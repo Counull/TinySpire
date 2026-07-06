@@ -1,0 +1,11 @@
+Tools/Luban/*.dll filter=lfs diff=lfs merge=lfs -text
+Tools/Luban/*.pdb filter=lfs diff=lfs merge=lfs -text
+Tools/Luban/*.exe filter=lfs diff=lfs merge=lfs -text
+Docs/Hermes_Pegasus/art/assets/art-style/tinyspire-constructivist-battle-bg-concept.png filter=lfs diff=lfs merge=lfs -text
+Docs/Hermes_Pegasus/art/assets/art-style/tinyspire-order-warden-enemy-concept.png filter=lfs diff=lfs merge=lfs -text
+Docs/Hermes_Pegasus/art/assets/art-style/tinyspire-plague-doctor-executor-concept.png filter=lfs diff=lfs merge=lfs -text
+Docs/Hermes_Pegasus/art/assets/art-style/tinyspire-pontiff-monster-concept.png filter=lfs diff=lfs merge=lfs -text
+Docs/Hermes_Pegasus/art/assets/art-style/tinyspire-tower-executor-character-concept.png filter=lfs diff=lfs merge=lfs -text
+Tools/Luban/**/*.dll filter=lfs diff=lfs merge=lfs -text
+Tools/Luban/**/*.pdb filter=lfs diff=lfs merge=lfs -text
+Tools/Luban/**/*.exe filter=lfs diff=lfs merge=lfs -text

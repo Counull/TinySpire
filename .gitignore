@@ -1,0 +1,13 @@
+# Unity generated folders
+[Tt]iny[Ss]pire/Library/
+[Tt]iny[Ss]pire/Temp/
+[Tt]iny[Ss]pire/Obj/
+[Tt]iny[Ss]pire/obj/
+[Tt]iny[Ss]pire/Logs/
+[Tt]iny[Ss]pire/UserSettings/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.tmp
+*.log
