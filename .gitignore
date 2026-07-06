@@ -6,6 +6,9 @@
 [Tt]iny[Ss]pire/Logs/
 [Tt]iny[Ss]pire/UserSettings/
 
+# Agent/local backups
+.nested-git-backup/
+
 # OS/editor noise
 .DS_Store
 Thumbs.db
