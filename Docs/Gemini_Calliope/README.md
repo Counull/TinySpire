@@ -29,11 +29,22 @@ updated: 2026-07-08
 2. 将确定的概念设计（如卡牌包装方案）移交给 Pegasus 转化为数值设定。
 3. 协助用户分析和拆解发散性需求，将其梳理为具体的设计方向。
 
-## 目录结构
+## 目录结构 (LLM Workflow)
 
 ```text
 Gemini_Calliope/
-├── README.md           ← 本文件
-├── BRAINSTORM_LOG.md   ← 创意脑暴日志
-└── concepts/           ← 概念包装设计方案（卡牌/角色/世界观）
+├── README.md             ← 实体入口与配置
+├── AGENT_PROMPT.md       ← Agent Prompt 模板
+├── 00_inbox/             ← 未分类脑暴素材
+├── 01_requirements/      ← 包装需求分析
+├── 02_index/             ← 导航索引与状态 (index.md, status.md)
+├── 03_design/            ← 美术/文案概念设定案
+├── 04_research/          ← 风格参考调研
+├── 05_development-log/   ← 创意迭代记录
+├── 06_testing/           ← (较少使用)
+├── 07_retrospective/     ← 创意复盘
+├── 08_tools/             ← 生成工具/工作流脚本
+├── 09_meetings/          ← 同步会议摘要
+├── 10_communication/     ← 对外沟通草稿
+└── 99_archive/           ← 废弃/历史案
 ```
