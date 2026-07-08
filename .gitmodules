@@ -1,0 +1,3 @@
+[submodule "Docs/_external/llm-workflow"]
+	path = Docs/_external/llm-workflow
+	url = https://github.com/Counull/LLM-Workflow.git
