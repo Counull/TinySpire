@@ -1,25 +1,27 @@
 ---
-title: 卡牌游戏 · 项目总览
+title: TinySpire · 项目总览
 created: 2026-06-04
-updated: 2026-06-04
+updated: 2026-07-08
 type: pattern
 tags: [pattern, workflow]
 sources: [20260604_cardgame]
 confidence: low
 ---
 
-# 卡牌游戏
+# TinySpire / 卡牌游戏
 
-> 杀戮尖塔 like · Unity · 联机 PVE
+> Unity · Slay the Spire-like roguelike deckbuilder · 多人联机 PVE 方向
 
 ## 目录
 
 ### 策划
-- [[card-game-design-decisions]] — 玩法决策记录（已做 7 个决策）
-- [[card-game-design-baseline]] — 基础设定（类型、参考、核心机制）
+- [[design/project-definition]] — 当前项目与游戏定义：TinySpire 是什么、当前 MVP 做什么、不做什么
+- [[design/decision-locks]] — 决策锁定表：Locked / Provisional / Deferred / Open
+- [[design/decisions]] — 玩法决策记录（当前 10 个决策）
+- [[design/baseline]] — 基础设定（类型、参考、核心机制）
 
 ### 程序
-- [[card-game-architecture]] — 技术选型（DI/R3/MVVM/UniTask）、三层架构、动画耦合无害论
+- [[architecture]] — 技术选型（DI/R3/MVVM/UniTask）、三层架构、动画耦合无害论
 
 ### 美术
 - [[art-style]] — TinySpire 美术风格与 ComfyUI/Z-Image 资源管线
@@ -27,7 +29,7 @@ confidence: low
 ### Agent 交接
 - [[AGENT_HANDOFF]] — 给本地 coding/design agent 的项目上下文入口
 
-## 随笔
+## 当前入口
 
-见 [[card-game-notes]]，松散记录。
+新 Agent 或隔天回来先读：`design/project-definition.md` → `design/decision-locks.md` → `design/decisions.md`。
 

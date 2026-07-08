@@ -60,8 +60,10 @@ Docs/Copilot_Daedalus/CODE_DECISIONS.md
 Pegasus 还需要读取：
 
 ```text
-Docs/Hermes_Pegasus/art/art-style.md
+Docs/Hermes_Pegasus/design/project-definition.md
+Docs/Hermes_Pegasus/design/decision-locks.md
 Docs/Hermes_Pegasus/design/decisions.md
+Docs/Hermes_Pegasus/art/art-style.md
 Docs/Hermes_Pegasus/architecture.md
 ```
 

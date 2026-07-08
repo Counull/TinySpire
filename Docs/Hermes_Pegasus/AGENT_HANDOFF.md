@@ -15,6 +15,8 @@
 同目录：
 
 - `index.md` — 项目总览
+- `design/project-definition.md` — 当前项目与游戏定义
+- `design/decision-locks.md` — 决策锁定表：哪些是地基、哪些只是暂定/延后/开放
 - `design/baseline.md` — 基础设定
 - `design/decisions.md` — 玩法决策记录
 - `architecture.md` — 程序架构

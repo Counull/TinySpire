@@ -25,6 +25,8 @@
 | `AGENT_HANDOFF.md` | 本地 Agent 入口 | active | 已生成 |
 | `index.md` | 项目总览 | active | 已同步 |
 | `architecture.md` | 程序架构 | active | 已同步 |
+| `design/project-definition.md` | 当前项目与游戏定义 | active | 新增：定义 TinySpire / MVP / 非目标 |
+| `design/decision-locks.md` | 决策锁定表 | active | 新增：Locked / Provisional / Deferred / Open |
 | `design/baseline.md` | 基础设定 | active | 已同步 |
 | `design/decisions.md` | 玩法决策 | active | 已同步 |
 | `art/art-style.md` | 美术方向 / AI 资源管线 | active | 已同步 |
