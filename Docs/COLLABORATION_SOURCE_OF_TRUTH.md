@@ -36,7 +36,7 @@ Docs/
 |---|---|---|
 | Pegasus / 珀伽索斯 | `Docs/Hermes_Pegasus/` | 数值策划 / 系统机制设计 / 流程 / 决策整理 |
 | Daedalus / 代达罗斯 | `Docs/Copilot_Daedalus/` | 编程实现 / Unity C# / 架构落地 / 测试 / 重构 |
-| Urania / 乌剌尼亚 | Workspace / Gemini | 创意 / 文本包装 / 剧情 / 美术概念 / 脑暴发散 |
+| Calliope / 卡利俄佩 | `Docs/Gemini_Calliope/` | 创意 / 文本包装 / 剧情 / 美术概念 / 脑暴发散 |
 | User / 刘鸿森 | root owner | 制作人 / 主程 / 最终拍板者 |
 
 ## 3. Required Reading Order
@@ -174,5 +174,5 @@ Card → Effect → BattleState → UI → Feedback
 Current collaboration model:
 
 ```text
-Urania brainstorms/designs concepts → Pegasus defines systems/math → Daedalus implements code → User decides/finalizes
+Calliope brainstorms/designs concepts → Pegasus defines systems/math → Daedalus implements code → User decides/finalizes
 ```
