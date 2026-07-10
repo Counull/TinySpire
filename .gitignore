@@ -8,6 +8,7 @@
 
 # Agent/local backups
 .nested-git-backup/
+.github/
 
 # OS/editor noise
 .DS_Store

@@ -45,6 +45,7 @@
 # JetBrains Rider IDE settings
 .idea/
 
+.github/
 # Gradle cache directory
 .gradle/
 
