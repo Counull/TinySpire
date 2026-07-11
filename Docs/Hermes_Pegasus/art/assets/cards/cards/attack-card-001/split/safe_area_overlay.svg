@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="750" height="1125" viewBox="0 0 750 1125">
+<rect width="750" height="1125" fill="none" stroke="#ff00aa" stroke-width="4"/>
+<rect x="34" y="174" width="682" height="575" fill="none" stroke="#00aaff" stroke-width="4"/>
+<rect x="75" y="243" width="600" height="437" fill="none" stroke="#00ff88" stroke-width="3" stroke-dasharray="12 10"/>
+<text x="42" y="225" font-family="sans-serif" font-size="18" fill="#00aaff">illustration area</text>
+<text x="83" y="270" font-family="sans-serif" font-size="18" fill="#00ff88">illustration safe area</text>
+<text x="42" y="1100" font-family="sans-serif" font-size="18" fill="#ff00aa">card boundary</text>
+</svg>

@@ -1,10 +1,10 @@
 ---
 title: TinySpire · 美术风格与 AI 资源管线
 created: 2026-07-06
-updated: 2026-07-06
+updated: 2026-07-11
 type: constraint
 tags: [pattern, workflow]
-sources: [20260706_153457, 20260706_174737]
+|sources: [20260706_153457, 20260706_174737, 20260711_loading_anchor]
 confidence: medium
 attribution: |
   来源分层：
@@ -154,8 +154,17 @@ fantasy roguelike enemy creature, full body, isolated, readable silhouette, fron
 - `assets/art-style/tinyspire-constructivist-battle-bg-concept.png` — 构成主义奇幻战斗背景
 - `assets/art-style/tinyspire-tower-executor-character-concept.png` — 玩家角色：塔内执行员 / 失控档案员
 - `assets/art-style/tinyspire-order-warden-enemy-concept.png` — 敌人：秩序守卫 / Order Warden
+- `assets/art-style/tinyspire-loading-screen-style-anchor.png` — **2026-07-11 风格锚点图**，GPT Image 生成。包含 Sisyphus（荒诞记录官）+ Pegasus（翼之向导）+ 构成主义三角黑塔 + 红黑米白纸片海报质感。
+- `assets/agent-mythic-characters/` — 角色概念图集合（Sisyphus / Pegasus / Daedalus / Warden / Pontiff 多种变体）
 
-这些图适合作为 **一个场景 / 一个 demo 垂直切片** 的美术锚点。
+### 风格锚点图使用规范
+
+后续所有 GPT Image 生成的 TinySpire 美术资源，应使用 `tinyspire-loading-screen-style-anchor.png` 作为唯一的视觉参考图（reference_image），配合文本 prompt 描述所需元素。原则：
+
+1. **只用一张参考图**——多张冲突的参考图会导致角色和背景分离粘贴。
+2. **prompt 中角色和背景用同一套视觉语言描述**（参见加载图 prompt：`flat paper-cut poster shapes, same brush, same texture`）。
+3. **禁止直接引用透明 PNG 剪影图作为参考**——它们会被当作素材粘贴而非融入画面。
+4. **锚点的核心约束**：构成主义纸片/海报质感、红黑米白、锐利斜线切割、测量线和印章装饰、无字无 logo 无苏维埃符号。
 
 ## 重要边界：Demo 风格 vs 独立游戏风格
 
@@ -185,9 +194,17 @@ fantasy roguelike enemy creature, full body, isolated, readable silhouette, fron
 - 后续可以扩展其他视觉语法，例如：炼金手稿塔、荒诞剧场塔、废墟童话塔、星图机械塔；
 - 卡牌 UI 保持统一系统，场景和敌人可分主题变化。
 
-## 相关
+## Related
 
 - [[architecture]] — 程序架构
 - [[baseline]] — 基础设定
 - [[decisions]] — 玩法决策
 - [[notes]] — 松散随笔
+
+## 三视图资产
+
+见 `assets/agent-mythic-characters/turnaround-sheets/`：
+- `pegasus_turnaround.png` — 2026-07-11
+- `sisyphus-low-collar-registrar_turnaround.png` — 2026-07-11
+- `sisyphus-tower-witness_turnaround.png` — 2026-07-11
+- `daedalus-artificer_turnaround.png` — 2026-07-11

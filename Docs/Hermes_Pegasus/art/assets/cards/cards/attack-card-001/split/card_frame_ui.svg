@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="750" height="1125" viewBox="0 0 750 1125">
+<defs><filter id="shadow"><feGaussianBlur stdDeviation="9"/></filter></defs>
+<rect x="24" y="24" width="702" height="1077" rx="28" fill="#171719" opacity=".32" filter="url(#shadow)"/>
+<rect x="20" y="16" width="702" height="1077" rx="28" fill="#eee4d0" stroke="#171719" stroke-width="12"/>
+<path d="M34 30 H708 V158 H34 Z" fill="#e9dfcb"/>
+<path d="M34 158 H708 L676 174 H66 Z" fill="#a52d2d"/>
+<circle cx="86" cy="86" r="43" fill="#171719"/>
+<text x="86" y="101" text-anchor="middle" font-family="DejaVu Sans" font-size="48" font-weight="bold" fill="#eee4d0">1</text>
+<path id="titleArc" d="M205 101 Q371 52 537 101" fill="none"/>
+<text font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="48" font-weight="bold" fill="#171719"><textPath href="#titleArc" startOffset="50%" text-anchor="middle">打击</textPath></text>
+<rect x="622" y="40" width="68" height="68" fill="none"/>
+<rect x="34" y="174" width="682" height="575" rx="8" fill="#55565a"/>
+<path d="M34 749 H708 L682 797 H60 Z" fill="#a52d2d"/>
+<text x="371" y="782" text-anchor="middle" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="22" font-weight="bold" fill="#eee4d0">攻击</text>
+<path d="M34 797 H708 V1078 H34 Z" fill="#eee4d0"/>
+<path d="M58 838 H684" stroke="#b8ad9a" stroke-width="2"/>
+<text x="72" y="905" font-family="Noto Sans CJK SC, Microsoft YaHei, sans-serif" font-size="32" fill="#171719">造成伤害。</text>
+</svg>
