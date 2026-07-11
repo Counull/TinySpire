@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: d68f46dfecfe27542bc96aea31c65d0f
+guid: a44de96b71700fc44bb8cfb3de48e43a
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: -6162018385890514110
-    second: gpt_char_3_trans_0
+      213: -3009375188861928554
+    second: gpt_warden_transparent_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -96,17 +96,30 @@ TextureImporter:
     ignorePlatformSupport: 0
     androidETC2FallbackOverride: 0
     forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Android
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
   spriteSheet:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: gpt_char_3_trans_0
+      name: gpt_warden_transparent_0
       rect:
         serializedVersion: 2
-        x: 0
-        y: 0
-        width: 1016
-        height: 1497
+        x: 130
+        y: 37
+        width: 678
+        height: 1476
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -115,8 +128,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 24be1910dec1c7aa0800000000000000
-      internalID: -6162018385890514110
+      spriteID: 69bb208c53d8c36d0800000000000000
+      internalID: -3009375188861928554
       vertices: []
       indices: 
       edges: []
@@ -135,7 +148,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      gpt_char_3_trans_0: -6162018385890514110
+      gpt_warden_transparent_0: -3009375188861928554
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

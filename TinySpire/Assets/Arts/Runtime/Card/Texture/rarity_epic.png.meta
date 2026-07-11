@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 2115f0b16d686c54b96a95afa484cec2
+guid: 97729ae0d0dd1c9448378e76fab541f3
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 2984573680639082409
-    second: t_bg_0
+      213: -3483030734306162040
+    second: rarity_epic_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -96,17 +96,30 @@ TextureImporter:
     ignorePlatformSupport: 0
     androidETC2FallbackOverride: 0
     forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Android
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
   spriteSheet:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: t_bg_0
+      name: rarity_epic_0
       rect:
         serializedVersion: 2
-        x: 0
-        y: 0
-        width: 1672
-        height: 941
+        x: 61
+        y: 61
+        width: 118
+        height: 118
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -115,8 +128,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 9aff87813f55b6920800000000000000
-      internalID: 2984573680639082409
+      spriteID: 88ac9e3400ac9afc0800000000000000
+      internalID: -3483030734306162040
       vertices: []
       indices: 
       edges: []
@@ -135,7 +148,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      t_bg_0: 2984573680639082409
+      rarity_epic_0: -3483030734306162040
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

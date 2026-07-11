@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 7b3300232176b7d4a8a1c06bb75c16fa
+guid: 8deee277ef5b8f74b84c0f92873ed6d7
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: -8071824686740836585
-    second: calliope_loading_screen_0
+      213: -7941776895293072010
+    second: rarity_legendary_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -113,13 +113,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: calliope_loading_screen_0
+      name: rarity_legendary_0
       rect:
         serializedVersion: 2
-        x: 0
-        y: 0
-        width: 1672
-        height: 941
+        x: 61
+        y: 57
+        width: 122
+        height: 122
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -128,8 +128,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 71f6599b63e1bff80800000000000000
-      internalID: -8071824686740836585
+      spriteID: 67dd6a6bdf329c190800000000000000
+      internalID: -7941776895293072010
       vertices: []
       indices: 
       edges: []
@@ -148,7 +148,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      calliope_loading_screen_0: -8071824686740836585
+      rarity_legendary_0: -7941776895293072010
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
