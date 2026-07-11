@@ -1,15 +1,35 @@
 using UnityEngine;
+using VContainer;
+using VContainer.Unity;
 
-public class Launcher : MonoBehaviour
+public sealed class Bootstrap : LifetimeScope
 {
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
+    [SerializeField] private string initialSceneName = "BattleScene";
+    [SerializeField] private string loadingSceneName = "LoadingScene";
+
+    protected override void Awake()
     {
+        DontDestroyOnLoad(gameObject);
+        base.Awake();
     }
 
-    // Update is called once per frame
-    void Update()
+    protected override void Configure(IContainerBuilder builder)
     {
-        
+        builder.Register<LubanConfigService>(Lifetime.Singleton);
+        builder.RegisterInstance(new GameStartupOptions(initialSceneName, loadingSceneName));
+        builder.Register<SceneFlowService>(Lifetime.Singleton);
+        builder.RegisterEntryPoint<GameLauncher>();
+    }
+}
+
+public sealed class GameStartupOptions
+{
+    public string InitialSceneName { get; }
+    public string LoadingSceneName { get; }
+
+    public GameStartupOptions(string initialSceneName, string loadingSceneName)
+    {
+        InitialSceneName = initialSceneName;
+        LoadingSceneName = loadingSceneName;
     }
 }

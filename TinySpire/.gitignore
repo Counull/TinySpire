@@ -113,3 +113,8 @@ InitTestScene*.unity*
 
 # NuGetForUnity downloaded packages (restorable via packages.config)
 /[Aa]ssets/Packages/
+
+# HybridCLR local IL2CPP installation, cloned repositories, and generated helpers.
+# Keep ProjectSettings/HybridCLRSettings.asset and Packages configuration under version control.
+/HybridCLRData/
+/HybridCLRGenerate/

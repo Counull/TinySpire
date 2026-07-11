@@ -8,7 +8,7 @@ dotnet %LUBAN_DLL% ^
     -d json2 ^
     -c cs-newtonsoft-json ^
     --conf %CONF_ROOT%\luban.conf ^
-    -x outputCodeDir=%WORKSPACE%\%PROJECT_NAME%\Assets\Scripts\Runtime\Generated\Config ^
-    -x outputDataDir=%WORKSPACE%\%PROJECT_NAME%\Assets\TableDatas
+    -x outputCodeDir=%WORKSPACE%\%PROJECT_NAME%\Assets\Scripts\Core\Generated\Config ^
+    -x outputDataDir=%WORKSPACE%\%PROJECT_NAME%\Assets\StreamingAssets\GameData
 
 pause
