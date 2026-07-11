@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using Cysharp.Threading.Tasks;
 using UnityEngine.SceneManagement;
 using YooAsset;
@@ -6,6 +7,8 @@ using YooSceneHandle = YooAsset.SceneHandle;
 
 public sealed class SceneFlowService : IDisposable
 {
+    private static readonly TimeSpan MinimumLoadingSceneDuration = TimeSpan.FromSeconds(1);
+
     private readonly GameStartupOptions _options;
     private readonly YooAssetPackageService _assets;
     private YooSceneHandle _activeSceneHandle;
@@ -29,6 +32,7 @@ public sealed class SceneFlowService : IDisposable
             throw new ArgumentException("Target scene location cannot be empty.", nameof(targetSceneLocation));
 
         await LoadSceneAsync(_options.LoadingSceneLocation);
+        Stopwatch loadingSceneTimer = Stopwatch.StartNew();
         await UniTask.NextFrame();
 
         if (!_gameContentReady)
@@ -36,6 +40,10 @@ public sealed class SceneFlowService : IDisposable
             await _assets.EnsureAllContentAvailableAsync();
             _gameContentReady = true;
         }
+
+        TimeSpan remainingLoadingTime = MinimumLoadingSceneDuration - loadingSceneTimer.Elapsed;
+        if (remainingLoadingTime > TimeSpan.Zero)
+            await UniTask.Delay(remainingLoadingTime, ignoreTimeScale: true);
 
         await LoadSceneAsync(targetSceneLocation);
     }

@@ -1,11 +1,21 @@
 ---
 created: 2026-07-06
-updated: 2026-07-08
+updated: 2026-07-12
 ---
 
 # Daedalus · 会话日志
 
 > 记录每次编程会话的关键产出、决策和待办。
+
+---
+
+## 2026-07-12 · LoadingScene 最短展示时间
+
+- `SceneFlowService` 在 LoadingScene 完成切入后开始计时，保证目标场景切换前至少展示 1 秒。
+- 内容准备耗时计入这 1 秒；仅补足剩余时间，不给慢加载额外增加固定等待。
+- 补足延迟不受 `Time.timeScale` 影响。
+- `dotnet build TinySpire.sln --no-restore` 通过（0 错误、3 个既有程序集版本冲突警告）；Unity Editor 当前存在运行实例，未启动额外实例进行 Play Mode 验证。
+- 验证记录：`Docs/Copilot_Daedalus/06_testing/2026-07-12-loading-scene-minimum-duration.md`。
 
 ---
 
