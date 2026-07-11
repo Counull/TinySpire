@@ -6,9 +6,18 @@
 [Tt]iny[Ss]pire/Logs/
 [Tt]iny[Ss]pire/UserSettings/
 
+# Runtime-generated or package-provided Unity assets
+[Tt]iny[Ss]pire/Assets/StreamingAssets/
+[Tt]iny[Ss]pire/Assets/TextMesh Pro/
+[Tt]iny[Ss]pire/Assets/TextMesh Pro.meta
+[Tt]iny[Ss]pire/Bundles/
+[Tt]iny[Ss]pire/yoo/
+
 # Agent/local backups
 .nested-git-backup/
+.agents/
 .github/
+[Tt]iny[Ss]pire/.vscode/
 
 # OS/editor noise
 .DS_Store
