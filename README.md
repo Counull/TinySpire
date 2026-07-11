@@ -1,5 +1,9 @@
 # TinySpire
 
+<p align="center">
+  <img src="TinySpire/Assets/Arts/Loading/tinyspire-calliope-cover-paper-playwright-pencil-hand-fixed.png" alt="TinySpire - Calliope Cover" width="800"/>
+</p>
+
 TinySpire is a Unity/C# card game project in early development.
 
 The current focus is building a small BattleScene vertical slice: playing cards, resolving effects, updating battle state, and showing feedback in UI.
