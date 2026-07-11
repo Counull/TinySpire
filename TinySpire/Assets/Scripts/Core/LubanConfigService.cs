@@ -1,43 +1,53 @@
 using System;
-using System.IO;
 using cfg;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
+using YooAsset;
 
 public sealed class LubanConfigService
 {
-    public Tables Tables { get; }
+    private ResourcePackage _package;
 
-    public LubanConfigService()
+    public Tables Tables { get; private set; }
+
+    public void Initialize(ResourcePackage package)
     {
+        _package = package ?? throw new ArgumentNullException(nameof(package));
         Tables = new Tables(LoadTable);
     }
 
-    private static JArray LoadTable(string tableName)
+    private JArray LoadTable(string tableName)
     {
-        string path = Path.Combine(Application.streamingAssetsPath, "GameData", tableName + ".json");
-        if (!File.Exists(path))
-        {
-            throw new FileNotFoundException($"找不到 Luban 配置表 '{tableName}'，请重新生成配置。", path);
-        }
+        if (_package == null)
+            throw new InvalidOperationException("LubanConfigService has not been initialized.");
 
-        JToken token = JToken.Parse(File.ReadAllText(path));
-        if (token is JArray array)
+        var handle = _package.LoadAssetSync<TextAsset>($"Assets/GameData/{tableName}.json");
+        try
         {
-            return array;
-        }
+            if (handle.Status != EOperationStatus.Succeed)
+                throw new InvalidOperationException($"Unable to load Luban table '{tableName}': {handle.LastError}");
 
-        if (token is JObject map)
-        {
-            var values = new JArray();
-            foreach (JProperty property in map.Properties())
+            TextAsset textAsset = handle.GetAssetObject<TextAsset>();
+            if (textAsset == null)
+                throw new InvalidOperationException($"Luban table '{tableName}' did not load as a TextAsset.");
+
+            JToken token = JToken.Parse(textAsset.text);
+            if (token is JArray array)
+                return array;
+
+            if (token is JObject map)
             {
-                values.Add(property.Value);
+                var values = new JArray();
+                foreach (JProperty property in map.Properties())
+                    values.Add(property.Value);
+                return values;
             }
 
-            return values;
+            throw new InvalidOperationException($"Luban table '{tableName}' has an unsupported JSON shape.");
         }
-
-        throw new InvalidOperationException($"Luban 配置表 '{tableName}' 的 JSON 格式无效。");
+        finally
+        {
+            handle.Release();
+        }
     }
 }

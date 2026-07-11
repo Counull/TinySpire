@@ -1,58 +1,63 @@
 using System;
 using Cysharp.Threading.Tasks;
 using UnityEngine.SceneManagement;
+using YooAsset;
+using YooSceneHandle = YooAsset.SceneHandle;
 
 public sealed class SceneFlowService : IDisposable
 {
     private readonly GameStartupOptions _options;
-    private string _nextSceneName;
-    private bool _isLoadingTarget;
+    private readonly YooAssetPackageService _assets;
+    private YooSceneHandle _activeSceneHandle;
+    private bool _gameContentReady;
 
-    public SceneFlowService(GameStartupOptions options)
+    public SceneFlowService(GameStartupOptions options, YooAssetPackageService assets)
     {
         _options = options;
-        SceneManager.sceneLoaded += OnSceneLoaded;
+        _assets = assets;
     }
 
-    public void LoadInitialScene() => LoadScene(_options.InitialSceneName);
-
-    public void LoadScene(string sceneName)
+    public async UniTask LoadInitialSceneAsync()
     {
-        if (string.IsNullOrWhiteSpace(sceneName))
-        {
-            throw new ArgumentException("目标场景名不能为空。", nameof(sceneName));
-        }
-
-        _nextSceneName = sceneName;
-        SceneManager.LoadSceneAsync(_options.LoadingSceneName, LoadSceneMode.Single);
+        await _assets.InitializeAsync();
+        await LoadSceneWithLoadingAsync(_options.InitialSceneLocation);
     }
 
-    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    public async UniTask LoadSceneWithLoadingAsync(string targetSceneLocation)
     {
-        if (scene.name == _options.LoadingSceneName && !_isLoadingTarget && !string.IsNullOrEmpty(_nextSceneName))
+        if (string.IsNullOrWhiteSpace(targetSceneLocation))
+            throw new ArgumentException("Target scene location cannot be empty.", nameof(targetSceneLocation));
+
+        await LoadSceneAsync(_options.LoadingSceneLocation);
+        await UniTask.NextFrame();
+
+        if (!_gameContentReady)
         {
-            LoadTargetSceneAsync().Forget();
+            await _assets.EnsureAllContentAvailableAsync();
+            _gameContentReady = true;
         }
+
+        await LoadSceneAsync(targetSceneLocation);
     }
 
-    private async UniTask LoadTargetSceneAsync()
+    private async UniTask LoadSceneAsync(string location)
     {
-        _isLoadingTarget = true;
-        string targetSceneName = _nextSceneName;
-        await UniTask.Yield();
+        YooSceneHandle nextHandle = _assets.Package.LoadSceneAsync(location, LoadSceneMode.Single);
+        await nextHandle.Task;
 
-        var operation = SceneManager.LoadSceneAsync(targetSceneName, LoadSceneMode.Single);
-        while (!operation.isDone)
+        if (nextHandle.Status != EOperationStatus.Succeed)
         {
-            await UniTask.Yield();
+            nextHandle.Release();
+            throw new InvalidOperationException($"Unable to load scene '{location}': {nextHandle.LastError}");
         }
 
-        _nextSceneName = null;
-        _isLoadingTarget = false;
+        YooSceneHandle previousHandle = _activeSceneHandle;
+        _activeSceneHandle = nextHandle;
+        previousHandle?.Release();
     }
 
     public void Dispose()
     {
-        SceneManager.sceneLoaded -= OnSceneLoaded;
+        _activeSceneHandle?.Release();
     }
 }
