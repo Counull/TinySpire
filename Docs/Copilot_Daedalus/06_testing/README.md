@@ -13,4 +13,5 @@ updated: 2026-07-12
 
 ## 验证记录
 
+- [2026-07-12 BattleScene 基础手牌 UI](2026-07-12-battlescene-card-ui.md)
 - [2026-07-12 LoadingScene 最短展示时间](2026-07-12-loading-scene-minimum-duration.md)

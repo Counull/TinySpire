@@ -9,6 +9,16 @@ updated: 2026-07-12
 
 ---
 
+## 2026-07-12 · BattleScene 基础手牌 UI
+
+- 在 `TinySpire/Assets/Scenes/BattleScene.unity` 的现有 Canvas 下新增 `BattleCardUI`：包含底部手牌托盘、5 个 `CardView` 实例和单选高亮。
+- 卡牌选择使用 UGUI `Toggle` + `ToggleGroup`；本轮只构造表现与可点击状态，没有新增运行时代码，也未接入卡牌数据、ViewModel 或出牌逻辑。
+- 将现有 Screen Space - Camera Canvas 的 `planeDistance` 从 100 调整为 1，避免 UI 平面落在背景 Sprite 后方而被完全遮挡。
+- Unity Game View 目视验证通过；EventSystem 点击第二张卡后，第一张取消选中、第二张进入选中状态；Console 0 错误、0 警告。
+- 实现计划：`Docs/Copilot_Daedalus/plans/2026-07-12-battlescene-card-ui.md`；验证记录：`Docs/Copilot_Daedalus/06_testing/2026-07-12-battlescene-card-ui.md`。
+
+---
+
 ## 2026-07-12 · LoadingScene 最短展示时间
 
 - `SceneFlowService` 在 LoadingScene 完成切入后开始计时，保证目标场景切换前至少展示 1 秒。
