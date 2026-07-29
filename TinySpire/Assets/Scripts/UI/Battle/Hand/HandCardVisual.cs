@@ -6,15 +6,23 @@ public sealed class HandCardVisual : MonoBehaviour
 {
     private RectTransform _cardContent;
     private Canvas _canvas;
+    private CanvasGroup _dragFeedbackCanvasGroup;
     private Vector3 _baseScale;
     private HandCardPose _basePose;
     private Tween _activeTween;
+    private Tween _feedbackTween;
+    private bool _hasPlayFeedback;
 
-    public void Initialize(Canvas canvas, RectTransform cardContent, Vector3 baseScale)
+    public int CardId { get; private set; }
+    public float CurrentAnchoredY => _cardContent.anchoredPosition.y;
+
+    public void Initialize(Canvas canvas, RectTransform cardContent, Vector3 baseScale, int cardId, CanvasGroup dragFeedbackCanvasGroup)
     {
         _canvas = canvas;
         _cardContent = cardContent;
         _baseScale = baseScale;
+        CardId = cardId;
+        _dragFeedbackCanvasGroup = dragFeedbackCanvasGroup;
         _canvas.overrideSorting = true;
     }
 
@@ -53,14 +61,29 @@ public sealed class HandCardVisual : MonoBehaviour
     public void BeginDrag(int elevatedSortingOrder)
     {
         KillActiveTween();
+        SetDragPlayFeedback(false);
         _canvas.sortingOrder = elevatedSortingOrder;
         _cardContent.localEulerAngles = Vector3.zero;
         _cardContent.localScale = _baseScale;
     }
 
-    public void FollowPointer(Vector2 anchoredPosition)
+    public void FollowPointerDelta(Vector2 screenDelta)
     {
-        _cardContent.anchoredPosition = anchoredPosition;
+        float scaleFactor = _canvas != null && _canvas.scaleFactor > 0f ? _canvas.scaleFactor : 1f;
+        _cardContent.anchoredPosition += screenDelta / scaleFactor;
+    }
+
+    public void SetDragPlayFeedback(bool isPastPlayLine)
+    {
+        if (_dragFeedbackCanvasGroup == null || _hasPlayFeedback == isPastPlayLine)
+            return;
+
+        _hasPlayFeedback = isPastPlayLine;
+        KillFeedbackTween();
+
+        // TODO(DEP-003): Final drag-over-play-line visual style requires design/art confirmation.
+        float targetAlpha = isPastPlayLine ? 0.82f : 1f;
+        _feedbackTween = _dragFeedbackCanvasGroup.DOFade(targetAlpha, 0.1f).SetEase(Ease.OutQuad);
     }
 
     private void ApplyBasePose()
@@ -79,8 +102,17 @@ public sealed class HandCardVisual : MonoBehaviour
         _activeTween = null;
     }
 
+    private void KillFeedbackTween()
+    {
+        if (_feedbackTween != null && _feedbackTween.IsActive())
+            _feedbackTween.Kill();
+
+        _feedbackTween = null;
+    }
+
     private void OnDestroy()
     {
         KillActiveTween();
+        KillFeedbackTween();
     }
 }

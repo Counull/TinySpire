@@ -9,6 +9,22 @@ updated: 2026-07-29
 
 ---
 
+## 2026-07-30 · BattleScene 拖拽出牌（最小判定）实施
+
+- 在 `TinySpire/Assets/Scripts/UI/Battle/Hand/HandState.cs` 新增纯 C# `HandState`：以占位 ID 初始化手牌列表，只暴露只读快照、`PlayCard(int)` 和 `event Action` 变化通知；不接入 R3、真实卡牌数据、费用或 BattleState。
+- `HandCardContainer` 现在只以 Inspector `initialHandCount` 初始化 `HandState`；运行期张数从 `HandState.CardIds.Count` 得出。它订阅变化后销毁已打出卡的视觉对象并按状态快照重排其余卡牌。松手时以可调 `playLineY`（默认 240）判定；越线调用 `HandState.PlayCard`，未越线仍回弹。
+- 拖拽坐标使用每帧 `PointerEventData.delta / Canvas.scaleFactor` 累加到当前锚点，不再把屏幕点换算到独立根 Canvas 的零尺寸 RectTransform；因此按下不跳中心，后续移动保持抓取偏移并持续跟随鼠标。
+- `HandCardVisual` 使用 `CardContent` 上运行时添加的 `CanvasGroup` 做越线透明度反馈，并独立维护、终止其反馈 Tween；未修改 `CardView.prefab`。
+- 按依赖台账添加 `TODO(DEP-001)` 至 `TODO(DEP-004)`：目标 ID 填充、费用、反馈样式、销毁前动作。没有实现目标、费用、效果、抽牌或弃牌逻辑。
+- 验证：纯 `HandState` 检查通过；`dotnet build TinySpire/TinySpire.sln --no-restore` 通过（0 错误；9 条既有程序集版本冲突警告）；UnityMCP Play Mode Console 为 0 错误、0 警告。MCP 无指针事件注入，最终鼠标拖拽手势需人工确认。
+- 验证记录：`06_testing/2026-07-30-battlescene-drag-to-play-minimal.md`。
+
+### 后续动作
+
+- 在当前 Game View 中人工拖动卡牌：确认移动不跳中心、越线销毁补位、线内回弹和透明度反馈。
+
+---
+
 ## 2026-07-29 · 拖拽出牌（最小判定）grilling + 计划产出
 
 - 确认杀戮尖塔式手牌 UI 已由 Codex 实施完成（见上一条会话日志与 `06_testing/2026-07-29-battlescene-hand-ui-sts-style.md`），但拖拽当前不能判定出牌。

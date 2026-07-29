@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using DG.Tweening;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 [DisallowMultipleComponent]
@@ -9,16 +10,21 @@ public sealed class HandCardContainer : MonoBehaviour
 {
     [SerializeField] private GameObject cardViewPrefab;
 
-    // Temporary placeholder: Luban-driven card data will replace only this value source; layout, hover, and drag logic must remain unchanged.
-    [SerializeField, Min(0)] private int handCount = 5;
+    // Temporary placeholder: Luban-driven card data will replace only this HandState initialization input; layout, hover, and drag logic must remain unchanged.
+    [FormerlySerializedAs("handCount")]
+    [SerializeField, Min(0)] private int initialHandCount = 5;
 
     [Header("Fan Layout")]
     [SerializeField, Min(0f)] private float baseSpacing = 260f;
     [SerializeField, Min(0f)] private float maxFanAngle = 15f;
     [SerializeField, Min(0f)] private float verticalDrop = 72f;
     [SerializeField, Min(0f)] private float maxHandWidth = 1300f;
-    [SerializeField] private float handCenterYOffset = -240f;
+    [SerializeField] private float handCenterYOffset = -380;
     [SerializeField, Min(0.01f)] private float cardDisplayScale = 0.36f;
+
+    [Header("Play")]
+    [Tooltip("CardContent local Y must be greater than this hand-area value to play the card.")]
+    [SerializeField] private float playLineY = -100f;
 
     [Header("Animation")]
     [SerializeField, Min(0f)] private float hoverLift = 100f;
@@ -27,24 +33,29 @@ public sealed class HandCardContainer : MonoBehaviour
     [SerializeField, Min(0f)] private float reflowDuration = 0.22f;
 
     private readonly List<HandCardVisual> _cards = new();
-    private Canvas _handCanvas;
-    private RectTransform _handArea;
     private HandCardVisual _draggingCard;
+    private HandState _handState;
+
+    private int CurrentHandCount => _handState.CardIds.Count;
 
     private void Awake()
     {
-        _handCanvas = GetComponentInParent<Canvas>();
-        _handArea = transform as RectTransform;
-
-        if (cardViewPrefab == null || _handCanvas == null || _handArea == null)
+        if (cardViewPrefab == null)
         {
-            Debug.LogError("HandCardContainer is missing its CardView prefab or Canvas setup.", this);
+            Debug.LogError("HandCardContainer is missing its CardView prefab.", this);
             enabled = false;
             return;
         }
 
-        CreateCards();
-        LayoutCards(immediate: true);
+        _handState = new HandState(initialHandCount);
+        _handState.Changed += HandleHandStateChanged;
+        RebuildCards(immediate: true);
+    }
+
+    private void OnDestroy()
+    {
+        if (_handState != null)
+            _handState.Changed -= HandleHandStateChanged;
     }
 
     public void HandlePointerEnter(HandCardVisual card)
@@ -52,7 +63,7 @@ public sealed class HandCardContainer : MonoBehaviour
         if (card == null || _draggingCard != null)
             return;
 
-        card.PlayHover(hoverLift, hoverScale, _cards.Count, hoverDuration);
+        card.PlayHover(hoverLift, hoverScale, CurrentHandCount, hoverDuration);
     }
 
     public void HandlePointerExit(HandCardVisual card)
@@ -69,7 +80,7 @@ public sealed class HandCardContainer : MonoBehaviour
             return;
 
         _draggingCard = card;
-        card.BeginDrag(_cards.Count + 1);
+        card.BeginDrag(CurrentHandCount + 1);
         LayoutCards(immediate: false, excludedCard: card);
     }
 
@@ -78,9 +89,10 @@ public sealed class HandCardContainer : MonoBehaviour
         if (card == null || card != _draggingCard || eventData == null)
             return;
 
-        Camera eventCamera = _handCanvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : _handCanvas.worldCamera;
-        if (RectTransformUtility.ScreenPointToLocalPointInRectangle(_handArea, eventData.position, eventCamera, out Vector2 localPosition))
-            card.FollowPointer(localPosition - _handArea.rect.center);
+        // Independent root Canvases serialize with a zero-sized RectTransform, so converting absolute screen points can snap to (0, 0).
+        // Incremental pointer movement preserves the grab offset and makes the card follow the cursor continuously.
+        card.FollowPointerDelta(eventData.delta);
+        card.SetDragPlayFeedback(IsPastPlayLine(card));
     }
 
     public void HandleEndDrag(HandCardVisual card)
@@ -88,44 +100,86 @@ public sealed class HandCardContainer : MonoBehaviour
         if (card == null || card != _draggingCard)
             return;
 
+        bool shouldPlayCard = IsPastPlayLine(card);
         _draggingCard = null;
+        card.SetDragPlayFeedback(false);
+
+        if (shouldPlayCard && _handState.PlayCard(card.CardId))
+            return;
+
         LayoutCards(immediate: false);
     }
 
-    private void CreateCards()
+    private void HandleHandStateChanged()
+    {
+        RebuildCards(immediate: false);
+    }
+
+    private void RebuildCards(bool immediate)
+    {
+        IReadOnlyList<int> cardIds = _handState.CardIds;
+        for (int index = _cards.Count - 1; index >= 0; index--)
+        {
+            HandCardVisual card = _cards[index];
+            if (ContainsCardId(cardIds, card.CardId))
+                continue;
+
+            // TODO(DEP-004): Future card-effect types need distinct pre-destruction actions before this visual is destroyed.
+            Destroy(card.gameObject);
+            _cards.RemoveAt(index);
+        }
+
+        var orderedCards = new List<HandCardVisual>(cardIds.Count);
+        foreach (int cardId in cardIds)
+        {
+            HandCardVisual card = FindCardById(cardId);
+            if (card == null)
+                card = CreateCard(cardId);
+
+            if (card != null)
+                orderedCards.Add(card);
+        }
+
+        _cards.Clear();
+        _cards.AddRange(orderedCards);
+        LayoutCards(immediate);
+    }
+
+    private HandCardVisual CreateCard(int cardId)
     {
         Vector3 baseScale = Vector3.one * cardDisplayScale;
-        for (int index = 0; index < handCount; index++)
+
+        // CardView owns a root Canvas. Keep each runtime card as an independent root Canvas so its serialized root scale and sorting order remain valid.
+        GameObject cardObject = Instantiate(cardViewPrefab);
+        cardObject.name = $"HandCard_{cardId + 1:00}";
+
+        Canvas cardCanvas = cardObject.GetComponent<Canvas>();
+        RectTransform cardContent = cardObject.transform.Find("CardContent") as RectTransform;
+        if (cardCanvas == null || cardContent == null)
         {
-            // CardView owns a root Canvas. Keep each runtime card as an independent root Canvas so its serialized root scale and sorting order remain valid.
-            GameObject cardObject = Instantiate(cardViewPrefab);
-            cardObject.name = $"HandCard_{index + 1:00}";
-
-            Canvas cardCanvas = cardObject.GetComponent<Canvas>();
-            RectTransform cardContent = cardObject.transform.Find("CardContent") as RectTransform;
-            if (cardCanvas == null || cardContent == null)
-            {
-                Debug.LogError("CardView prefab does not contain the expected Canvas and CardContent objects.", cardObject);
-                Destroy(cardObject);
-                continue;
-            }
-
-            HandCardVisual visual = cardObject.AddComponent<HandCardVisual>();
-            visual.Initialize(cardCanvas, cardContent, baseScale);
-
-            Image hitTarget = cardContent.gameObject.AddComponent<Image>();
-            hitTarget.color = Color.clear;
-            hitTarget.raycastTarget = true;
-
-            HandCardInteraction interaction = cardContent.gameObject.AddComponent<HandCardInteraction>();
-            interaction.Initialize(this, visual);
-            _cards.Add(visual);
+            Debug.LogError("CardView prefab does not contain the expected Canvas and CardContent objects.", cardObject);
+            Destroy(cardObject);
+            return null;
         }
+
+        HandCardVisual visual = cardObject.AddComponent<HandCardVisual>();
+        CanvasGroup feedbackCanvasGroup = cardContent.gameObject.AddComponent<CanvasGroup>();
+        feedbackCanvasGroup.interactable = true;
+        feedbackCanvasGroup.blocksRaycasts = true;
+        visual.Initialize(cardCanvas, cardContent, baseScale, cardId, feedbackCanvasGroup);
+
+        Image hitTarget = cardContent.gameObject.AddComponent<Image>();
+        hitTarget.color = Color.clear;
+        hitTarget.raycastTarget = true;
+
+        HandCardInteraction interaction = cardContent.gameObject.AddComponent<HandCardInteraction>();
+        interaction.Initialize(this, visual);
+        return visual;
     }
 
     private void LayoutCards(bool immediate, HandCardVisual excludedCard = null)
     {
-        int layoutCount = _cards.Count - (excludedCard == null ? 0 : 1);
+        int layoutCount = CurrentHandCount - (excludedCard == null ? 0 : 1);
         HandCardPose[] poses = HandCardLayout.Calculate(
             layoutCount,
             new HandCardLayoutSettings(baseSpacing, maxFanAngle, verticalDrop, maxHandWidth));
@@ -140,7 +194,7 @@ public sealed class HandCardContainer : MonoBehaviour
             var pose = new HandCardPose(
                 fanPose.AnchoredPosition + Vector2.up * handCenterYOffset,
                 fanPose.RotationDegrees,
-                card == excludedCard ? fanPose.SortingOrder : IndexOf(card));
+                IndexOf(card));
 
             if (immediate)
                 card.SetBasePoseImmediately(pose);
@@ -154,8 +208,35 @@ public sealed class HandCardContainer : MonoBehaviour
         }
     }
 
+    private HandCardVisual FindCardById(int cardId)
+    {
+        foreach (HandCardVisual card in _cards)
+        {
+            if (card.CardId == cardId)
+                return card;
+        }
+
+        return null;
+    }
+
+    private static bool ContainsCardId(IReadOnlyList<int> cardIds, int cardId)
+    {
+        foreach (int candidateCardId in cardIds)
+        {
+            if (candidateCardId == cardId)
+                return true;
+        }
+
+        return false;
+    }
+
     private int IndexOf(HandCardVisual card)
     {
         return _cards.IndexOf(card);
+    }
+
+    private bool IsPastPlayLine(HandCardVisual card)
+    {
+        return card.CurrentAnchoredY > playLineY;
     }
 }
