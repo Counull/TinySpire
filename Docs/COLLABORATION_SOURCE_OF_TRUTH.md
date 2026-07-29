@@ -204,3 +204,21 @@ Current collaboration model:
 ```text
 Calliope brainstorms concepts/text → Pegasus defines systems/math/docs → Daedalus implements code → Theseus decides/finalizes
 ```
+
+## 9. Current Work Tracking Workflow
+
+This is the current project-wide workflow decision. Agents must read and follow it instead of inferring a task system from their own defaults.
+
+```text
+Docs/                         detailed design, decisions, status, and evidence
+GitHub Issue                  one phase-level entry for a vertical slice
+Git                           code and document history
+```
+
+Rules:
+
+- Do not create a GitHub Issue for every small implementation step.
+- Do not use Hermes Kanban for TinySpire at the current project scale.
+- A phase-level Issue links to the relevant Docs pages; it does not duplicate the full design.
+- `Docs/Hermes_Pegasus/STATUS.md` remains the current task/status entry for the project.
+- When this workflow changes, update this section first. Other Agent prompts must point back here rather than copying a second version.
