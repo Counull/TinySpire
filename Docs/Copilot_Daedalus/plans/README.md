@@ -2,7 +2,7 @@
 title: plans · 实现计划（03_design 角色）
 page_type: plan
 lifecycle: active
-updated: 2026-07-12
+updated: 2026-07-30
 ---
 
 # plans · 实现计划
@@ -13,4 +13,6 @@ updated: 2026-07-12
 
 ## 现有计划
 
+- [2026-07-30 战斗静态配置表](2026-07-30-battle-static-config-tables.md)
+- [2026-07-30 BattleState 运行时参与者模型](2026-07-30-battle-runtime-state.md)
 - [2026-07-12 BattleScene 基础手牌 UI](2026-07-12-battlescene-card-ui.md)

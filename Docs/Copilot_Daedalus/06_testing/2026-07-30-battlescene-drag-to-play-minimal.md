@@ -4,7 +4,7 @@ page_type: testing
 lifecycle: active
 date: 2026-07-30
 scope: TinySpire/Assets/Scripts/UI/Battle/Hand/
-source: 实现计划、纯状态检查、静态编译与 UnityMCP Play Mode
+source: 实现计划、纯状态检查、静态编译、UnityMCP Play Mode 与用户 Game View 手工验收
 status_source: ../SESSION_LOG.md
 ---
 
@@ -24,13 +24,13 @@ status_source: ../SESSION_LOG.md
 | 编译 | `dotnet build TinySpire/TinySpire.sln --no-restore` | 通过：0 错误；9 条既有第三方程序集版本冲突警告。 |
 | Unity Play Mode | UnityMCP Console | Console 为 0 条错误、0 条警告。 |
 
-## 待人工交互确认
+## 手工交互验收
 
-UnityMCP 当前没有指针事件注入能力，以下两项未伪造为已完成：
+用户已在 Game View 手工确认以下交互：
 
-- 按住任意卡牌并移动：卡牌保持抓取偏移、持续跟随鼠标，且不跳到屏幕中心。
-- 将卡拖过 `playLineY` 后松手：卡牌销毁、其余手牌补位，且透明度反馈出现；线内松手应回弹并恢复透明度。
+- 按住任意卡牌并移动时，卡牌保持抓取偏移、持续跟随鼠标，且不跳到屏幕中心。
+- 将卡拖过 `playLineY` 后松手时，卡牌销毁、其余手牌补位，并出现透明度反馈；线内松手会回弹并恢复透明度。
 
 ## 结论
 
-纯状态、编译与 Unity 运行初始化验证通过。拖拽坐标实现已经排除上一版的零尺寸根 Canvas 绝对坐标换算；最终鼠标手势验收需在当前 Game View 手工执行。
+纯状态、编译、Unity 运行初始化与 Game View 手工交互验收均已通过。拖拽坐标实现已排除上一版的零尺寸根 Canvas 绝对坐标换算问题；Phase 1 无剩余验收项。

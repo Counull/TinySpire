@@ -1,0 +1,9 @@
+{
+  "3001": {
+    "id": 3001,
+    "name": "Strength",
+    "cost": 0,
+    "target_rule": 0,
+    "effect_id": 4001
+  }
+}

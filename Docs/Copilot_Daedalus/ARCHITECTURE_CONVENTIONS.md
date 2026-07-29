@@ -4,7 +4,7 @@ owner: Daedalus
 page_type: convention
 lifecycle: active
 created: 2026-07-29
-updated: 2026-07-29
+updated: 2026-07-30
 status_source: SESSION_LOG.md
 note: 本文件只锁定代码实现层面的通用约定，不涉及玩法设计决策（玩法决策见 ../Hermes_Pegasus/design/decision-locks.md）。不修改、不复制 architecture.md，只交叉引用。
 ---
@@ -64,6 +64,18 @@ note: 本文件只锁定代码实现层面的通用约定，不涉及玩法设�
 
 任何 Daedalus 产出的、交给外部 Agent（如 Codex）的实施 Prompt，**必须显式引用本文件路径**（`Docs/Copilot_Daedalus/ARCHITECTURE_CONVENTIONS.md`）作为"不要重新决策"的强制前提之一。不能假设外部 Agent 已经知道这些约定——外部 Agent 没有本仓库的会话记忆，只会看到 Prompt 里写了什么。
 
+### AC-006：场景级服务用挂载在场景内的 LifetimeScope
+
+场景专属的运行时服务（例如战斗局内的回合调度器、抽牌堆、弃牌堆）对应的 `LifetimeScope`，必须作为 GameObject 挂载在该场景（或场景引用的 prefab）里，`parentReference` 按类型指向根 Scope；**不允许**由 `SceneFlowService` 或其他代码路径动态 `CreateChild`/手动持有场景级子 Scope。生命周期完全依赖 Unity 场景加载/卸载触发的 `Awake`/`OnDestroy`。
+
+来源与先例：`CD-008`；此前一版动态创建子 Scope 的方案已撤回，验证记录归档于 `99_archive/2026-07-30-scene-child-scope.md`。
+
+### AC-007：派生数据不得成为第二份运行时状态
+
+任何可由唯一权威状态计算或筛选得出的数据（例如存活参与者、玩家阵营参与者、敌人阵营参与者），必须在实际业务需要时按需派生；不得预先维护一个可变的镜像列表、缓存计数或平行索引作为第二事实源。若将来因性能确实需要索引或缓存，必须由同一聚合在单个写入口内原子更新，并通过新的 CD 记录失效与一致性策略。
+
+来源与先例：`BattleState`（`CD-010`）。
+
 ## 4. Provisional（先这样做，允许调整细节）
 
 ### AC-P001：变化通知用 `event Action`
@@ -79,6 +91,7 @@ note: 本文件只锁定代码实现层面的通用约定，不涉及玩法设�
 - 未来是否所有"最小状态聚合"类（`HandState` 等）都要合并成同一个 `BattleState` 的子聚合，还是保持多个独立聚合并存？
 - R3 正式接入状态层的具体触发条件/时间点是什么？
 - 聚合类之间（例如手牌聚合 vs 未来的战场聚合）如何互相引用，是否需要一个统一的聚合根？
+- 存档层 `RunScope`/`RunFlowService`/`RunState`（`CD-009`）目前只是前瞻记录，`RunFlowService` 的具体触发时机、`RunState` 的字段结构、地图是否需要独立 Scope 均未实现，不能当作已落地约定使用。
 
 ## 6. Reopen 流程
 

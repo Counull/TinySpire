@@ -13,18 +13,51 @@ namespace cfg
 {
 public partial class Tables
 {
-    public demo.Tbitem Tbitem {get; }
+    /// <summary>
+    /// Hero static template
+    /// </summary>
+    public battle.TbHero TbHero {get; }
+    /// <summary>
+    /// Enemy static template
+    /// </summary>
+    public battle.TbEnemy TbEnemy {get; }
+    /// <summary>
+    /// Initial deck static template
+    /// </summary>
+    public battle.TbDeck TbDeck {get; }
+    /// <summary>
+    /// Card static template
+    /// </summary>
+    public battle.TbCard TbCard {get; }
+    /// <summary>
+    /// Card effect static template
+    /// </summary>
+    public battle.TbCardEffect TbCardEffect {get; }
+    /// <summary>
+    /// Battle encounter static template
+    /// </summary>
+    public battle.TbEncounter TbEncounter {get; }
 
 
       public Tables(System.Func<string, JArray> loader)
     {
-        Tbitem = new demo.Tbitem(loader("demo_tbitem"));
+        TbHero = new battle.TbHero(loader("battle_tbhero"));
+        TbEnemy = new battle.TbEnemy(loader("battle_tbenemy"));
+        TbDeck = new battle.TbDeck(loader("battle_tbdeck"));
+        TbCard = new battle.TbCard(loader("battle_tbcard"));
+        TbCardEffect = new battle.TbCardEffect(loader("battle_tbcardeffect"));
+        TbEncounter = new battle.TbEncounter(loader("battle_tbencounter"));
         ResolveRef();
     }
     
      private void ResolveRef()
     {
-        Tbitem.ResolveRef(this);
+        TbHero.ResolveRef(this);
+        TbEnemy.ResolveRef(this);
+        TbDeck.ResolveRef(this);
+        TbCard.ResolveRef(this);
+        TbCardEffect.ResolveRef(this);
+        TbEncounter.ResolveRef(this);
     }
 }
 

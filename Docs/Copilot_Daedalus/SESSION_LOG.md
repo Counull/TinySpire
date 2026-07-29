@@ -3,9 +3,60 @@ created: 2026-07-06
 updated: 2026-07-30
 ---
 
+## 2026-07-30 · 战斗表 YooAsset 生成路径修正
+
+> - Luban JSON 输出从 `TinySpire/Assets/StreamingAssets/GameData` 改为 `TinySpire/Assets/GameData`，与 `ConfigService` 的资源路径加载约定对齐。
+> - 生成后重建 YooAsset `Main` 内置包；仅刷新 Unity 不会把新 JSON 写入离线清单。Bootstrap 场景实跑确认 `battle_tbhero` 加载不再报错。
+
+---
+
 # Daedalus · 会话日志
 
 > 记录每次编程会话的关键产出、决策和待办。
+
+---
+## 2026-07-30 · 战斗静态配置表实施
+
+- 在 `DataTables/Datas/__tables__.xlsx` 登记 6 张手工 schema 战斗表，并在 `__enums__.xlsx` 定义 `TargetRule.Self`、`EffectType.ModifyAttribute`、`Attribute.Strength`。
+- 新增 `battle.hero.xlsx`、`battle.enemy.xlsx`、`battle.deck.xlsx`、`battle.card.xlsx`、`battle.card_effect.xlsx`、`battle.encounter.xlsx`；填入一套闭合最小样例：Test Warrior（30 HP）→ deck 1001 → Strength 卡牌（Self，+3 Strength），Test Slime（20 HP）和单敌人 encounter 5001。
+- 模板表只保存稳定 ID 与设计数值；`CombatantId`、当前生命、存活、手牌/抽牌/弃牌堆、卡牌实例、临时费用、升级、敌人意图和控制者不进入配置。表间关系暂以 ID 表达，未实现 `ref` 校验或运行时导航。
+- Luban 生成 `cfg.battle` 的 6 个记录类型、6 个表管理器、3 个枚举及 6 个 JSON；`#demo.item.xlsx` 按既有删除意图保持缺失，旧 demo 生成产物已随重新生成移除。战斗数据文件故意不使用 `#` 前缀，避免自动导入与手工 schema 重复。
+- 验证：UnityMCP 资源刷新无编译错误；`dotnet build TinySpire/TinySpire.sln --no-restore --verbosity:minimal` 为 0 错误（13 条既有程序集版本冲突警告）。详情见 `plans/2026-07-30-battle-static-config-tables.md`、`06_testing/2026-07-30-battle-static-config-tables.md` 与 CD-011。
+
+---
+## 2026-07-30 · BattleState 运行时参与者模型实施
+
+- 新增纯 C# `TinySpire.Battle` 运行时模型：`CombatantId`、共同基类 `CombatantState`、`PlayerCombatantState`、`EnemyCombatantState` 与聚合根 `BattleState`。
+- `BattleState` 是唯一持有 `CombatantId → CombatantState` 映射的事实源，并以只读字典 `Combatants` 暴露；按用户反馈删除了预置的玩家/敌人/存活派生视图和与 `TryGetCombatant` 重复的 `ResolveSelf`，未来只在真实目标规则出现时从字典值按需派生。未并存 `List` 作为索引或镜像；本次将原始 `List` 正式替换为该字典，`TryGetCombatant` 直接委托 `TryGetValue`。
+- 初版共同可变事实仅为生命；`ApplyDamage` 修改目标参与者自身的当前生命，`IsAlive` 由该生命值派生，当前不预置存活视图。未接入 `HandState`、卡牌实例、Effect、敌人意图、能量、UI、场景锚点或 `BattleLifetimeScope`。
+- 新增 EditMode `BattleStateTests`；字典调整后 UnityMCP 重新运行 3 项测试全部通过。`dotnet build TinySpire/TinySpire.sln --no-restore --verbosity:minimal` 为 0 错误（13 条既有程序集版本冲突警告）。测试结束后 Console 出现 YooAsset `AssetBundleCollectorWindow.RefreshWindow` 的既有编辑器包空引用（Undo 回调，未触及本次代码），已在验证记录注明。
+- 决策见 `CODE_DECISIONS.md` CD-010；计划与验证记录分别见 `plans/2026-07-30-battle-runtime-state.md`、`06_testing/2026-07-30-battle-runtime-state.md`。
+
+---
+## 2026-07-30 · BattleScene 拖拽出牌（最小判定）验收完成
+
+- 用户已在 Game View 完成并确认鼠标手势验收：拖拽保持抓取偏移且持续跟随；越过 `playLineY` 松手后卡牌销毁、其余手牌补位并显示透明度反馈；线内松手会回弹并恢复反馈。
+- `拖拽打出最小判定 + 手牌数据归属权收回`（ROADMAP Phase 1）由“已实施，待人工手势验收”更新为“已完成并验证”。
+- 已更新 `ROADMAP.md` 与 `06_testing/2026-07-30-battlescene-drag-to-play-minimal.md`；未修改代码、预制体、场景或 DEP-001～DEP-004 的未解决状态。
+
+---
+## 2026-07-30 · BattleScene LifetimeScope 实施
+
+- 新增 `TinySpire/Assets/Scripts/Battle/BattleLifetimeScope.cs`：定义 sealed 的 VContainer 场景 Scope，`Configure` 保持为空，仅保留 `TODO(DEP-005)` 占位标记。
+- 通过 Unity MCP/编辑器在 `BattleScene.unity` 根级创建并保存 `BattleLifetimeScope` GameObject，`parentReference` 设置为 `Bootstrap`。
+- 未修改 `SceneFlowService.cs`、`Bootstrap.cs`，未实现回合调度器、抽牌堆、弃牌堆或相关抽象。
+- 验证：`dotnet build TinySpire/TinySpire.sln --no-restore` 为 0 错误；Unity Play Mode 为 0 错误、0 警告，未出现 parent reference 警告。
+- 验证记录：`06_testing/2026-07-30-battle-lifetime-scope.md`。
+
+---
+## 2026-07-30 · 战斗场景 LifetimeScope 结构 grilling（纯讨论，无代码改动）
+
+- 用户提出未来战斗场景需要独立的回合调度循环、抽牌堆、弃牌堆，讨论是否需要专属 `LifetimeScope`、是否绑定场景生命周期。结论：需要，且应作为场景内挂载的 GameObject（不由代码动态创建/销毁），因为 YooAsset `LoadSceneMode.Single` 切场景时会自动销毁旧场景 GameObject，VContainer 的 `parentReference` 按类型全局查找父 Scope（`LifetimeScope.FindParent`），与 `SceneFlowService` 完全解耦，不需要改动 `SceneFlowService.cs`。
+- 进一步讨论"未来加入地图"后的结构（Game → 存档 → 三张地图 → 具体事件），结论：不需要给每一层单开 DI Scope，只需要 3 层——Bootstrap（Root）→ RunScope（存档，跨场景持久，需要新的 `RunFlowService` 手动创建/销毁）→ 事件层场景 Scope（战斗/地图/商店，沿用场景挂载方案）；"地图"本身只是 `RunState` 里的字段，不需要单独 Scope。
+- 确认了 `06_testing/2026-07-30-scene-child-scope.md` 描述的"`SceneFlowService.CreateChild` 动态创建子 Scope"方案已被用户撤回、代码已还原，该文件头部的 `source: CD-008` 是错误引用（当时 CD-008 从未真正存在）；已将该文件归档至 `99_archive/2026-07-30-scene-child-scope.md` 并更新其前言说明。
+- 新增 `CD-008`（场景级服务用挂载在场景内的 `LifetimeScope`，不由代码动态创建/销毁）与 `CD-009`（存档层 `RunScope` 需要显式 `RunFlowService` 管理生命周期，前瞻记录、未实现）；`ARCHITECTURE_CONVENTIONS.md` 新增 Locked 的 `AC-006` 并在 Open 部分登记 `RunScope` 仍是前瞻性质。
+- 按 CD-008/AC-006 产出 Codex 实施 Prompt（直接在对话中给出，未另存为文件）：仅创建 `BattleLifetimeScope`（挂在 `BattleScene.unity`，`parentReference` 指向 `Bootstrap`），`Configure` 暂空并标记 `DEP-005`；明确排除回合调度器/抽牌堆/弃牌堆的实际实现，不改动 `SceneFlowService.cs`。新增依赖项 `DEP-005` 登记到 `DEPENDENCIES.md`。
+- 本轮未写任何 C# 代码，未创建 `RunFlowService`/`RunLifetimeScope`/`RunState`，仅做文档维护。
 
 ---
 
@@ -31,7 +82,7 @@ updated: 2026-07-30
 
 ### 后续动作
 
-- 在当前 Game View 中人工拖动卡牌：确认移动不跳中心、越线销毁补位、线内回弹和透明度反馈。
+- 已完成：用户在当前 Game View 中人工确认移动不跳中心、越线销毁补位、线内回弹和透明度反馈。
 
 ---
 

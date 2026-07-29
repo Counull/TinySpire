@@ -27,3 +27,4 @@ note: 全项目范围唯一的依赖项 ID 分配与状态账本；实现计划�
 | DEP-002 | 费用/能量系统与检查逻辑 | 需先定义能量池数据结构；应并入 `HandState` 或其后续演化的聚合 | `TinySpire/Assets/Scripts/UI/Battle/Hand/HandState.cs:25` | `plans/2026-07-29-battlescene-drag-to-play-minimal.md` | open | — |
 | DEP-003 | 拖过出牌线的最终视觉样式 | 需要策划/美术确认最终表现 | `TinySpire/Assets/Scripts/UI/Battle/Hand/HandCardVisual.cs:83` | `plans/2026-07-29-battlescene-drag-to-play-minimal.md` | open | — |
 | DEP-004 | 打出后卡牌的销毁前过渡动作（按卡牌效果类型区分） | 需要 Effect 系统 / 卡牌数据结构先落地 | `TinySpire/Assets/Scripts/UI/Battle/Hand/HandCardContainer.cs:130` | `plans/2026-07-29-battlescene-drag-to-play-minimal.md` | open | — |
+| DEP-005 | `BattleLifetimeScope.Configure` 为空，等待回合调度器/抽牌堆/弃牌堆等战斗局内服务确定后注册 | 需要先设计回合调度循环、抽牌堆、弃牌堆的具体接口（当前明确不在本轮实现范围） | `TinySpire/Assets/Scripts/Battle/BattleLifetimeScope.cs` | 无（Codex 直接实施，未产出 plan 文档） | open | — |

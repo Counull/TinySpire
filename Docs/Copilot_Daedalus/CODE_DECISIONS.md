@@ -1,6 +1,6 @@
 ---
 created: 2026-07-06
-updated: 2026-07-29
+updated: 2026-07-30
 ---
 
 # Daedalus · 代码决策记录
@@ -96,3 +96,53 @@ updated: 2026-07-29
 **理由**：先保留一个小而明确的接口，验证跨帧保持、同步事件转换和生命周期顺序；后续只有在真实用例证明需要时，才通过外部组合或新的决策扩展能力。
 
 **影响**：新增 `TinySpire/Assets/Scripts/Core/StateMachine.cs` 及其 Unity 元数据；不接入现有游戏代码，不改变 HandState、配置服务或 BattleScene。
+
+## CD-008：场景级服务用挂载在场景内的 LifetimeScope，不由代码动态创建/销毁
+
+**问题**：BattleScene 未来需要回合调度器、抽牌堆、弃牌堆等战斗局内运行时服务，需要一个专属的 DI 容器边界。此前一版方案尝试由 `SceneFlowService` 用 `CreateChild` 动态创建/持有每个场景的子 `LifetimeScope`（验证记录见已归档的 `99_archive/2026-07-30-scene-child-scope.md`），但该方案已被用户撤回、代码已还原，需要重新给出结论。
+
+**选择**：场景级服务（战斗/地图/商店等）的 `LifetimeScope` 直接作为 GameObject 挂载在对应场景（或场景引用的 prefab）里，`parentReference` 按类型指向根 Scope（现阶段是 `Bootstrap`）。生命周期完全依赖 Unity 场景加载/卸载：YooAsset 以 `LoadSceneMode.Single` 切换场景时销毁旧场景全部 GameObject，其中的场景级 `LifetimeScope` 随之 `Dispose`；`SceneFlowService` 不需要知道、也不需要修改任何代码来配合这件事——VContainer 的父级解析（`LifetimeScope.FindParent`）在 `Awake` 时按类型全局查找已加载的父 Scope 实例，和“这个场景是怎么被加载出来的”完全解耦。
+
+**理由**：Unity 场景系统已经免费提供“场景卸载 = GameObject 销毁 = 容器 Dispose”的清理时机，手动管理子 Scope 创建/销毁只是重新发明这个机制，还引入额外的时机竞态风险；符合 AC-002 不做投机性抽象。
+
+**影响**：未来新增战斗/地图/商店场景时，直接在场景里放置对应的 `LifetimeScope` 子类组件即可；不涉及 `SceneFlowService.cs` 的任何改动。已归档 `06_testing/2026-07-30-scene-child-scope.md` → `99_archive/2026-07-30-scene-child-scope.md`（该验证记录描述的方案已撤回，且原文件头的 `source: CD-008` 是错误引用）。
+
+## CD-009：存档层（RunScope）需要显式生命周期管理服务，场景挂载方案不适用（前瞻，未实现）
+
+**问题**：未来加入“地图”后会形成 Game → 存档 → 地图 → 具体事件（战斗/奇遇/商店）的结构。CD-008 的“场景挂载”方案只适用于生命周期恰好等于单一场景的层；存档层的数据（卡组、遗物、金钱、当前地图进度）要跨越地图/战斗/商店的多次场景切换持续存活，没有天然对应的场景加载/卸载事件。
+
+**选择**：这一层（暂命名 `RunScope`）不挂载在任何单一场景里，而是由一个新的、与 `SceneFlowService` 平级但职责分离的显式流程服务（暂命名 `RunFlowService`）在“开始新游戏/读档”时创建（例如从 `Bootstrap` `CreateChild` 出一个 `DontDestroyOnLoad` 的子 Scope），在“本局结束/返回主菜单”时显式 `Dispose`。届时事件层场景 Scope 的 `parentReference` 改为指向这一层，而不是 `Bootstrap`。“三张地图”本身不需要单独一层 Scope，只作为 `RunScope` 内 `RunState`（纯 C# 数据）的字段存在，除非某张地图确有独立的运行时服务需求。
+
+**理由**：DI Scope 层级应该对应生命周期边界，而不是照搬数据模型的层级；`RunScope` 是唯一一处生命周期不对齐任何单一场景、因此必须手动管理创建/销毁的层，其余层继续用 CD-008 的场景挂载方案。
+
+**影响**：本轮不创建 `RunFlowService`、`RunLifetimeScope` 或 `RunState` 代码（按 AC-002，不做投机性抽象），仅作为未来“存档/地图”功能立项时的架构前提记录。
+
+## CD-010：BattleState 作为战斗参与者与目标解析的唯一事实源
+
+**问题**：卡牌效果需要按稳定 ID 解析玩家/敌人目标；若同时维护“全部参与者”“存活参与者”“玩家列表”“敌人列表”等多个可变集合，死亡、加入战斗或换阵营时会出现同步遗漏与状态分叉。
+
+**选择**：`BattleState` 内只持有一个权威的 `CombatantId → CombatantState` 字典，并只以 `IReadOnlyDictionary<CombatantId, CombatantState>` 暴露它。当前不预置玩家、敌人或存活视图；出现真实目标规则后再从该字典的值按需派生。`TryGetCombatant` 直接委托给该唯一事实字典。`PlayerCombatantState` 与 `EnemyCombatantState` 仅继承共同的 `CombatantState`，不在父类中预置牌组、AI 或场景对象字段。
+
+**理由**：参与者的稳定 ID 已是目标解析的领域主键，因此 ID 到参与者的映射本身就是最贴合领域的唯一事实，并能直接完成查询。避免同时保留 `List` 与字典；后续只有在“顺序”成为明确业务事实时，才单独建模其语义，不能依赖字典遍历顺序。
+
+**影响**：新增 `TinySpire/Assets/Scripts/Battle/CombatantState.cs`、`BattleState.cs` 与 `TinySpire/Assets/Editor/Tests/BattleStateTests.cs`。不接入 `HandState`、卡牌实例、效果、敌人意图、能量、场景锚点或 DI 注册。
+
+## CD-011：战斗配置只描述静态模板，不镜像运行时状态
+
+**问题**：玩家、敌人、卡牌需要可编辑、可生成的配置来源；若把当前生命、存活状态、手牌或卡牌实例等局内可变值写进表格，会和 `BattleState`、`HandState` 形成两份事实。
+
+**选择**：以 Luban 表定义六类静态模板：`battle.Hero`、`battle.Enemy`、`battle.Deck`、`battle.Card`、`battle.CardEffect`、`battle.Encounter`；目标规则、效果类型与可修改属性定义为 `battle.TargetRule`、`battle.EffectType`、`battle.Attribute` 枚举。表之间仅保存模板 ID 关系，运行时再由 `BattleState`、未来的卡牌实例和手牌状态实例化并持有可变数据。
+
+**理由**：模板 ID、基础生命、基础力量、费用、效果数值和遭遇组成是可复用的设计事实；`CombatantId`、当前生命、`IsAlive`、手牌/抽牌/弃牌堆、临时费用、升级、敌人意图和控制者则只在某一局战斗中成立，不能回写为配置状态。
+
+**影响**：`DataTables/Datas/__tables__.xlsx`、`__enums__.xlsx` 与六个 `battle.*.xlsx` 数据源；Luban 输出 `TinySpire/Assets/Scripts/Core/Generated/Config/battle/` 和 `TinySpire/Assets/GameData/battle_*.json`，与 `ConfigService` 的 YooAsset 地址一致。重新生成数据后必须重建 YooAsset `Main` 内置包，使新 JSON 进入离线清单；不修改目标解析或效果执行代码。
+
+## CD-012：Luban 表数据以资源路径加载，并在生成后重建离线清单
+
+**问题**：`ConfigService` 通过 `Assets/GameData/<table>.json` 加载表数据；若 Luban 输出到 `StreamingAssets/GameData`，或仅刷新 Unity 而不重建 YooAsset `Main` 包，离线清单不会包含新表，运行时会报资源地址无效。
+
+**选择**：Luban 统一输出至 `TinySpire/Assets/GameData`；保留 `ConfigService` 的资源路径加载方式。每次生成或变更 `Assets/GameData` 后，用现有 `Main` / `BuiltinBuildPipeline` 重建内置包。
+
+**理由**：当前 `Main` 包未启用以自定义地址替代资源路径，运行时清单以资源路径为定位键；维持这条既有约定比改写整个资源定位策略影响更小。资源收集器已经覆盖 `Assets/GameData`，重建内置包即可更新离线清单。
+
+**影响**：`DataTables/gen.bat`、`Assets/GameData/`、`Assets/StreamingAssets/yoo/Main/`。生成配置并不自动更新 YooAsset 清单，构建是必要的后续步骤。

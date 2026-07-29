@@ -1,0 +1,8 @@
+{
+  "2001": {
+    "id": 2001,
+    "name": "Test Slime",
+    "max_health": 20,
+    "base_strength": 0
+  }
+}

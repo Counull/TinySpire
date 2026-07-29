@@ -2,8 +2,10 @@
 title: 06_testing · 测试记录
 page_type: testing
 lifecycle: active
-updated: 2026-07-12
+updated: 2026-07-30
 ---
+
+- [2026-07-30 BattleScene LifetimeScope](2026-07-30-battle-lifetime-scope.md)
 
 # 06_testing · 测试记录
 
@@ -13,6 +15,8 @@ updated: 2026-07-12
 
 ## 验证记录
 
+- [2026-07-30 战斗静态配置表](2026-07-30-battle-static-config-tables.md)
+- [2026-07-30 BattleState 运行时参与者模型](2026-07-30-battle-runtime-state.md)
 - [2026-07-30 最小状态机 Core](2026-07-30-state-machine-core.md)
 - [2026-07-30 BattleScene 拖拽出牌（最小判定）](2026-07-30-battlescene-drag-to-play-minimal.md)
 - [2026-07-29 BattleScene 手牌 UI（杀戮尖塔式）](2026-07-29-battlescene-hand-ui-sts-style.md)

@@ -12,44 +12,49 @@ using Newtonsoft.Json.Linq;
 
 
 
-namespace cfg.demo
+namespace cfg.battle
 {
 
-public sealed partial class item : Luban.BeanBase
+public sealed partial class Hero : Luban.BeanBase
 {
-    public item(JToken _buf) 
+    public Hero(JToken _buf) 
     {
         JObject _obj = _buf as JObject;
         Id = (int)_obj.GetValue("id");
         Name = (string)_obj.GetValue("name");
-        Desc = (string)_obj.GetValue("desc");
-        Count = (int)_obj.GetValue("count");
+        MaxHealth = (int)_obj.GetValue("max_health");
+        BaseStrength = (int)_obj.GetValue("base_strength");
+        InitialDeckId = (int)_obj.GetValue("initial_deck_id");
     }
 
-    public static item Deserializeitem(JToken _buf)
+    public static Hero DeserializeHero(JToken _buf)
     {
-        return new demo.item(_buf);
+        return new battle.Hero(_buf);
     }
 
     /// <summary>
-    /// id
+    /// Unique ID
     /// </summary>
     public readonly int Id;
     /// <summary>
-    /// 名称
+    /// Name
     /// </summary>
     public readonly string Name;
     /// <summary>
-    /// 描述
+    /// Max health
     /// </summary>
-    public readonly string Desc;
+    public readonly int MaxHealth;
     /// <summary>
-    /// 个数
+    /// Base strength
     /// </summary>
-    public readonly int Count;
+    public readonly int BaseStrength;
+    /// <summary>
+    /// Initial deck ID
+    /// </summary>
+    public readonly int InitialDeckId;
 
 
-    public const int __ID__ = 750578750;
+    public const int __ID__ = -795877488;
     public override int GetTypeId() => __ID__;
 
     public  void ResolveRef(Tables tables)
@@ -61,8 +66,9 @@ public sealed partial class item : Luban.BeanBase
         return "{ "
         + "id:" + Id + ","
         + "name:" + Name + ","
-        + "desc:" + Desc + ","
-        + "count:" + Count + ","
+        + "maxHealth:" + MaxHealth + ","
+        + "baseStrength:" + BaseStrength + ","
+        + "initialDeckId:" + InitialDeckId + ","
         + "}";
     }
 }

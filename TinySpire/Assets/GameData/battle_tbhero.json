@@ -1,0 +1,9 @@
+{
+  "1001": {
+    "id": 1001,
+    "name": "Test Warrior",
+    "max_health": 30,
+    "base_strength": 0,
+    "initial_deck_id": 1001
+  }
+}

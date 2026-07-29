@@ -4,7 +4,7 @@ owner: Daedalus
 page_type: roadmap
 lifecycle: proposal
 created: 2026-07-29
-updated: 2026-07-29
+updated: 2026-07-30
 status_source: SESSION_LOG.md
 note: 本文件是实现侧的阶段化路线图提案，细化 ../Hermes_Pegasus/STATUS.md 的 P0 清单；不替代 STATUS.md 的项目状态权威。若要成为项目级正式状态源，需要 Pegasus/Theseus 确认后同步回 STATUS.md，Daedalus 不会静默改写 STATUS.md。
 ---
@@ -21,7 +21,7 @@ note: 本文件是实现侧的阶段化路线图提案，细化 ../Hermes_Pegasu
 | 阶段 | 内容 | 状态 |
 |---|---|---|
 | Phase 0 | 手牌 UI 表现层（扇形/悬停/拖拽视觉） | ✅ 已实施 |
-| Phase 1 | 拖拽打出最小判定 + 手牌数据归属权收回 | � 已实施，待人工手势验收 |
+| Phase 1 | 拖拽打出最小判定 + 手牌数据归属权收回 | ✅ 已完成并验证 |
 | Phase 2 | 卡牌数据最小结构（"力量+3"测试卡） | ⬜ 未开始 |
 | Phase 3 | Effect 执行链（Card → Effect → 属性变化） | ⬜ 未开始 |
 | Phase 4 | 属性状态 → UI 绑定 | ⬜ 未开始 |
@@ -42,7 +42,7 @@ note: 本文件是实现侧的阶段化路线图提案，细化 ../Hermes_Pegasu
 - **目标**：拖过可调出牌线判定为"打出"；手牌数据归属权从 UI 收回到 `HandState` 纯 C# 聚合类。
 - **依赖**：Phase 0。
 - **涉及文件**：同 Phase 0 目录，新增 `HandState`。
-- **状态**：已由 Codex 实施，`HandState` 行为、出牌线判定、视觉重建、越线反馈、4 处 `TODO(DEP-xxx)` 均通过静态验证；拖拽/回弹的最终鼠标手势仍需人工 Game View 验收（UnityMCP 无法注入指针事件）。见 `06_testing/2026-07-29-battlescene-drag-to-play-minimal.md`。
+- **状态**：已由 Codex 实施并验证完成。`HandState` 行为、出牌线判定、视觉重建、越线反馈、4 处 `TODO(DEP-xxx)` 均通过静态验证；最终鼠标拖拽/回弹手势已由用户在 Game View 确认。见 `06_testing/2026-07-30-battlescene-drag-to-play-minimal.md`。
 - **产生的依赖项**：DEP-001（目标检测方式）、DEP-002（费用检查）、DEP-003（视觉样式）、DEP-004（销毁过渡动作），见 [`DEPENDENCIES.md`](DEPENDENCIES.md)。
 - **架构约定**：遵守 `ARCHITECTURE_CONVENTIONS.md` 的 AC-001（最小状态聚合）。
 
