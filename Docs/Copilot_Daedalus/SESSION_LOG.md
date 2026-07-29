@@ -1,11 +1,21 @@
 ---
 created: 2026-07-06
-updated: 2026-07-29
+updated: 2026-07-30
 ---
 
 # Daedalus · 会话日志
 
 > 记录每次编程会话的关键产出、决策和待办。
+
+---
+
+## 2026-07-30 · 最小状态机 Core 实施
+
+- 新增纯 C# `TinySpire.Core.StateMachine`：状态包含 `Enter`、`Tick(TimeSpan)`、`Handle(event)`、`Exit`，状态通过返回值请求切换。
+- 状态机不持有事件队列、不依赖 Unity/UniTask、不查找游戏运行时数据；Update/Tick 驱动和事件排队由外部负责。
+- 支持状态跨多帧保持、同步事件分发、同一次 `Tick` 中后续状态使用零时间继续 Tick，以及不可重启的 `Stop()`。
+- 本轮明确不实现 Context、嵌套状态、并行状态、异步调度和任何游戏领域接入，避免在缺少真实用例时扩展 Core。
+- 验证记录：`06_testing/2026-07-30-state-machine-core.md`。
 
 ---
 
