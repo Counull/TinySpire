@@ -42,6 +42,7 @@ status_source: ../SESSION_LOG.md
 - 手工登记的战斗表使用 `battle.TbXxx` 表名和 `battle.Xxx` 记录类型；避免把 table 与 value type 设为同名。
 - 战斗数据文件不以 `#` 开头，以免与 Luban 自动导入规则重复；`#demo.item.xlsx` 已按既有删除意图移除，不再参与生成。
 - Luban JSON 输出到 `TinySpire/Assets/GameData`；生成后必须用 YooAsset 的 `Main` / `BuiltinBuildPipeline` 重建内置包，单独刷新 Unity 不会更新离线清单。
+- 战士初始卡组使用 5×Strike、4×Defend、1×Bash；卡牌以 `effect_ids` 数组支持复合效果。`Bash` 的伤害和易伤目前仅为静态模板数据，不接入运行时执行。
 - ID 列表使用 `(array#sep=,),int`，在一个单元格内以逗号分隔多个 ID。
 
 ## 明确排除

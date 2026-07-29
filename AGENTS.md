@@ -28,6 +28,12 @@
 - 使用批处理 Unity 验证前，先确认没有其他 Unity 实例占用项目。验证结束后确认批处理进程已经退出。
 - 讨论 HybridCLR、AOT/热更新边界或配置热更方案时，默认只给设计建议；只有用户明确要求实施后才能修改程序集结构。
 
+## 配置表与资源包流程
+
+- 只要修改 `DataTables/Datas/` 下的表格或表定义，交付前必须运行 Luban 生成（`DataTables/gen.bat` 或等价命令），更新生成代码与 `TinySpire/Assets/GameData/` 内的 JSON。
+- Luban 生成或其他方式改动 `TinySpire/Assets/GameData/` 后，必须重建 YooAsset `Main` 的内置 AB 包（`BuiltinBuildPipeline`），使新资源写入 `TinySpire/Assets/StreamingAssets/yoo/Main/` 的离线清单；仅刷新 Unity 资源数据库不算完成。
+- 验收至少确认：目标 JSON 位于 `Assets/GameData`、`Main` 内置包已重建，且启动加载链路未出现资源地址无效错误。
+
 ## 验证与交付
 
 - 修改后只运行与改动规模相称的检查，不为了验证而扩展修改范围。

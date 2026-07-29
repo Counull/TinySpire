@@ -16,10 +16,8 @@ namespace cfg.battle
     /// </summary>
     public enum Attribute
     {
-        /// <summary>
-        /// Strength
-        /// </summary>
-        Strength = 0,
+        None = 0,
+        Strength = 1,
     }
 
 } 

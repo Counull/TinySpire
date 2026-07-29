@@ -2,7 +2,31 @@
   "4001": {
     "id": 4001,
     "effect_type": 0,
-    "attribute": 0,
+    "attribute": 1,
     "value": 3
+  },
+  "4002": {
+    "id": 4002,
+    "effect_type": 1,
+    "attribute": 0,
+    "value": 6
+  },
+  "4003": {
+    "id": 4003,
+    "effect_type": 2,
+    "attribute": 0,
+    "value": 5
+  },
+  "4004": {
+    "id": 4004,
+    "effect_type": 1,
+    "attribute": 0,
+    "value": 8
+  },
+  "4005": {
+    "id": 4005,
+    "effect_type": 3,
+    "attribute": 0,
+    "value": 2
   }
 }

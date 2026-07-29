@@ -17,9 +17,12 @@ namespace cfg.battle
     public enum EffectType
     {
         /// <summary>
-        /// Modify an attribute
+        /// Strength
         /// </summary>
         ModifyAttribute = 0,
+        DealDamage = 1,
+        GainBlock = 2,
+        ApplyVulnerable = 3,
     }
 
 } 

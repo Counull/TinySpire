@@ -20,6 +20,10 @@ namespace cfg.battle
         /// Self target only
         /// </summary>
         Self = 0,
+        /// <summary>
+        /// Modify an attribute
+        /// </summary>
+        Enemy = 1,
     }
 
 } 

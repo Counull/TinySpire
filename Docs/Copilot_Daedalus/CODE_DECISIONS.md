@@ -146,3 +146,13 @@ updated: 2026-07-30
 **理由**：当前 `Main` 包未启用以自定义地址替代资源路径，运行时清单以资源路径为定位键；维持这条既有约定比改写整个资源定位策略影响更小。资源收集器已经覆盖 `Assets/GameData`，重建内置包即可更新离线清单。
 
 **影响**：`DataTables/gen.bat`、`Assets/GameData/`、`Assets/StreamingAssets/yoo/Main/`。生成配置并不自动更新 YooAsset 清单，构建是必要的后续步骤。
+
+## CD-013：卡牌模板用效果 ID 列表表达复合效果
+
+**问题**：单一 `effect_id` 只能表达一张卡的一项效果，无法完整描述战士 `Bash` 的“造成伤害并施加易伤”。
+
+**选择**：`battle.Card` 将 `effect_id` 改为 `effect_ids` 数组。新增静态枚举项：`TargetRule.Enemy`、`EffectType.DealDamage`、`EffectType.GainBlock`、`EffectType.ApplyVulnerable`，并以 `Attribute.None` 表示不涉及属性修改的效果。
+
+**理由**：复合效果是卡牌模板的稳定设计事实；以 ID 列表保留执行顺序，既能表示当前 STS 初始卡组，也不需要提前实现运行时效果执行器。
+
+**影响**：战士初始卡组为 5×Strike（6 伤害）、4×Defend（5 格挡）、1×Bash（8 伤害、2 易伤）；`game-config.json` 初始手牌维持 STS 对标的 5。运行时伤害、格挡、易伤结算仍未实现。

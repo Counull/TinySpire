@@ -4,6 +4,36 @@
     "name": "Strength",
     "cost": 0,
     "target_rule": 0,
-    "effect_id": 4001
+    "effect_ids": [
+      4001
+    ]
+  },
+  "3002": {
+    "id": 3002,
+    "name": "Strike",
+    "cost": 1,
+    "target_rule": 1,
+    "effect_ids": [
+      4002
+    ]
+  },
+  "3003": {
+    "id": 3003,
+    "name": "Defend",
+    "cost": 1,
+    "target_rule": 0,
+    "effect_ids": [
+      4003
+    ]
+  },
+  "3004": {
+    "id": 3004,
+    "name": "Bash",
+    "cost": 2,
+    "target_rule": 1,
+    "effect_ids": [
+      4004,
+      4005
+    ]
   }
 }

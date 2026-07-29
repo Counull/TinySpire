@@ -24,7 +24,7 @@ public sealed partial class Card : Luban.BeanBase
         Name = (string)_obj.GetValue("name");
         Cost = (int)_obj.GetValue("cost");
         TargetRule = (battle.TargetRule)(int)_obj.GetValue("target_rule");
-        EffectId = (int)_obj.GetValue("effect_id");
+        { var __json0 = _obj.GetValue("effect_ids"); int _n0 = (__json0 as JArray).Count; EffectIds = new int[_n0]; int __index0=0; foreach(JToken __e0 in __json0) { int __v0;  __v0 = (int)__e0;  EffectIds[__index0++] = __v0; }   }
     }
 
     public static Card DeserializeCard(JToken _buf)
@@ -49,9 +49,9 @@ public sealed partial class Card : Luban.BeanBase
     /// </summary>
     public readonly battle.TargetRule TargetRule;
     /// <summary>
-    /// Effect ID
+    /// Effect ID list
     /// </summary>
-    public readonly int EffectId;
+    public readonly int[] EffectIds;
 
 
     public const int __ID__ = -796030298;
@@ -68,7 +68,7 @@ public sealed partial class Card : Luban.BeanBase
         + "name:" + Name + ","
         + "cost:" + Cost + ","
         + "targetRule:" + TargetRule + ","
-        + "effectId:" + EffectId + ","
+        + "effectIds:" + Luban.StringUtil.CollectionToString(EffectIds) + ","
         + "}";
     }
 }

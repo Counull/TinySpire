@@ -3,6 +3,14 @@ created: 2026-07-06
 updated: 2026-07-30
 ---
 
+## 2026-07-30 · STS 战士初始卡组配置
+
+> - `battle.Deck` 1001 设为 5×Strike、4×Defend、1×Bash；初始手牌 `game-config.json` 已是 5，保持不变。
+> - `battle.Card` 由单个 `effect_id` 改为 `effect_ids` 列表，使 Bash 可表达“8 伤害 + 2 易伤”；新增敌方目标、伤害、格挡、易伤和空属性枚举项，仅作为静态配置。
+> - Luban 生成成功，YooAsset `Main` 内置包已重建；Bootstrap 场景实跑控制台 0 error。运行时效果结算不在本轮范围内。
+
+---
+
 ## 2026-07-30 · 战斗表 YooAsset 生成路径修正
 
 > - Luban JSON 输出从 `TinySpire/Assets/StreamingAssets/GameData` 改为 `TinySpire/Assets/GameData`，与 `ConfigService` 的资源路径加载约定对齐。
