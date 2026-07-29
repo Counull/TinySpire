@@ -27,7 +27,7 @@ public sealed class Bootstrap : LifetimeScope
         // 先注册启动参数，再注册依赖这些参数的资源、配置和场景服务。
         builder.RegisterInstance(new GameStartupOptions(packageName, initialSceneName, loadingSceneName));
         builder.Register<YooAssetPackageService>(Lifetime.Singleton);
-        builder.Register<LubanConfigService>(Lifetime.Singleton);
+        builder.Register<ConfigService>(Lifetime.Singleton);
         builder.Register<SceneFlowService>(Lifetime.Singleton);
         builder.RegisterEntryPoint<GameLauncher>();
     }

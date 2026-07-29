@@ -2,7 +2,8 @@ using System;
 using System.Collections.Generic;
 
 /// <summary>
-/// Minimal, UI-independent ownership of the current hand's placeholder card IDs.
+/// 当前手牌的轻量 ID 容器，与 UI 无关。
+/// 初始手牌数量由 GameConfig.json 的 initialHandCount 提供。
 /// </summary>
 public sealed class HandState
 {

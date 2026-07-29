@@ -2,17 +2,14 @@ using System.Collections.Generic;
 using DG.Tweening;
 using UnityEngine;
 using UnityEngine.EventSystems;
-using UnityEngine.Serialization;
 using UnityEngine.UI;
+using VContainer;
+using VContainer.Unity;
 
 [DisallowMultipleComponent]
 public sealed class HandCardContainer : MonoBehaviour
 {
     [SerializeField] private GameObject cardViewPrefab;
-
-    // Temporary placeholder: Luban-driven card data will replace only this HandState initialization input; layout, hover, and drag logic must remain unchanged.
-    [FormerlySerializedAs("handCount")]
-    [SerializeField, Min(0)] private int initialHandCount = 5;
 
     [Header("Fan Layout")]
     [SerializeField, Min(0f)] private float baseSpacing = 260f;
@@ -32,6 +29,8 @@ public sealed class HandCardContainer : MonoBehaviour
     [SerializeField, Min(0f)] private float hoverDuration = 0.15f;
     [SerializeField, Min(0f)] private float reflowDuration = 0.22f;
 
+    private GameConfig _config;
+
     private readonly List<HandCardVisual> _cards = new();
     private HandCardVisual _draggingCard;
     private HandState _handState;
@@ -47,7 +46,12 @@ public sealed class HandCardContainer : MonoBehaviour
             return;
         }
 
-        _handState = new HandState(initialHandCount);
+        // 从 Bootstrap 根 LifetimeScope 解析运行时配置。
+        if (FindFirstObjectByType<Bootstrap>() is { } scope)
+            _config = scope.Container.Resolve<ConfigService>().GameConfig;
+
+        int handCount = _config?.InitialHandCount ?? 5;
+        _handState = new HandState(handCount);
         _handState.Changed += HandleHandStateChanged;
         RebuildCards(immediate: true);
     }
