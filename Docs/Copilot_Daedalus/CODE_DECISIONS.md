@@ -156,3 +156,27 @@ updated: 2026-07-30
 **理由**：复合效果是卡牌模板的稳定设计事实；以 ID 列表保留执行顺序，既能表示当前 STS 初始卡组，也不需要提前实现运行时效果执行器。
 
 **影响**：战士初始卡组为 5×Strike（6 伤害）、4×Defend（5 格挡）、1×Bash（8 伤害、2 易伤）；`game-config.json` 初始手牌维持 STS 对标的 5。运行时伤害、格挡、易伤结算仍未实现。
+
+## CD-014：BattleSession 只把静态模板实例化为运行时事实
+
+**问题**：Luban 战斗表已经能加载，但 `BattleState` 与 `HandState` 仍由 UI 或测试手工创建；同时初始卡组含 5 张相同 Strike，若继续把模板 ID 当运行时卡牌 ID，视图查找和单卡移除会把重复模板混为一张。
+
+**选择**：新增场景级 `BattleSession` 作为配置到运行时的装配边界：从 `Hero`、`Encounter`、`Enemy`、`Deck` 与 `GameConfig` 创建 `BattleState` 和 `HandState`。每张运行时卡牌使用唯一 `CardInstanceId`，并以 `TemplateId` 引用静态 `Card`；不复制名称、费用或效果字段。`BattleLifetimeScope` 注册该会话，`HandCardContainer` 只消费会话中的手牌状态和静态卡牌模板。
+
+**临时限制**：正式牌堆尚未建立，初始手牌暂按卡组顺序取前 `initialHandCount` 张，由 `DEP-006` 明确标记；这不是正式洗牌/抽牌规则。
+
+**理由**：配置模板与运行时实例是不同身份域。把实例身份分离后，重复卡牌可独立移动和打出；同时 `BattleSession` 只负责一次性实例化，不保存配置镜像，不破坏 `BattleState`/`HandState` 的唯一事实归属。效果器仍可在目标、费用和牌堆边界稳定后单独实现。
+
+**影响**：新增 `TinySpire/Assets/Scripts/Battle/BattleSession.cs`；扩展 `BattleState`/`CombatantState`、`HandState`、`BattleLifetimeScope` 和手牌 UI。未修改配置表、生成数据、效果执行、牌堆、敌人行为或回合流程。
+
+## CD-015：规则随机使用实例流，卡牌区域由一个聚合持有
+
+**问题**：`UnityEngine.Random` 使用全局静态状态，视觉或其他系统多消耗一次随机值就可能改变洗牌和敌人行为；同时只保存当前手牌无法表达抽牌、弃牌、消耗和空堆重洗，也无法保证一张实例只存在于一个区域。
+
+**选择**：新增 `GameRandom`，封装项目现有 `Unity.Mathematics.Random` 的实例状态、`NextInt` 与 Fisher–Yates `Shuffle`。`CardZoneState` 持有全部 `CardInstanceState` 定义，以及抽牌堆、手牌、弃牌堆和消耗区四个互斥有序列表；洗牌随机流由 `CardZoneState` 独占。`BattleSession` 用战斗种子创建该随机流，先洗牌再抽取初始手牌。
+
+**理由**：实例随机流不会被加载界面或表现随机调用推进，`uint State` 可以直接作为后续随机序列的唯一事实保存和恢复；项目不需要自研 PRNG。区域归属只由四个列表表达，不在卡牌实例上再保存 `Zone`，因此移动入口可以原子维护互斥关系，计数按列表派生。
+
+**兼容与后续**：`UnityEngine.Random` 仍可用于不影响规则的纯视觉随机。地图、奖励和敌人行为后续分别创建独立 `GameRandom`，不得共享洗牌流。当前 BattleScene 种子由 Inspector 提供；Run 生命周期建立后由 `RunState` 派生/恢复，见 `DEP-007`。
+
+**影响**：新增 `TinySpire/Assets/Scripts/Core/GameRandom.cs`、`TinySpire/Assets/Scripts/Battle/CardZoneState.cs` 及测试；`BattleSession` 和手牌 UI 改读 `CardZoneState`，解决 CD-014 的临时前 N 张限制与 `DEP-006`。未实现效果器、目标、费用或回合流程，也未修改表格和资源包。

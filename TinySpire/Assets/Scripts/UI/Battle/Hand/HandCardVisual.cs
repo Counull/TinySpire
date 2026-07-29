@@ -1,4 +1,5 @@
 using DG.Tweening;
+using TinySpire.Battle;
 using UnityEngine;
 
 [DisallowMultipleComponent]
@@ -13,10 +14,15 @@ public sealed class HandCardVisual : MonoBehaviour
     private Tween _feedbackTween;
     private bool _hasPlayFeedback;
 
-    public int CardId { get; private set; }
+    public CardInstanceId CardId { get; private set; }
     public float CurrentAnchoredY => _cardContent.anchoredPosition.y;
 
-    public void Initialize(Canvas canvas, RectTransform cardContent, Vector3 baseScale, int cardId, CanvasGroup dragFeedbackCanvasGroup)
+    public void Initialize(
+        Canvas canvas,
+        RectTransform cardContent,
+        Vector3 baseScale,
+        CardInstanceId cardId,
+        CanvasGroup dragFeedbackCanvasGroup)
     {
         _canvas = canvas;
         _cardContent = cardContent;

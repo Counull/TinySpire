@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using DG.Tweening;
+using TinySpire.Battle;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using VContainer;
-using VContainer.Unity;
 
 [DisallowMultipleComponent]
 public sealed class HandCardContainer : MonoBehaviour
@@ -29,15 +29,23 @@ public sealed class HandCardContainer : MonoBehaviour
     [SerializeField, Min(0f)] private float hoverDuration = 0.15f;
     [SerializeField, Min(0f)] private float reflowDuration = 0.22f;
 
-    private GameConfig _config;
+    private BattleSession _session;
+    private ConfigService _configs;
 
     private readonly List<HandCardVisual> _cards = new();
     private HandCardVisual _draggingCard;
-    private HandState _handState;
+    private CardZoneState _cardZones;
 
-    private int CurrentHandCount => _handState.CardIds.Count;
+    private int CurrentHandCount => _cardZones.Hand.Count;
 
-    private void Awake()
+    [Inject]
+    public void Construct(BattleSession session, ConfigService configs)
+    {
+        _session = session;
+        _configs = configs;
+    }
+
+    private void Start()
     {
         if (cardViewPrefab == null)
         {
@@ -46,20 +54,22 @@ public sealed class HandCardContainer : MonoBehaviour
             return;
         }
 
-        // 从 Bootstrap 根 LifetimeScope 解析运行时配置。
-        if (FindFirstObjectByType<Bootstrap>() is { } scope)
-            _config = scope.Container.Resolve<ConfigService>().GameConfig;
+        if (_session == null || _configs?.Tables == null)
+        {
+            Debug.LogError("HandCardContainer did not receive the initialized battle session.", this);
+            enabled = false;
+            return;
+        }
 
-        int handCount = _config?.InitialHandCount ?? 5;
-        _handState = new HandState(handCount);
-        _handState.Changed += HandleHandStateChanged;
+        _cardZones = _session.CardZones;
+        _cardZones.Changed += HandleCardZonesChanged;
         RebuildCards(immediate: true);
     }
 
     private void OnDestroy()
     {
-        if (_handState != null)
-            _handState.Changed -= HandleHandStateChanged;
+        if (_cardZones != null)
+            _cardZones.Changed -= HandleCardZonesChanged;
     }
 
     public void HandlePointerEnter(HandCardVisual card)
@@ -108,24 +118,26 @@ public sealed class HandCardContainer : MonoBehaviour
         _draggingCard = null;
         card.SetDragPlayFeedback(false);
 
-        if (shouldPlayCard && _handState.PlayCard(card.CardId))
+        // TODO(DEP-001): Resolve a legal target before moving an aimed card out of the hand.
+        // TODO(DEP-002): Validate and spend card energy before committing the zone move.
+        if (shouldPlayCard && _cardZones.DiscardFromHand(card.CardId))
             return;
 
         LayoutCards(immediate: false);
     }
 
-    private void HandleHandStateChanged()
+    private void HandleCardZonesChanged()
     {
         RebuildCards(immediate: false);
     }
 
     private void RebuildCards(bool immediate)
     {
-        IReadOnlyList<int> cardIds = _handState.CardIds;
+        IReadOnlyList<CardInstanceId> hand = _cardZones.Hand;
         for (int index = _cards.Count - 1; index >= 0; index--)
         {
             HandCardVisual card = _cards[index];
-            if (ContainsCardId(cardIds, card.CardId))
+            if (ContainsCardId(hand, card.CardId))
                 continue;
 
             // TODO(DEP-004): Future card-effect types need distinct pre-destruction actions before this visual is destroyed.
@@ -133,12 +145,13 @@ public sealed class HandCardContainer : MonoBehaviour
             _cards.RemoveAt(index);
         }
 
-        var orderedCards = new List<HandCardVisual>(cardIds.Count);
-        foreach (int cardId in cardIds)
+        var orderedCards = new List<HandCardVisual>(hand.Count);
+        foreach (CardInstanceId cardId in hand)
         {
-            HandCardVisual card = FindCardById(cardId);
+            CardInstanceState cardState = _cardZones.Cards[cardId];
+            HandCardVisual card = FindCardById(cardState.Id);
             if (card == null)
-                card = CreateCard(cardId);
+                card = CreateCard(cardState);
 
             if (card != null)
                 orderedCards.Add(card);
@@ -149,13 +162,13 @@ public sealed class HandCardContainer : MonoBehaviour
         LayoutCards(immediate);
     }
 
-    private HandCardVisual CreateCard(int cardId)
+    private HandCardVisual CreateCard(CardInstanceState cardState)
     {
         Vector3 baseScale = Vector3.one * cardDisplayScale;
 
         // CardView owns a root Canvas. Keep each runtime card as an independent root Canvas so its serialized root scale and sorting order remain valid.
         GameObject cardObject = Instantiate(cardViewPrefab);
-        cardObject.name = $"HandCard_{cardId + 1:00}";
+        cardObject.name = $"HandCard_{cardState.Id.Value:00}_Template_{cardState.TemplateId}";
 
         Canvas cardCanvas = cardObject.GetComponent<Canvas>();
         RectTransform cardContent = cardObject.transform.Find("CardContent") as RectTransform;
@@ -170,7 +183,13 @@ public sealed class HandCardContainer : MonoBehaviour
         CanvasGroup feedbackCanvasGroup = cardContent.gameObject.AddComponent<CanvasGroup>();
         feedbackCanvasGroup.interactable = true;
         feedbackCanvasGroup.blocksRaycasts = true;
-        visual.Initialize(cardCanvas, cardContent, baseScale, cardId, feedbackCanvasGroup);
+        visual.Initialize(
+            cardCanvas,
+            cardContent,
+            baseScale,
+            cardState.Id,
+            feedbackCanvasGroup);
+        BindCardTemplate(cardObject, cardState.TemplateId);
 
         Image hitTarget = cardContent.gameObject.AddComponent<Image>();
         hitTarget.color = Color.clear;
@@ -212,7 +231,29 @@ public sealed class HandCardContainer : MonoBehaviour
         }
     }
 
-    private HandCardVisual FindCardById(int cardId)
+    private void BindCardTemplate(GameObject cardObject, int cardTemplateId)
+    {
+        cfg.battle.Card cardTemplate = _configs.Tables.TbCard.Get(cardTemplateId);
+        foreach (Text label in cardObject.GetComponentsInChildren<Text>(includeInactive: true))
+        {
+            switch (label.name)
+            {
+                case "TitleText":
+                    label.text = cardTemplate.Name;
+                    break;
+                case "CostText":
+                    label.text = cardTemplate.Cost.ToString();
+                    break;
+                case "TypeText":
+                case "DescriptionText":
+                    // Effect display text belongs to the later card-presentation/effect-description slice.
+                    label.text = string.Empty;
+                    break;
+            }
+        }
+    }
+
+    private HandCardVisual FindCardById(CardInstanceId cardId)
     {
         foreach (HandCardVisual card in _cards)
         {
@@ -223,11 +264,11 @@ public sealed class HandCardContainer : MonoBehaviour
         return null;
     }
 
-    private static bool ContainsCardId(IReadOnlyList<int> cardIds, int cardId)
+    private static bool ContainsCardId(IReadOnlyList<CardInstanceId> cards, CardInstanceId cardId)
     {
-        foreach (int candidateCardId in cardIds)
+        foreach (CardInstanceId candidate in cards)
         {
-            if (candidateCardId == cardId)
+            if (candidate == cardId)
                 return true;
         }
 

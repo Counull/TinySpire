@@ -16,16 +16,16 @@ namespace TinySpire.Battle
 
         public IReadOnlyDictionary<CombatantId, CombatantState> Combatants => _combatants;
 
-        public PlayerCombatantState AddPlayer(int templateId, int maxHealth)
+        public PlayerCombatantState AddPlayer(int templateId, int maxHealth, int strength)
         {
-            var player = new PlayerCombatantState(AllocateCombatantId(), templateId, maxHealth);
+            var player = new PlayerCombatantState(AllocateCombatantId(), templateId, maxHealth, strength);
             AddCombatant(player);
             return player;
         }
 
-        public EnemyCombatantState AddEnemy(int templateId, int maxHealth)
+        public EnemyCombatantState AddEnemy(int templateId, int maxHealth, int strength)
         {
-            var enemy = new EnemyCombatantState(AllocateCombatantId(), templateId, maxHealth);
+            var enemy = new EnemyCombatantState(AllocateCombatantId(), templateId, maxHealth, strength);
             AddCombatant(enemy);
             return enemy;
         }

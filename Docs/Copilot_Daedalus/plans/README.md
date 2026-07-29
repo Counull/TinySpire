@@ -13,6 +13,12 @@ updated: 2026-07-30
 
 ## 现有计划
 
+- [2026-07-30 卡牌区域与确定性洗牌](2026-07-30-card-zones-deterministic-random.md)
+- [2026-07-30 卡牌本地化文本与动态参数设计](2026-07-30-card-localized-text-design.md)
 - [2026-07-30 战斗静态配置表](2026-07-30-battle-static-config-tables.md)
 - [2026-07-30 BattleState 运行时参与者模型](2026-07-30-battle-runtime-state.md)
 - [2026-07-12 BattleScene 基础手牌 UI](2026-07-12-battlescene-card-ui.md)
+
+## 已替代 / 历史计划
+
+- [2026-07-30 战斗配置接入运行时](2026-07-30-battle-config-runtime-integration.md) — 已由卡牌区域与确定性洗牌计划承接运行时牌区。

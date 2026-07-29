@@ -1,0 +1,84 @@
+using System.Collections.Generic;
+using cfg;
+using Newtonsoft.Json.Linq;
+using NUnit.Framework;
+using TinySpire.Battle;
+
+public sealed class BattleSessionTests
+{
+    [Test]
+    public void FromConfig_CreatesCombatantsAndInitialHandFromStaticTemplates()
+    {
+        Tables tables = CreateTables();
+        var options = new BattleSetupOptions(heroTemplateId: 1001, encounterTemplateId: 5001);
+
+        BattleSession session = BattleSession.FromConfig(tables, new GameConfig(), options);
+
+        Assert.That(session.BattleState.Combatants.Count, Is.EqualTo(2));
+
+        PlayerCombatantState player = null;
+        EnemyCombatantState enemy = null;
+        foreach (CombatantState combatant in session.BattleState.Combatants.Values)
+        {
+            if (combatant is PlayerCombatantState playerCombatant)
+                player = playerCombatant;
+            else if (combatant is EnemyCombatantState enemyCombatant)
+                enemy = enemyCombatant;
+        }
+
+        Assert.That(player, Is.Not.Null);
+        Assert.That(player.TemplateId, Is.EqualTo(1001));
+        Assert.That(player.MaxHealth, Is.EqualTo(80));
+        Assert.That(player.Strength, Is.EqualTo(1));
+        Assert.That(enemy, Is.Not.Null);
+        Assert.That(enemy.TemplateId, Is.EqualTo(2001));
+        Assert.That(enemy.MaxHealth, Is.EqualTo(20));
+
+        Assert.That(session.CardZones.Cards.Count, Is.EqualTo(10));
+        Assert.That(session.CardZones.Hand.Count, Is.EqualTo(5));
+        Assert.That(session.CardZones.DrawPile.Count, Is.EqualTo(5));
+        Assert.That(session.CardZones.DiscardPile, Is.Empty);
+        Assert.That(session.CardZones.ExhaustPile, Is.Empty);
+    }
+
+    [Test]
+    public void FromConfig_WithTheSameSeed_CreatesTheSameInitialHand()
+    {
+        Tables tables = CreateTables();
+        var options = new BattleSetupOptions(
+            heroTemplateId: 1001,
+            encounterTemplateId: 5001,
+            randomSeed: 2468);
+
+        BattleSession first = BattleSession.FromConfig(tables, new GameConfig(), options);
+        BattleSession second = BattleSession.FromConfig(tables, new GameConfig(), options);
+
+        Assert.That(second.CardZones.Hand, Is.EqualTo(first.CardZones.Hand));
+    }
+
+    private static Tables CreateTables()
+    {
+        var data = new Dictionary<string, JArray>
+        {
+            ["battle_tbhero"] = JArray.Parse(
+                "[{\"id\":1001,\"name\":\"Warrior\",\"max_health\":80,\"base_strength\":1,\"initial_deck_id\":1001}]"),
+            ["battle_tbenemy"] = JArray.Parse(
+                "[{\"id\":2001,\"name\":\"Slime\",\"max_health\":20,\"base_strength\":0}]"),
+            ["battle_tbdeck"] = JArray.Parse(
+                "[{\"id\":1001,\"card_template_ids\":[3002,3002,3002,3002,3002,3003,3003,3003,3003,3004]}]"),
+            ["battle_tbcard"] = JArray.Parse(
+                "[{\"id\":3002,\"name\":\"Strike\",\"cost\":1,\"target_rule\":1,\"effect_ids\":[4002]},{" +
+                "\"id\":3003,\"name\":\"Defend\",\"cost\":1,\"target_rule\":0,\"effect_ids\":[4003]},{" +
+                "\"id\":3004,\"name\":\"Bash\",\"cost\":2,\"target_rule\":1,\"effect_ids\":[4004,4005]}]"),
+            ["battle_tbcardeffect"] = JArray.Parse(
+                "[{\"id\":4002,\"effect_type\":1,\"attribute\":0,\"value\":6},{" +
+                "\"id\":4003,\"effect_type\":2,\"attribute\":0,\"value\":5},{" +
+                "\"id\":4004,\"effect_type\":1,\"attribute\":0,\"value\":8},{" +
+                "\"id\":4005,\"effect_type\":3,\"attribute\":0,\"value\":2}]"),
+            ["battle_tbencounter"] = JArray.Parse(
+                "[{\"id\":5001,\"enemy_template_ids\":[2001]}]")
+        };
+
+        return new Tables(tableName => data[tableName]);
+    }
+}

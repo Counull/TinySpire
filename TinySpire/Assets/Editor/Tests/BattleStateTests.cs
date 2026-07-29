@@ -8,8 +8,8 @@ public sealed class BattleStateTests
     {
         var battle = new BattleState();
 
-        PlayerCombatantState player = battle.AddPlayer(templateId: 101, maxHealth: 30);
-        EnemyCombatantState enemy = battle.AddEnemy(templateId: 201, maxHealth: 20);
+        PlayerCombatantState player = battle.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
+        EnemyCombatantState enemy = battle.AddEnemy(templateId: 201, maxHealth: 20, strength: 0);
 
         Assert.That(player.Id, Is.Not.EqualTo(enemy.Id));
         Assert.That(battle.Combatants.Count, Is.EqualTo(2));
@@ -21,8 +21,8 @@ public sealed class BattleStateTests
     public void TryGetCombatant_ReturnsTheCombatantWithTheRequestedId()
     {
         var battle = new BattleState();
-        PlayerCombatantState player = battle.AddPlayer(templateId: 101, maxHealth: 30);
-        battle.AddEnemy(templateId: 201, maxHealth: 20);
+        PlayerCombatantState player = battle.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
+        battle.AddEnemy(templateId: 201, maxHealth: 20, strength: 0);
 
         bool found = battle.TryGetCombatant(player.Id, out CombatantState combatant);
 
@@ -34,8 +34,8 @@ public sealed class BattleStateTests
     public void ApplyDamage_ChangesOnlyTheTargetCombatantHealth()
     {
         var battle = new BattleState();
-        PlayerCombatantState player = battle.AddPlayer(templateId: 101, maxHealth: 30);
-        EnemyCombatantState enemy = battle.AddEnemy(templateId: 201, maxHealth: 20);
+        PlayerCombatantState player = battle.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
+        EnemyCombatantState enemy = battle.AddEnemy(templateId: 201, maxHealth: 20, strength: 0);
 
         bool damaged = battle.ApplyDamage(enemy.Id, 20);
 

@@ -3,6 +3,38 @@ created: 2026-07-06
 updated: 2026-07-30
 ---
 
+## 2026-07-30 · 卡牌区域与确定性洗牌实施
+
+> - 新增 `GameRandom`，以实例方式封装项目已存在的 `Unity.Mathematics.Random`；规则随机可读取/恢复 `uint State`，并通过 Fisher–Yates 洗牌，不使用 `UnityEngine.Random` 全局状态。
+> - `HandState` 升级为 `CardZoneState`：全部卡牌实例由 `Cards` 字典定义，抽牌堆、手牌、弃牌堆、消耗区分别保存互斥的有序 `CardInstanceId`；不保存 `Zone` 镜像或缓存计数。
+> - `BattleSession` 现在创建完整 10 张初始卡组，按战斗种子洗牌并抽取 `GameConfig.InitialHandCount` 张；`DEP-006` 已解决。当前种子仍来自 BattleScene Inspector，未来改由 Run 生命周期提供，登记为 `DEP-007`。
+> - 手牌拖过出牌线的既有占位行为现在把指定实例移动到弃牌堆；未实现效果器、目标合法性、费用、回合调度、地图/奖励/敌人随机。
+> - TDD 定向 EditMode 10/10、完整 EditMode 13/13 通过；dotnet build 0 error；Bootstrap 实跑为 10 个实例、抽牌堆 5、手牌 5、弃牌/消耗 0，Console 0 error，保留既有 LoadingScene handle warning。
+> - 双轴代码审查最终通过；审查修正了随机流外部别名、视图冗余模板 ID 与旧文档过期状态，复核无新增 P1/P2。
+> - 本轮未修改表格、生成 JSON 或 YooAsset 包，因此不运行 Luban/AB 重建。
+
+---
+
+## 2026-07-30 · 卡牌 i18n key 与动态说明设计补充
+
+> - 路线图新增 M2A：卡牌名称/说明使用 i18n key，说明模板使用 `{damage}`、`{block}`、`{vulnerable}` 等命名参数，并允许不同语言调整语序。
+> - 规划 `CardTextFormatter` 深模块：UI 只提交卡牌实例和可选来源参与者，模块内部解析 key、效果参数、关键词和动态数值；格式化文本不进入 `CardInstanceState`。
+> - 说明显示值、目标预览值和实际结算值必须复用同一纯数值计算模块，只是上下文不同；三者均由配置和运行时事实派生，不成为第二份状态。
+> - 当前未安装 Unity Localization，文本目录后端与 fallback locale 保持为实施前 Open Question。本轮只修改设计文档，未改表格、代码、生成数据、AB 包或效果器。
+> - 详细设计见 `plans/2026-07-30-card-localized-text-design.md`。
+
+---
+
+## 2026-07-30 · 战斗配置接入运行时 + BattleScene MVP 路线图
+
+> - 新增 `BattleSession`，由 `BattleLifetimeScope` 从英雄 1001、遭遇 5001、初始卡组和 `GameConfig.InitialHandCount` 创建玩家、敌人与手牌；`CombatantState` 接入模板基础力量。
+> - `HandState` 改用唯一 `CardInstanceId` + `TemplateId`，解决初始卡组内重复 Strike 无法独立表示的问题。手牌 UI 读取同一运行时状态，并从 `battle.Card` 显示卡名和费用。
+> - 未实现效果器、目标、费用扣除、牌堆、回合流程或敌人行为。正式牌堆前暂取卡组前 5 张，登记为 `DEP-006`。
+> - 重写 `ROADMAP.md`：按 M0～M10 规划牌堆、主 HUD、回合、敌人意图/随机行为、出牌命令、效果器、完整循环和反馈；并以 G1～G8 承接主菜单、Run、存档、地图、奖励、遗物/药水、商店/事件和完整产品收尾。每阶段明确唯一事实、派生数据与验收标准。
+> - 验证：EditMode 6/6 通过；dotnet build 0 error；Bootstrap → BattleScene 实跑生成 5 张独立 Strike，标题/费用绑定正确。本次无 error，保留一条既有 LoadingScene handle warning。
+
+---
+
 ## 2026-07-30 · STS 战士初始卡组配置
 
 > - `battle.Deck` 1001 设为 5×Strike、4×Defend、1×Bash；初始手牌 `game-config.json` 已是 5，保持不变。

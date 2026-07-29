@@ -51,9 +51,10 @@ namespace TinySpire.Battle
         public int TemplateId { get; }
         public int MaxHealth { get; }
         public int CurrentHealth { get; private set; }
+        public int Strength { get; }
         public bool IsAlive => CurrentHealth > 0;
 
-        protected CombatantState(CombatantId id, int templateId, int maxHealth)
+        protected CombatantState(CombatantId id, int templateId, int maxHealth, int strength)
         {
             if (maxHealth <= 0)
                 throw new ArgumentOutOfRangeException(nameof(maxHealth));
@@ -62,6 +63,7 @@ namespace TinySpire.Battle
             TemplateId = templateId;
             MaxHealth = maxHealth;
             CurrentHealth = maxHealth;
+            Strength = strength;
         }
 
         internal bool ApplyDamage(int damage)
@@ -79,16 +81,16 @@ namespace TinySpire.Battle
 
     public sealed class PlayerCombatantState : CombatantState
     {
-        internal PlayerCombatantState(CombatantId id, int templateId, int maxHealth)
-            : base(id, templateId, maxHealth)
+        internal PlayerCombatantState(CombatantId id, int templateId, int maxHealth, int strength)
+            : base(id, templateId, maxHealth, strength)
         {
         }
     }
 
     public sealed class EnemyCombatantState : CombatantState
     {
-        internal EnemyCombatantState(CombatantId id, int templateId, int maxHealth)
-            : base(id, templateId, maxHealth)
+        internal EnemyCombatantState(CombatantId id, int templateId, int maxHealth, int strength)
+            : base(id, templateId, maxHealth, strength)
         {
         }
     }

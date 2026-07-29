@@ -27,6 +27,8 @@ status_source: ../SESSION_LOG.md
 - 不实现敌人意图、抽牌/弃牌、费用、状态效果、场景锚点或 UI 绑定。
 - 不注册到 `BattleLifetimeScope`；战斗局内服务的注册时机仍由 DEP-005 约束。
 
+> 后续状态：配置实例化与场景注册已由 `2026-07-30-battle-config-runtime-integration.md` 完成；本节保留为该切片当时的排除范围。
+
 ## 验收
 
 - 玩家和敌人注册后取得不同 `CombatantId`，并可由唯一参与者字典按 ID 取回。

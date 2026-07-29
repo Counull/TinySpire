@@ -3,7 +3,7 @@ title: Daedalus · 依赖项账本（Dependency Ledger）
 page_type: registry
 lifecycle: active
 created: 2026-07-29
-updated: 2026-07-29
+updated: 2026-07-30
 status_source: ../SESSION_LOG.md
 note: 全项目范围唯一的依赖项 ID 分配与状态账本；实现计划文档只引用 ID，不重复维护完整描述。
 ---
@@ -23,8 +23,10 @@ note: 全项目范围唯一的依赖项 ID 分配与状态账本；实现计划�
 
 | ID | 内容 | 阻塞条件 | 涉及代码位置（预期/实际） | 来源 Plan | 状态 | 解决记录 |
 |---|---|---|---|---|---|---|
-| DEP-001 | 目标检测方式（UGUI `GraphicRaycaster` vs 2D `Collider`/`OverlapPoint`） | 取决于怪物/玩家锚点最终是 UGUI 元素还是 World Space Sprite（P0 待办，尚未开始） | `TinySpire/Assets/Scripts/UI/Battle/Hand/HandState.cs:27` | `plans/2026-07-29-battlescene-drag-to-play-minimal.md` | open | — |
-| DEP-002 | 费用/能量系统与检查逻辑 | 需先定义能量池数据结构；应并入 `HandState` 或其后续演化的聚合 | `TinySpire/Assets/Scripts/UI/Battle/Hand/HandState.cs:25` | `plans/2026-07-29-battlescene-drag-to-play-minimal.md` | open | — |
-| DEP-003 | 拖过出牌线的最终视觉样式 | 需要策划/美术确认最终表现 | `TinySpire/Assets/Scripts/UI/Battle/Hand/HandCardVisual.cs:83` | `plans/2026-07-29-battlescene-drag-to-play-minimal.md` | open | — |
-| DEP-004 | 打出后卡牌的销毁前过渡动作（按卡牌效果类型区分） | 需要 Effect 系统 / 卡牌数据结构先落地 | `TinySpire/Assets/Scripts/UI/Battle/Hand/HandCardContainer.cs:130` | `plans/2026-07-29-battlescene-drag-to-play-minimal.md` | open | — |
-| DEP-005 | `BattleLifetimeScope.Configure` 为空，等待回合调度器/抽牌堆/弃牌堆等战斗局内服务确定后注册 | 需要先设计回合调度循环、抽牌堆、弃牌堆的具体接口（当前明确不在本轮实现范围） | `TinySpire/Assets/Scripts/Battle/BattleLifetimeScope.cs` | 无（Codex 直接实施，未产出 plan 文档） | open | — |
+| DEP-001 | 目标检测方式（UGUI `GraphicRaycaster` vs 2D `Collider`/`OverlapPoint`） | 取决于怪物/玩家锚点最终是 UGUI 元素还是 World Space Sprite（P0 待办，尚未开始） | `TinySpire/Assets/Scripts/UI/Battle/Hand/HandCardContainer.cs` | `plans/2026-07-29-battlescene-drag-to-play-minimal.md` | open | — |
+| DEP-002 | 费用/能量系统与检查逻辑 | 需先定义能量池数据结构；最终应由出牌命令在提交区域移动前统一校验 | `TinySpire/Assets/Scripts/UI/Battle/Hand/HandCardContainer.cs` | `plans/2026-07-29-battlescene-drag-to-play-minimal.md` | open | — |
+| DEP-003 | 拖过出牌线的最终视觉样式 | 需要策划/美术确认最终表现 | `TinySpire/Assets/Scripts/UI/Battle/Hand/HandCardVisual.cs` | `plans/2026-07-29-battlescene-drag-to-play-minimal.md` | open | — |
+| DEP-004 | 打出后卡牌的销毁前过渡动作（按卡牌效果类型区分） | 需要 Effect 系统 / 卡牌数据结构先落地 | `TinySpire/Assets/Scripts/UI/Battle/Hand/HandCardContainer.cs` | `plans/2026-07-29-battlescene-drag-to-play-minimal.md` | open | — |
+| DEP-005 | `BattleLifetimeScope` 已注册战斗会话，但回合调度器与其余战斗局内模块仍待确定后注册 | 需要先完成路线图 M3～M4 的视图与回合流程边界 | `TinySpire/Assets/Scripts/Battle/BattleLifetimeScope.cs` | `plans/2026-07-30-battle-config-runtime-integration.md` | open | — |
+| DEP-006 | 初始手牌临时取初始卡组的前 N 张，尚未经过抽牌堆洗牌与抽取 | 需要先实现 `CardZoneState`、战斗专属确定性随机源与抽牌/重洗流程 | `TinySpire/Assets/Scripts/Battle/BattleSession.cs` | `plans/2026-07-30-battle-config-runtime-integration.md` | resolved | `plans/2026-07-30-card-zones-deterministic-random.md`：创建完整卡组、确定性洗牌后抽取初始手牌，并实现弃牌重洗。 |
+| DEP-007 | BattleScene 的战斗种子当前由 Inspector 常量提供，尚未来自 Run 的根种子/存档 | 需要先实现 `RunState`、战斗创建标识与随机流派生/恢复规则 | `TinySpire/Assets/Scripts/Battle/BattleLifetimeScope.cs` | `plans/2026-07-30-card-zones-deterministic-random.md` | open | — |
