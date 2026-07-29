@@ -11,4 +11,7 @@ dotnet %LUBAN_DLL% ^
     -x outputCodeDir=%WORKSPACE%\%PROJECT_NAME%\Assets\Scripts\Core\Generated\Config ^
     -x outputDataDir=%WORKSPACE%\%PROJECT_NAME%\Assets\StreamingAssets\GameData
 
+:: 将手写 JSON 配置文件复制到 StreamingAssets，与 Luban 输出走同一条 YooAsset 加载管线
+copy /Y "%CONF_ROOT%\game-config.json" "%WORKSPACE%\%PROJECT_NAME%\Assets\StreamingAssets\GameData\game-config.json"
+
 pause
