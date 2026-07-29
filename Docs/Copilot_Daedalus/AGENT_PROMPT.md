@@ -63,6 +63,9 @@ note: 本文件为提案性质的 Prompt 模板草案，非事实源。生效前
 - `Docs/Copilot_Daedalus/AGENT_PROFILE.md`（若存在；暂缺时读 `README.md`）
 - `Docs/Copilot_Daedalus/SESSION_LOG.md` — 上次进度
 - `Docs/Copilot_Daedalus/CODE_DECISIONS.md` — 已有代码决策
+- `Docs/Copilot_Daedalus/ARCHITECTURE_CONVENTIONS.md` — 代码架构级 Locked/Provisional 约定，**任何交给外部实现 Agent（如 Codex）的 Prompt 都必须显式引用本文件**，不能假设对方已知晓
+- `Docs/Copilot_Daedalus/ROADMAP.md` — BattleScene MVP 阶段化路线图提案，了解当前处于哪个阶段
+- `Docs/Copilot_Daedalus/DEPENDENCIES.md` — 全局依赖项账本，查/登记 `DEP-NNN`
 - `Docs/Copilot_Daedalus/plans/` — 既有实现计划
 
 **我依赖的其他 Agent 产出（只读）**

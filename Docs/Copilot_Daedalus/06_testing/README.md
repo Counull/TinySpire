@@ -13,5 +13,6 @@ updated: 2026-07-12
 
 ## 验证记录
 
+- [2026-07-29 BattleScene 手牌 UI（杀戮尖塔式）](2026-07-29-battlescene-hand-ui-sts-style.md)
 - [2026-07-12 BattleScene 基础手牌 UI](2026-07-12-battlescene-card-ui.md)
 - [2026-07-12 LoadingScene 最短展示时间](2026-07-12-loading-scene-minimum-duration.md)

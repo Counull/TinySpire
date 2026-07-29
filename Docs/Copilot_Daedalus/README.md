@@ -3,7 +3,7 @@ title: Copilot_Daedalus · 目录索引
 project: TinySpire
 page_type: index
 lifecycle: active
-updated: 2026-07-08
+updated: 2026-07-29
 ---
 
 # Copilot_Daedalus · 目录索引
@@ -30,13 +30,16 @@ Status Source: [SESSION_LOG.md](SESSION_LOG.md)
 |---:|---|---|
 | 1 | [SESSION_LOG.md](SESSION_LOG.md) | 当前进度、状态与下一步动作（唯一状态源）。 |
 | 2 | [CODE_DECISIONS.md](CODE_DECISIONS.md) | 已生效的代码级决策，避免重复讨论。 |
-| 3 | [AGENT_PROFILE.md](AGENT_PROFILE.md) | Daedalus 身份、职责边界与工作方式。 |
+| 3 | [ARCHITECTURE_CONVENTIONS.md](ARCHITECTURE_CONVENTIONS.md) | 代码架构级的 Locked/Provisional 约定，任何新实现（包括交给 Codex 等外部 Agent）默认必须遵守。 |
+| 4 | [AGENT_PROFILE.md](AGENT_PROFILE.md) | Daedalus 身份、职责边界与工作方式。 |
 
 ## Optional Deep-Dive Docs
 
 | 页面 | 何时读 |
 |---|---|
 | [plans/](plans/) | 需要某个切片的完整实现计划时。 |
+| [ROADMAP.md](ROADMAP.md) | 需要看整个 BattleScene MVP 的阶段化进度、下一步应该做什么时。 |
+| [DEPENDENCIES.md](DEPENDENCIES.md) | 需要查某个 `DEP-NNN` 依赖项的阻塞条件、状态或解决记录时。 |
 | [AGENT_PROMPT.md](AGENT_PROMPT.md) | 需要按标准格式向 Daedalus 派任务时。 |
 
 ## 外部依赖（只读）
