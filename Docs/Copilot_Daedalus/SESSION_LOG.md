@@ -3,6 +3,36 @@ created: 2026-07-06
 updated: 2026-07-30
 ---
 
+## 2026-07-30 · 本地化文本唯一来源收敛
+
+> - 删除 `LocalizationBuildTools` 中硬编码的 `LocalizedEntry[]`、配置/补全菜单及其写表辅助函数。`Battle Cards` Unity Localization 表资源现在是翻译正文的唯一来源。
+> - 保留 `TinySpire/Localization/Validate Battle Card Text`，它只校验 locale、key、Smart String、参数和效果引用，不创建或覆盖翻译。
+> - 新增/修改本地化内容的流程：直接编辑 String Table → 执行校验 → 重建 Addressables 本地内容。未修改任何翻译资源、Luban 表或运行时效果逻辑；决策见 CD-020。
+
+## 2026-07-30 · 运行时数据命名与 R3 事实绑定修正
+
+> - 运行时类型与文件统一改用 `Data` 尾缀：`CombatantData`、`PlayerCombatantData`、`EnemyCombatantData`、`BattleCombatantsData`、`CardInstanceData`、`CardZoneLayoutData`、`BattleCardZonesData`；`State` 留给未来状态机/状态模式。
+> - 删除泛化 `Changed`/`Subject<Unit>`。生命、力量以只读 R3 属性公开；四卡区以不可变的完整 `CardZoneLayoutData` 原子发布。手牌 UI 订阅手牌布局、玩家力量与 Locale 的实际值，卡区移动不会向观察者暴露中间状态。
+> - 验证：定向 EditMode 18/18、全量 EditMode 25/25 通过；BattleScene 实跑后 `BattleCardZonesData.Layout` 发布的手牌数为 4，`HandCardVisual` 也为 4，Console 无错误；`dotnet build` 为 0 error（12 条程序集引用冲突警告）；Addressables 本地内容已重建。决策见 CD-019；术语见 `CONTEXT.md`。
+
+## 2026-07-30 · R3 通知绑定与 HandCardVisual 展示边界
+
+> - 历史记录：当时曾将 `BattleState`、`CardZoneState` 与 `LocalizationService` 迁移为 `Subject<Unit>` / `Observable<Unit>`。该做法已由 CD-019 替代；`HandCardVisual` 的展示引用归属结论仍有效。
+> - `CardView.prefab` 根节点现在序列化配置 `HandCardVisual` 的 Canvas、CardContent、标题、费用、类型和说明引用。容器不再按对象名扫描 `Text`，而是在 `HandCardVisual.Bind` 中写入展示值；语言和战斗事实变化仍只触发即时重派生，不保存文本镜像。
+> - 验证：BattleState/CardZoneState EditMode 9/9、全量 EditMode 25/25 通过；`dotnet build TinySpire/TinySpire.sln --no-restore --verbosity:minimal` 为 0 error（12 条既有程序集引用冲突警告）。运行时触发卡区变动与战斗伤害后，手牌事实数与延迟销毁后的 View 数均为 4，Console 无错误；`TinySpire/Addressables/Build Local Content` 成功完成。
+> - 决策见 `CODE_DECISIONS.md` CD-018；M2A 仍不包含 Effect 执行、费用、目标选择、敌人行为或回合流程。
+
+## 2026-07-30 · Addressables 迁移与 M2A 完成
+
+> - 已移除 YooAsset 运行时/包/收集设置，建立本地 Addressables 场景与 GameData 组；启动、配置和场景加载改走 Addressables，完整 `Assets/...` 地址保持稳定。
+> - `battle.Card` 已迁移为 name/description i18n key 与有序 `CardEffectBinding`；Luban 生成成功。
+> - 已实现 Unity Localization 薄服务、Smart String 资源配置/校验工具、`CardTextFormatter` 与 `CardValueCalculator`；手牌 UI 在语言或战斗事实通知后即时重派生文本，不保存格式化字符串或显示伤害状态。
+> - Luban、Localization 配置/校验和 Addressables 本地内容构建均已完成；校验器要求 `en`、`zh-CN`、共享关键词 key 与 `zh-CN → en` fallback，String Database 启用 fallback；`dotnet build` 0 error，Unity EditMode 23/23 通过。
+> - Bootstrap → LoadingScene → BattleScene 实跑成功；GameData 正常加载，中文/英文动态卡牌说明正确，切换语言前后 5 个手牌 View 身份不变，Console 0 error、0 warning。
+> - 本阶段仍未实现 Effect 执行器、费用、目标选择、伤害/格挡/易伤结算、远程 catalog 或第二套资源包。
+
+---
+
 ## 2026-07-30 · 卡牌区域与确定性洗牌实施
 
 > - 新增 `GameRandom`，以实例方式封装项目已存在的 `Unity.Mathematics.Random`；规则随机可读取/恢复 `uint State`，并通过 Fisher–Yates 洗牌，不使用 `UnityEngine.Random` 全局状态。

@@ -19,6 +19,7 @@
 - `Docs/Copilot_Daedalus/` 的维护必须使用项目相对路径，并遵守该目录现有的 index、status source、decision source 约定；不得把 TinySpire 私有语义回写到 `Docs/_external/llm-workflow/`。
 - 用户说“暂停、停止、先别做”时，立即停止所有写入和外部操作，只汇报当前状态。
 - 遇到不确定的架构选择时，优先询问，不自行替用户作重大决策。
+  每个函数至少有中文注释说明。
 
 ## Unity 项目规则
 
@@ -31,8 +32,8 @@
 ## 配置表与资源包流程
 
 - 只要修改 `DataTables/Datas/` 下的表格或表定义，交付前必须运行 Luban 生成（`DataTables/gen.bat` 或等价命令），更新生成代码与 `TinySpire/Assets/GameData/` 内的 JSON。
-- Luban 生成或其他方式改动 `TinySpire/Assets/GameData/` 后，必须重建 YooAsset `Main` 的内置 AB 包（`BuiltinBuildPipeline`），使新资源写入 `TinySpire/Assets/StreamingAssets/yoo/Main/` 的离线清单；仅刷新 Unity 资源数据库不算完成。
-- 验收至少确认：目标 JSON 位于 `Assets/GameData`、`Main` 内置包已重建，且启动加载链路未出现资源地址无效错误。
+- Luban 生成、Localization 资源变更或其他方式改动可寻址内容后，必须执行 `TinySpire/Addressables/Build Local Content`，重建本地 Addressables 内容；仅刷新 Unity 资源数据库不算完成。
+- 验收至少确认：目标 JSON 位于 `Assets/GameData`、场景和配置继续使用完整 `Assets/...` 稳定地址、本地 Addressables 内容已重建，且启动加载链路未出现 InvalidKey/资源地址无效错误。
 
 ## 验证与交付
 

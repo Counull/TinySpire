@@ -21,7 +21,7 @@ note: 本文件是 BattleScene 实现侧的阶段化路线图；项目级玩法�
 2. 初始卡组进入抽牌堆，按确定性随机种子洗牌，开局抽 5 张。
 3. 玩家回合开始时获得 3 点能量；可按当前语言查看卡名、费用、目标与带动态数值的效果说明。
 4. 拖拽攻击牌指向敌人，技能牌按规则打出；合法性、费用和目标在提交命令时统一验证。
-5. 卡牌按 `effect_ids` 顺序结算伤害、格挡、力量和易伤；结算结果驱动生命、格挡、状态与反馈 UI。
+5. 卡牌按 `effect_bindings` 顺序结算伤害、格挡、力量和易伤；结算结果驱动生命、格挡、状态与反馈 UI。
 6. 玩家结束回合后，手牌按规则进入弃牌堆，格挡和能量按回合规则清理。
 7. 敌人展示下一步意图，按行为规则行动；随机行为在同一战斗种子下可复现。
 8. 抽牌堆为空时把弃牌堆洗回抽牌堆；死亡参与者不再行动。
@@ -35,7 +35,7 @@ note: 本文件是 BattleScene 实现侧的阶段化路线图；项目级玩法�
 ### 2.1 静态模板与运行时事实分离
 
 - Luban 表只保存英雄、敌人、遭遇、卡组、卡牌和效果的静态模板。
-- `BattleState` 保存参与者运行时事实；配置表不保存当前生命、格挡、死亡或状态层数。
+- `BattleCombatantsData` 保存参与者运行时事实；配置表不保存当前生命、格挡、死亡或状态层数。
 - 卡牌模板 ID 可以重复；每张进入战斗的卡必须拥有唯一 `CardInstanceId`。
 - UI 只显示运行时状态与静态模板的组合结果，不成为生命、能量、牌堆或意图的写入者。
 
@@ -44,12 +44,12 @@ note: 本文件是 BattleScene 实现侧的阶段化路线图；项目级玩法�
 以下内容不得成为第二份可变状态：
 
 - `IsAlive` 从当前生命派生。
-- 玩家列表、敌人列表、存活目标从 `BattleState.Combatants` 派生。
+- 玩家列表、敌人列表、存活目标从 `BattleCombatantsData.All` 派生。
 - 手牌数、抽牌堆数、弃牌堆数从各权威有序集合的数量派生。
 - `CanPlayCard` 从当前阶段、能量、卡牌费用、目标规则和目标状态派生。
 - 伤害预览从攻击基础值、力量、易伤、虚弱等事实计算；不保存一个需要同步的“最终伤害”字段。
 - UI 高亮、按钮可用性、胜负提示均从当前状态派生。
-- 已本地化的卡名、卡牌说明和说明中的动态数值从 i18n key、卡牌模板、卡牌实例与战斗状态派生，不保存在 `CardInstanceState`。
+- 已本地化的卡名、卡牌说明和说明中的动态数值从 i18n key、卡牌模板、卡牌实例与战斗数据派生，不保存在 `CardInstanceData`。
 
 必须保存为事实的内容包括：
 
@@ -66,21 +66,21 @@ note: 本文件是 BattleScene 实现侧的阶段化路线图；项目级玩法�
 | 模块 | 唯一事实 | 只读/派生出口 | 写入口 |
 |---|---|---|---|
 | `BattleSession` | 本场战斗拥有的各运行时聚合引用 | 战斗状态、卡牌区域、回合状态 | 仅负责从配置创建和装配 |
-| `BattleState` | `CombatantId → CombatantState` | 阵营、存活目标、胜负 | 伤害、治疗、格挡、状态变更 |
-| `CardZoneState` | 卡牌实例定义；抽牌/手牌/弃牌/消耗区的有序且互斥集合 | 各区数量、某卡所在区域 | `Draw`、`DiscardFromHand`、`ExhaustFromHand`、`DiscardHand`；空抽牌堆时内部重洗 |
+| `BattleCombatantsData` | `CombatantId → CombatantData` | 阵营、存活目标、胜负 | 伤害、治疗、格挡、状态变更 |
+| `BattleCardZonesData` | 卡牌实例定义；`CardZoneLayoutData` 中抽牌/手牌/弃牌/消耗区的有序且互斥集合 | 各区数量、某卡所在区域 | `Draw`、`DiscardFromHand`、`ExhaustFromHand`、`DiscardHand`；空抽牌堆时内部重洗 |
 | `TurnState`（待建） | 阶段、回合号、当前能量 | 是否可出牌、是否可结束回合 | 回合调度器 |
 | `EnemyIntentState`（待建） | 每名存活敌人本轮已选意图 | 意图图标、预测数值 | 敌人行为选择器 |
 | `GameRandom` | 单个规则随机流的 `uint State` | 可复现的抽样与 Fisher–Yates 洗牌 | 由拥有该随机域的聚合推进；不同随机域不共享实例 |
-| `CardTextFormatter`（待建） | 不持有战斗事实 | 当前语言的卡名、说明、关键词与动态参数 | 纯格式化，无状态写入口 |
+| `CardTextFormatter` | 不持有战斗事实 | 当前语言的卡名、说明、关键词与动态参数 | 纯格式化，无状态写入口 |
 
-`CardZoneState` 不同时保存 `CardInstance.Zone` 与四份区域列表。卡牌模板/实例定义是一类事实，区域顺序是另一类事实；四个区域集合互斥，移动卡牌必须通过单一原子入口完成，区域计数直接由集合派生。
+`BattleCardZonesData` 不同时保存 `CardInstanceData.Zone` 与四份区域列表。卡牌模板/实例定义是一类事实，区域顺序是另一类事实；四个区域集合互斥，移动卡牌必须通过单一原子入口完成，区域计数直接由集合派生。
 
 ## 4. 阶段总览
 
 | 阶段 | 交付物 | 依赖 |
 |---|---|---|
 | M0 | 手牌扇形、悬停、拖拽、越线判定 | 无 |
-| M1 | Luban 数据接入 `BattleState`/`CardZoneState` | M0 |
+| M1 | Luban 数据接入 `BattleCombatantsData`/`BattleCardZonesData` | M0 |
 | M2 | 卡牌区域、洗牌、抽牌、弃牌、重洗 | M1 |
 | M2A | 卡牌 i18n key、说明模板与可替换参数 | M1；可与 M2 并行 |
 | M3 | BattleScene 主 HUD 与玩家/敌人运行时视图 | M1、M2A；可与 M2 分切片推进 |
@@ -104,15 +104,15 @@ note: 本文件是 BattleScene 实现侧的阶段化路线图；项目级玩法�
 - `06_testing/2026-07-30-battle-config-runtime-integration.md`
 - `06_testing/2026-07-30-battlescene-drag-to-play-minimal.md`
 
-`DEP-006` 已由 M2 状态切片解决：初始卡组的全部卡牌先实例化到 `CardZoneState`，经过确定性洗牌后再抽取初始手牌。当前实施状态与剩余 UI/回合接入仍以 `SESSION_LOG.md` 为准。
+`DEP-006` 已由 M2 运行时数据切片解决：初始卡组的全部卡牌先实例化到 `BattleCardZonesData`，经过确定性洗牌后再抽取初始手牌。当前实施状态与剩余 UI/回合接入仍以 `SESSION_LOG.md` 为准。
 
-### M2 · 卡牌区域与确定性洗牌（下一优先级）
+### M2 · 卡牌区域与确定性洗牌
 
 目标是一次性解决抽牌堆、手牌、弃牌堆和消耗区的数据归属权。
 
 状态设计：
 
-- 创建全部 `CardInstanceState`，实例身份在整场战斗中不变化。
+- 创建全部 `CardInstanceData`，实例身份在整场战斗中不变化。
 - 抽牌堆、手牌、弃牌堆、消耗区各保存有序 `CardInstanceId`，四者互斥。
 - 不在卡牌实例上再保存一个 `Zone` 镜像字段。
 - `DrawPileCount` 等计数全部由集合派生。
@@ -140,6 +140,8 @@ note: 本文件是 BattleScene 实现侧的阶段化路线图；项目级玩法�
 
 ### M2A · 卡牌本地化文本与动态参数
 
+实现口径：使用 Unity Localization 1.5.12 + Smart Strings，并统一进入 Addressables 本地内容构建；完成状态只查 `SESSION_LOG.md`。
+
 这一阶段只负责“如何正确显示卡牌文字”，不执行卡牌效果。
 
 静态配置目标：
@@ -164,8 +166,8 @@ battle.keyword.vulnerable.name
 不同语言可以自由调整语序：
 
 ```text
-zh-CN: 造成 {damage} 点伤害。施加 {vulnerable} 层{keyword.vulnerable}。
-en:    Deal {damage} damage. Apply {vulnerable} {keyword.vulnerable}.
+zh-CN: 造成 {damage} 点伤害。施加 {vulnerable} 层{keywordVulnerable}。
+en:    Deal {damage} damage. Apply {vulnerable} {keywordVulnerable}.
 ```
 
 `CardTextFormatter` 的外部接口只接收卡牌实例和可选来源参与者，返回 `Name`、`Description` 等展示结果。模块内部完成：
@@ -194,7 +196,7 @@ en:    Deal {damage} damage. Apply {vulnerable} {keyword.vulnerable}.
 
 - 构建前检查 key 唯一、各支持语言都存在、模板参数与绑定完全一致。
 - 拒绝重复参数、未知参数、未使用绑定、效果引用缺失和不允许的富文本标签。
-- 文本目录后端在实施前确认；当前项目尚未安装 Unity Localization，不在设计阶段擅自添加包。无论选 JSON/Luban 目录还是 Unity Localization，UI 和 `CardTextFormatter` 的接口不变。
+- 文本目录后端已确认为 Unity Localization；`Battle Cards` String Table 提供 `en`、`zh-CN`，卡牌说明使用 Smart Strings。Localization 资源与场景、GameData 一起由 Addressables 构建，不再维护 YooAsset 或另一套资源包。
 - 不自行实现复数/性别语法引擎；需要复杂语法时选择已有的 Smart String/ICU 能力。
 
 完整设计见 `plans/2026-07-30-card-localized-text-design.md`。
@@ -214,12 +216,12 @@ en:    Deal {damage} damage. Apply {vulnerable} {keyword.vulnerable}.
 - 名称、基础美术和卡牌文本来自静态模板；当前生命、格挡和状态来自运行时。
 - 卡牌 View 不直接拼接说明文本，统一消费 `CardTextFormatter` 的结果；语言切换与状态变化均重新派生。
 - 敌人 View 由遭遇生成结果创建，不能依赖场景中手摆固定数量的敌人。
-- `LivingEnemies` 每次从 `BattleState.Combatants.Values` 派生，不保存镜像列表。
-- 状态变化初期继续用聚合事件通知；不要在此阶段顺手迁移整套 R3。
+- `LivingEnemies` 每次从 `BattleCombatantsData.All.Values` 派生，不保存镜像列表。
+- 状态聚合已使用 R3 `Observable<Unit>` 通知；仍不把派生展示数据或可直接读取的领域事实镜像为 `ReactiveProperty`。
 
 生成与布局边界：
 
-- `CombatantViewFactory`（或同职责的场景服务）接收 `CombatantId`，从 `BattleState` 获取运行时类型和模板 ID，再选择玩家/敌人 View prefab；工厂返回 View，不持有第二份参与者集合。
+- `CombatantViewFactory`（或同职责的场景服务）接收 `CombatantId`，从 `BattleCombatantsData` 获取运行时类型和模板 ID，再选择玩家/敌人 View prefab；工厂返回 View，不持有第二份参与者集合。
 - `PlayerCombatantView`、`EnemyCombatantView` 只保存自身 `CombatantId`。刷新时重新按 ID 查询生命、格挡和状态；静态名称与美术按 `TemplateId` 查询。
 - `BattleScene` 提供一个玩家锚点和一个敌人布局区域。MVP 明确支持 1～3 名敌人：按遭遇中的稳定顺序从右向左/等距分布，不能使用 `Dictionary.Values` 顺序决定位置或行动顺序。
 - 敌人数量超过布局容量时显式报配置错误，不允许重叠后静默继续。后续扩大容量时只替换布局策略。
@@ -326,7 +328,7 @@ PlayCardCommand
 建议执行顺序：
 
 1. `PlayCardCommand` 已通过验证。
-2. 由卡牌模板按顺序读取 `effect_ids`。
+2. 由卡牌模板按顺序读取 `effect_bindings`。
 3. 目标解析器根据卡牌目标规则得到稳定 `CombatantId` 集合。
 4. 每个效果转换为明确的运行时操作。
 5. 操作依次写入权威状态，并产生只读结算记录供表现层消费。
@@ -344,7 +346,7 @@ MVP 效果类型：
 - 伤害 = 卡牌基础伤害 + 力量，再处理虚弱/易伤等倍率和取整。
 - 格挡先吸收伤害，剩余才扣生命。
 - 易伤按回合或行动时机衰减，不能只存一个 UI 数字。
-- 多效果卡严格按表中 `effect_ids` 顺序执行。
+- 多效果卡严格按表中 `effect_bindings` 顺序执行。
 
 测试以纯 C# 为主：Strike、Defend、Bash、致死、格挡溢出、易伤倍率、无效目标、多效果顺序。表现层只读取结算记录播放数字、抖动和状态图标。
 
@@ -405,7 +407,7 @@ MVP 效果类型：
 
 ## 7. BattleScene MVP 之后：完整 STS 式 Run 路线
 
-单场战斗闭环是第一条竖切，不是完整游戏终点。以下阶段在 M10 后开始；它们复用战斗结果，不把跨局数据塞回 `BattleState`。
+单场战斗闭环是第一条竖切，不是完整游戏终点。以下阶段在 M10 后开始；它们复用战斗结果，不把跨局数据塞回 `BattleCombatantsData`。
 
 ### G1 · 主菜单与 Run 生命周期
 
@@ -422,7 +424,7 @@ MVP 效果类型：
 生命所有权必须按生命周期转移：
 
 1. 进入战斗前，`RunState` 是玩家当前生命的唯一事实源。
-2. 创建 `BattleSession` 时，把该值作为输入交给玩家 `CombatantState`；战斗存在期间，玩家生命只允许由 `BattleState` 写入，`RunState` 中的入场值只是不可变检查点，不能被 UI 或其他系统当作当前生命读取。
+2. 创建 `BattleSession` 时，把该值作为输入交给玩家 `PlayerCombatantData`；战斗存在期间，玩家生命只允许由 `BattleCombatantsData` 写入，`RunState` 中的入场值只是不可变检查点，不能被 UI 或其他系统当作当前生命读取。
 3. 战斗结束产生一次 `BattleResult`，由 `RunFlowService` 原子写回最终生命和奖励，再销毁 `BattleSession`；写回成功后 `RunState` 重新成为唯一事实源。
 4. 若场景异常退出或写回失败，不得同时继续使用两份生命；流程必须停留在可恢复检查点或使本次 Run 进入显式错误状态。
 

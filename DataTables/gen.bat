@@ -1,3 +1,4 @@
+@echo off
 set WORKSPACE=..
 set PROJECT_NAME=TinySpire
 set LUBAN_DLL=%WORKSPACE%\Tools\Luban\Luban.dll
@@ -11,7 +12,7 @@ dotnet %LUBAN_DLL% ^
     -x outputCodeDir=%WORKSPACE%\%PROJECT_NAME%\Assets\Scripts\Core\Generated\Config ^
     -x outputDataDir=%WORKSPACE%\%PROJECT_NAME%\Assets\GameData
 
-:: 将手写 JSON 配置文件复制到 GameData，与 ConfigService 的 YooAsset 地址保持一致
+:: Copy the hand-authored JSON config into GameData so its Addressables address stays stable.
 copy /Y "%CONF_ROOT%\game-config.json" "%WORKSPACE%\%PROJECT_NAME%\Assets\GameData\game-config.json"
 
 pause

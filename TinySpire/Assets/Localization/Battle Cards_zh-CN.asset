@@ -1,0 +1,78 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e9620f8c34305754d8cc9a7e49e852d9, type: 3}
+  m_Name: Battle Cards_zh-CN
+  m_EditorClassIdentifier: Unity.Localization::UnityEngine.Localization.Tables.StringTable
+  m_LocaleId:
+    m_Code: zh-CN
+  m_SharedData: {fileID: 11400000, guid: c62614a79812d114d8e292f9c02b8ea2, type: 2}
+  m_Metadata:
+    m_Items:
+    - rid: 3318493899348770841
+  m_TableData:
+  - m_Id: 2970251264
+    m_Localized: "\u529B\u91CF"
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3062525952
+    m_Localized: "\u6613\u4F24"
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3066720256
+    m_Localized: "\u529B\u91CF"
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3066720257
+    m_Localized: "\u83B7\u5F97 {strength} \u70B9{keywordStrength}\u3002"
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770841
+  - m_Id: 3087691776
+    m_Localized: "\u6253\u51FB"
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3091886080
+    m_Localized: "\u9020\u6210 {damage} \u70B9\u4F24\u5BB3\u3002"
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770841
+  - m_Id: 3091886081
+    m_Localized: "\u9632\u5FA1"
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3091886082
+    m_Localized: "\u83B7\u5F97 {block} \u70B9\u683C\u6321\u3002"
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770841
+  - m_Id: 3091886083
+    m_Localized: "\u91CD\u51FB"
+    m_Metadata:
+      m_Items: []
+  - m_Id: 3091886084
+    m_Localized: "\u9020\u6210 {damage} \u70B9\u4F24\u5BB3\u3002\u65BD\u52A0 {vulnerable}
+      \u5C42{keywordVulnerable}\u3002"
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770841
+  references:
+    version: 2
+    RefIds:
+    - rid: 3318493899348770841
+      type: {class: SmartFormatTag, ns: UnityEngine.Localization.Metadata, asm: Unity.Localization}
+      data:
+        m_Entries: 
+        m_SharedEntries:
+        - id: 3066720257
+        - id: 3091886080
+        - id: 3091886082
+        - id: 3091886084

@@ -4,12 +4,23 @@ using TinySpire.Core;
 
 namespace TinySpire.Battle
 {
+    /// <summary>
+    /// 创建单场战斗运行时数据所需的静态模板标识与随机种子。
+    /// </summary>
     public sealed class BattleSetupOptions
     {
+        /// <summary>玩家 Hero 模板标识。</summary>
         public int HeroTemplateId { get; }
+
+        /// <summary>敌方 Encounter 模板标识。</summary>
         public int EncounterTemplateId { get; }
+
+        /// <summary>本场确定性随机流的初始种子。</summary>
         public uint RandomSeed { get; }
 
+        /// <summary>
+        /// 创建战斗装配参数，并验证所有模板标识和种子均有效。
+        /// </summary>
         public BattleSetupOptions(int heroTemplateId, int encounterTemplateId, int randomSeed = 1)
         {
             if (heroTemplateId <= 0)
@@ -29,24 +40,34 @@ namespace TinySpire.Battle
     /// 把静态战斗模板实例化为一场战斗的运行时事实。
     /// 不保存配置表的镜像，也不执行卡牌效果。
     /// </summary>
-    public sealed class BattleSession
+    public sealed class BattleSession : IDisposable
     {
-        public BattleState BattleState { get; }
-        public CardZoneState CardZones { get; }
+        /// <summary>本场战斗的参与者运行时数据。</summary>
+        public BattleCombatantsData Combatants { get; }
 
+        /// <summary>本场战斗的卡区运行时数据。</summary>
+        public BattleCardZonesData CardZones { get; }
+
+        /// <summary>
+        /// 从已初始化的配置服务创建一场战斗。
+        /// </summary>
         public BattleSession(ConfigService configs, BattleSetupOptions options)
         {
             BattleSession initialized = CreateFromConfigService(configs, options);
-            BattleState = initialized.BattleState;
+            Combatants = initialized.Combatants;
             CardZones = initialized.CardZones;
         }
 
-        private BattleSession(BattleState battleState, CardZoneState cardZones)
+        /// <summary>组合已完成初始化的两个运行时数据聚合。</summary>
+        private BattleSession(BattleCombatantsData combatants, BattleCardZonesData cardZones)
         {
-            BattleState = battleState;
+            Combatants = combatants;
             CardZones = cardZones;
         }
 
+        /// <summary>
+        /// 从显式配置表和全局战斗配置创建一场战斗，便于启动流程与测试复用。
+        /// </summary>
         public static BattleSession FromConfig(Tables tables, GameConfig gameConfig, BattleSetupOptions options)
         {
             if (tables == null)
@@ -65,24 +86,34 @@ namespace TinySpire.Battle
 
             ValidateDeckCards(tables, deck);
 
-            var battleState = new BattleState();
-            battleState.AddPlayer(hero.Id, hero.MaxHealth, hero.BaseStrength);
+            var combatants = new BattleCombatantsData();
+            combatants.AddPlayer(hero.Id, hero.MaxHealth, hero.BaseStrength);
             foreach (int enemyTemplateId in encounter.EnemyTemplateIds)
             {
                 cfg.battle.Enemy enemy = tables.TbEnemy.GetOrDefault(enemyTemplateId)
                     ?? throw new InvalidOperationException($"Enemy template {enemyTemplateId} does not exist.");
-                battleState.AddEnemy(enemy.Id, enemy.MaxHealth, enemy.BaseStrength);
+                combatants.AddEnemy(enemy.Id, enemy.MaxHealth, enemy.BaseStrength);
             }
 
-            var cardZones = new CardZoneState(
+            var cardZones = new BattleCardZonesData(
                 deck.CardTemplateIds,
                 options.RandomSeed);
             int initialHandCount = Math.Min(Math.Max(0, gameConfig.InitialHandCount), deck.CardTemplateIds.Length);
             cardZones.Draw(initialHandCount);
 
-            return new BattleSession(battleState, cardZones);
+            return new BattleSession(combatants, cardZones);
         }
 
+        /// <summary>
+        /// 释放本场战斗持有的参与者和卡区响应式资源。
+        /// </summary>
+        public void Dispose()
+        {
+            Combatants.Dispose();
+            CardZones.Dispose();
+        }
+
+        /// <summary>确认配置服务可用后，将其委托给显式配置装配入口。</summary>
         private static BattleSession CreateFromConfigService(ConfigService configs, BattleSetupOptions options)
         {
             if (configs == null)
@@ -93,6 +124,7 @@ namespace TinySpire.Battle
             return FromConfig(configs.Tables, configs.GameConfig, options);
         }
 
+        /// <summary>确认初始牌组引用的每张静态卡牌模板均存在。</summary>
         private static void ValidateDeckCards(Tables tables, cfg.battle.Deck deck)
         {
             foreach (int cardTemplateId in deck.CardTemplateIds)

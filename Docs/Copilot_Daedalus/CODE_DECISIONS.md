@@ -180,3 +180,59 @@ updated: 2026-07-30
 **兼容与后续**：`UnityEngine.Random` 仍可用于不影响规则的纯视觉随机。地图、奖励和敌人行为后续分别创建独立 `GameRandom`，不得共享洗牌流。当前 BattleScene 种子由 Inspector 提供；Run 生命周期建立后由 `RunState` 派生/恢复，见 `DEP-007`。
 
 **影响**：新增 `TinySpire/Assets/Scripts/Core/GameRandom.cs`、`TinySpire/Assets/Scripts/Battle/CardZoneState.cs` 及测试；`BattleSession` 和手牌 UI 改读 `CardZoneState`，解决 CD-014 的临时前 N 张限制与 `DEP-006`。未实现效果器、目标、费用或回合流程，也未修改表格和资源包。
+
+## CD-016：本地资源管线从 YooAsset 迁移到 Addressables
+
+**问题**：项目同时计划使用 Unity Localization，而继续保留 YooAsset 会形成两套 catalog、构建和生命周期规则；现有 YooAsset 仅承担本地场景与 GameData 加载，尚未形成必须保留的远程更新资产。
+
+**选择**：移除 YooAsset 包、初始化服务与扫描/收集设置，由 Unity Addressables 2.9.1 统一加载场景、Luban JSON 和 Localization 资源。场景及 GameData 的地址继续使用完整 `Assets/...` 路径；`AddressableAssetService` 和 `SceneFlowService` 在模块内部管理 handle，不向业务层泄漏。当前只构建本地内容，不配置远程 catalog。
+
+**理由**：一个资源管线即可覆盖当前全部需求，并与 Unity Localization 的原生 Addressables 集成保持一致。保留稳定地址把迁移影响限制在资源边界，不要求同步改写表格或运行时领域模型。
+
+**修订**：本决策替代 CD-012 中“生成后重建 YooAsset Main 包”的当前流程；`Assets/GameData` 仍是 Luban JSON 的正确输出位置，但后续动作改为 `TinySpire/Addressables/Build Local Content`。CD-008 的场景生命周期结论不变，只是场景加载实现由 Addressables 承接。
+
+**影响**：`Packages/manifest.json`、`packages-lock.json`、`Bootstrap`、`GameLauncher`、`ConfigService`、`SceneFlowService`、`AddressableAssetService`、`AddressableAssetsData`、编辑器构建工具与 `AGENTS.md`。
+
+## CD-017：卡牌文本使用 Unity Localization，效果引用升级为命名绑定
+
+**问题**：CD-013 的 `effect_ids` 可以表达复合效果，却无法把“哪个效果提供 damage/vulnerable 参数”稳定交给本地化模板；自行维护 JSON 模板又会重复 Unity Localization 已有的 locale、fallback、Smart String 和 Addressables 集成。
+
+**选择**：`battle.Card` 使用 `name_i18n_key`、`description_i18n_key` 和有序 `CardEffectBinding[]`；每个绑定保存 `argument_key` 与 `effect_id`。文本后端使用 Unity Localization 1.5.12 的 `Battle Cards` String Table，初始 locale 为 `en`、`zh-CN`，说明条目使用 Smart Strings。`LocalizationSettings.SelectedLocale` 是唯一语言事实，`LocalizationService` 只做薄封装和变化通知。
+
+**理由**：命名绑定同时保留复合效果顺序和可读模板参数。卡牌实例只保留身份，格式化器从静态效果、当前参与者事实和当前 locale 即时派生文字，避免产生第二份展示状态。
+
+**修订**：本决策以 `CardEffectBinding[]` 替代 CD-013 的裸 `effect_ids` 字段；CD-013 对“复合效果是有序静态事实”以及“不提前实现效果执行器”的结论继续有效。
+
+**影响**：Luban bean/card 表、生成配置、Unity Localization 资源、`LocalizationService`、`CardTextFormatter`、`CardValueCalculator`、手牌 UI、编辑器校验与 M2A 测试。仍不实现 Effect 执行、费用、目标选择或状态施加。
+
+## CD-018：状态通知改用 R3 只读事件流，卡牌视图拥有其展示引用
+
+**问题**：`event Action` 需要 UI 手写订阅/反订阅，且 `HandCardContainer` 曾以 `GameObject` 搜索子 `Text` 并按对象名写入卡牌内容，使容器同时掌握卡牌预制体的内部结构和展示职责。
+
+**选择**：`BattleState`、`CardZoneState` 与 `LocalizationService` 私有持有 `Subject<Unit>`，对外只暴露 `Observable<Unit>`；UI 使用 `Subscribe(...).AddTo(this)` 让订阅随 `HandCardContainer` 销毁。`CardView.prefab` 根节点持有 `HandCardVisual`，并序列化 Canvas、CardContent 与四个文本控件引用；容器只创建/排布视觉并调用 `HandCardVisual.Bind`，不再搜索子节点或直接写文本。
+
+**理由**：R3 流只通知“事实已改变”，字典、卡区、语言与格式化文本仍分别从其唯一事实源读取或即时派生，因此不引入第二份状态。将预制体结构收回视图组件后，容器不再依赖 `TitleText` 等对象名，卡牌显示的所有权也更清晰。
+
+**影响**：`BattleState`、`CardZoneState`、`LocalizationService`、`HandCardContainer`、`HandCardVisual`、`CardView.prefab` 与对应 EditMode 测试；本轮不引入 Effect 执行、费用结算、目标选择、敌人行为或完整回合流程。
+
+## CD-019：运行时数据统一使用 `Data` 尾缀，并以 R3 属性公开可绑定事实
+
+**问题**：`*State` 同时可能指局内数据、状态机状态或状态模式对象，领域含义含混。CD-018 又将 R3 降格为 `Subject<Unit>` 失效通知：UI 必须收到泛化事件后重新遍历聚合，不能直接绑定具体运行时值。
+
+**选择**：局内数据统一以 `Data` 结尾：`CombatantData`、`PlayerCombatantData`、`EnemyCombatantData`、`BattleCombatantsData`、`CardInstanceData`、`CardZoneLayoutData`、`BattleCardZonesData`；文件名与类型名同步。`Health`、`Strength` 等标量事实由私有 `ReactiveProperty<T>` 唯一持有，并只读公开；四个卡区的完整有序归属由 `ReactiveProperty<CardZoneLayoutData>` 原子发布。UI 订阅手牌布局、玩家力量与 Locale 的实际值，不再订阅泛化 `Changed`。
+
+**理由**：`Data` 说明对象是本局运行时事实，给未来 `BattleStateMachine` 等时序/状态模式类型保留清晰术语。R3 属性成为事实本身或完整原子快照，而不是第二份镜像；订阅方因此有直接、窄且可测试的绑定点。
+
+**修订**：本决策替代 CD-018 中 `Subject<Unit>`/`Observable<Unit>` 的通知方案；CD-018 关于 `HandCardVisual` 拥有预制体展示引用的结论继续有效。
+
+**影响**：战斗运行时数据、`BattleSession`、卡牌格式化器、手牌 UI、编辑器测试、文件名和领域术语文档。本轮仍不实现 Effect 执行、费用、目标、敌人行为或状态机。
+
+## CD-020：Unity Localization 表资源是翻译文本的唯一来源
+
+**问题**：`LocalizationBuildTools` 曾在 C# `LocalizedEntry[]` 中保存中英文卡牌与关键词文本，并在执行菜单时回写 String Table。翻译内容同时存在于 C# 与 Localization 资源中，新增或修改卡牌时容易双写漂移，且一次校验操作可能覆盖编辑器内的翻译。
+
+**选择**：删除 `LocalizedEntry[]`、配置/补全菜单及所有写表辅助方法。`Assets/Localization` 下的 Unity String Table 资源独占翻译文本；`LocalizationBuildTools` 仅以 `TinySpire/Localization/Validate Battle Card Text` 校验所需语言、key、Smart String、参数与效果引用。
+
+**理由**：内容创作应在 Unity Localization 编辑器内完成，运行时也只经 `LocalizationService` 读取同一资源。校验器保留结构性约束，但不持有或生成任何本地化正文，避免第二事实源。
+
+**影响**：新增/修改卡牌 i18n key 后，先更新 `Battle Cards` 的每个 locale，再运行校验与 Addressables 本地构建；本轮未更改任何 String Table 条目、表格或运行时效果执行逻辑。

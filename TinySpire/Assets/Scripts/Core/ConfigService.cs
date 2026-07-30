@@ -1,87 +1,86 @@
+using System;
+using System.Collections.Generic;
 using cfg;
+using Cysharp.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
-using YooAsset;
 
 /// <summary>
 /// 统一配置服务：加载 Luban 表格（Tables）和手写 JSON 配置（GameConfig）。
 /// </summary>
 public sealed class ConfigService
 {
-    private ResourcePackage _package;
+    private static readonly string[] TableNames =
+    {
+        "battle_tbhero",
+        "battle_tbenemy",
+        "battle_tbdeck",
+        "battle_tbcard",
+        "battle_tbcardeffect",
+        "battle_tbencounter"
+    };
 
     public Tables Tables { get; private set; }
     public GameConfig GameConfig { get; private set; }
 
-    public void Initialize(ResourcePackage package)
+    public async UniTask InitializeAsync(AddressableAssetService assets)
     {
-        _package = package ?? throw new System.ArgumentNullException(nameof(package));
-        Tables = new Tables(LoadTable);
-        GameConfig = LoadGameConfig();
+        if (assets == null)
+            throw new ArgumentNullException(nameof(assets));
+        if (Tables != null && GameConfig != null)
+            return;
+
+        var tableData = new Dictionary<string, JArray>(TableNames.Length);
+        foreach (string tableName in TableNames)
+        {
+            string json = await assets.LoadTextAsync(ToGameDataAddress($"{tableName}.json"));
+            tableData.Add(tableName, ParseTable(tableName, json));
+        }
+
+        Tables = new Tables(tableName =>
+            tableData.TryGetValue(tableName, out JArray data)
+                ? data
+                : throw new InvalidOperationException($"Table '{tableName}' was not preloaded."));
+        GameConfig = await LoadGameConfigAsync(assets);
     }
 
-    private JArray LoadTable(string tableName)
+    private static JArray ParseTable(string tableName, string json)
     {
-        if (_package == null)
-            throw new System.InvalidOperationException("ConfigService has not been initialized.");
+        JToken token = JToken.Parse(json);
+        if (token is JArray array)
+            return array;
 
-        var handle = _package.LoadAssetSync<TextAsset>($"Assets/GameData/{tableName}.json");
-        try
+        if (token is JObject map)
         {
-            if (handle.Status != EOperationStatus.Succeed)
-                throw new System.InvalidOperationException($"Unable to load table '{tableName}': {handle.LastError}");
-
-            TextAsset textAsset = handle.GetAssetObject<TextAsset>();
-            if (textAsset == null)
-                throw new System.InvalidOperationException($"Table '{tableName}' did not load as a TextAsset.");
-
-            JToken token = JToken.Parse(textAsset.text);
-            if (token is JArray array)
-                return array;
-
-            if (token is JObject map)
-            {
-                var values = new JArray();
-                foreach (JProperty property in map.Properties())
-                    values.Add(property.Value);
-                return values;
-            }
-
-            throw new System.InvalidOperationException($"Table '{tableName}' has an unsupported JSON shape.");
+            var values = new JArray();
+            foreach (JProperty property in map.Properties())
+                values.Add(property.Value);
+            return values;
         }
-        finally
-        {
-            handle.Release();
-        }
+
+        throw new InvalidOperationException($"Table '{tableName}' has an unsupported JSON shape.");
     }
 
-    private GameConfig LoadGameConfig()
+    private static async UniTask<GameConfig> LoadGameConfigAsync(AddressableAssetService assets)
     {
-        var handle = _package.LoadAssetSync<TextAsset>("Assets/GameData/game-config.json");
         try
         {
-            if (handle.Status != EOperationStatus.Succeed)
-            {
-                Debug.LogWarning($"game-config.json 加载失败（{handle.LastError}），将使用默认配置。");
-                return new GameConfig();
-            }
-
-            TextAsset textAsset = handle.GetAssetObject<TextAsset>();
-            if (textAsset == null)
-            {
-                Debug.LogWarning("game-config.json 加载后为 null，将使用默认配置。");
-                return new GameConfig();
-            }
-
+            string json = await assets.LoadTextAsync(ToGameDataAddress("game-config.json"));
             var config = new GameConfig();
-            JsonConvert.PopulateObject(textAsset.text, config);
+            JsonConvert.PopulateObject(json, config);
             Debug.Log("game-config.json 已加载。");
             return config;
         }
-        finally
+        catch (Exception exception)
         {
-            handle.Release();
+            Debug.LogWarning($"game-config.json 加载失败（{exception.Message}），将使用默认配置。");
+            return new GameConfig();
         }
+    }
+
+    private static string ToGameDataAddress(string fileName)
+    {
+        return $"Assets/GameData/{fileName}";
     }
 }

@@ -8,13 +8,19 @@ using VContainer.Unity;
 public sealed class GameLauncher : IStartable
 {
 	private readonly ConfigService _configs;
-	private readonly YooAssetPackageService _assets;
+	private readonly AddressableAssetService _assets;
+	private readonly LocalizationService _localization;
 	private readonly SceneFlowService _sceneFlow;
 
-	public GameLauncher(ConfigService configs, YooAssetPackageService assets, SceneFlowService sceneFlow)
+	public GameLauncher(
+		ConfigService configs,
+		AddressableAssetService assets,
+		LocalizationService localization,
+		SceneFlowService sceneFlow)
 	{
 		_configs = configs;
 		_assets = assets;
+		_localization = localization;
 		_sceneFlow = sceneFlow;
 	}
 
@@ -26,9 +32,9 @@ public sealed class GameLauncher : IStartable
 
 	private async UniTaskVoid StartAsync()
 	{
-		// 资源包初始化和配置初始化必须先于场景加载。
 		await _assets.InitializeAsync();
-		_configs.Initialize(_assets.Package);
+		await _configs.InitializeAsync(_assets);
+		await _localization.InitializeAsync();
 		await _sceneFlow.LoadInitialSceneAsync();
 	}
 }

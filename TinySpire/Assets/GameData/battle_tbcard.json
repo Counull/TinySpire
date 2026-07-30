@@ -1,39 +1,58 @@
 {
   "3001": {
     "id": 3001,
-    "name": "Strength",
+    "name_i18n_key": "battle.card.strength.name",
+    "description_i18n_key": "battle.card.strength.description",
     "cost": 0,
     "target_rule": 0,
-    "effect_ids": [
-      4001
+    "effect_bindings": [
+      {
+        "argument_key": "strength",
+        "effect_id": 4001
+      }
     ]
   },
   "3002": {
     "id": 3002,
-    "name": "Strike",
+    "name_i18n_key": "battle.card.strike.name",
+    "description_i18n_key": "battle.card.strike.description",
     "cost": 1,
     "target_rule": 1,
-    "effect_ids": [
-      4002
+    "effect_bindings": [
+      {
+        "argument_key": "damage",
+        "effect_id": 4002
+      }
     ]
   },
   "3003": {
     "id": 3003,
-    "name": "Defend",
+    "name_i18n_key": "battle.card.defend.name",
+    "description_i18n_key": "battle.card.defend.description",
     "cost": 1,
     "target_rule": 0,
-    "effect_ids": [
-      4003
+    "effect_bindings": [
+      {
+        "argument_key": "block",
+        "effect_id": 4003
+      }
     ]
   },
   "3004": {
     "id": 3004,
-    "name": "Bash",
+    "name_i18n_key": "battle.card.bash.name",
+    "description_i18n_key": "battle.card.bash.description",
     "cost": 2,
     "target_rule": 1,
-    "effect_ids": [
-      4004,
-      4005
+    "effect_bindings": [
+      {
+        "argument_key": "damage",
+        "effect_id": 4004
+      },
+      {
+        "argument_key": "vulnerable",
+        "effect_id": 4005
+      }
     ]
   }
 }

@@ -14,22 +14,22 @@ public sealed class BattleSessionTests
 
         BattleSession session = BattleSession.FromConfig(tables, new GameConfig(), options);
 
-        Assert.That(session.BattleState.Combatants.Count, Is.EqualTo(2));
+        Assert.That(session.Combatants.All.Count, Is.EqualTo(2));
 
-        PlayerCombatantState player = null;
-        EnemyCombatantState enemy = null;
-        foreach (CombatantState combatant in session.BattleState.Combatants.Values)
+        PlayerCombatantData player = null;
+        EnemyCombatantData enemy = null;
+        foreach (CombatantData combatant in session.Combatants.All.Values)
         {
-            if (combatant is PlayerCombatantState playerCombatant)
+            if (combatant is PlayerCombatantData playerCombatant)
                 player = playerCombatant;
-            else if (combatant is EnemyCombatantState enemyCombatant)
+            else if (combatant is EnemyCombatantData enemyCombatant)
                 enemy = enemyCombatant;
         }
 
         Assert.That(player, Is.Not.Null);
         Assert.That(player.TemplateId, Is.EqualTo(1001));
         Assert.That(player.MaxHealth, Is.EqualTo(80));
-        Assert.That(player.Strength, Is.EqualTo(1));
+        Assert.That(player.Strength.CurrentValue, Is.EqualTo(1));
         Assert.That(enemy, Is.Not.Null);
         Assert.That(enemy.TemplateId, Is.EqualTo(2001));
         Assert.That(enemy.MaxHealth, Is.EqualTo(20));
@@ -67,9 +67,9 @@ public sealed class BattleSessionTests
             ["battle_tbdeck"] = JArray.Parse(
                 "[{\"id\":1001,\"card_template_ids\":[3002,3002,3002,3002,3002,3003,3003,3003,3003,3004]}]"),
             ["battle_tbcard"] = JArray.Parse(
-                "[{\"id\":3002,\"name\":\"Strike\",\"cost\":1,\"target_rule\":1,\"effect_ids\":[4002]},{" +
-                "\"id\":3003,\"name\":\"Defend\",\"cost\":1,\"target_rule\":0,\"effect_ids\":[4003]},{" +
-                "\"id\":3004,\"name\":\"Bash\",\"cost\":2,\"target_rule\":1,\"effect_ids\":[4004,4005]}]"),
+                "[{\"id\":3002,\"name_i18n_key\":\"battle.card.strike.name\",\"description_i18n_key\":\"battle.card.strike.description\",\"cost\":1,\"target_rule\":1,\"effect_bindings\":[{\"argument_key\":\"damage\",\"effect_id\":4002}]},{" +
+                "\"id\":3003,\"name_i18n_key\":\"battle.card.defend.name\",\"description_i18n_key\":\"battle.card.defend.description\",\"cost\":1,\"target_rule\":0,\"effect_bindings\":[{\"argument_key\":\"block\",\"effect_id\":4003}]},{" +
+                "\"id\":3004,\"name_i18n_key\":\"battle.card.bash.name\",\"description_i18n_key\":\"battle.card.bash.description\",\"cost\":2,\"target_rule\":1,\"effect_bindings\":[{\"argument_key\":\"damage\",\"effect_id\":4004},{\"argument_key\":\"vulnerable\",\"effect_id\":4005}]}]"),
             ["battle_tbcardeffect"] = JArray.Parse(
                 "[{\"id\":4002,\"effect_type\":1,\"attribute\":0,\"value\":6},{" +
                 "\"id\":4003,\"effect_type\":2,\"attribute\":0,\"value\":5},{" +

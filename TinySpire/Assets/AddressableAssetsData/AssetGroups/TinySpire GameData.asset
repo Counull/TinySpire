@@ -1,0 +1,65 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bbb281ee3bf0b054c82ac2347e9e782c, type: 3}
+  m_Name: TinySpire GameData
+  m_EditorClassIdentifier: Unity.Addressables.Editor::UnityEditor.AddressableAssets.Settings.AddressableAssetGroup
+  m_GroupName: TinySpire GameData
+  m_GUID: a1f0a6a90f0ff154483e46063046d29d
+  m_SerializeEntries:
+  - m_GUID: 300d79d5b2dc27542973ef3a5108596f
+    m_Address: Assets/GameData/battle_tbcardeffect.json
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - GameData
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 716d5c44c73818847b4b0bd18e867a15
+    m_Address: Assets/GameData/battle_tbdeck.json
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - GameData
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9782e86f4f1fb8a40a1e1569a0bf1b0f
+    m_Address: Assets/GameData/battle_tbhero.json
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - GameData
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9b1b46b0f00543e4bbbf632ee95ea1f3
+    m_Address: Assets/GameData/battle_tbencounter.json
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - GameData
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: a7a51b1d109c3b1488de5c219b344717
+    m_Address: Assets/GameData/battle_tbcard.json
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - GameData
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: b0ba43d46ef9a96448d5d5ea67677b1d
+    m_Address: Assets/GameData/battle_tbenemy.json
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - GameData
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: cb671fc9d59388f489a021eaa39a9f44
+    m_Address: Assets/GameData/game-config.json
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - GameData
+    FlaggedDuringContentUpdateRestriction: 0
+  m_ReadOnly: 0
+  m_Settings: {fileID: 11400000, guid: ec003b10e131c9e40aebe3d03dd58e88, type: 2}
+  m_SchemaSet:
+    m_Schemas:
+    - {fileID: 11400000, guid: 870e7d74e391f434e9eb58c68995e706, type: 2}
+    - {fileID: 11400000, guid: 0d4fd4de2b82f86468623231a2ffbb76, type: 2}
