@@ -63,6 +63,18 @@ MonoBehaviour:
     m_Key: battle.enemy.test_slime.name
     m_Metadata:
       m_Items: []
+  - m_Id: 46598705541120
+    m_Key: battle.card_pile.draw.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 46598802010112
+    m_Key: battle.card_pile.discard.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 46598898479104
+    m_Key: battle.card_pile.exhaust.name
+    m_Metadata:
+      m_Items: []
   m_Metadata:
     m_Items: []
   m_KeyGenerator:

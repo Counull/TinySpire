@@ -64,11 +64,23 @@ MonoBehaviour:
       m_Items:
       - rid: 3318493899348770842
   - m_Id: 46598512603136
-    m_Localized: Test Warrior
+    m_Localized: Sisyphus
     m_Metadata:
       m_Items: []
   - m_Id: 46598609072128
-    m_Localized: Test Slime
+    m_Localized: Warden
+    m_Metadata:
+      m_Items: []
+  - m_Id: 46598705541120
+    m_Localized: Draw Pile
+    m_Metadata:
+      m_Items: []
+  - m_Id: 46598802010112
+    m_Localized: Discard Pile
+    m_Metadata:
+      m_Items: []
+  - m_Id: 46598898479104
+    m_Localized: Exhaust Pile
     m_Metadata:
       m_Items: []
   references:

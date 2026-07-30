@@ -1,4 +1,5 @@
 using TinySpire.Battle;
+using TinySpire.UI.Battle;
 using UnityEngine;
 using VContainer;
 using VContainer.Unity;
@@ -20,6 +21,8 @@ public sealed class BattleLifetimeScope : LifetimeScope
             Lifetime.Singleton);
         builder.Register<CardTextFormatter>(Lifetime.Singleton);
         builder.RegisterComponentInHierarchy<HandCardContainer>();
+        builder.RegisterComponentInHierarchy<BattleParticipantPresenter>();
+        builder.RegisterComponentInHierarchy<BattleCardPileHudView>();
 
         // TODO(DEP-005): 回合调度器与其余战斗局内模块确定后在此注册
     }

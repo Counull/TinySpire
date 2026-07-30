@@ -44,6 +44,13 @@ public static class LocalizationBuildTools
         "battle.keyword.vulnerable.name"
     };
 
+    private static readonly string[] RequiredBattleHudKeys =
+    {
+        "battle.card_pile.draw.name",
+        "battle.card_pile.discard.name",
+        "battle.card_pile.exhaust.name"
+    };
+
     /// <summary>
     /// 将 Excel 翻译源表同步到 Battle Cards String Table，并立即校验结果。
     /// </summary>
@@ -90,6 +97,7 @@ public static class LocalizationBuildTools
         JObject enemies = JObject.Parse(enemyData.text);
         Dictionary<string, I18nExcelEntry> entriesByKey = IndexEntries(entries);
         var requiredKeys = new HashSet<string>(RequiredKeywordKeys, StringComparer.Ordinal);
+        requiredKeys.UnionWith(RequiredBattleHudKeys);
         foreach (JProperty cardProperty in cards.Properties())
         {
             JObject card = (JObject)cardProperty.Value;
@@ -109,6 +117,8 @@ public static class LocalizationBuildTools
 
             foreach (string keywordKey in RequiredKeywordKeys)
                 RequireEntry(table, keywordKey);
+            foreach (string battleHudKey in RequiredBattleHudKeys)
+                RequireEntry(table, battleHudKey);
             ValidateParticipantNames(table, heroes, "Hero");
             ValidateParticipantNames(table, enemies, "Enemy");
 

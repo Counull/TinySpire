@@ -3,6 +3,13 @@ created: 2026-07-06
 updated: 2026-07-30
 ---
 
+## 2026-07-30 · M3B 抽牌堆/弃牌堆计数 HUD 实施（待 Unity 人工验收）
+
+> - 新增 `BattleCardPileHudView`：它仅订阅 `BattleSession.CardZones.Layout` 与 `LocalizationService.LocaleChanged`，从已发布布局的 `DrawPile.Count`、`DiscardPile.Count`、`ExhaustPile.Count` 即时派生三个底部计数文本；没有新增计数、卡区列表或卡牌归属的镜像状态。场景 `BattleCardPileHud` 已置于主 Canvas 底部左右两侧，并由 `BattleLifetimeScope` 注入。
+> - 新增 `battle.card_pile.draw.name` / `battle.card_pile.discard.name` / `battle.card_pile.exhaust.name` 三个 Excel i18n key（en：`Draw Pile` / `Discard Pile` / `Exhaust Pile`；zh-CN：`抽牌堆` / `弃牌堆` / `消耗牌堆`）。本地化校验器把它们纳入必需运行时 key，防止表格遗漏后静默运行。相应 String Table 已与 Excel 编辑源同步。
+> - `DataTables/gen.bat` 已成功执行；两套程序集串行静态编译均为 0 error（保留 6/12 条既有版本冲突 warning）；工作表、场景 GUID 与 `git diff --check` 均已检查。新增 `BattleCardPileHudPresentationTests` 已编译，Unity EditMode 与实际场景验收尚未执行。
+> - 未实施 M3C～M3E：它们分别依赖 M4 回合/能量、M5 意图及 M7～M9 的效果与结算事实，不能先以 UI 占位状态替代。需在当前 Unity Editor 执行 `TinySpire/Build/Sync and Build All` 后从 Bootstrap 人工验收 M3B，详见 `06_testing/2026-07-30-battlescene-card-pile-hud.md`。
+
 ## 2026-07-30 · M3A-1/2 参与者配置与 Prefab 工厂实施（待 Unity 验收）
 
 > - `battle.Hero`、`battle.Enemy` 已新增 `name_i18n_key` 与 `view_prefab_address`；Test Warrior 与 Test Slime 分别指向现有玩家、敌人 Prefab，名称写入 `i18n.xlsx`。Luban 已生成对应 C# 与 `Assets/GameData` JSON。
@@ -10,6 +17,18 @@ updated: 2026-07-30
 > - 已实现 `BattleParticipantPresenter` 与 `EnemyCombatantLayout`：一名玩家、1–3 名敌人按 Encounter 顺序自右向左等距实例化；场景销毁时以 `ReleaseInstance` 释放。`BattleSession` 显式保留遇敌顺序，未依赖字典遍历顺序。
 > - 本轮实跑曾暴露 VContainer 选择参数最多的非公开 `BattleSession` 构造函数，导致尝试解析本不应注册的 `BattleCombatantsData`。`BattleLifetimeScope` 已改为显式工厂，仅解析 `ConfigService` 与 `BattleSetupOptions` 后调用正确的公共构造函数。
 > - 定向用例覆盖遇敌顺序、两/三敌布局、容量与间距错误；既有程序集 `dotnet build` 为 0 error（6 条既有程序集引用冲突警告）。运行中的 Unity 尚未将新文件刷新进生成的 `.csproj`，且当前存在用户的 `BattleScene.unity` 改动，因此未启动第二个 Editor、未修改场景、未运行 Unity EditMode 或 Addressables 构建。待在现有 Editor 执行 `TinySpire/Build/Sync and Build All` 后完成 M3A-1 内容验收；场景挂载与实跑属于尚未开始的 M3A-4。
+
+## 2026-07-30 · M3A-3/4 HUD 与 BattleScene 接线实施（待 Unity 人工验收）
+
+> - 新增 `ParticipantHudView` Prefab/组件：它只保存参与者事实、世界 Sprite、Canvas 与本地化服务的引用，不复制生命、力量或语言状态；Health/Strength/Locale 变化分别驱动展示重派生。名称投影在角色头顶，生命条与 `当前 / 上限` 投影在脚下，力量为零时隐藏。
+> - `BattleParticipantPresenter` 现在同时创建并销毁角色 Addressables 实例和对应 HUD；HUD 构建失败会立即释放已生成角色，Presenter 销毁时也会显式释放两类 View。场景中的 `BattleLifetimeScope` 已挂载 Presenter，并接入既有 Player/Enemy Anchor、主 Canvas 与 HUD Prefab；Scope 注册该场景组件以完成 VContainer 注入。
+> - 本轮未改动战斗表、翻译正文或角色 Addressables 配置。因现有 Unity Editor 正在被用户使用，尚未启动第二个 Editor 或重建 Addressables 本地内容；需在该 Editor 执行 `TinySpire/Build/Sync and Build All` 并从 Bootstrap 实跑 BattleScene，确认 HUD 和 Console 后再完成验收。
+
+## 2026-07-30 · M3A HUD 前景渲染与素材名修正（待重建本地内容）
+
+> - 人工实跑确认 HUD 的世界投影位置正确，但现有 Screen Space - Camera Canvas 的 `Plane Distance = 100` 位于世界背景之后。BattleScene 已将其改为 `1`，使该 Canvas 位于相机近端、背景之前；未改变角色或背景的 Sorting Layer。
+> - Hero 1001 与 Enemy 2001 的名称语义取自实际 Sprite 的关键词：英文为 `Sisyphus`、`Warden`，中文为 `西西弗斯`、`典狱长`。稳定 i18n key 不变，Excel 编辑源、Unity String Table 与运行时读取链保持一致；之后仍需由现有 Unity Editor 重导入本地化并重建 Addressables。
+> - `DataTables/gen.bat` 已成功生成；两套程序集静态构建均为 0 error（分别保留 6/12 条既有版本冲突警告），`git diff --check` 通过。尚未由 Unity 菜单重建 Addressables 本地内容，也尚未进行修正后的人工实跑。
 
 ## 2026-07-30 · M3 BattleScene 主 HUD 与参与者视图 grilling 完成
 

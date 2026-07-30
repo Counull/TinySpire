@@ -203,7 +203,7 @@ en:    Deal {damage} damage. Apply {vulnerable} {keywordVulnerable}.
 
 ### M3 · BattleScene 主 HUD 与参与者视图
 
-当前将 M3 拆为按事实依赖推进的切片：M3A 参与者世界视图与生命 HUD；M3B 抽牌/弃牌计数；M3C 能量与结束回合；M3D 敌人意图；M3E 格挡、状态、死亡、回合提示与胜败覆盖层。只有 M3A 已完成设计确认，详见 `plans/2026-07-30-battlescene-participant-views.md`；M3B 可复用已完成的 M2 卡区事实，其余切片分别等待 M4、M5 与 M7-M9。
+当前将 M3 拆为按事实依赖推进的切片：M3A 参与者世界视图与生命 HUD；M3B 抽牌/弃牌计数；M3C 能量与结束回合；M3D 敌人意图；M3E 格挡、状态、死亡、回合提示与胜败覆盖层。M3A 与 M3B 已完成设计确认，分别见 `plans/2026-07-30-battlescene-participant-views.md` 与 `plans/2026-07-30-battlescene-card-pile-hud.md`；M3B 可复用已完成的 M2 卡区事实，其余切片分别等待 M4、M5 与 M7-M9。
 
 主界面至少包含：
 
