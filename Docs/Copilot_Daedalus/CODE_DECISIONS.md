@@ -69,6 +69,16 @@ updated: 2026-07-30
 
 ## 决策模板
 
+## CD-024：可旋转卡牌插图使用 Stencil Mask 裁剪
+
+**问题**：`CardContent` 在手牌扇形布局中旋转，但其插图区的 `RectMask2D` 只按轴对齐矩形裁剪；旋转卡片时会裁掉插图边缘并露出下层 `CardBase` 的灰色区域。
+
+**选择**：`CardView.prefab` 的 `IllustrationMask` 保留现有 `Image`、尺寸与子层级，将裁剪组件从 `RectMask2D` 替换为 `Mask`，并设置 `m_ShowMaskGraphic: 0`。子节点 `Illustration` 继续作为唯一被裁剪的卡图。
+
+**理由**：Stencil Mask 使用遮罩 Graphic 自身的变换写入模板缓冲，能与 `CardContent` 一起旋转；它只增加一个局部 UI 裁剪层，不改变卡牌布局、交互、贴图、运行时数据或资源地址。
+
+**影响**：`TinySpire/Assets/Arts/Runtime/Card/Prefab/CardView.prefab`。本次不修改手牌扇形旋转算法、场景、C# 脚本、卡图资源、Luban 表或 Addressables 配置；需要在当前 Unity Editor 中重建本地 Addressables 内容并进行旋转卡人工验收。
+
 ```markdown
 ## CD-XXX：决策标题
 

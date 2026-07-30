@@ -3,6 +3,13 @@ created: 2026-07-06
 updated: 2026-07-30
 ---
 
+## 2026-07-30 · CardView 旋转插图灰边修复（待 Unity 人工验收）
+
+- 用户报告手牌扇形布局中，只有旋转卡的插图区出现灰色边缘。代码与 Prefab 静态检查确认：`HandCardVisual` 旋转 `CardContent`，而 `IllustrationMask` 使用轴对齐的 `RectMask2D`，导致其子节点 `Illustration` 被错误裁剪并露出下层 `CardBase`。
+- `CardView.prefab` 已将 `IllustrationMask` 的裁剪组件替换为 `Mask`，保留既有 `Image`、尺寸、卡图资源与层级，并关闭 `Show Mask Graphic`，使模板裁剪区域随卡片旋转。
+- 新增 CD-024、实施方案与验收记录；未修改 C#、手牌布局参数、场景、数据表、资源地址或 Addressables 配置。
+- 当前检测到用户正在使用 Unity，未启动第二个 Editor 或批处理实例；请在该 Editor 执行 `TinySpire/Addressables/Build Local Content`，并在 BattleScene 检查左右倾斜卡、悬停归零和拖拽时是否还会露出灰边。
+
 ## 2026-07-30 · M3B 抽牌堆/弃牌堆计数 HUD 实施（待 Unity 人工验收）
 
 > - 新增 `BattleCardPileHudView`：它仅订阅 `BattleSession.CardZones.Layout` 与 `LocalizationService.LocaleChanged`，从已发布布局的 `DrawPile.Count`、`DiscardPile.Count`、`ExhaustPile.Count` 即时派生三个底部计数文本；没有新增计数、卡区列表或卡牌归属的镜像状态。场景 `BattleCardPileHud` 已置于主 Canvas 底部左右两侧，并由 `BattleLifetimeScope` 注入。
