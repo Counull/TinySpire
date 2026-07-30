@@ -137,12 +137,11 @@ Unity Localization 的 `Battle Cards` 表是由该 Excel 导入得到的可寻�
 
 修改卡牌表或本地化资源后：
 
-1. 运行 Luban，更新生成 C# 与 `Assets/GameData` JSON。
-2. 编辑 `DataTables/Datas/i18n.xlsx`；卡牌说明需要将 `smart` 设为 `true`。
-3. 执行 `TinySpire/Localization/Import Battle Card Text from Excel`。
-4. 执行 `TinySpire/Localization/Validate Battle Card Text`。
-5. 执行 `TinySpire/Addressables/Build Local Content`。
-6. 运行 EditMode、启动加载和双语言手牌验收。
+1. 编辑 `DataTables/Datas/` 下的静态表格和/或 `i18n.xlsx`；卡牌说明需要将 `smart` 设为 `true`。
+2. 执行 `TinySpire/Build/Sync and Build All`。
+
+该入口固定依次执行 Luban 生成、资源刷新、Excel 导入与本地化校验、Addressables 本地内容构建；任一步失败即停止。仅在需要单独排查时，才使用下方的细粒度菜单。
+3. 运行 EditMode、启动加载和双语言手牌验收。
 
 ## 验收
 

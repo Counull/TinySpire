@@ -246,3 +246,13 @@ updated: 2026-07-30
 **理由**：Excel 集中承担可编辑文本事实，Unity Localization 继续承担 locale、fallback、Smart String 与 Addressables 运行时集成。导入不是运行时依赖，运行时仍只通过 `LocalizationService` 读取 String Table；因此没有引入第二条运行时加载链路。
 
 **影响**：本地化修改流程变为：编辑 Excel → 导入 Unity Localization → 校验 → 重建 Addressables。本轮不把 i18n.xlsx 加入 Luban 配置定义，不生成 i18n JSON，也不改变卡牌配置、运行时文本格式化或效果执行边界。
+
+## CD-022：配置与本地内容发布使用单一编辑器入口
+
+**问题**：修改静态表格或 `i18n.xlsx` 后，Luban 生成、Unity 资源刷新、本地化导入/校验和 Addressables 构建分散为多个菜单和命令，容易漏掉任一步，导致 JSON、String Table 与本地 catalog 不一致。
+
+**选择**：新增 `TinySpire/Build/Sync and Build All`。该入口固定依次执行与 `DataTables/gen.bat` 相同参数的 Luban 生成、`AssetDatabase.Refresh`、i18n Excel 导入及校验、Addressables 本地内容构建；任一步抛错即中止，不继续发布后续内容。细粒度菜单保留给诊断使用。
+
+**理由**：表格和本地化变更的正确交付链路是稳定且顺序固定的。将顺序与失败边界收敛到编辑器工具，能降低漏构建风险，同时不改变配置、Localization 或运行时加载的唯一事实来源。
+
+**影响**：内容人员修改 `DataTables/Datas/` 下任何配置表或 i18n.xlsx 后，只需执行一个菜单。该入口只构建本地 Addressables 内容，不引入远程 catalog、效果执行或新的运行时加载链路。
