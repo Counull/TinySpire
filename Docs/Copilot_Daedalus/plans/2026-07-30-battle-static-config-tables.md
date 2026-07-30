@@ -21,7 +21,7 @@ status_source: ../SESSION_LOG.md
 | 英雄模板 | `battle.Hero` | `max_health`、`base_strength`、`initial_deck_id` | 1001 / Test Warrior / 30 HP / deck 1001 |
 | 敌人模板 | `battle.Enemy` | `max_health`、`base_strength` | 2001 / Test Slime / 20 HP |
 | 卡组模板 | `battle.Deck` | `card_template_ids` | 1001 → 5×Strike、4×Defend、1×Bash |
-| 卡牌模板 | `battle.Card` | `cost`、`target_rule`、`effect_ids` | Strike / Defend / Bash |
+| 卡牌模板 | `battle.Card` | `name_i18n_key`、`description_i18n_key`、`cost`、`target_rule`、`effect_bindings` | Strength / Strike / Defend / Bash |
 | 卡牌效果 | `battle.CardEffect` | `effect_type`、`attribute`、`value` | 4001 / ModifyAttribute / Strength / +3 |
 | 遭遇模板 | `battle.Encounter` | `enemy_template_ids` | 5001 → [2001] |
 
@@ -33,7 +33,7 @@ status_source: ../SESSION_LOG.md
 
 ## 数据关系与边界
 
-`Hero.initial_deck_id → Deck.card_template_ids → Card.effect_ids → CardEffect`；`Encounter.enemy_template_ids → Enemy`。
+`Hero.initial_deck_id → Deck.card_template_ids → Card.effect_bindings.effect_id → CardEffect`；`Encounter.enemy_template_ids → Enemy`。
 
 这些关系当前以模板 ID 表达，尚未接入 Luban `ref` 校验或运行时导航。`CombatantId`、当前生命、存活与否、手牌/抽牌/弃牌堆、卡牌实例、临时费用、升级、敌人意图和控制者都明确不进入表格。
 
@@ -41,8 +41,8 @@ status_source: ../SESSION_LOG.md
 
 - 手工登记的战斗表使用 `battle.TbXxx` 表名和 `battle.Xxx` 记录类型；避免把 table 与 value type 设为同名。
 - 战斗数据文件不以 `#` 开头，以免与 Luban 自动导入规则重复；`#demo.item.xlsx` 已按既有删除意图移除，不再参与生成。
-- Luban JSON 输出到 `TinySpire/Assets/GameData`；生成后必须用 YooAsset 的 `Main` / `BuiltinBuildPipeline` 重建内置包，单独刷新 Unity 不会更新离线清单。
-- 战士初始卡组使用 5×Strike、4×Defend、1×Bash；卡牌以 `effect_ids` 数组支持复合效果。`Bash` 的伤害和易伤目前仅为静态模板数据，不接入运行时执行。
+- Luban JSON 输出到 `TinySpire/Assets/GameData`；生成或修改可寻址内容后必须执行 `TinySpire/Addressables/Build Local Content`，单独刷新 Unity 不会更新本地 Addressables 内容。
+- 战士初始卡组使用 5×Strike、4×Defend、1×Bash；卡牌以有序 `effect_bindings` 支持复合效果和本地化命名参数。`Bash` 的伤害和易伤目前仅用于动态说明派生，不接入运行时执行。
 - ID 列表使用 `(array#sep=,),int`，在一个单元格内以逗号分隔多个 ID。
 
 ## 明确排除

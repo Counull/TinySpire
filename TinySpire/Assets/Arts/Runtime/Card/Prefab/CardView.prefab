@@ -565,6 +565,7 @@ GameObject:
   - component: {fileID: 606912178581207511}
   - component: {fileID: 5174148585644344560}
   - component: {fileID: 7464053599367206487}
+  - component: {fileID: 5249884519165781771}
   m_Layer: 0
   m_Name: CardView
   m_TagString: Untagged
@@ -656,6 +657,24 @@ MonoBehaviour:
   m_BlockingMask:
     serializedVersion: 2
     m_Bits: 4294967295
+--- !u!114 &5249884519165781771
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5584687693069242302}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6c032af53bca47a2a8c121969519d096, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::HandCardVisual
+  _canvas: {fileID: 606912178581207511}
+  _cardContent: {fileID: 7023076731172432324}
+  _titleText: {fileID: 1750228080530724987}
+  _costText: {fileID: 918101985981586173}
+  _typeText: {fileID: 7168821670673846105}
+  _descriptionText: {fileID: 7960129587187924371}
 --- !u!1 &5607609382875956158
 GameObject:
   m_ObjectHideFlags: 0

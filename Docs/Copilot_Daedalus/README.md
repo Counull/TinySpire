@@ -33,6 +33,8 @@ Status Source: [SESSION_LOG.md](SESSION_LOG.md)
 | 3 | [ARCHITECTURE_CONVENTIONS.md](ARCHITECTURE_CONVENTIONS.md) | 代码架构级的 Locked/Provisional 约定，任何新实现（包括交给 Codex 等外部 Agent）默认必须遵守。 |
 | 4 | [AGENT_PROFILE.md](AGENT_PROFILE.md) | Daedalus 身份、职责边界与工作方式。 |
 
+战斗术语变更或涉及运行时数据命名时，额外阅读 [CONTEXT.md](CONTEXT.md)。
+
 ## Optional Deep-Dive Docs
 
 | 页面 | 何时读 |

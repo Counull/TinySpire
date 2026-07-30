@@ -323,6 +323,9 @@ MonoBehaviour:
     TypeName: Bootstrap
   autoRun: 1
   autoInjectGameObjects: []
+  heroTemplateId: 1001
+  encounterTemplateId: 5001
+  battleSeed: 5
 --- !u!4 &55982455
 Transform:
   m_ObjectHideFlags: 0
@@ -746,10 +749,10 @@ RectTransform:
 SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
+  - {fileID: 55982455}
   - {fileID: 1823309450}
   - {fileID: 41389463}
   - {fileID: 332294741}
   - {fileID: 610778483}
   - {fileID: 1625868447}
   - {fileID: 14265934}
-  - {fileID: 55982455}

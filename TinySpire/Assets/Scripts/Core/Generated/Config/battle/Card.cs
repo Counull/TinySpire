@@ -21,10 +21,11 @@ public sealed partial class Card : Luban.BeanBase
     {
         JObject _obj = _buf as JObject;
         Id = (int)_obj.GetValue("id");
-        Name = (string)_obj.GetValue("name");
+        NameI18nKey = (string)_obj.GetValue("name_i18n_key");
+        DescriptionI18nKey = (string)_obj.GetValue("description_i18n_key");
         Cost = (int)_obj.GetValue("cost");
         TargetRule = (battle.TargetRule)(int)_obj.GetValue("target_rule");
-        { var __json0 = _obj.GetValue("effect_ids"); int _n0 = (__json0 as JArray).Count; EffectIds = new int[_n0]; int __index0=0; foreach(JToken __e0 in __json0) { int __v0;  __v0 = (int)__e0;  EffectIds[__index0++] = __v0; }   }
+        { var __json0 = _obj.GetValue("effect_bindings"); int _n0 = (__json0 as JArray).Count; EffectBindings = new battle.CardEffectBinding[_n0]; int __index0=0; foreach(JToken __e0 in __json0) { battle.CardEffectBinding __v0;  __v0 = global::cfg.battle.CardEffectBinding.DeserializeCardEffectBinding(__e0);  EffectBindings[__index0++] = __v0; }   }
     }
 
     public static Card DeserializeCard(JToken _buf)
@@ -37,9 +38,13 @@ public sealed partial class Card : Luban.BeanBase
     /// </summary>
     public readonly int Id;
     /// <summary>
-    /// Name
+    /// Name localization key
     /// </summary>
-    public readonly string Name;
+    public readonly string NameI18nKey;
+    /// <summary>
+    /// Description localization key
+    /// </summary>
+    public readonly string DescriptionI18nKey;
     /// <summary>
     /// Cost
     /// </summary>
@@ -49,9 +54,9 @@ public sealed partial class Card : Luban.BeanBase
     /// </summary>
     public readonly battle.TargetRule TargetRule;
     /// <summary>
-    /// Effect ID list
+    /// Ordered effect argument bindings
     /// </summary>
-    public readonly int[] EffectIds;
+    public readonly battle.CardEffectBinding[] EffectBindings;
 
 
     public const int __ID__ = -796030298;
@@ -59,16 +64,18 @@ public sealed partial class Card : Luban.BeanBase
 
     public  void ResolveRef(Tables tables)
     {
+        foreach (var _e in EffectBindings) { _e?.ResolveRef(tables); }
     }
 
     public override string ToString()
     {
         return "{ "
         + "id:" + Id + ","
-        + "name:" + Name + ","
+        + "nameI18nKey:" + NameI18nKey + ","
+        + "descriptionI18nKey:" + DescriptionI18nKey + ","
         + "cost:" + Cost + ","
         + "targetRule:" + TargetRule + ","
-        + "effectIds:" + Luban.StringUtil.CollectionToString(EffectIds) + ","
+        + "effectBindings:" + Luban.StringUtil.CollectionToString(EffectBindings) + ","
         + "}";
     }
 }

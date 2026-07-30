@@ -13,7 +13,12 @@ public sealed class BattleLifetimeScope : LifetimeScope
     protected override void Configure(IContainerBuilder builder)
     {
         builder.RegisterInstance(new BattleSetupOptions(heroTemplateId, encounterTemplateId, battleSeed));
-        builder.Register<BattleSession>(Lifetime.Singleton);
+        builder.Register(
+            resolver => new BattleSession(
+                resolver.Resolve<ConfigService>(),
+                resolver.Resolve<BattleSetupOptions>()),
+            Lifetime.Singleton);
+        builder.Register<CardTextFormatter>(Lifetime.Singleton);
         builder.RegisterComponentInHierarchy<HandCardContainer>();
 
         // TODO(DEP-005): 回合调度器与其余战斗局内模块确定后在此注册

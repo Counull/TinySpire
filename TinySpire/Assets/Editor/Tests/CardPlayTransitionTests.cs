@@ -6,7 +6,7 @@ public sealed class CardPlayTransitionTests
     [Test]
     public void DiscardFromHand_MovesOnlyTheRequestedRuntimeInstance()
     {
-        var zones = new CardZoneState(new[] { 3002, 3002 }, shuffleSeed: 1234);
+        var zones = new BattleCardZonesData(new[] { 3002, 3002 }, shuffleSeed: 1234);
         zones.Draw(2);
         CardInstanceId discardedId = zones.Hand[0];
         CardInstanceId remainingId = zones.Hand[1];

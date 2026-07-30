@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using DG.Tweening;
+using R3;
 using TinySpire.Battle;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -31,20 +32,33 @@ public sealed class HandCardContainer : MonoBehaviour
 
     private BattleSession _session;
     private ConfigService _configs;
+    private CardTextFormatter _cardTextFormatter;
+    private LocalizationService _localization;
 
     private readonly List<HandCardVisual> _cards = new();
     private HandCardVisual _draggingCard;
-    private CardZoneState _cardZones;
+    private BattleCardZonesData _cardZones;
+    private PlayerCombatantData _player;
 
     private int CurrentHandCount => _cardZones.Hand.Count;
 
+    /// <summary>
+    /// 接收已初始化的战斗会话及文本依赖，并在 Start 中订阅所需的运行时事实。
+    /// </summary>
     [Inject]
-    public void Construct(BattleSession session, ConfigService configs)
+    public void Construct(
+        BattleSession session,
+        ConfigService configs,
+        CardTextFormatter cardTextFormatter,
+        LocalizationService localization)
     {
         _session = session;
         _configs = configs;
+        _cardTextFormatter = cardTextFormatter;
+        _localization = localization;
     }
 
+    /// <summary>校验依赖、建立事实订阅并绘制初始手牌。</summary>
     private void Start()
     {
         if (cardViewPrefab == null)
@@ -54,7 +68,10 @@ public sealed class HandCardContainer : MonoBehaviour
             return;
         }
 
-        if (_session == null || _configs?.Tables == null)
+        if (_session == null
+            || _configs?.Tables == null
+            || _cardTextFormatter == null
+            || _localization == null)
         {
             Debug.LogError("HandCardContainer did not receive the initialized battle session.", this);
             enabled = false;
@@ -62,16 +79,23 @@ public sealed class HandCardContainer : MonoBehaviour
         }
 
         _cardZones = _session.CardZones;
-        _cardZones.Changed += HandleCardZonesChanged;
+        _player = ResolvePlayer();
+        _cardZones.Layout
+            .Select(layout => layout.Hand)
+            .Skip(1)
+            .Subscribe(_ => RebuildCards(immediate: false))
+            .AddTo(this);
+        _player.Strength
+            .Skip(1)
+            .Subscribe(_ => RefreshCardTexts())
+            .AddTo(this);
+        _localization.LocaleChanged.Subscribe(_ => RefreshCardTexts()).AddTo(this);
         RebuildCards(immediate: true);
     }
 
-    private void OnDestroy()
-    {
-        if (_cardZones != null)
-            _cardZones.Changed -= HandleCardZonesChanged;
-    }
-
+    /// <summary>
+    /// 处理手牌悬停进入，播放抬升反馈。
+    /// </summary>
     public void HandlePointerEnter(HandCardVisual card)
     {
         if (card == null || _draggingCard != null)
@@ -80,6 +104,9 @@ public sealed class HandCardContainer : MonoBehaviour
         card.PlayHover(hoverLift, hoverScale, CurrentHandCount, hoverDuration);
     }
 
+    /// <summary>
+    /// 处理手牌悬停离开，恢复该牌的基础姿态。
+    /// </summary>
     public void HandlePointerExit(HandCardVisual card)
     {
         if (card == null || card == _draggingCard)
@@ -88,6 +115,9 @@ public sealed class HandCardContainer : MonoBehaviour
         card.PlayBasePose(hoverDuration, Ease.OutBack);
     }
 
+    /// <summary>
+    /// 开始拖拽一张手牌，并使其脱离当前手牌排布。
+    /// </summary>
     public void HandleBeginDrag(HandCardVisual card)
     {
         if (card == null || _draggingCard != null)
@@ -98,6 +128,9 @@ public sealed class HandCardContainer : MonoBehaviour
         LayoutCards(immediate: false, excludedCard: card);
     }
 
+    /// <summary>
+    /// 根据指针增量移动正在拖拽的卡牌，并刷新越过打出线的视觉反馈。
+    /// </summary>
     public void HandleDrag(HandCardVisual card, PointerEventData eventData)
     {
         if (card == null || card != _draggingCard || eventData == null)
@@ -109,6 +142,9 @@ public sealed class HandCardContainer : MonoBehaviour
         card.SetDragPlayFeedback(IsPastPlayLine(card));
     }
 
+    /// <summary>
+    /// 结束拖拽：越过打出线则请求卡区弃置该实例，否则恢复手牌排布。
+    /// </summary>
     public void HandleEndDrag(HandCardVisual card)
     {
         if (card == null || card != _draggingCard)
@@ -126,11 +162,7 @@ public sealed class HandCardContainer : MonoBehaviour
         LayoutCards(immediate: false);
     }
 
-    private void HandleCardZonesChanged()
-    {
-        RebuildCards(immediate: false);
-    }
-
+    /// <summary>根据当前手牌布局增删并排序 CardView。</summary>
     private void RebuildCards(bool immediate)
     {
         IReadOnlyList<CardInstanceId> hand = _cardZones.Hand;
@@ -148,10 +180,12 @@ public sealed class HandCardContainer : MonoBehaviour
         var orderedCards = new List<HandCardVisual>(hand.Count);
         foreach (CardInstanceId cardId in hand)
         {
-            CardInstanceState cardState = _cardZones.Cards[cardId];
+            CardInstanceData cardState = _cardZones.Cards[cardId];
             HandCardVisual card = FindCardById(cardState.Id);
             if (card == null)
                 card = CreateCard(cardState);
+            else
+                BindCardPresentation(card, cardState);
 
             if (card != null)
                 orderedCards.Add(card);
@@ -162,7 +196,8 @@ public sealed class HandCardContainer : MonoBehaviour
         LayoutCards(immediate);
     }
 
-    private HandCardVisual CreateCard(CardInstanceState cardState)
+    /// <summary>从预制体创建一个与卡牌实例绑定的视觉对象。</summary>
+    private HandCardVisual CreateCard(CardInstanceData cardState)
     {
         Vector3 baseScale = Vector3.one * cardDisplayScale;
 
@@ -170,26 +205,23 @@ public sealed class HandCardContainer : MonoBehaviour
         GameObject cardObject = Instantiate(cardViewPrefab);
         cardObject.name = $"HandCard_{cardState.Id.Value:00}_Template_{cardState.TemplateId}";
 
-        Canvas cardCanvas = cardObject.GetComponent<Canvas>();
-        RectTransform cardContent = cardObject.transform.Find("CardContent") as RectTransform;
-        if (cardCanvas == null || cardContent == null)
+        HandCardVisual visual = cardObject.GetComponent<HandCardVisual>();
+        if (visual == null || visual.CardContent == null)
         {
-            Debug.LogError("CardView prefab does not contain the expected Canvas and CardContent objects.", cardObject);
+            Debug.LogError("CardView prefab does not contain a configured HandCardVisual.", cardObject);
             Destroy(cardObject);
             return null;
         }
 
-        HandCardVisual visual = cardObject.AddComponent<HandCardVisual>();
+        RectTransform cardContent = visual.CardContent;
         CanvasGroup feedbackCanvasGroup = cardContent.gameObject.AddComponent<CanvasGroup>();
         feedbackCanvasGroup.interactable = true;
         feedbackCanvasGroup.blocksRaycasts = true;
         visual.Initialize(
-            cardCanvas,
-            cardContent,
             baseScale,
             cardState.Id,
             feedbackCanvasGroup);
-        BindCardTemplate(cardObject, cardState.TemplateId);
+        BindCardPresentation(visual, cardState);
 
         Image hitTarget = cardContent.gameObject.AddComponent<Image>();
         hitTarget.color = Color.clear;
@@ -200,6 +232,7 @@ public sealed class HandCardContainer : MonoBehaviour
         return visual;
     }
 
+    /// <summary>按扇形布局计算并应用当前全部手牌的基础姿态。</summary>
     private void LayoutCards(bool immediate, HandCardVisual excludedCard = null)
     {
         int layoutCount = CurrentHandCount - (excludedCard == null ? 0 : 1);
@@ -231,28 +264,39 @@ public sealed class HandCardContainer : MonoBehaviour
         }
     }
 
-    private void BindCardTemplate(GameObject cardObject, int cardTemplateId)
+    /// <summary>以当前语言和玩家事实重刷已有卡牌的展示文本。</summary>
+    private void RefreshCardTexts()
     {
-        cfg.battle.Card cardTemplate = _configs.Tables.TbCard.Get(cardTemplateId);
-        foreach (Text label in cardObject.GetComponentsInChildren<Text>(includeInactive: true))
+        foreach (HandCardVisual card in _cards)
         {
-            switch (label.name)
-            {
-                case "TitleText":
-                    label.text = cardTemplate.Name;
-                    break;
-                case "CostText":
-                    label.text = cardTemplate.Cost.ToString();
-                    break;
-                case "TypeText":
-                case "DescriptionText":
-                    // Effect display text belongs to the later card-presentation/effect-description slice.
-                    label.text = string.Empty;
-                    break;
-            }
+            if (_cardZones.TryGetCard(card.CardId, out CardInstanceData cardState))
+                BindCardPresentation(card, cardState);
         }
     }
 
+    /// <summary>将一个卡牌实例的当前展示文本与费用写入其视觉对象。</summary>
+    private void BindCardPresentation(
+        HandCardVisual visual,
+        CardInstanceData cardState)
+    {
+        cfg.battle.Card cardTemplate = _configs.Tables.TbCard.Get(cardState.TemplateId);
+        CardPresentationText text = _cardTextFormatter.Format(cardState, _player);
+        visual.Bind(text, cardTemplate.Cost);
+    }
+
+    /// <summary>从战斗参与者唯一事实映射中取得本场玩家。</summary>
+    private PlayerCombatantData ResolvePlayer()
+    {
+        foreach (CombatantData combatant in _session.Combatants.All.Values)
+        {
+            if (combatant is PlayerCombatantData player)
+                return player;
+        }
+
+        throw new System.InvalidOperationException("Battle session does not contain a player combatant.");
+    }
+
+    /// <summary>在已创建的视觉对象中查找对应卡牌实例。</summary>
     private HandCardVisual FindCardById(CardInstanceId cardId)
     {
         foreach (HandCardVisual card in _cards)
@@ -264,6 +308,7 @@ public sealed class HandCardContainer : MonoBehaviour
         return null;
     }
 
+    /// <summary>判断一个卡牌实例是否仍属于指定卡区快照。</summary>
     private static bool ContainsCardId(IReadOnlyList<CardInstanceId> cards, CardInstanceId cardId)
     {
         foreach (CardInstanceId candidate in cards)
@@ -275,11 +320,13 @@ public sealed class HandCardContainer : MonoBehaviour
         return false;
     }
 
+    /// <summary>获取一个手牌视觉对象在当前显示顺序中的位置。</summary>
     private int IndexOf(HandCardVisual card)
     {
         return _cards.IndexOf(card);
     }
 
+    /// <summary>判断拖拽卡牌是否已经越过配置的打出线。</summary>
     private bool IsPastPlayLine(HandCardVisual card)
     {
         return card.CurrentAnchoredY > playLineY;

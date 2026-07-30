@@ -3,6 +3,59 @@ created: 2026-07-06
 updated: 2026-07-30
 ---
 
+## 2026-07-30 · M3A-1/2 参与者配置与 Prefab 工厂实施（待 Unity 验收）
+
+> - `battle.Hero`、`battle.Enemy` 已新增 `name_i18n_key` 与 `view_prefab_address`；Test Warrior 与 Test Slime 分别指向现有玩家、敌人 Prefab，名称写入 `i18n.xlsx`。Luban 已生成对应 C# 与 `Assets/GameData` JSON。
+> - 本地化导入/校验现在覆盖 Hero、Enemy 名称；Addressables 配置工具会把两个角色 Prefab 放入 `TinySpire Characters` 本地组，地址仍是表中的完整 `Assets/...` 路径。
+> - 已实现 `BattleParticipantPresenter` 与 `EnemyCombatantLayout`：一名玩家、1–3 名敌人按 Encounter 顺序自右向左等距实例化；场景销毁时以 `ReleaseInstance` 释放。`BattleSession` 显式保留遇敌顺序，未依赖字典遍历顺序。
+> - 本轮实跑曾暴露 VContainer 选择参数最多的非公开 `BattleSession` 构造函数，导致尝试解析本不应注册的 `BattleCombatantsData`。`BattleLifetimeScope` 已改为显式工厂，仅解析 `ConfigService` 与 `BattleSetupOptions` 后调用正确的公共构造函数。
+> - 定向用例覆盖遇敌顺序、两/三敌布局、容量与间距错误；既有程序集 `dotnet build` 为 0 error（6 条既有程序集引用冲突警告）。运行中的 Unity 尚未将新文件刷新进生成的 `.csproj`，且当前存在用户的 `BattleScene.unity` 改动，因此未启动第二个 Editor、未修改场景、未运行 Unity EditMode 或 Addressables 构建。待在现有 Editor 执行 `TinySpire/Build/Sync and Build All` 后完成 M3A-1 内容验收；场景挂载与实跑属于尚未开始的 M3A-4。
+
+## 2026-07-30 · M3 BattleScene 主 HUD 与参与者视图 grilling 完成
+
+> - 已确认 M3 按运行时事实拆为 M3A-M3E；当前只规划 M3A 的参与者世界视图与生命 HUD。M3B 牌堆计数可复用已完成的 M2 卡区事实，M3C 能量/结束回合等待 M4，M3D 意图等待 M5，M3E 格挡/状态/死亡/覆盖层等待 M7-M9。
+> - M3A 的静态模板将新增 `name_i18n_key` 与 `view_prefab_address`。名称进入现有 `i18n.xlsx` 和 Unity Localization；角色 Prefab 作为 Addressables 资源从表中指定的完整 `Assets/...` 地址加载。
+> - 已确定 `BattleParticipantPresenter` 负责 BattleScene 内的实例与 HUD 生命周期：按 `CombatantId` 绑定，世界 Sprite 与 UGUI HUD 分层；单玩家、1-3 敌人按 Encounter 顺序自右向左布局。地址/加载/Prefab 合约错误直接抛出，不做占位或回退。
+> - M3A 只显示名称、生命和非零力量；生命为零时仅刷新数值，尚不实现死亡、格挡、状态、意图、能量、回合、胜败或 Effect。完整设计见 `plans/2026-07-30-battlescene-participant-views.md`，决策见 CD-023。
+> - 本轮仅完成设计与文档沉淀；未修改表格、Addressables、场景或运行时代码，未产生新的测试结果。
+
+## 2026-07-30 · i18n Excel 编辑源接入与一键构建验收
+
+> - 新增 `DataTables/Datas/i18n.xlsx`（`i18n` sheet，`key`、`en`、`zh-CN`、`smart`）作为翻译正文的编辑源；初始内容与既有 Strength、Strike、Defend、Bash 及共享关键词一致。
+> - 新增 `I18nExcelReader` 和 `TinySpire/Localization/Import Battle Card Text from Excel`。导入后校验 Excel 覆盖运行时所需 key，并确认 String Table 的正文/Smart 标记与 Excel 一致；运行时仍只通过 Unity Localization 读取。
+> - 新增 `TinySpire/Build/Sync and Build All`：依次执行 Luban 生成、Unity 资源刷新、Excel 导入与校验、Addressables 本地构建。已由用户在 Unity Editor 内执行并确认通过；决策见 CD-022。
+> - `dotnet build` 为 0 error（12 条既有程序集引用冲突警告）。一键入口已完成 Luban、Excel 导入、本地化校验与 Addressables 本地内容构建，M2A 的 Excel 内容管线验收完成。决策见 CD-021。
+
+## 2026-07-30 · 本地化文本唯一来源收敛
+
+> - 删除 `LocalizationBuildTools` 中硬编码的 `LocalizedEntry[]`、配置/补全菜单及其写表辅助函数。`Battle Cards` Unity Localization 表资源现在是翻译正文的唯一来源。
+> - 保留 `TinySpire/Localization/Validate Battle Card Text`，它只校验 locale、key、Smart String、参数和效果引用，不创建或覆盖翻译。
+> - 新增/修改本地化内容的流程：直接编辑 String Table → 执行校验 → 重建 Addressables 本地内容。未修改任何翻译资源、Luban 表或运行时效果逻辑；决策见 CD-020。
+
+## 2026-07-30 · 运行时数据命名与 R3 事实绑定修正
+
+> - 运行时类型与文件统一改用 `Data` 尾缀：`CombatantData`、`PlayerCombatantData`、`EnemyCombatantData`、`BattleCombatantsData`、`CardInstanceData`、`CardZoneLayoutData`、`BattleCardZonesData`；`State` 留给未来状态机/状态模式。
+> - 删除泛化 `Changed`/`Subject<Unit>`。生命、力量以只读 R3 属性公开；四卡区以不可变的完整 `CardZoneLayoutData` 原子发布。手牌 UI 订阅手牌布局、玩家力量与 Locale 的实际值，卡区移动不会向观察者暴露中间状态。
+> - 验证：定向 EditMode 18/18、全量 EditMode 25/25 通过；BattleScene 实跑后 `BattleCardZonesData.Layout` 发布的手牌数为 4，`HandCardVisual` 也为 4，Console 无错误；`dotnet build` 为 0 error（12 条程序集引用冲突警告）；Addressables 本地内容已重建。决策见 CD-019；术语见 `CONTEXT.md`。
+
+## 2026-07-30 · R3 通知绑定与 HandCardVisual 展示边界
+
+> - 历史记录：当时曾将 `BattleState`、`CardZoneState` 与 `LocalizationService` 迁移为 `Subject<Unit>` / `Observable<Unit>`。该做法已由 CD-019 替代；`HandCardVisual` 的展示引用归属结论仍有效。
+> - `CardView.prefab` 根节点现在序列化配置 `HandCardVisual` 的 Canvas、CardContent、标题、费用、类型和说明引用。容器不再按对象名扫描 `Text`，而是在 `HandCardVisual.Bind` 中写入展示值；语言和战斗事实变化仍只触发即时重派生，不保存文本镜像。
+> - 验证：BattleState/CardZoneState EditMode 9/9、全量 EditMode 25/25 通过；`dotnet build TinySpire/TinySpire.sln --no-restore --verbosity:minimal` 为 0 error（12 条既有程序集引用冲突警告）。运行时触发卡区变动与战斗伤害后，手牌事实数与延迟销毁后的 View 数均为 4，Console 无错误；`TinySpire/Addressables/Build Local Content` 成功完成。
+> - 决策见 `CODE_DECISIONS.md` CD-018；M2A 仍不包含 Effect 执行、费用、目标选择、敌人行为或回合流程。
+
+## 2026-07-30 · Addressables 迁移与 M2A 完成
+
+> - 已移除 YooAsset 运行时/包/收集设置，建立本地 Addressables 场景与 GameData 组；启动、配置和场景加载改走 Addressables，完整 `Assets/...` 地址保持稳定。
+> - `battle.Card` 已迁移为 name/description i18n key 与有序 `CardEffectBinding`；Luban 生成成功。
+> - 已实现 Unity Localization 薄服务、Smart String 资源配置/校验工具、`CardTextFormatter` 与 `CardValueCalculator`；手牌 UI 在语言或战斗事实通知后即时重派生文本，不保存格式化字符串或显示伤害状态。
+> - Luban、Localization 配置/校验和 Addressables 本地内容构建均已完成；校验器要求 `en`、`zh-CN`、共享关键词 key 与 `zh-CN → en` fallback，String Database 启用 fallback；`dotnet build` 0 error，Unity EditMode 23/23 通过。
+> - Bootstrap → LoadingScene → BattleScene 实跑成功；GameData 正常加载，中文/英文动态卡牌说明正确，切换语言前后 5 个手牌 View 身份不变，Console 0 error、0 warning。
+> - 本阶段仍未实现 Effect 执行器、费用、目标选择、伤害/格挡/易伤结算、远程 catalog 或第二套资源包。
+
+---
+
 ## 2026-07-30 · 卡牌区域与确定性洗牌实施
 
 > - 新增 `GameRandom`，以实例方式封装项目已存在的 `Unity.Mathematics.Random`；规则随机可读取/恢复 `uint State`，并通过 Fisher–Yates 洗牌，不使用 `UnityEngine.Random` 全局状态。

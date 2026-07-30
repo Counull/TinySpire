@@ -21,9 +21,10 @@ public sealed partial class Enemy : Luban.BeanBase
     {
         JObject _obj = _buf as JObject;
         Id = (int)_obj.GetValue("id");
-        Name = (string)_obj.GetValue("name");
+        NameI18nKey = (string)_obj.GetValue("name_i18n_key");
         MaxHealth = (int)_obj.GetValue("max_health");
         BaseStrength = (int)_obj.GetValue("base_strength");
+        ViewPrefabAddress = (string)_obj.GetValue("view_prefab_address");
     }
 
     public static Enemy DeserializeEnemy(JToken _buf)
@@ -36,9 +37,9 @@ public sealed partial class Enemy : Luban.BeanBase
     /// </summary>
     public readonly int Id;
     /// <summary>
-    /// Name
+    /// Name i18n key
     /// </summary>
-    public readonly string Name;
+    public readonly string NameI18nKey;
     /// <summary>
     /// Max health
     /// </summary>
@@ -47,6 +48,10 @@ public sealed partial class Enemy : Luban.BeanBase
     /// Base strength
     /// </summary>
     public readonly int BaseStrength;
+    /// <summary>
+    /// View Prefab Address
+    /// </summary>
+    public readonly string ViewPrefabAddress;
 
 
     public const int __ID__ = 1095086770;
@@ -60,9 +65,10 @@ public sealed partial class Enemy : Luban.BeanBase
     {
         return "{ "
         + "id:" + Id + ","
-        + "name:" + Name + ","
+        + "nameI18nKey:" + NameI18nKey + ","
         + "maxHealth:" + MaxHealth + ","
         + "baseStrength:" + BaseStrength + ","
+        + "viewPrefabAddress:" + ViewPrefabAddress + ","
         + "}";
     }
 }
