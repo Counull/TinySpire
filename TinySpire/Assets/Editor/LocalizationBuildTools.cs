@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
@@ -17,6 +18,8 @@ public static class LocalizationBuildTools
 {
     private const string CardDataPath = "Assets/GameData/battle_tbcard.json";
     private const string CardEffectDataPath = "Assets/GameData/battle_tbcardeffect.json";
+    private const string I18nWorkbookRelativePath = "DataTables/Datas/i18n.xlsx";
+    private const string I18nSheetName = "i18n";
 
     private static readonly Regex ArgumentPattern =
         new Regex(@"\{([A-Za-z][A-Za-z0-9]*)\}", RegexOptions.Compiled);
@@ -40,22 +43,34 @@ public static class LocalizationBuildTools
     };
 
     /// <summary>
-    /// 校验 Battle Cards 表的语言、条目、Smart String 参数和效果引用。
+    /// 将 Excel 翻译源表同步到 Battle Cards String Table，并立即校验结果。
+    /// </summary>
+    [MenuItem("TinySpire/Localization/Import Battle Card Text from Excel")]
+    public static void ImportBattleCardTextFromExcel()
+    {
+        IReadOnlyList<I18nExcelEntry> entries = ReadExcelEntries();
+        StringTableCollection collection = GetBattleCardCollection();
+        ImportEntries(collection, entries);
+        ValidateCardLocalization(collection, entries);
+        Debug.Log("TinySpire battle card localization imported from Excel and validated.");
+    }
+
+    /// <summary>
+    /// 校验 Excel 翻译源表与 Battle Cards 表、卡牌配置和效果引用是否一致。
     /// </summary>
     [MenuItem("TinySpire/Localization/Validate Battle Card Text")]
     public static void ValidateBattleCardText()
     {
-        StringTableCollection collection =
-            LocalizationEditorSettings.GetStringTableCollection(LocalizationService.BattleCardTableName)
-            ?? throw new InvalidOperationException(
-                $"String table collection '{LocalizationService.BattleCardTableName}' does not exist.");
-
-        ValidateCardLocalization(collection);
+        IReadOnlyList<I18nExcelEntry> entries = ReadExcelEntries();
+        StringTableCollection collection = GetBattleCardCollection();
+        ValidateCardLocalization(collection, entries);
         Debug.Log("TinySpire battle card localization validation passed.");
     }
 
     /// <summary>按每种要求语言校验卡牌 key、参数模板和效果绑定。</summary>
-    private static void ValidateCardLocalization(StringTableCollection collection)
+    private static void ValidateCardLocalization(
+        StringTableCollection collection,
+        IReadOnlyList<I18nExcelEntry> entries)
     {
         ValidateRequiredLocales();
 
@@ -65,6 +80,15 @@ public static class LocalizationBuildTools
             ?? throw new InvalidOperationException($"Generated effect data does not exist: {CardEffectDataPath}");
         JObject cards = JObject.Parse(cardData.text);
         JObject effects = JObject.Parse(effectData.text);
+        Dictionary<string, I18nExcelEntry> entriesByKey = IndexEntries(entries);
+        var requiredKeys = new HashSet<string>(RequiredKeywordKeys, StringComparer.Ordinal);
+        foreach (JProperty cardProperty in cards.Properties())
+        {
+            JObject card = (JObject)cardProperty.Value;
+            requiredKeys.Add(card.Value<string>("name_i18n_key"));
+            requiredKeys.Add(card.Value<string>("description_i18n_key"));
+        }
+        ValidateExcelCoverage(entriesByKey, requiredKeys);
 
         foreach (string localeCode in RequiredLocaleCodes)
         {
@@ -121,7 +145,101 @@ public static class LocalizationBuildTools
                         $"'{table.LocaleIdentifier.Code}' do not match its effect bindings.");
                 }
             }
+
+            ValidateImportedTableMatchesExcel(table, entries, localeCode);
         }
+    }
+
+    /// <summary>读取项目内 i18n.xlsx 的全部翻译行。</summary>
+    private static IReadOnlyList<I18nExcelEntry> ReadExcelEntries()
+    {
+        return I18nExcelReader.Read(
+            GetI18nWorkbookPath(),
+            I18nSheetName,
+            RequiredLocaleCodes);
+    }
+
+    /// <summary>取得已创建的 Battle Cards String Table Collection。</summary>
+    private static StringTableCollection GetBattleCardCollection()
+    {
+        return LocalizationEditorSettings.GetStringTableCollection(LocalizationService.BattleCardTableName)
+            ?? throw new InvalidOperationException(
+                $"String table collection '{LocalizationService.BattleCardTableName}' does not exist.");
+    }
+
+    /// <summary>将 Excel 行写入每种要求语言的 String Table，不删除其他条目。</summary>
+    private static void ImportEntries(
+        StringTableCollection collection,
+        IReadOnlyList<I18nExcelEntry> entries)
+    {
+        foreach (string localeCode in RequiredLocaleCodes)
+        {
+            StringTable table = collection.GetTable(new LocaleIdentifier(localeCode)) as StringTable
+                ?? throw new InvalidOperationException(
+                    $"String table collection '{LocalizationService.BattleCardTableName}' " +
+                    $"does not contain required locale '{localeCode}'.");
+
+            foreach (I18nExcelEntry entry in entries)
+            {
+                StringTableEntry tableEntry = table.GetEntry(entry.Key)
+                    ?? table.AddEntry(entry.Key, entry.Translations[localeCode]);
+                tableEntry.Value = entry.Translations[localeCode];
+                tableEntry.IsSmart = entry.IsSmart;
+            }
+
+            EditorUtility.SetDirty(table);
+        }
+
+        EditorUtility.SetDirty(collection.SharedData);
+        AssetDatabase.SaveAssets();
+    }
+
+    /// <summary>以 key 建立 Excel 行索引，供覆盖范围和一致性校验使用。</summary>
+    private static Dictionary<string, I18nExcelEntry> IndexEntries(IReadOnlyList<I18nExcelEntry> entries)
+    {
+        var entriesByKey = new Dictionary<string, I18nExcelEntry>(StringComparer.Ordinal);
+        foreach (I18nExcelEntry entry in entries)
+            entriesByKey.Add(entry.Key, entry);
+        return entriesByKey;
+    }
+
+    /// <summary>确认 Excel 至少维护了当前运行时会读取的全部 key。</summary>
+    private static void ValidateExcelCoverage(
+        IReadOnlyDictionary<string, I18nExcelEntry> entriesByKey,
+        IEnumerable<string> requiredKeys)
+    {
+        foreach (string key in requiredKeys)
+        {
+            if (!entriesByKey.ContainsKey(key))
+                throw new InvalidOperationException($"i18n workbook is missing required key '{key}'.");
+        }
+    }
+
+    /// <summary>确认运行时 String Table 仍与 Excel 的文本和 Smart String 标记完全一致。</summary>
+    private static void ValidateImportedTableMatchesExcel(
+        StringTable table,
+        IReadOnlyList<I18nExcelEntry> entries,
+        string localeCode)
+    {
+        foreach (I18nExcelEntry entry in entries)
+        {
+            StringTableEntry tableEntry = RequireEntry(table, entry.Key);
+            if (tableEntry.Value != entry.Translations[localeCode]
+                || tableEntry.IsSmart != entry.IsSmart)
+            {
+                throw new InvalidOperationException(
+                    $"String table '{table.LocaleIdentifier.Code}' does not match i18n workbook key '{entry.Key}'. " +
+                    "Run 'TinySpire/Localization/Import Battle Card Text from Excel'.");
+            }
+        }
+    }
+
+    /// <summary>从 Unity 项目根目录拼出受版本控制的 Excel 源表路径。</summary>
+    private static string GetI18nWorkbookPath()
+    {
+        string projectDirectory = Directory.GetParent(Application.dataPath)?.FullName
+            ?? throw new InvalidOperationException("Unable to determine Unity project directory.");
+        return Path.Combine(projectDirectory, "..", I18nWorkbookRelativePath);
     }
 
     /// <summary>确认 en/zh-CN 已配置，且中文显式回退到英文。</summary>

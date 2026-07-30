@@ -236,3 +236,13 @@ updated: 2026-07-30
 **理由**：内容创作应在 Unity Localization 编辑器内完成，运行时也只经 `LocalizationService` 读取同一资源。校验器保留结构性约束，但不持有或生成任何本地化正文，避免第二事实源。
 
 **影响**：新增/修改卡牌 i18n key 后，先更新 `Battle Cards` 的每个 locale，再运行校验与 Addressables 本地构建；本轮未更改任何 String Table 条目、表格或运行时效果执行逻辑。
+
+## CD-021：i18n Excel 是本地化内容的编辑源，String Table 是生成的运行时资源
+
+**问题**：CD-020 移除 C# 硬编码正文后，若仍要求内容人员直接编辑 Unity String Table，卡牌表与翻译源分散在不同编辑器中；同时 String Table 被 Addressables 直接加载，必须避免把它和 Excel 当成两个可随意编辑的权威来源。
+
+**选择**：新增 `DataTables/Datas/i18n.xlsx`，固定 `i18n` 工作表与 `key`、`en`、`zh-CN`、`smart` 列。`I18nExcelReader` 仅读取项目约定的 OpenXML 文本工作簿；`TinySpire/Localization/Import Battle Card Text from Excel` 将其同步到 `Battle Cards` 的 `en`、`zh-CN` 表并写入 Smart String 标记。校验菜单同时验证 Excel 的结构、当前卡牌/关键词覆盖范围和导入结果一致性。
+
+**理由**：Excel 集中承担可编辑文本事实，Unity Localization 继续承担 locale、fallback、Smart String 与 Addressables 运行时集成。导入不是运行时依赖，运行时仍只通过 `LocalizationService` 读取 String Table；因此没有引入第二条运行时加载链路。
+
+**影响**：本地化修改流程变为：编辑 Excel → 导入 Unity Localization → 校验 → 重建 Addressables。本轮不把 i18n.xlsx 加入 Luban 配置定义，不生成 i18n JSON，也不改变卡牌配置、运行时文本格式化或效果执行边界。

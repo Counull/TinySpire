@@ -22,6 +22,12 @@ status_source: ../SESSION_LOG.md
 - Bash 的 `damage → 4004`、`vulnerable → 4005` 顺序稳定。
 - `TinySpire/Localization/Validate Battle Card Text` 通过：明确要求 `en`、`zh-CN` 两张表及共享关键词 key；每语言卡牌 key、Smart String 标记、参数集合、重复参数和 effect 引用均合法。
 
+### Excel 编辑源接入（后续验证）
+
+- 已新增 `DataTables/Datas/i18n.xlsx`，`i18n` sheet 包含 10 个现有 key，列为 `key`、`en`、`zh-CN`、`smart`；内容与当前 Battle Cards 文本对应。
+- `I18nExcelReader`、导入菜单与一致性校验已通过 `dotnet build`（0 error，12 条既有程序集引用冲突警告）。Luban 成功完成，`game-config.json` 已按生成流程恢复到 `Assets/GameData`。
+- 待验收：通过 Unity 执行 `TinySpire/Localization/Import Battle Card Text from Excel`、`Validate Battle Card Text` 和 `Addressables/Build Local Content`。本次无法执行，因为已有 Unity Editor 占用了项目；未结束该进程或删除锁文件。
+
 ## Unity 与运行时
 
 ### R3 绑定与 HandCardVisual 边界（后续验证）

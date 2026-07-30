@@ -123,7 +123,9 @@ Format(CardInstanceData card, CombatantData source)
 
 ## 构建期校验
 
-Unity Localization 表资源由编辑器直接维护，是翻译文本的唯一来源。`LocalizationBuildTools` 只校验，不创建、补全或覆盖条目；因此新增卡牌、语言或关键词后，必须先在 String Table 中完成翻译，再运行校验。
+`DataTables/Datas/i18n.xlsx` 是翻译内容的编辑源；工作表固定为 `i18n`，列为 `key`、`en`、`zh-CN`、`smart`。`key` 必须唯一，两个语言列不得为空，`smart` 只能是 `true` 或 `false`。
+
+Unity Localization 的 `Battle Cards` 表是由该 Excel 导入得到的可寻址运行时资源，不作为手工编辑源。`LocalizationBuildTools` 的导入菜单只更新 Excel 中声明的条目、不删除其他条目；校验会反向确认每个 Excel 条目的文本和 Smart String 标记均与 String Table 一致，也会确认 Excel 覆盖当前卡牌和共享关键词所需 key。
 
 `LocalizationBuildTools` 检查：
 
@@ -136,10 +138,11 @@ Unity Localization 表资源由编辑器直接维护，是翻译文本的唯一�
 修改卡牌表或本地化资源后：
 
 1. 运行 Luban，更新生成 C# 与 `Assets/GameData` JSON。
-2. 在 Unity Localization 的 `Battle Cards` 表中添加或修改每种语言的文本，并为说明条目启用 Smart String。
-3. 执行 `TinySpire/Localization/Validate Battle Card Text`。
-4. 执行 `TinySpire/Addressables/Build Local Content`。
-5. 运行 EditMode、启动加载和双语言手牌验收。
+2. 编辑 `DataTables/Datas/i18n.xlsx`；卡牌说明需要将 `smart` 设为 `true`。
+3. 执行 `TinySpire/Localization/Import Battle Card Text from Excel`。
+4. 执行 `TinySpire/Localization/Validate Battle Card Text`。
+5. 执行 `TinySpire/Addressables/Build Local Content`。
+6. 运行 EditMode、启动加载和双语言手牌验收。
 
 ## 验收
 

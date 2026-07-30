@@ -3,6 +3,12 @@ created: 2026-07-06
 updated: 2026-07-30
 ---
 
+## 2026-07-30 · i18n Excel 编辑源接入（待 Unity 导入验收）
+
+> - 新增 `DataTables/Datas/i18n.xlsx`（`i18n` sheet，`key`、`en`、`zh-CN`、`smart`）作为翻译正文的编辑源；初始内容与既有 Strength、Strike、Defend、Bash 及共享关键词一致。
+> - 新增 `I18nExcelReader` 和 `TinySpire/Localization/Import Battle Card Text from Excel`。导入后校验 Excel 覆盖运行时所需 key，并确认 String Table 的正文/Smart 标记与 Excel 一致；运行时仍只通过 Unity Localization 读取。
+> - Luban 已成功运行并恢复 `Assets/GameData/game-config.json`。`dotnet build` 为 0 error（12 条既有程序集引用冲突警告）。Unity 项目被已有 Editor 实例占用，未强制启动第二实例；Excel 导入、Unity 校验和 Addressables 本地构建待该实例可用后执行。决策见 CD-021。
+
 ## 2026-07-30 · 本地化文本唯一来源收敛
 
 > - 删除 `LocalizationBuildTools` 中硬编码的 `LocalizedEntry[]`、配置/补全菜单及其写表辅助函数。`Battle Cards` Unity Localization 表资源现在是翻译正文的唯一来源。
