@@ -83,7 +83,7 @@ note: 本文件是 BattleScene 实现侧的阶段化路线图；项目级玩法�
 | M1 | Luban 数据接入 `BattleCombatantsData`/`BattleCardZonesData` | M0 |
 | M2 | 卡牌区域、洗牌、抽牌、弃牌、重洗 | M1 |
 | M2A | 卡牌 i18n key、说明模板与可替换参数 | M1；可与 M2 并行 |
-| M3 | BattleScene 主 HUD 与玩家/敌人运行时视图 | M1、M2A；可与 M2 分切片推进 |
+| M3 | BattleScene 主 HUD 与玩家/敌人运行时视图（M3A-M3E） | M1、M2A；可与 M2 分切片推进 |
 | M4 | 回合调度与 3 能量规则 | M2、M3 |
 | M5 | 敌人生成、意图与确定性行为选择 | M3、M4 |
 | M6 | 出牌命令、合法性与目标选择 | M3～M5 |
@@ -202,6 +202,8 @@ en:    Deal {damage} damage. Apply {vulnerable} {keywordVulnerable}.
 完整设计见 `plans/2026-07-30-card-localized-text-design.md`。
 
 ### M3 · BattleScene 主 HUD 与参与者视图
+
+当前将 M3 拆为按事实依赖推进的切片：M3A 参与者世界视图与生命 HUD；M3B 抽牌/弃牌计数；M3C 能量与结束回合；M3D 敌人意图；M3E 格挡、状态、死亡、回合提示与胜败覆盖层。只有 M3A 已完成设计确认，详见 `plans/2026-07-30-battlescene-participant-views.md`；M3B 可复用已完成的 M2 卡区事实，其余切片分别等待 M4、M5 与 M7-M9。
 
 主界面至少包含：
 

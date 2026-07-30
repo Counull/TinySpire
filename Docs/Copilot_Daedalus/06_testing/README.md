@@ -15,6 +15,7 @@ updated: 2026-07-30
 
 ## 验证记录
 
+- [2026-07-30 BattleScene M3A 参与者配置与 Prefab 工厂](2026-07-30-battlescene-participant-views.md)
 - [2026-07-30 Addressables 迁移](2026-07-30-addressables-migration.md)
 - [2026-07-30 卡牌本地化与动态文本](2026-07-30-card-localization-dynamic-text.md)
 - [2026-07-30 卡牌区域与确定性洗牌](2026-07-30-card-zones-deterministic-random.md)

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using cfg;
 using TinySpire.Core;
 
@@ -49,6 +50,12 @@ namespace TinySpire.Battle
         public BattleCardZonesData CardZones { get; }
 
         /// <summary>
+        /// Encounter 配置顺序对应的敌方参与者标识，供布局和未来敌方行动使用。
+        /// 这不是由字典枚举派生的镜像列表。
+        /// </summary>
+        public IReadOnlyList<CombatantId> EnemyCombatantIdsInEncounterOrder { get; }
+
+        /// <summary>
         /// 从已初始化的配置服务创建一场战斗。
         /// </summary>
         public BattleSession(ConfigService configs, BattleSetupOptions options)
@@ -56,13 +63,18 @@ namespace TinySpire.Battle
             BattleSession initialized = CreateFromConfigService(configs, options);
             Combatants = initialized.Combatants;
             CardZones = initialized.CardZones;
+            EnemyCombatantIdsInEncounterOrder = initialized.EnemyCombatantIdsInEncounterOrder;
         }
 
-        /// <summary>组合已完成初始化的两个运行时数据聚合。</summary>
-        private BattleSession(BattleCombatantsData combatants, BattleCardZonesData cardZones)
+        /// <summary>组合已完成初始化的运行时数据聚合与遇敌顺序。</summary>
+        private BattleSession(
+            BattleCombatantsData combatants,
+            BattleCardZonesData cardZones,
+            IReadOnlyList<CombatantId> enemyCombatantIdsInEncounterOrder)
         {
             Combatants = combatants;
             CardZones = cardZones;
+            EnemyCombatantIdsInEncounterOrder = enemyCombatantIdsInEncounterOrder;
         }
 
         /// <summary>
@@ -88,11 +100,13 @@ namespace TinySpire.Battle
 
             var combatants = new BattleCombatantsData();
             combatants.AddPlayer(hero.Id, hero.MaxHealth, hero.BaseStrength);
+            var enemyCombatantIdsInEncounterOrder = new List<CombatantId>(encounter.EnemyTemplateIds.Length);
             foreach (int enemyTemplateId in encounter.EnemyTemplateIds)
             {
                 cfg.battle.Enemy enemy = tables.TbEnemy.GetOrDefault(enemyTemplateId)
                     ?? throw new InvalidOperationException($"Enemy template {enemyTemplateId} does not exist.");
-                combatants.AddEnemy(enemy.Id, enemy.MaxHealth, enemy.BaseStrength);
+                EnemyCombatantData combatant = combatants.AddEnemy(enemy.Id, enemy.MaxHealth, enemy.BaseStrength);
+                enemyCombatantIdsInEncounterOrder.Add(combatant.Id);
             }
 
             var cardZones = new BattleCardZonesData(
@@ -101,7 +115,10 @@ namespace TinySpire.Battle
             int initialHandCount = Math.Min(Math.Max(0, gameConfig.InitialHandCount), deck.CardTemplateIds.Length);
             cardZones.Draw(initialHandCount);
 
-            return new BattleSession(combatants, cardZones);
+            return new BattleSession(
+                combatants,
+                cardZones,
+                enemyCombatantIdsInEncounterOrder.AsReadOnly());
         }
 
         /// <summary>

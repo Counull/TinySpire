@@ -11,12 +11,19 @@ public static class AddressablesBuildTools
 {
     private const string ScenesGroupName = "TinySpire Scenes";
     private const string GameDataGroupName = "TinySpire GameData";
+    private const string CharactersGroupName = "TinySpire Characters";
     private const string GameDataLabel = "GameData";
 
     private static readonly string[] ScenePaths =
     {
         "Assets/Scenes/LoadingScene.unity",
         "Assets/Scenes/BattleScene.unity"
+    };
+
+    private static readonly string[] CharacterPrefabPaths =
+    {
+        "Assets/Arts/Runtime/Character/Prefabs/pfb_char_player.prefab",
+        "Assets/Arts/Runtime/Character/Prefabs/pfb_char_enemy.prefab"
     };
 
     [MenuItem("TinySpire/Addressables/Configure Local Content")]
@@ -46,6 +53,13 @@ public static class AddressablesBuildTools
             if (Path.GetExtension(path).Equals(".json", StringComparison.OrdinalIgnoreCase))
                 AddEntry(settings, gameData, path, GameDataLabel);
         }
+
+        AddressableAssetGroup characters = EnsureLocalGroup(
+            settings,
+            CharactersGroupName,
+            BundledAssetGroupSchema.BundlePackingMode.PackTogether);
+        foreach (string prefabPath in CharacterPrefabPaths)
+            AddEntry(settings, characters, prefabPath, label: null);
 
         EditorUtility.SetDirty(settings);
         AssetDatabase.SaveAssets();

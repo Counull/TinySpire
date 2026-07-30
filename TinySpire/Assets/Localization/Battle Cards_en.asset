@@ -63,6 +63,14 @@ MonoBehaviour:
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
+  - m_Id: 46598512603136
+    m_Localized: Test Warrior
+    m_Metadata:
+      m_Items: []
+  - m_Id: 46598609072128
+    m_Localized: Test Slime
+    m_Metadata:
+      m_Items: []
   references:
     version: 2
     RefIds:

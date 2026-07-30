@@ -55,6 +55,14 @@ MonoBehaviour:
     m_Key: battle.card.bash.description
     m_Metadata:
       m_Items: []
+  - m_Id: 46598512603136
+    m_Key: battle.hero.test_warrior.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 46598609072128
+    m_Key: battle.enemy.test_slime.name
+    m_Metadata:
+      m_Items: []
   m_Metadata:
     m_Items: []
   m_KeyGenerator:

@@ -1,8 +1,9 @@
 {
   "2001": {
     "id": 2001,
-    "name": "Test Slime",
+    "name_i18n_key": "battle.enemy.test_slime.name",
     "max_health": 20,
-    "base_strength": 0
+    "base_strength": 0,
+    "view_prefab_address": "Assets/Arts/Runtime/Character/Prefabs/pfb_char_enemy.prefab"
   }
 }

@@ -1,0 +1,33 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bbb281ee3bf0b054c82ac2347e9e782c, type: 3}
+  m_Name: TinySpire Characters
+  m_EditorClassIdentifier: Unity.Addressables.Editor::UnityEditor.AddressableAssets.Settings.AddressableAssetGroup
+  m_GroupName: TinySpire Characters
+  m_GUID: 4b1ee90e183377545b02996a1eb34257
+  m_SerializeEntries:
+  - m_GUID: 42d875889080c7e40b280bb5bbe73247
+    m_Address: Assets/Arts/Runtime/Character/Prefabs/pfb_char_player.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: c8a4c9a0941ae3f48bb472ed9994ff11
+    m_Address: Assets/Arts/Runtime/Character/Prefabs/pfb_char_enemy.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  m_ReadOnly: 0
+  m_Settings: {fileID: 11400000, guid: ec003b10e131c9e40aebe3d03dd58e88, type: 2}
+  m_SchemaSet:
+    m_Schemas:
+    - {fileID: 11400000, guid: a1226f7bb791f9045bdcbfba2f5969cf, type: 2}
+    - {fileID: 11400000, guid: 1d95b689055ad864987b800625fc8a73, type: 2}

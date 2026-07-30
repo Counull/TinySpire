@@ -13,6 +13,7 @@ updated: 2026-07-30
 
 ## 现有计划
 
+- [2026-07-30 BattleScene M3A 参与者视图与生命 HUD](2026-07-30-battlescene-participant-views.md)
 - [2026-07-30 卡牌区域与确定性洗牌](2026-07-30-card-zones-deterministic-random.md)
 - [2026-07-30 YooAsset 到 Addressables 迁移](2026-07-30-addressables-migration.md)
 - [2026-07-30 卡牌本地化文本与动态参数设计](2026-07-30-card-localized-text-design.md)

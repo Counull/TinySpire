@@ -3,6 +3,22 @@ created: 2026-07-06
 updated: 2026-07-30
 ---
 
+## 2026-07-30 · M3A-1/2 参与者配置与 Prefab 工厂实施（待 Unity 验收）
+
+> - `battle.Hero`、`battle.Enemy` 已新增 `name_i18n_key` 与 `view_prefab_address`；Test Warrior 与 Test Slime 分别指向现有玩家、敌人 Prefab，名称写入 `i18n.xlsx`。Luban 已生成对应 C# 与 `Assets/GameData` JSON。
+> - 本地化导入/校验现在覆盖 Hero、Enemy 名称；Addressables 配置工具会把两个角色 Prefab 放入 `TinySpire Characters` 本地组，地址仍是表中的完整 `Assets/...` 路径。
+> - 已实现 `BattleParticipantPresenter` 与 `EnemyCombatantLayout`：一名玩家、1–3 名敌人按 Encounter 顺序自右向左等距实例化；场景销毁时以 `ReleaseInstance` 释放。`BattleSession` 显式保留遇敌顺序，未依赖字典遍历顺序。
+> - 本轮实跑曾暴露 VContainer 选择参数最多的非公开 `BattleSession` 构造函数，导致尝试解析本不应注册的 `BattleCombatantsData`。`BattleLifetimeScope` 已改为显式工厂，仅解析 `ConfigService` 与 `BattleSetupOptions` 后调用正确的公共构造函数。
+> - 定向用例覆盖遇敌顺序、两/三敌布局、容量与间距错误；既有程序集 `dotnet build` 为 0 error（6 条既有程序集引用冲突警告）。运行中的 Unity 尚未将新文件刷新进生成的 `.csproj`，且当前存在用户的 `BattleScene.unity` 改动，因此未启动第二个 Editor、未修改场景、未运行 Unity EditMode 或 Addressables 构建。待在现有 Editor 执行 `TinySpire/Build/Sync and Build All` 后完成 M3A-1 内容验收；场景挂载与实跑属于尚未开始的 M3A-4。
+
+## 2026-07-30 · M3 BattleScene 主 HUD 与参与者视图 grilling 完成
+
+> - 已确认 M3 按运行时事实拆为 M3A-M3E；当前只规划 M3A 的参与者世界视图与生命 HUD。M3B 牌堆计数可复用已完成的 M2 卡区事实，M3C 能量/结束回合等待 M4，M3D 意图等待 M5，M3E 格挡/状态/死亡/覆盖层等待 M7-M9。
+> - M3A 的静态模板将新增 `name_i18n_key` 与 `view_prefab_address`。名称进入现有 `i18n.xlsx` 和 Unity Localization；角色 Prefab 作为 Addressables 资源从表中指定的完整 `Assets/...` 地址加载。
+> - 已确定 `BattleParticipantPresenter` 负责 BattleScene 内的实例与 HUD 生命周期：按 `CombatantId` 绑定，世界 Sprite 与 UGUI HUD 分层；单玩家、1-3 敌人按 Encounter 顺序自右向左布局。地址/加载/Prefab 合约错误直接抛出，不做占位或回退。
+> - M3A 只显示名称、生命和非零力量；生命为零时仅刷新数值，尚不实现死亡、格挡、状态、意图、能量、回合、胜败或 Effect。完整设计见 `plans/2026-07-30-battlescene-participant-views.md`，决策见 CD-023。
+> - 本轮仅完成设计与文档沉淀；未修改表格、Addressables、场景或运行时代码，未产生新的测试结果。
+
 ## 2026-07-30 · i18n Excel 编辑源接入与一键构建验收
 
 > - 新增 `DataTables/Datas/i18n.xlsx`（`i18n` sheet，`key`、`en`、`zh-CN`、`smart`）作为翻译正文的编辑源；初始内容与既有 Strength、Strike、Defend、Bash 及共享关键词一致。

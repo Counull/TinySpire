@@ -18,6 +18,8 @@ public static class LocalizationBuildTools
 {
     private const string CardDataPath = "Assets/GameData/battle_tbcard.json";
     private const string CardEffectDataPath = "Assets/GameData/battle_tbcardeffect.json";
+    private const string HeroDataPath = "Assets/GameData/battle_tbhero.json";
+    private const string EnemyDataPath = "Assets/GameData/battle_tbenemy.json";
     private const string I18nWorkbookRelativePath = "DataTables/Datas/i18n.xlsx";
     private const string I18nSheetName = "i18n";
 
@@ -78,8 +80,14 @@ public static class LocalizationBuildTools
             ?? throw new InvalidOperationException($"Generated card data does not exist: {CardDataPath}");
         TextAsset effectData = AssetDatabase.LoadAssetAtPath<TextAsset>(CardEffectDataPath)
             ?? throw new InvalidOperationException($"Generated effect data does not exist: {CardEffectDataPath}");
+        TextAsset heroData = AssetDatabase.LoadAssetAtPath<TextAsset>(HeroDataPath)
+            ?? throw new InvalidOperationException($"Generated hero data does not exist: {HeroDataPath}");
+        TextAsset enemyData = AssetDatabase.LoadAssetAtPath<TextAsset>(EnemyDataPath)
+            ?? throw new InvalidOperationException($"Generated enemy data does not exist: {EnemyDataPath}");
         JObject cards = JObject.Parse(cardData.text);
         JObject effects = JObject.Parse(effectData.text);
+        JObject heroes = JObject.Parse(heroData.text);
+        JObject enemies = JObject.Parse(enemyData.text);
         Dictionary<string, I18nExcelEntry> entriesByKey = IndexEntries(entries);
         var requiredKeys = new HashSet<string>(RequiredKeywordKeys, StringComparer.Ordinal);
         foreach (JProperty cardProperty in cards.Properties())
@@ -88,6 +96,8 @@ public static class LocalizationBuildTools
             requiredKeys.Add(card.Value<string>("name_i18n_key"));
             requiredKeys.Add(card.Value<string>("description_i18n_key"));
         }
+        AddParticipantNameKeys(requiredKeys, heroes, "Hero");
+        AddParticipantNameKeys(requiredKeys, enemies, "Enemy");
         ValidateExcelCoverage(entriesByKey, requiredKeys);
 
         foreach (string localeCode in RequiredLocaleCodes)
@@ -99,6 +109,8 @@ public static class LocalizationBuildTools
 
             foreach (string keywordKey in RequiredKeywordKeys)
                 RequireEntry(table, keywordKey);
+            ValidateParticipantNames(table, heroes, "Hero");
+            ValidateParticipantNames(table, enemies, "Enemy");
 
             foreach (JProperty cardProperty in cards.Properties())
             {
@@ -201,6 +213,41 @@ public static class LocalizationBuildTools
         foreach (I18nExcelEntry entry in entries)
             entriesByKey.Add(entry.Key, entry);
         return entriesByKey;
+    }
+
+    /// <summary>将 Hero 或 Enemy 配置引用的名称 key 加入本地化覆盖范围。</summary>
+    private static void AddParticipantNameKeys(
+        ISet<string> requiredKeys,
+        JObject participants,
+        string participantType)
+    {
+        foreach (JProperty participantProperty in participants.Properties())
+        {
+            string key = participantProperty.Value.Value<string>("name_i18n_key");
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                throw new InvalidOperationException(
+                    $"{participantType} {participantProperty.Name} has no name_i18n_key.");
+            }
+
+            requiredKeys.Add(key);
+        }
+    }
+
+    /// <summary>确认静态参与者名称存在且不被声明为 Smart String。</summary>
+    private static void ValidateParticipantNames(StringTable table, JObject participants, string participantType)
+    {
+        foreach (JProperty participantProperty in participants.Properties())
+        {
+            string key = participantProperty.Value.Value<string>("name_i18n_key");
+            StringTableEntry entry = RequireEntry(table, key);
+            if (entry.IsSmart)
+            {
+                throw new InvalidOperationException(
+                    $"{participantType} {participantProperty.Name} name '{key}' for locale " +
+                    $"'{table.LocaleIdentifier.Code}' must not be a Smart String.");
+            }
+        }
     }
 
     /// <summary>确认 Excel 至少维护了当前运行时会读取的全部 key。</summary>

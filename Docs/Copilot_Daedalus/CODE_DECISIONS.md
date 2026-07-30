@@ -256,3 +256,13 @@ updated: 2026-07-30
 **理由**：表格和本地化变更的正确交付链路是稳定且顺序固定的。将顺序与失败边界收敛到编辑器工具，能降低漏构建风险，同时不改变配置、Localization 或运行时加载的唯一事实来源。
 
 **影响**：内容人员修改 `DataTables/Datas/` 下任何配置表或 i18n.xlsx 后，只需执行一个菜单。该入口只构建本地 Addressables 内容，不引入远程 catalog、效果执行或新的运行时加载链路。
+
+## CD-023：参与者视觉从模板地址生成，HUD 只绑定运行时事实
+
+**问题**：BattleScene 已能从配置创建 `CombatantData`，但玩家和敌人尚无场景视图。若在场景预摆角色、在 UI 内按模板 ID 分支或为 HUD 镜像生命/力量，会使遭遇数量、资源替换与运行时事实失去单一来源。
+
+**选择**：`battle.Hero` 与 `battle.Enemy` 使用 `name_i18n_key` 和 `view_prefab_address` 描述静态名称和完整 Addressables Prefab 地址。`BattleParticipantPresenter` 是场景生命周期编排者：它从 `BattleSession.Combatants` 按 `CombatantId` 创建和释放世界空间角色与对应 HUD View；角色与 HUD 都不持有生命、力量或阵营的可变副本。`BattleSession.EnemyCombatantIdsInEncounterOrder` 是由 `Encounter.enemy_template_ids` 实例化得到的明确顺序事实，供布局使用，不能从参与者字典的枚举顺序反推。Prefab 通过 `Addressables.InstantiateAsync` 创建，销毁时使用 `Addressables.ReleaseInstance`；M3A 世界角色 Prefab 必须包含 `SpriteRenderer`。地址、加载或 Prefab 合约错误直接抛出，不提供降级显示。
+
+**理由**：模板决定可复用的美术和名称，`CombatantData` 决定本局事实，场景 Presenter 只协调两者的生命周期。Addressables 地址留在表中后，扩展英雄/敌人外观不需要改 UI 代码；直接失败可让构建/发布问题尽早暴露，而不让画面与战斗事实脱节。
+
+**影响**：M3A 只展示名称、生命和非零力量，支持一名玩家和一至三名按 Encounter 配置顺序从右向左布局的敌人。格挡、状态、意图、能量、回合、死亡表现和胜败覆盖层不在本决策实现，分别等待 M3B-M3E 的前置事实。详见 `plans/2026-07-30-battlescene-participant-views.md`。
