@@ -2,7 +2,7 @@
 title: 10_communication · 跨 Agent 沟通
 page_type: communication
 lifecycle: active
-updated: 2026-07-08
+updated: 2026-07-30
 ---
 
 # 10_communication · 跨 Agent 沟通
@@ -10,3 +10,7 @@ updated: 2026-07-08
 - 角色：对 Pegasus / Calliope / Theseus 的 hand-off、确认问题、外发措辞草稿。
 - **非默认工程上下文**：只在做沟通任务时读。
 - 已确认结论迁往对应事实源或实现计划。
+
+## 可外发素材说明
+
+- [BattleScene UI 美术素材需求说明](2026-07-30-battle-ui-art-brief.md)：供图像生成模型或美术协作者使用的缺失 UI 素材清单、用途、规格与提示词。
