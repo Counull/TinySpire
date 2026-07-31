@@ -21,10 +21,13 @@ public sealed class HandCardVisual : MonoBehaviour
     private Tween _activeTween;
     private Tween _feedbackTween;
     private bool _hasPlayFeedback;
+    private bool _isPlayerInputEnabled = true;
+    private bool _isCommandPending;
 
     public CardInstanceId CardId { get; private set; }
     public float CurrentAnchoredY => _cardContent.anchoredPosition.y;
     public RectTransform CardContent => _cardContent;
+    public bool IsCommandPending => _isCommandPending;
 
     /// <summary>
     /// 初始化该 View 对应的卡牌实例及拖拽反馈依赖。
@@ -39,6 +42,7 @@ public sealed class HandCardVisual : MonoBehaviour
         CardId = cardId;
         _dragFeedbackCanvasGroup = dragFeedbackCanvasGroup;
         _canvas.overrideSorting = true;
+        RefreshInteractionState();
     }
 
     /// <summary>
@@ -110,6 +114,43 @@ public sealed class HandCardVisual : MonoBehaviour
         _cardContent.localScale = _baseScale;
     }
 
+    /// <summary>按当前玩家阶段启用或锁定卡牌输入，不改变任何卡区事实。</summary>
+    public void SetPlayerInputEnabled(bool isEnabled)
+    {
+        _isPlayerInputEnabled = isEnabled;
+        RefreshInteractionState();
+    }
+
+    /// <summary>切换命令待定视觉，并只锁定该张卡牌而不阻塞其他手牌。</summary>
+    public void SetCommandPending(bool isPending)
+    {
+        if (_dragFeedbackCanvasGroup == null || _isCommandPending == isPending)
+            return;
+
+        _isCommandPending = isPending;
+        _hasPlayFeedback = false;
+        KillFeedbackTween();
+        _feedbackTween = _dragFeedbackCanvasGroup
+            .DOFade(isPending ? 0.58f : 1f, 0.1f)
+            .SetEase(Ease.OutQuad);
+        RefreshInteractionState();
+    }
+
+    /// <summary>执行期失败时清除待定状态、恢复交互并播放一次明确的失败闪烁。</summary>
+    public void PlayCommandFailureFeedback()
+    {
+        if (_dragFeedbackCanvasGroup == null)
+            return;
+
+        _isCommandPending = false;
+        _hasPlayFeedback = false;
+        RefreshInteractionState();
+        KillFeedbackTween();
+        _feedbackTween = DOTween.Sequence()
+            .Append(_dragFeedbackCanvasGroup.DOFade(0.28f, 0.08f).SetEase(Ease.OutQuad))
+            .Append(_dragFeedbackCanvasGroup.DOFade(1f, 0.16f).SetEase(Ease.OutQuad));
+    }
+
     /// <summary>
     /// 使用屏幕坐标增量移动卡牌，保持抓取时的相对偏移。
     /// </summary>
@@ -124,7 +165,9 @@ public sealed class HandCardVisual : MonoBehaviour
     /// </summary>
     public void SetDragPlayFeedback(bool isPastPlayLine)
     {
-        if (_dragFeedbackCanvasGroup == null || _hasPlayFeedback == isPastPlayLine)
+        if (_dragFeedbackCanvasGroup == null ||
+            _isCommandPending ||
+            _hasPlayFeedback == isPastPlayLine)
             return;
 
         _hasPlayFeedback = isPastPlayLine;
@@ -133,6 +176,17 @@ public sealed class HandCardVisual : MonoBehaviour
         // TODO(DEP-003): Final drag-over-play-line visual style requires design/art confirmation.
         float targetAlpha = isPastPlayLine ? 0.82f : 1f;
         _feedbackTween = _dragFeedbackCanvasGroup.DOFade(targetAlpha, 0.1f).SetEase(Ease.OutQuad);
+    }
+
+    /// <summary>由玩家阶段与该牌待定状态共同派生实际射线和交互开关。</summary>
+    private void RefreshInteractionState()
+    {
+        if (_dragFeedbackCanvasGroup == null)
+            return;
+
+        bool canInteract = _isPlayerInputEnabled && !_isCommandPending;
+        _dragFeedbackCanvasGroup.interactable = canInteract;
+        _dragFeedbackCanvasGroup.blocksRaycasts = canInteract;
     }
 
     /// <summary>立即将 RectTransform 写入当前基础姿态。</summary>

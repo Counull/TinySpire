@@ -4,6 +4,7 @@ using Cysharp.Threading.Tasks;
 using DG.Tweening;
 using R3;
 using TinySpire.Battle;
+using TinySpire.UI.Battle;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.EventSystems;
@@ -38,9 +39,12 @@ public sealed class HandCardContainer : MonoBehaviour
     private ConfigService _configs;
     private CardTextFormatter _cardTextFormatter;
     private LocalizationService _localization;
+    private BattleCommandQueue _commandQueue;
+    private BattleCommandPresentationAdapter _commandPresentation;
 
     private readonly List<HandCardVisual> _cards = new();
     private readonly Dictionary<int, AsyncOperationHandle<Sprite>> _illustrationHandles = new();
+    private readonly Dictionary<long, CardInstanceId> _pendingPlayCards = new();
     private HandCardVisual _draggingCard;
     private BattleCardZonesData _cardZones;
     private PlayerCombatantData _player;
@@ -56,12 +60,16 @@ public sealed class HandCardContainer : MonoBehaviour
         BattleSession session,
         ConfigService configs,
         CardTextFormatter cardTextFormatter,
-        LocalizationService localization)
+        LocalizationService localization,
+        BattleCommandQueue commandQueue,
+        BattleCommandPresentationAdapter commandPresentation)
     {
         _session = session;
         _configs = configs;
         _cardTextFormatter = cardTextFormatter;
         _localization = localization;
+        _commandQueue = commandQueue;
+        _commandPresentation = commandPresentation;
     }
 
     /// <summary>校验依赖、建立事实订阅并绘制初始手牌。</summary>
@@ -77,7 +85,9 @@ public sealed class HandCardContainer : MonoBehaviour
         if (_session == null
             || _configs?.Tables == null
             || _cardTextFormatter == null
-            || _localization == null)
+            || _localization == null
+            || _commandQueue == null
+            || _commandPresentation == null)
         {
             Debug.LogError("HandCardContainer did not receive the initialized battle session.", this);
             enabled = false;
@@ -115,6 +125,8 @@ public sealed class HandCardContainer : MonoBehaviour
             .Subscribe(_ => RefreshCardTexts())
             .AddTo(this);
         _localization.LocaleChanged.Subscribe(_ => RefreshCardTexts()).AddTo(this);
+        _commandQueue.Turn.Subscribe(HandleTurnChanged).AddTo(this);
+        _commandPresentation.Feedback.Subscribe(HandleCommandFeedback).AddTo(this);
         RebuildCards(immediate: true);
     }
 
@@ -123,7 +135,7 @@ public sealed class HandCardContainer : MonoBehaviour
     /// </summary>
     public void HandlePointerEnter(HandCardVisual card)
     {
-        if (card == null || _draggingCard != null)
+        if (!CanInteractWithCard(card) || _draggingCard != null)
             return;
 
         card.PlayHover(hoverLift, hoverScale, CurrentHandCount, hoverDuration);
@@ -134,7 +146,7 @@ public sealed class HandCardContainer : MonoBehaviour
     /// </summary>
     public void HandlePointerExit(HandCardVisual card)
     {
-        if (card == null || card == _draggingCard)
+        if (!CanInteractWithCard(card) || card == _draggingCard)
             return;
 
         card.PlayBasePose(hoverDuration, Ease.OutBack);
@@ -145,7 +157,7 @@ public sealed class HandCardContainer : MonoBehaviour
     /// </summary>
     public void HandleBeginDrag(HandCardVisual card)
     {
-        if (card == null || _draggingCard != null)
+        if (!CanInteractWithCard(card) || _draggingCard != null)
             return;
 
         _draggingCard = card;
@@ -168,7 +180,7 @@ public sealed class HandCardContainer : MonoBehaviour
     }
 
     /// <summary>
-    /// 结束拖拽：越过打出线则请求卡区弃置该实例，否则恢复手牌排布。
+    /// 结束拖拽：越过打出线时只提交出牌命令，否则恢复手牌排布。
     /// </summary>
     public void HandleEndDrag(HandCardVisual card)
     {
@@ -179,12 +191,69 @@ public sealed class HandCardContainer : MonoBehaviour
         _draggingCard = null;
         card.SetDragPlayFeedback(false);
 
-        // TODO(DEP-001): Resolve a legal target before moving an aimed card out of the hand.
-        // TODO(DEP-002): Validate and spend card energy before committing the zone move.
-        if (shouldPlayCard && _cardZones.DiscardFromHand(card.CardId))
+        // TODO(DEP-001): Resolve a legal target before submitting an aimed card command.
+        if (shouldPlayCard && CanSubmitPlayerAction())
+        {
+            SubmitPlayCard(card);
             return;
+        }
 
         LayoutCards(immediate: false);
+    }
+
+    /// <summary>把拖拽意图提交为 PlayCardCommand，并只记录该序号的待定展示关系。</summary>
+    private void SubmitPlayCard(HandCardVisual card)
+    {
+        CardInstanceId cardId = card.CardId;
+        card.SetCommandPending(true);
+        var command = new PlayCardCommand(_player.Id, cardId);
+        BattleCommandSubmissionResult submission = _commandQueue.Submit(command);
+        if (!submission.Accepted || !submission.AuthoritySequence.HasValue)
+        {
+            card.SetCommandPending(false);
+            LayoutCards(immediate: false);
+            return;
+        }
+
+        _pendingPlayCards.Add(submission.AuthoritySequence.Value, cardId);
+        _commandPresentation.PublishQueued(command, submission);
+        LayoutCards(immediate: false);
+    }
+
+    /// <summary>执行失败时恢复对应卡牌交互；成功时只清除展示追踪，卡区变化负责移除 View。</summary>
+    private void HandleCommandFeedback(BattleCommandFeedback feedback)
+    {
+        if (feedback.Stage == BattleCommandFeedbackStage.Queued ||
+            !_pendingPlayCards.TryGetValue(feedback.AuthoritySequence, out CardInstanceId cardId))
+        {
+            return;
+        }
+
+        _pendingPlayCards.Remove(feedback.AuthoritySequence);
+        if (feedback.Stage != BattleCommandFeedbackStage.ExecutionFailed)
+            return;
+
+        HandCardVisual card = FindCardById(cardId);
+        if (card == null)
+            return;
+
+        card.PlayCommandFailureFeedback();
+        LayoutCards(immediate: false);
+    }
+
+    /// <summary>阶段或当前玩家结束事实变化时，立即派生全部手牌的输入可用性。</summary>
+    private void HandleTurnChanged(BattleTurnData turn)
+    {
+        bool canSubmit = CanSubmitPlayerAction(turn);
+        if (!canSubmit && _draggingCard != null)
+        {
+            _draggingCard.SetDragPlayFeedback(false);
+            _draggingCard = null;
+            LayoutCards(immediate: false);
+        }
+
+        foreach (HandCardVisual card in _cards)
+            card.SetPlayerInputEnabled(canSubmit);
     }
 
     /// <summary>根据当前手牌布局增删并排序 CardView。</summary>
@@ -198,6 +267,7 @@ public sealed class HandCardContainer : MonoBehaviour
                 continue;
 
             // TODO(DEP-004): Future card-effect types need distinct pre-destruction actions before this visual is destroyed.
+            card.SetPlayerInputEnabled(false);
             Destroy(card.gameObject);
             _cards.RemoveAt(index);
         }
@@ -219,6 +289,7 @@ public sealed class HandCardContainer : MonoBehaviour
         _cards.Clear();
         _cards.AddRange(orderedCards);
         LayoutCards(immediate);
+        HandleTurnChanged(_commandQueue.Turn.CurrentValue);
     }
 
     /// <summary>从预制体创建一个与卡牌实例绑定的视觉对象。</summary>
@@ -428,6 +499,28 @@ public sealed class HandCardContainer : MonoBehaviour
     private bool IsPastPlayLine(HandCardVisual card)
     {
         return card.CurrentAnchoredY > playLineY;
+    }
+
+    /// <summary>判断当前权威阶段是否仍允许本玩家继续提交出牌意图。</summary>
+    private bool CanSubmitPlayerAction()
+    {
+        return CanSubmitPlayerAction(_commandQueue.Turn.CurrentValue);
+    }
+
+    /// <summary>从给定回合快照派生当前玩家的出牌输入可用性。</summary>
+    private bool CanSubmitPlayerAction(BattleTurnData turn)
+    {
+        return turn.Phase == BattleTurnPhase.PlayerAction &&
+               turn.Players.TryGetValue(_player.Id, out PlayerTurnData playerTurn) &&
+               !playerTurn.HasEndedAction;
+    }
+
+    /// <summary>同时检查卡牌有效、未待定且当前玩家仍处于可输入阶段。</summary>
+    private bool CanInteractWithCard(HandCardVisual card)
+    {
+        return card != null &&
+               !card.IsCommandPending &&
+               CanSubmitPlayerAction();
     }
 
     /// <summary>容器销毁时停止异步落地，并释放其持有的牌面资源。</summary>

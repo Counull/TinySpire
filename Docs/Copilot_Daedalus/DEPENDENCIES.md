@@ -24,7 +24,7 @@ note: 全项目范围唯一的依赖项 ID 分配与状态账本；实现计划�
 | ID | 内容 | 阻塞条件 | 涉及代码位置（预期/实际） | 来源 Plan | 状态 | 解决记录 |
 |---|---|---|---|---|---|---|
 | DEP-001 | 目标检测方式（UGUI `GraphicRaycaster` vs 2D `Collider`/`OverlapPoint`） | 取决于怪物/玩家锚点最终是 UGUI 元素还是 World Space Sprite（P0 待办，尚未开始） | `TinySpire/Assets/Scripts/UI/Battle/Hand/HandCardContainer.cs` | `plans/2026-07-29-battlescene-drag-to-play-minimal.md` | open | — |
-| DEP-002 | 费用/能量系统与检查逻辑 | 需先定义能量池数据结构；最终应由出牌命令在提交区域移动前统一校验 | `TinySpire/Assets/Scripts/UI/Battle/Hand/HandCardContainer.cs` | `plans/2026-07-29-battlescene-drag-to-play-minimal.md` | open | — |
+| DEP-002 | 费用/能量系统与检查逻辑 | 需先定义能量池数据结构；最终应由出牌命令在提交区域移动前统一校验 | `TinySpire/Assets/Scripts/UI/Battle/Hand/HandCardContainer.cs` | `plans/2026-07-29-battlescene-drag-to-play-minimal.md` | resolved | `plans/2026-07-31-m4-turn-scheduling-energy.md` M4D：UI 只提交 `PlayCardCommand`；队首按当前 `Card.Cost`、玩家能量和卡区事实校验，且仅在执行成功后扣能量并移动卡牌。 |
 | DEP-003 | 拖过出牌线的最终视觉样式 | 需要策划/美术确认最终表现 | `TinySpire/Assets/Scripts/UI/Battle/Hand/HandCardVisual.cs` | `plans/2026-07-29-battlescene-drag-to-play-minimal.md` | open | — |
 | DEP-004 | 打出后卡牌的销毁前过渡动作（按卡牌效果类型区分） | 需要 Effect 系统 / 卡牌数据结构先落地 | `TinySpire/Assets/Scripts/UI/Battle/Hand/HandCardContainer.cs` | `plans/2026-07-29-battlescene-drag-to-play-minimal.md` | open | — |
 | DEP-005 | `BattleLifetimeScope` 已注册战斗会话，但回合调度器与其余战斗局内模块仍待确定后注册 | 需要先完成路线图 M3～M4 的视图与回合流程边界 | `TinySpire/Assets/Scripts/Battle/BattleLifetimeScope.cs` | `plans/2026-07-30-battle-config-runtime-integration.md` | resolved | `plans/2026-07-31-m4-turn-scheduling-energy.md` M4C：注册 `BattleCommandQueue`、表现 adapter 与启动/逐帧驱动；阶段模块由队列内部持有。 |

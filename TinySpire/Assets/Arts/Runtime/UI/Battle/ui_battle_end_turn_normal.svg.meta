@@ -8,7 +8,7 @@ ScriptedImporter:
   assetBundleName: 
   assetBundleVariant: 
   script: {fileID: 12408, guid: 0000000000000000e000000000000000, type: 0}
-  svgType: 3
+  svgType: 1
   texturedSpriteMeshType: 0
   svgPixelsPerUnit: 100
   gradientResolution: 64
@@ -28,26 +28,26 @@ ScriptedImporter:
   maxCordDeviation: 1
   maxTangentAngleEnabled: 0
   maxTangentAngle: 5
-  keepTextureAspectRatio: 1
+  keepTextureAspectRatio: 0
   textureSize: 256
-  textureWidth: 256
-  textureHeight: 256
-  wrapMode: 0
+  textureWidth: 180
+  textureHeight: 180
+  wrapMode: 1
   filterMode: 1
   sampleCount: 4
   preserveSVGImageAspect: 0
   useSVGPixelsPerUnit: 0
   spriteData:
     TessellationDetail: 0
-    SpriteName: 
-    SpritePivot: {x: 0, y: 0}
+    SpriteName: ui_battle_end_turn_normal
+    SpritePivot: {x: 0.5, y: 0.5}
     SpriteAlignment: 0
     SpriteBorder: {x: 0, y: 0, z: 0, w: 0}
     SpriteRect:
       serializedVersion: 2
       x: 0
       y: 0
-      width: 0
-      height: 0
-    SpriteID: 
+      width: 180
+      height: 180
+    SpriteID: 7edc0f8131f342178356de8bc93d1e11
     PhysicsOutlines: []

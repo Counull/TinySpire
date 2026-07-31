@@ -3,6 +3,15 @@ created: 2026-07-06
 updated: 2026-08-01
 ---
 
+## 2026-08-01 · M4D 当前单玩家命令 UI 接线（已验证并接生产）
+
+- `HandCardContainer` 不再直接弃牌或推进阶段：拖牌越过出牌线只提交 `PlayCardCommand`，并用权威序号关联该卡的短生命周期 pending 视觉。当前结果展示期间其他合法卡仍可继续提交；成功后由权威卡区布局移除 View，执行期失败则清除 pending、恢复交互，且能量和卡区保持不变。
+- 新增 `BattleCommandPresentationAdapter`，生产中分别发布“已排队 / 执行失败 / 执行完成”反馈并在非缩放时间内保留最短展示窗口；新增 `BattleTurnHudView` 与静态 `BattleTurnHud.prefab`，从 `BattleCommandQueue.Turn` 和展示反馈派生第几轮、阶段、当前玩家能量、状态文字及按钮可用性。结束按钮只提交 `EndPlayerActionCommand`；成功进入敌人阶段后手牌输入立即锁定，系统敌人完成命令后下一轮恢复 3 能量、5 张新手牌和输入。
+- Unity MCP 定向 EditMode **30/30** 通过（0 failed、0 skipped，`0.3453076s`）；两套相关程序集串行静态编译均为 0 error，保留 6/12 条既有依赖版本冲突 warning。Bootstrap 实跑首轮读取到 `PlayerAction / Round 1 / Energy 3 / Hand 5`，快速连续提交两张费用 1 的牌后按权威序号依次变为 1 能量、3 手牌；能量不足的费用 2 卡执行失败后仍为 1 能量、3 手牌并恢复交互。实际拖拽处理链由运行时回调执行，物理鼠标手感不冒充自动化结论。
+- 从场景结束按钮实际 `onClick` 提交后，阶段进入 `EnemyAction`、剩余手牌统一弃置且旧 View 立即不可交互；系统完成无行为敌人后进入第 2 轮，能量恢复 3、手牌恢复 5、按钮和新手牌重新可用。运行期间 Console Error/Warning 均为 0，未出现 `InvalidKey` 或 VContainer 错误；随后正常退出 Play Mode。
+- 场景和 Prefab 接线完成后，`TinySpire/Addressables/Build Local Content` 成功；报告 `buildlayout_2026.08.01.04.27.53.json` 的 `BuildError` 为空、哈希为 `259e02cf2d79b5cd0bd291f571b46782`、耗时 `19.984942s`。本切片未修改 Excel/Luban 表、生成 JSON、asmdef、DI 架构或启动流程，因此未运行 Luban；未实现 M4E 全量收口、真实敌人行为、Effect、伤害、状态、胜败或奖励。
+- `DEP-002` 已解决；`DEP-001`、`DEP-004` 继续保持 open，M4E 尚未开始。决策见 CD-030，计划见 `plans/2026-07-31-m4-turn-scheduling-energy.md`，验收见 `06_testing/2026-08-01-m4d-single-player-command-ui.md`。
+
 ## 2026-08-01 · M4C 队列化结束行动与敌人顺序交接（已验证并接生产）
 
 - `EndPlayerActionCommand` 现在在队首执行时校验阶段、玩家身份与存活、重复结束及玩家卡区；成功后只弃置该玩家剩余手牌并设置其结束标记。仍有存活玩家未结束时继续保持 `PlayerAction`，全体完成后才进入敌人阶段；重复结束和排在结束命令后的旧出牌均明确失败且不重复写入事实。

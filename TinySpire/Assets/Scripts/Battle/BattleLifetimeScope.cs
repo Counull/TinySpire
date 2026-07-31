@@ -26,8 +26,9 @@ public sealed class BattleLifetimeScope : LifetimeScope
         builder.RegisterComponentInHierarchy<HandCardContainer>();
         builder.RegisterComponentInHierarchy<BattleParticipantPresenter>();
         builder.RegisterComponentInHierarchy<BattleCardPileHudView>();
-        builder.Register<ImmediateBattleCommandPresentation>(Lifetime.Singleton)
-            .As<IBattleCommandPresentation>();
+        builder.RegisterComponentInHierarchy<BattleTurnHudView>();
+        builder.RegisterEntryPoint<BattleCommandPresentationAdapter>()
+            .AsSelf();
         builder.Register(
             resolver => CreateBattleCommandQueue(
                 resolver.Resolve<BattleSession>(),

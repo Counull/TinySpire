@@ -12,7 +12,7 @@ namespace TinySpire.Battle
     }
 
     /// <summary>
-    /// M4C 生产接线使用的无动画表现 adapter；未来真实表现层可替换该注册而不绕过队列。
+    /// 零等待测试使用的即时表现 adapter；M4D 生产接线改用可观察反馈 adapter。
     /// </summary>
     public sealed class ImmediateBattleCommandPresentation : IBattleCommandPresentation
     {
