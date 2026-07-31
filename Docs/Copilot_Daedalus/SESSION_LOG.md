@@ -1,7 +1,22 @@
 ---
 created: 2026-07-06
-updated: 2026-07-30
+updated: 2026-07-31
 ---
+
+## 2026-07-31 · DataTables 工作簿简易配色（已验证）
+
+- `DataTables/Datas/` 下 10 个 `.xlsx` 已统一使用低饱和配色：首行深蓝底白色粗体，Luban 类型行浅蓝、分组行浅灰、说明行浅金；内容区按列循环使用蓝、绿、金、紫、橙、青六组淡色，并用同色深浅交替区分相邻数据行。没有新增、删除或改写任何单元格内容、公式、字段、表定义或共享字符串。
+- OpenXML 写入在临时副本中完成，逐工作簿对比配色前后语义 SHA-256，10/10 一致；所有 XML、关系文件与样式索引均可解析。Luban 生成成功，生成目录中的 55 个 C# / JSON 文件前后内容哈希变化为 0。
+- Unity MCP 回归先后暴露四张牌面的磁盘导入模式不一致；已通过当前 Editor 将 strength、strike、defend、bash 全部统一为 `Sprite / Single / no mipmap`，未改牌面地址或图片像素。最终定向 EditMode 1/1、全量 EditMode 35/35 通过，清理 Test Runner 结果写入提示后 Console Error 为 0。
+- 最终 `TinySpire/Addressables/Build Local Content` 成功，报告 `buildlayout_2026.07.31.20.39.59.json` 的 `BuildError` 为空，构建哈希为 `f347180971402fb852359628813c07b2`，耗时 `8.911s`。本次没有新增代码决策；详细记录见 `06_testing/2026-07-31-datatables-simple-colors.md`。
+
+## 2026-07-31 · 战斗 UI 首批美术与牌面配置链路接入（已验证）
+
+- 按 `10_communication/2026-07-30-battle-ui-art-brief.md` 接入当前已有运行时事实能够承载的 P0/P4 素材：BattleScene 三个牌堆计数改用共用九宫格面板及抽牌/弃牌/消耗图标；`ParticipantHudView` 改用生命框、横向填充与力量图标。P1-P3 所对应的能量、回合、敌人意图、状态与结算覆盖层没有提前创建占位状态。
+- `DataTables/Datas/battle.card.xlsx` 新增 `illustration_address`，四个模板使用完整 `Assets/Arts/Runtime/Card/card_art_*.png` 稳定地址；Luban 已重新生成 `Card.IllustrationAddress` 与 `Assets/GameData/battle_tbcard.json`。
+- 四张牌面已统一导入为 `Sprite / Single / no mipmap`。`AddressablesBuildTools` 从生成卡牌表收集并校验地址，使专用 `TinySpire Card Art` 本地组与表中地址完全同步；`HandCardContainer` 按牌组唯一模板预加载并在销毁时释放句柄，`HandCardVisual` 让横图等比 cover 插图区后交给现有 Stencil Mask 裁切。
+- Unity 6000.5.5f1 当前 Editor 内完成编译、定向测试 1/1、全量 EditMode 35/35、最终 Addressables 本地构建（19.026 秒）与 Bootstrap→BattleScene 实跑。初始 5 张手牌均加载到对应牌面，显示尺寸为 `862.5×575`、遮罩为 `682×575`，比例无拉伸；Console 错误、`InvalidKey` 与牌面加载失败均为 0。
+- 实现边界和回滚见 `plans/2026-07-31-battle-ui-art-integration.md`，验收细节见 `06_testing/2026-07-31-battle-ui-art-integration.md`，资源事实与生命周期决策见 CD-025。
 
 ## 2026-07-30 · CardView 旋转插图灰边修复（待 Unity 人工验收）
 

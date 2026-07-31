@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEditor.AddressableAssets;
 using UnityEditor.AddressableAssets.Build;
@@ -12,7 +14,9 @@ public static class AddressablesBuildTools
     private const string ScenesGroupName = "TinySpire Scenes";
     private const string GameDataGroupName = "TinySpire GameData";
     private const string CharactersGroupName = "TinySpire Characters";
+    private const string CardArtGroupName = "TinySpire Card Art";
     private const string GameDataLabel = "GameData";
+    private const string CardTableJsonPath = "Assets/GameData/battle_tbcard.json";
 
     private static readonly string[] ScenePaths =
     {
@@ -26,6 +30,7 @@ public static class AddressablesBuildTools
         "Assets/Arts/Runtime/Character/Prefabs/pfb_char_enemy.prefab"
     };
 
+    /// <summary>按项目稳定地址配置场景、配置、角色与牌面本地资源组。</summary>
     [MenuItem("TinySpire/Addressables/Configure Local Content")]
     public static void ConfigureLocalContent()
     {
@@ -61,11 +66,18 @@ public static class AddressablesBuildTools
         foreach (string prefabPath in CharacterPrefabPaths)
             AddEntry(settings, characters, prefabPath, label: null);
 
+        AddressableAssetGroup cardArt = EnsureLocalGroup(
+            settings,
+            CardArtGroupName,
+            BundledAssetGroupSchema.BundlePackingMode.PackTogether);
+        SyncEntries(settings, cardArt, ReadCardIllustrationAddresses(), label: null);
+
         EditorUtility.SetDirty(settings);
         AssetDatabase.SaveAssets();
         Debug.Log("TinySpire local Addressables content configured.");
     }
 
+    /// <summary>同步本地资源组并构建供启动链路加载的 Addressables 内容。</summary>
     [MenuItem("TinySpire/Addressables/Build Local Content")]
     public static void BuildLocalContent()
     {
@@ -77,6 +89,7 @@ public static class AddressablesBuildTools
         Debug.Log($"TinySpire Addressables content built: {result.OutputPath}");
     }
 
+    /// <summary>取得或创建一个使用本地构建与加载路径的 Addressables 资源组。</summary>
     private static AddressableAssetGroup EnsureLocalGroup(
         AddressableAssetSettings settings,
         string groupName,
@@ -104,6 +117,69 @@ public static class AddressablesBuildTools
         return group;
     }
 
+    /// <summary>从 Luban 生成的卡牌表读取并校验唯一牌面 Sprite 稳定地址。</summary>
+    private static IReadOnlyList<string> ReadCardIllustrationAddresses()
+    {
+        if (!File.Exists(CardTableJsonPath))
+            throw new InvalidOperationException($"Generated card table does not exist: {CardTableJsonPath}");
+
+        JObject cards = JObject.Parse(File.ReadAllText(CardTableJsonPath));
+        var addresses = new List<string>();
+        var uniqueAddresses = new HashSet<string>(StringComparer.Ordinal);
+        foreach (JProperty card in cards.Properties())
+        {
+            string address = (string)card.Value["illustration_address"];
+            if (string.IsNullOrWhiteSpace(address))
+                throw new InvalidOperationException($"Card template {card.Name} has no illustration_address.");
+            if (!address.StartsWith("Assets/", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Card template {card.Name} illustration address must start with 'Assets/': {address}");
+            }
+            if (AssetDatabase.LoadAssetAtPath<Sprite>(address) == null)
+            {
+                throw new InvalidOperationException(
+                    $"Card template {card.Name} illustration is not an importable Sprite: {address}");
+            }
+            if (uniqueAddresses.Add(address))
+                addresses.Add(address);
+        }
+
+        if (addresses.Count == 0)
+            throw new InvalidOperationException("Generated card table does not contain any illustration addresses.");
+
+        return addresses;
+    }
+
+    /// <summary>让专用资源组与当前配置地址集合完全一致，并移除已经失效的旧条目。</summary>
+    private static void SyncEntries(
+        AddressableAssetSettings settings,
+        AddressableAssetGroup group,
+        IReadOnlyList<string> assetPaths,
+        string label)
+    {
+        var expectedGuids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (string assetPath in assetPaths)
+        {
+            string guid = AssetDatabase.AssetPathToGUID(assetPath);
+            if (string.IsNullOrEmpty(guid))
+                throw new InvalidOperationException($"Addressable asset does not exist: {assetPath}");
+
+            expectedGuids.Add(guid);
+            AddEntry(settings, group, assetPath, label);
+        }
+
+        var staleEntries = new List<AddressableAssetEntry>();
+        foreach (AddressableAssetEntry entry in group.entries)
+        {
+            if (!expectedGuids.Contains(entry.guid))
+                staleEntries.Add(entry);
+        }
+        foreach (AddressableAssetEntry staleEntry in staleEntries)
+            group.RemoveAssetEntry(staleEntry, postEvent: false);
+    }
+
+    /// <summary>将指定资源以完整 Assets 路径作为稳定地址加入目标资源组。</summary>
     private static void AddEntry(
         AddressableAssetSettings settings,
         AddressableAssetGroup group,

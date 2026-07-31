@@ -1,6 +1,6 @@
 ---
 created: 2026-07-06
-updated: 2026-07-30
+updated: 2026-07-31
 ---
 
 # Daedalus · 代码决策记录
@@ -276,3 +276,13 @@ updated: 2026-07-30
 **理由**：模板决定可复用的美术和名称，`CombatantData` 决定本局事实，场景 Presenter 只协调两者的生命周期。Addressables 地址留在表中后，扩展英雄/敌人外观不需要改 UI 代码；直接失败可让构建/发布问题尽早暴露，而不让画面与战斗事实脱节。
 
 **影响**：M3A 只展示名称、生命和非零力量，支持一名玩家和一至三名按 Encounter 配置顺序从右向左布局的敌人。格挡、状态、意图、能量、回合、死亡表现和胜败覆盖层不在本决策实现，分别等待 M3B-M3E 的前置事实。详见 `plans/2026-07-30-battlescene-participant-views.md`。
+
+## CD-025：卡牌模板持有牌面稳定地址，手牌 View 管理加载生命周期
+
+**问题**：牌面 PNG 已进入项目，但卡牌模板没有资源地址。若按模板 ID 在 UI 中硬编码 Sprite、把所有图片直接序列化到场景，或让运行时卡牌实例保存资源对象，都会重复静态事实并使新增卡牌需要修改 UI 代码。
+
+**选择**：`battle.Card` 新增 `illustration_address`，保存完整 `Assets/...` Sprite 地址；Luban 生成的 `battle_tbcard.json` 是 Addressables 构建工具收集牌面条目的输入。四张牌面以 `Sprite / Single / no mipmap` 导入，`TinySpire Card Art` 本地组每次构建都与表中地址集合完全同步并移除失效条目。`HandCardContainer` 按本场牌组中的唯一模板预加载 `Sprite`，持有 `AsyncOperationHandle<Sprite>` 并在销毁时统一释放；`HandCardVisual` 让 Sprite 等比覆盖插图区，再由既有 Stencil Mask 裁切溢出内容，不保存模板 ID 到资源地址的映射。
+
+**理由**：静态模板继续决定展示资源，卡牌实例只保存身份与局内事实，View 负责其实际使用期内的资源句柄。新增或替换牌面只需修改表格与资源，不需要增加 UI 分支；地址、导入类型或加载失败会直接暴露为构建/运行错误。
+
+**影响**：`DataTables/Datas/battle.card.xlsx`、Luban 生成的 `Card`/JSON、四张牌面导入设置、`AddressablesBuildTools`、`TinySpire Card Art` 资源组、`HandCardContainer`、`HandCardVisual` 与 `CardView.prefab`。本决策不新增能量、回合、意图、状态、效果执行、胜败覆盖层或其他尚无运行时事实的 UI。

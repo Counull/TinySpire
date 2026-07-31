@@ -10,7 +10,8 @@
         "argument_key": "strength",
         "effect_id": 4001
       }
-    ]
+    ],
+    "illustration_address": "Assets/Arts/Runtime/Card/card_art_strength.png"
   },
   "3002": {
     "id": 3002,
@@ -23,7 +24,8 @@
         "argument_key": "damage",
         "effect_id": 4002
       }
-    ]
+    ],
+    "illustration_address": "Assets/Arts/Runtime/Card/card_art_strike.png"
   },
   "3003": {
     "id": 3003,
@@ -36,7 +38,8 @@
         "argument_key": "block",
         "effect_id": 4003
       }
-    ]
+    ],
+    "illustration_address": "Assets/Arts/Runtime/Card/card_art_defend.png"
   },
   "3004": {
     "id": 3004,
@@ -53,6 +56,7 @@
         "argument_key": "vulnerable",
         "effect_id": 4005
       }
-    ]
+    ],
+    "illustration_address": "Assets/Arts/Runtime/Card/card_art_bash.png"
   }
 }

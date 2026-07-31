@@ -1,9 +1,13 @@
+using System;
 using System.Collections.Generic;
+using Cysharp.Threading.Tasks;
 using DG.Tweening;
 using R3;
 using TinySpire.Battle;
 using UnityEngine;
+using UnityEngine.AddressableAssets;
 using UnityEngine.EventSystems;
+using UnityEngine.ResourceManagement.AsyncOperations;
 using UnityEngine.UI;
 using VContainer;
 
@@ -36,9 +40,11 @@ public sealed class HandCardContainer : MonoBehaviour
     private LocalizationService _localization;
 
     private readonly List<HandCardVisual> _cards = new();
+    private readonly Dictionary<int, AsyncOperationHandle<Sprite>> _illustrationHandles = new();
     private HandCardVisual _draggingCard;
     private BattleCardZonesData _cardZones;
     private PlayerCombatantData _player;
+    private bool _isDestroyed;
 
     private int CurrentHandCount => _cardZones.Hand.Count;
 
@@ -59,7 +65,7 @@ public sealed class HandCardContainer : MonoBehaviour
     }
 
     /// <summary>校验依赖、建立事实订阅并绘制初始手牌。</summary>
-    private void Start()
+    private async void Start()
     {
         if (cardViewPrefab == null)
         {
@@ -80,6 +86,25 @@ public sealed class HandCardContainer : MonoBehaviour
 
         _cardZones = _session.CardZones;
         _player = ResolvePlayer();
+        try
+        {
+            await LoadCardIllustrationsAsync();
+        }
+        catch (Exception exception)
+        {
+            ReleaseCardIllustrations();
+            if (!_isDestroyed)
+            {
+                Debug.LogException(exception, this);
+                enabled = false;
+            }
+
+            return;
+        }
+
+        if (_isDestroyed)
+            return;
+
         _cardZones.Layout
             .Select(layout => layout.Hand)
             .Skip(1)
@@ -280,8 +305,79 @@ public sealed class HandCardContainer : MonoBehaviour
         CardInstanceData cardState)
     {
         cfg.battle.Card cardTemplate = _configs.Tables.TbCard.Get(cardState.TemplateId);
+        if (!_illustrationHandles.TryGetValue(cardState.TemplateId, out AsyncOperationHandle<Sprite> handle)
+            || !handle.IsValid()
+            || handle.Status != AsyncOperationStatus.Succeeded
+            || handle.Result == null)
+        {
+            throw new InvalidOperationException(
+                $"Card template {cardState.TemplateId} illustration is not loaded.");
+        }
+
         CardPresentationText text = _cardTextFormatter.Format(cardState, _player);
-        visual.Bind(text, cardTemplate.Cost);
+        visual.Bind(text, cardTemplate.Cost, handle.Result);
+    }
+
+    /// <summary>按当前牌组中的唯一模板预加载牌面 Sprite，并持有其 Addressables 句柄。</summary>
+    private async UniTask LoadCardIllustrationsAsync()
+    {
+        foreach (CardInstanceData cardState in _cardZones.Cards.Values)
+        {
+            int templateId = cardState.TemplateId;
+            if (_illustrationHandles.ContainsKey(templateId))
+                continue;
+
+            cfg.battle.Card cardTemplate = _configs.Tables.TbCard.GetOrDefault(templateId)
+                ?? throw new InvalidOperationException($"Card template {templateId} does not exist.");
+            string address = cardTemplate.IllustrationAddress;
+            if (string.IsNullOrWhiteSpace(address))
+                throw new InvalidOperationException($"Card template {templateId} has no illustration_address.");
+
+            AsyncOperationHandle<Sprite> handle = Addressables.LoadAssetAsync<Sprite>(address);
+            try
+            {
+                await handle.Task;
+            }
+            catch (Exception exception)
+            {
+                if (handle.IsValid())
+                    Addressables.Release(handle);
+
+                throw new InvalidOperationException(
+                    $"Failed to load card template {templateId} illustration '{address}'.",
+                    exception);
+            }
+
+            if (handle.Status != AsyncOperationStatus.Succeeded || handle.Result == null)
+            {
+                Exception operationException = handle.OperationException;
+                if (handle.IsValid())
+                    Addressables.Release(handle);
+
+                throw new InvalidOperationException(
+                    $"Failed to load card template {templateId} illustration '{address}'.",
+                    operationException);
+            }
+            if (_isDestroyed)
+            {
+                Addressables.Release(handle);
+                return;
+            }
+
+            _illustrationHandles.Add(templateId, handle);
+        }
+    }
+
+    /// <summary>释放本容器持有的全部牌面 Addressables 句柄。</summary>
+    private void ReleaseCardIllustrations()
+    {
+        foreach (AsyncOperationHandle<Sprite> handle in _illustrationHandles.Values)
+        {
+            if (handle.IsValid())
+                Addressables.Release(handle);
+        }
+
+        _illustrationHandles.Clear();
     }
 
     /// <summary>从战斗参与者唯一事实映射中取得本场玩家。</summary>
@@ -330,5 +426,12 @@ public sealed class HandCardContainer : MonoBehaviour
     private bool IsPastPlayLine(HandCardVisual card)
     {
         return card.CurrentAnchoredY > playLineY;
+    }
+
+    /// <summary>容器销毁时停止异步落地，并释放其持有的牌面资源。</summary>
+    private void OnDestroy()
+    {
+        _isDestroyed = true;
+        ReleaseCardIllustrations();
     }
 }

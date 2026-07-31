@@ -13,6 +13,7 @@ public sealed class HandCardVisual : MonoBehaviour
     [SerializeField] private Text _costText;
     [SerializeField] private Text _typeText;
     [SerializeField] private Text _descriptionText;
+    [SerializeField] private Image _illustrationImage;
 
     private CanvasGroup _dragFeedbackCanvasGroup;
     private Vector3 _baseScale;
@@ -41,15 +42,16 @@ public sealed class HandCardVisual : MonoBehaviour
     }
 
     /// <summary>
-    /// 用当前格式化文本和费用刷新卡牌展示；不保存战斗事实。
+    /// 用当前格式化文本、费用和等比覆盖牌面刷新卡牌展示；不保存战斗事实。
     /// </summary>
-    public void Bind(CardPresentationText presentation, int cost)
+    public void Bind(CardPresentationText presentation, int cost, Sprite illustration)
     {
         EnsureReferences();
         _titleText.text = presentation.Name;
         _costText.text = cost.ToString();
         _typeText.text = string.Empty;
         _descriptionText.text = presentation.Description;
+        ApplyIllustration(illustration);
     }
 
     /// <summary>
@@ -150,11 +152,41 @@ public sealed class HandCardVisual : MonoBehaviour
             || _titleText == null
             || _costText == null
             || _typeText == null
-            || _descriptionText == null)
+            || _descriptionText == null
+            || _illustrationImage == null)
         {
             throw new InvalidOperationException(
                 "HandCardVisual is missing one or more serialized CardView references.");
         }
+    }
+
+    /// <summary>让横向牌面保持原始比例覆盖插图区，并由父级 Stencil Mask 裁切溢出部分。</summary>
+    private void ApplyIllustration(Sprite illustration)
+    {
+        if (illustration == null)
+            throw new ArgumentNullException(nameof(illustration));
+
+        RectTransform illustrationRect = _illustrationImage.rectTransform;
+        RectTransform maskRect = illustrationRect.parent as RectTransform;
+        if (maskRect == null)
+            throw new InvalidOperationException("Card illustration Image must be a child of a RectTransform mask.");
+
+        Vector2 maskSize = maskRect.rect.size;
+        Vector2 spriteSize = illustration.rect.size;
+        if (maskSize.x <= 0f || maskSize.y <= 0f || spriteSize.x <= 0f || spriteSize.y <= 0f)
+            throw new InvalidOperationException("Card illustration and mask must have non-zero dimensions.");
+
+        float maskAspect = maskSize.x / maskSize.y;
+        float spriteAspect = spriteSize.x / spriteSize.y;
+        Vector2 coverSize = spriteAspect >= maskAspect
+            ? new Vector2(maskSize.y * spriteAspect, maskSize.y)
+            : new Vector2(maskSize.x, maskSize.x / spriteAspect);
+
+        _illustrationImage.sprite = illustration;
+        _illustrationImage.preserveAspect = true;
+        illustrationRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, coverSize.x);
+        illustrationRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, coverSize.y);
+        illustrationRect.anchoredPosition = Vector2.zero;
     }
 
     /// <summary>停止并清理当前姿态补间。</summary>

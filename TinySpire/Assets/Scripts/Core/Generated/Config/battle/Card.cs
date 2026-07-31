@@ -26,6 +26,7 @@ public sealed partial class Card : Luban.BeanBase
         Cost = (int)_obj.GetValue("cost");
         TargetRule = (battle.TargetRule)(int)_obj.GetValue("target_rule");
         { var __json0 = _obj.GetValue("effect_bindings"); int _n0 = (__json0 as JArray).Count; EffectBindings = new battle.CardEffectBinding[_n0]; int __index0=0; foreach(JToken __e0 in __json0) { battle.CardEffectBinding __v0;  __v0 = global::cfg.battle.CardEffectBinding.DeserializeCardEffectBinding(__e0);  EffectBindings[__index0++] = __v0; }   }
+        IllustrationAddress = (string)_obj.GetValue("illustration_address");
     }
 
     public static Card DeserializeCard(JToken _buf)
@@ -57,6 +58,10 @@ public sealed partial class Card : Luban.BeanBase
     /// Ordered effect argument bindings
     /// </summary>
     public readonly battle.CardEffectBinding[] EffectBindings;
+    /// <summary>
+    /// Full Assets/... sprite address
+    /// </summary>
+    public readonly string IllustrationAddress;
 
 
     public const int __ID__ = -796030298;
@@ -76,6 +81,7 @@ public sealed partial class Card : Luban.BeanBase
         + "cost:" + Cost + ","
         + "targetRule:" + TargetRule + ","
         + "effectBindings:" + Luban.StringUtil.CollectionToString(EffectBindings) + ","
+        + "illustrationAddress:" + IllustrationAddress + ","
         + "}";
     }
 }

@@ -2,7 +2,7 @@
 title: plans · 实现计划（03_design 角色）
 page_type: plan
 lifecycle: active
-updated: 2026-07-30
+updated: 2026-07-31
 ---
 
 # plans · 实现计划
@@ -23,4 +23,5 @@ updated: 2026-07-30
 
 ## 已替代 / 历史计划
 
+- [2026-07-31 战斗 UI 首批美术与牌面配置链路接入](2026-07-31-battle-ui-art-integration.md) — 已完成并通过运行时验收。
 - [2026-07-30 战斗配置接入运行时](2026-07-30-battle-config-runtime-integration.md) — 已由卡牌区域与确定性洗牌计划承接运行时牌区。

@@ -2,7 +2,7 @@
 title: 06_testing · 测试记录
 page_type: testing
 lifecycle: active
-updated: 2026-07-30
+updated: 2026-07-31
 ---
 
 - [2026-07-30 BattleScene LifetimeScope](2026-07-30-battle-lifetime-scope.md)
@@ -15,6 +15,8 @@ updated: 2026-07-30
 
 ## 验证记录
 
+- [2026-07-31 DataTables 工作簿简易配色](2026-07-31-datatables-simple-colors.md)
+- [2026-07-31 战斗 UI 首批美术与牌面配置链路接入](2026-07-31-battle-ui-art-integration.md)
 - [2026-07-30 BattleScene M3A 参与者配置与 Prefab 工厂](2026-07-30-battlescene-participant-views.md)
 - [2026-07-30 Addressables 迁移](2026-07-30-addressables-migration.md)
 - [2026-07-30 卡牌本地化与动态文本](2026-07-30-card-localization-dynamic-text.md)

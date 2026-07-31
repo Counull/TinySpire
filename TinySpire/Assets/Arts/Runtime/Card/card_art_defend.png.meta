@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: c1a63cad785650646802d2f4f29c43b3
+guid: cdeea30fd10b72a409c28bca6e2ff8c9
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: -6943681669991335621
-    second: card_art_defend_0
+      213: -1219419988823041876
+    second: card_art_defend_portrait_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -46,7 +46,7 @@ TextureImporter:
   nPOTScale: 0
   lightmap: 0
   compressionQuality: 50
-  spriteMode: 2
+  spriteMode: 1
   spriteExtrude: 1
   spriteMeshType: 1
   alignment: 0
@@ -139,13 +139,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: card_art_defend_0
+      name: card_art_defend_portrait_0
       rect:
         serializedVersion: 2
         x: 0
         y: 0
-        width: 768
-        height: 512
+        width: 1024
+        height: 1536
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -154,8 +154,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: b3976c27f4613af90800000000000000
-      internalID: -6943681669991335621
+      spriteID: ca8113e1bffb31fe0800000000000000
+      internalID: -1219419988823041876
       vertices: []
       indices: 
       edges: []
@@ -164,7 +164,7 @@ TextureImporter:
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 
+    spriteID: 5e97eb03825dee720800000000000000
     internalID: 0
     vertices: []
     indices: 
@@ -174,7 +174,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      card_art_defend_0: -6943681669991335621
+      card_art_defend_portrait_0: -1219419988823041876
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

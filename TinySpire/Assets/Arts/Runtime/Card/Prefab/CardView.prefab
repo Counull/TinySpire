@@ -225,7 +225,7 @@ MonoBehaviour:
       m_Calls: []
   m_Sprite: {fileID: 4523494740250404578, guid: 20f0dac7a8776dc40bb75b1514e35b13, type: 3}
   m_Type: 0
-  m_PreserveAspect: 0
+  m_PreserveAspect: 1
   m_FillCenter: 1
   m_FillMethod: 4
   m_FillAmount: 1
@@ -666,7 +666,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6c032af53bca47a2a8c121969519d096, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HandCardVisual
   _canvas: {fileID: 606912178581207511}
   _cardContent: {fileID: 7023076731172432324}
@@ -674,6 +674,7 @@ MonoBehaviour:
   _costText: {fileID: 918101985981586173}
   _typeText: {fileID: 7168821670673846105}
   _descriptionText: {fileID: 7960129587187924371}
+  _illustrationImage: {fileID: 5394373751778117488}
 --- !u!1 &5607609382875956158
 GameObject:
   m_ObjectHideFlags: 0

@@ -1,0 +1,43 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bbb281ee3bf0b054c82ac2347e9e782c, type: 3}
+  m_Name: TinySpire Card Art
+  m_EditorClassIdentifier: Unity.Addressables.Editor::UnityEditor.AddressableAssets.Settings.AddressableAssetGroup
+  m_GroupName: TinySpire Card Art
+  m_GUID: a3ee3858b84ed7440bb1465fb7aea900
+  m_SerializeEntries:
+  - m_GUID: 20f0dac7a8776dc40bb75b1514e35b13
+    m_Address: Assets/Arts/Runtime/Card/card_art_strike.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 5f52c176836b32341a30d16c860079de
+    m_Address: Assets/Arts/Runtime/Card/card_art_bash.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 6b5532daf1e1b484f91b369ce4eeaa66
+    m_Address: Assets/Arts/Runtime/Card/card_art_strength.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: cdeea30fd10b72a409c28bca6e2ff8c9
+    m_Address: Assets/Arts/Runtime/Card/card_art_defend.png
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  m_ReadOnly: 0
+  m_Settings: {fileID: 11400000, guid: ec003b10e131c9e40aebe3d03dd58e88, type: 2}
+  m_SchemaSet:
+    m_Schemas:
+    - {fileID: 11400000, guid: b6c0eb7dff71423459558d240d38f436, type: 2}
+    - {fileID: 11400000, guid: 74f194a58977299488f18af7abcf2b1f, type: 2}
