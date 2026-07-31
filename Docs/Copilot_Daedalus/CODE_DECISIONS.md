@@ -297,14 +297,14 @@ updated: 2026-07-31
 
 **影响**：CD-025 关于手牌预加载、句柄释放和 View 生命周期的选择继续有效，但其“配置保存完整地址”部分被本决策替代。角色 Prefab 等其他字段仍保留完整地址，本次不扩展为全项目通用资源键系统。
 
-## CD-027：M4 以多人共享玩家阶段为调度根，当前只接入单玩家
+## CD-027：M4 以统一权威命令队列调度多人行动，当前只接入单玩家
 
-**问题**：现有 M4 路线图曾用单一 `CurrentEnergy` 和“玩家回合结束”描述当前 BattleScene，但 Pegasus 已锁定多人共享敌人阵列、玩家交错出牌、所有玩家结束后敌人才行动。若先按单人轮流模型实现调度器，后续加入多人时必须推翻能量归属、阶段命名和命令入口。
+**问题**：现有 M4 路线图曾用单一 `CurrentEnergy` 和“玩家交错出牌”描述多人行动。用户已明确修订为《杀戮尖塔 2》式口径：玩家可以同时提交命令，由统一权威顺序逐条执行和展示。若 UI 直接调用调度器并立即修改状态，就无法区分提交与执行，也无法在多人并发输入下保持确定顺序。
 
-**选择**：`BattleTurnController` 作为战斗时序层的深模块，所有玩家共享 `PlayerAction` 阶段；每名玩家的能量和结束行动标记按 `CombatantId` 存入不可变 `BattleTurnData` 快照，不保存全局 `CurrentEnergy` 或 `CurrentPlayer`。玩家通过统一命令交错出牌并独立结束行动，全部玩家结束后才按 `BattleSession.EnemyCombatantIdsInEncounterOrder` 进入敌人阶段。当前 BattleScene 只把唯一玩家及其 `BattleCardZonesData` 接入该模型，多玩家牌组装配登记为 `DEP-008`。
+**选择**：`BattleCommandQueue` 成为玩家、系统阶段与未来敌人/Effect 的唯一外部提交 seam；提交可以在当前命令执行或展示期间继续发生。单机本地为命令分配单调权威序号，未来网络 adapter 负责把 Host 已确认命令送入同一执行路径。队列一次只执行一个命令，并等待其权威状态写入与展示完成；最终合法性在队首执行时重新校验。`BattleTurnController` 退到队列内部，只写阶段、轮次、按 `CombatantId` 保存的能量与结束状态，不向 UI 暴露直通写方法。
 
-**接口**：调用方只通过 `StartBattle`、提交出牌、结束玩家行动、完成当前敌人行动四类命令和只读 `Turn` 事实使用该模块。UI 不直接设置阶段、能量或结束标记，也不再直接把拖拽卡移入弃牌堆。内部状态节点与 `StateMachine<TEvent>` 组合不属于外部测试 seam。
+**接口**：调用方只使用 `Submit(BattleCommand)` 以及只读 `Queue`/`Turn` 事实。首批命令为开始战斗、出牌、结束玩家行动和完成当前敌人行动。`BattleCommandSubmissionResult.Accepted` 与最终 `BattleCommandExecutionResult` 分离；UI 不传费用、不直接扣能量或移动卡牌。锁定的是逻辑上的统一权威顺序，不要求未来网络实现使用单一物理 FIFO。
 
-**理由**：小 interface 隐藏阶段转换、多人结束门槛、能量校验和敌人顺序，能让 UI、M5 敌人行为和后续 Effect 模块共享同一个稳定 seam。当前单玩家接线只是适配范围，不改变根模型；因此可以先补战斗根基，再按实际需要聚合子系统，而不提前实现联网或多玩家 UI。
+**理由**：并发提交消除玩家输入等待，串行执行保证能量、卡区、伤害、触发和表现顺序确定。小 interface 同时隐藏排序、执行期校验、阶段转换和展示等待；当前单玩家也走相同路径，因此后续加入网络时不需要把直通 UI 调用重写为命令。
 
-**影响**：M4 分为纯 C# 调度骨架、能量与出牌命令、玩家结束与敌人交接、当前单玩家 UI 接线、全量验证五步。`BattleSession` 的初始抽牌移交给调度器的 `BattleStart/PlayerRoundStart`；`GameConfig` 后续承载每轮基础能量静态规则；`BattleLifetimeScope` 后续注册控制器。完整计划见 `plans/2026-07-31-m4-turn-scheduling-energy.md`。
+**影响**：M4A 同时建立命令队列与调度事实骨架；M4B 实现队列化出牌、能量和执行期校验；M4C 实现队列化结束行动、敌人交接和生产接线；M4D 接 UI；M4E 全量验证。命令中途需要本地输入登记为 `DEP-010`，未来网络权威确认与重放登记为 `DEP-011`。完整计划见 `plans/2026-07-31-m4-turn-scheduling-energy.md`。

@@ -1,15 +1,24 @@
 ---
 created: 2026-07-06
-updated: 2026-07-31
+updated: 2026-08-01
 ---
 
-## 2026-07-31 · M4 多人回合根基分步确认（计划完成，尚未实施）
+## 2026-08-01 · M4A 权威命令队列与回合事实骨架（已验证，未接生产）
 
-- 用户确认 M4 采用“多人根基、当前单玩家接线”：所有玩家共享 `PlayerAction`，能量和结束行动状态按 `CombatantId` 归属；玩家可交错出牌，全部玩家结束后才进入敌人阶段。当前 BattleScene 仍只创建和显示一名玩家，不提前实现联网、输入仲裁或多玩家 UI。
-- 已规划深模块 `BattleTurnController`：外部只通过开始战斗、提交出牌、结束玩家行动、完成敌人行动四类命令与只读 `BattleTurnData` 使用；UI 不再直接设置阶段、扣能量或移动已提交卡牌。内部状态节点继续组合既有最小 `StateMachine<TEvent>`，不扩展 Core 状态机接口。
-- M4 拆为 M4A 调度事实与骨架、M4B 能量与统一出牌命令、M4C 全体玩家结束与敌人顺序交接、M4D 当前单玩家 M3C UI 接线、M4E 全量验证与复审。每一步有独立停止点，先纯 C# TDD，后修改高影响场景。
-- 当前单玩家仅有一套卡区登记为 `DEP-008`；敌人意图/行为执行登记为 `DEP-009`。本轮仅同步计划、路线图、决策、术语与依赖账本，未修改代码、场景、配置或资源，未运行 Unity 测试。
-- 完整计划见 `plans/2026-07-31-m4-turn-scheduling-energy.md`，代码决策见 CD-027。
+- 新增纯 C# `BattleCommandQueue` 调度根、四类首批命令、提交/执行结果与只读 `Queue`/`Turn` R3 事实；本地权威序号从 1 单调递增，当前命令执行和等待表现期间都可继续提交，只有绑定当前序号的表现完成回调可以推进下一条。
+- `BattleTurnController` 保持队列内部，通过既有 `StateMachine<TEvent>` 组合 `NotStarted -> BattleStart -> PlayerRoundStart -> PlayerAction`；回合事实按 `CombatantId -> PlayerTurnData` 保存，M4A 能量骨架为 0，没有 `CurrentPlayer` 或全局 `CurrentEnergy`。
+- TDD 通过公共 `Submit` / `Queue` / `Turn` seam 完成 9 个 EditMode 用例：覆盖未开始拒绝、执行期与等待期提交、稳定序号、FIFO 交接、重复表现回调、重复开始执行期失败、后续里程碑命令不改共享事实及双玩家独立映射。Unity MCP 定向测试 9/9；`Assembly-CSharp` 与 `Assembly-CSharp-Editor` 静态编译均为 0 error（保留 6/12 条既有依赖版本冲突 warning）。
+- Unity MCP 已为新增目录、脚本和测试生成全部 Meta；Console Error 为 0。未修改 `BattleSession` 的现有初始抽牌，未接 `BattleLifetimeScope`、场景或 UI，也未实现能量扣除、出牌结算、结束玩家行动或敌人行为；未运行全量 EditMode、PlayMode、Luban 或 Addressables 构建。
+- M4A 已满足独立停止点；M4 总计划仍为 active，M4B～M4E 尚未开始。实现计划见 `plans/2026-07-31-m4-turn-scheduling-energy.md`，验收记录见 `06_testing/2026-08-01-m4a-authoritative-command-queue.md`。
+
+## 2026-07-31 · M4 多人命令队列口径修订（计划完成，尚未实施）
+
+- 用户修订旧的“交错出牌/一张牌后切人”口径：所有未结束玩家可同时提交命令，提交不因其他玩家输入或当前效果展示而阻塞；权威调度层建立唯一顺序，再逐条执行共享状态修改和效果展示。全部玩家的结束命令均执行后才进入敌人阶段。
+- 外部查证区分了原版《杀戮尖塔》的行动队列与《杀戮尖塔 2》的多人模型。当前结论锁定逻辑上的统一权威顺序，不声称未来必须使用单一物理 FIFO；研究记录见 `04_research/2026-07-31-slay-the-spire-action-queue.md`。
+- M4 外部 seam 改为 `BattleCommandQueue.Submit` 与只读 `Queue`/`Turn` 事实；`BattleTurnController` 退为队列内部阶段模块。提交接受与执行成功分离，最终合法性在队首执行时重新校验。
+- M4A 改为权威命令队列与调度骨架；M4B 为队列化出牌、能量与执行期校验；M4C 为队列化结束行动、敌人交接和生产接线；M4D 接当前单玩家 UI；M4E 全量验证。TDD seam 同步改为命令提交及队列公开事实。
+- `DEP-008`/`DEP-009` 保持；新增 `DEP-010` 记录命令中途局部输入续接，`DEP-011` 记录未来网络权威确认与重放。本轮只修改文档，未修改代码、场景、配置或资源，未运行 Unity 测试。
+- 完整计划见 `plans/2026-07-31-m4-turn-scheduling-energy.md`，代码决策见 CD-027，架构约定见 AC-009。
 
 ## 2026-07-31 · 牌面短键与 Addressables 逻辑地址迁移（已验证）
 

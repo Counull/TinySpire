@@ -4,7 +4,7 @@ owner: Daedalus
 page_type: convention
 lifecycle: active
 created: 2026-07-29
-updated: 2026-07-30
+updated: 2026-07-31
 status_source: SESSION_LOG.md
 note: 本文件只锁定代码实现层面的通用约定，不涉及玩法设计决策（玩法决策见 ../Hermes_Pegasus/design/decision-locks.md）。不修改、不复制 architecture.md，只交叉引用。
 ---
@@ -84,6 +84,17 @@ note: 本文件只锁定代码实现层面的通用约定，不涉及玩法设�
 - 洗牌等随机事件执行后产生的牌序/候选结果是新的运行时事实，不要求每次读取时从初始种子重算。
 - 纯表现且不影响规则的随机可以继续使用 `UnityEngine.Random`。
 - 当前实现复用 `Unity.Mathematics.Random`，不自研 PRNG；见 `CD-015`。
+
+### AC-009：共享战斗写入必须经统一权威命令顺序
+
+玩家输入、系统阶段、敌人行动与后续 Effect 对共享战斗事实的修改，都必须先形成战斗命令并经统一提交 seam 排序。玩家可以在当前命令执行或展示期间继续提交，但同一时刻只有队首命令可以写入能量、卡区、参与者或阶段；提交接受不得提前修改权威事实。
+
+- 单机为命令本地分配权威序号；未来联机 adapter 必须把 Host 已确认顺序送入同一个执行路径，不能建立第二条网络专用写链。
+- 最终合法性在执行期依据当时事实校验；排队时的 UI 预览或本地反馈不是权威结果。
+- 表现 adapter 可以局部查找 View，但必须按命令执行顺序完成展示，不能反向决定规则状态。
+- 锁定的是逻辑上的统一顺序，不要求底层只能使用单一物理 FIFO。
+
+来源：`CD-027`；玩法口径见 `../Hermes_Pegasus/design/decision-locks.md` L-005。
 
 ## 4. Provisional（先这样做，允许调整细节）
 
