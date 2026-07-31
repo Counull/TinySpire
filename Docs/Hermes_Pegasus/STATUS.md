@@ -47,11 +47,11 @@
 
 | 资源 | 路径 | 用途 | 状态 |
 |---|---|---|---|
-| 构成主义战斗背景 | `art/assets/art-style/tinyspire-constructivist-battle-bg-concept.png` | Demo 背景概念 | keep |
-| 初版塔内执行员 | `art/assets/art-style/tinyspire-tower-executor-character-concept.png` | 早期角色概念 | reference |
-| 初版秩序守卫 | `art/assets/art-style/tinyspire-order-warden-enemy-concept.png` | 早期怪物概念 | reference |
-| 鸟嘴面具执行员 | `art/assets/art-style/tinyspire-plague-doctor-executor-concept.png` | 当前更贴近方向的玩家概念 | candidate |
-| 教皇式怪物 | `art/assets/art-style/tinyspire-pontiff-monster-concept.png` | 当前更贴近方向的敌人概念 | candidate |
+| 构成主义战斗背景 | `art/assets/art-style/scenes/tinyspire-constructivist-battle-bg-concept.png` | Demo 背景概念 | keep |
+| 初版塔内执行员 | `art/assets/art-style/characters/tinyspire-tower-executor-character-concept.png` | 早期角色概念 | reference |
+| 初版秩序守卫 | `art/assets/art-style/characters/tinyspire-order-warden-enemy-concept.png` | 早期怪物概念 | reference |
+| 鸟嘴面具执行员 | `art/assets/art-style/characters/tinyspire-plague-doctor-executor-concept.png` | 当前更贴近方向的玩家概念 | candidate |
+| 教皇式怪物 | `art/assets/art-style/characters/tinyspire-pontiff-monster-concept.png` | 当前更贴近方向的敌人概念 | candidate |
 
 ## 当前待办
 

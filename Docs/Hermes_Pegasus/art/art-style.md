@@ -151,15 +151,15 @@ fantasy roguelike enemy creature, full body, isolated, readable silhouette, fron
 
 已保存第一轮概念图：
 
-- `assets/art-style/tinyspire-constructivist-battle-bg-concept.png` — 构成主义奇幻战斗背景
-- `assets/art-style/tinyspire-tower-executor-character-concept.png` — 玩家角色：塔内执行员 / 失控档案员
-- `assets/art-style/tinyspire-order-warden-enemy-concept.png` — 敌人：秩序守卫 / Order Warden
-- `assets/art-style/tinyspire-loading-screen-style-anchor.png` — **2026-07-11 风格锚点图**，GPT Image 生成。包含 Sisyphus（荒诞记录官）+ Pegasus（翼之向导）+ 构成主义三角黑塔 + 红黑米白纸片海报质感。
+- `assets/art-style/scenes/tinyspire-constructivist-battle-bg-concept.png` — 构成主义奇幻战斗背景
+- `assets/art-style/characters/tinyspire-tower-executor-character-concept.png` — 玩家角色：塔内执行员 / 失控档案员
+- `assets/art-style/characters/tinyspire-order-warden-enemy-concept.png` — 敌人：秩序守卫 / Order Warden
+- `assets/art-style/anchors/tinyspire-loading-screen-style-anchor.png` — **2026-07-11 风格锚点图**，GPT Image 生成。包含 Sisyphus（荒诞记录官）+ Pegasus（翼之向导）+ 构成主义三角黑塔 + 红黑米白纸片海报质感。
 - `assets/agent-mythic-characters/` — 角色概念图集合（Sisyphus / Pegasus / Daedalus / Warden / Pontiff 多种变体）
 
 ### 风格锚点图使用规范
 
-后续所有 GPT Image 生成的 TinySpire 美术资源，应使用 `tinyspire-loading-screen-style-anchor.png` 作为唯一的视觉参考图（reference_image），配合文本 prompt 描述所需元素。原则：
+后续所有 GPT Image 生成的 TinySpire 美术资源，应使用 `assets/art-style/anchors/tinyspire-loading-screen-style-anchor.png` 作为唯一的视觉参考图（reference_image），配合文本 prompt 描述所需元素。原则：
 
 1. **只用一张参考图**——多张冲突的参考图会导致角色和背景分离粘贴。
 2. **prompt 中角色和背景用同一套视觉语言描述**（参见加载图 prompt：`flat paper-cut poster shapes, same brush, same texture`）。

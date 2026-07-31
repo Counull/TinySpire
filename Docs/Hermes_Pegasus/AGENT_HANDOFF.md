@@ -62,21 +62,21 @@
 已保存到：
 
 ```text
-assets/art-style/
+art/assets/art-style/
 ```
 
 文件：
 
-- `tinyspire-constructivist-battle-bg-concept.png` — 构成主义奇幻战斗背景
-- `tinyspire-tower-executor-character-concept.png` — 初版玩家角色概念
-- `tinyspire-order-warden-enemy-concept.png` — 初版怪物概念
+- `scenes/tinyspire-constructivist-battle-bg-concept.png` — 构成主义奇幻战斗背景
+- `characters/tinyspire-tower-executor-character-concept.png` — 初版玩家角色概念
+- `characters/tinyspire-order-warden-enemy-concept.png` — 初版怪物概念
 
 另外，本轮聊天生成过两张新方向图，尚未归档到 wiki assets：
 
 - 玩家：鸟嘴面具 / 欧洲-沙俄风格档案执行员
 - 怪物：教皇式 / 欧洲宗教-沙俄仪式感怪物
 
-如需归档，请从 Hermes cache 中复制最新图片到 `assets/art-style/`，并更新 `art-style.md`。
+如需归档，请从 Hermes cache 中复制最新图片到 `art/assets/` 下职责对应的子目录，并更新 `art/asset-index.md` 与相关设计文档。
 
 ## 表现策略
 
