@@ -6,7 +6,7 @@ namespace TinySpire.Core
 {
     /// <summary>
     /// 由实例独占的、可复现的玩法随机流。
-    /// 纯表现系统可继续独立使用 UnityEngine.Random。
+    /// 纯表现系统可继续独立使用 UnityEngine.Random
     /// </summary>
     public sealed class GameRandom
     {
