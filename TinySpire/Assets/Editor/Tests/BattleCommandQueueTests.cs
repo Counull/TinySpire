@@ -316,6 +316,95 @@ public sealed class BattleCommandQueueTests
         combatants.Dispose();
     }
 
+    /// <summary>验证全体敌人已死亡时，同轮排队的重复结束命令不会跨轮结束下一轮。</summary>
+    [Test]
+    public void EndPlayerAction_WhenAllEnemiesAreDead_QueuedDuplicateExpiresAtNextRound()
+    {
+        var combatants = new BattleCombatantsData();
+        PlayerCombatantData player = combatants.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
+        EnemyCombatantData enemy = combatants.AddEnemy(templateId: 201, maxHealth: 1, strength: 0);
+        var zones = new BattleCardZonesData(Array.Empty<int>(), shuffleSeed: 1);
+        var presentation = new ControllableBattleCommandPresentation();
+        BattleCommandQueue queue = BattleCommandQueueTestFactory.Create(
+            combatants,
+            presentation,
+            new Dictionary<CombatantId, BattleCardZonesData> { [player.Id] = zones },
+            enemyCombatantIdsInEncounterOrder: new[] { enemy.Id });
+        queue.Submit(new StartBattleCommand());
+        combatants.ApplyDamage(enemy.Id, 1);
+
+        queue.Submit(new EndPlayerActionCommand(player.Id));
+        queue.Submit(new EndPlayerActionCommand(player.Id));
+
+        Assert.That(queue.Queue.CurrentValue.PendingCount, Is.EqualTo(2));
+
+        presentation.CompleteNext();
+
+        Assert.That(presentation.Results[1].Succeeded, Is.True);
+        Assert.That(queue.Turn.CurrentValue.RoundNumber, Is.EqualTo(2));
+        Assert.That(queue.Turn.CurrentValue.Phase, Is.EqualTo(BattleTurnPhase.PlayerAction));
+        Assert.That(queue.Turn.CurrentValue.Players[player.Id].HasEndedAction, Is.False);
+
+        presentation.CompleteNext();
+
+        Assert.That(presentation.Results[2].Succeeded, Is.False);
+        Assert.That(
+            presentation.Results[2].FailureReason,
+            Is.EqualTo(BattleCommandExecutionFailureReason.PlayerActionWindowExpired));
+        Assert.That(queue.Turn.CurrentValue.RoundNumber, Is.EqualTo(2));
+        Assert.That(queue.Turn.CurrentValue.Phase, Is.EqualTo(BattleTurnPhase.PlayerAction));
+        Assert.That(queue.Turn.CurrentValue.Players[player.Id].Energy, Is.EqualTo(3));
+        Assert.That(queue.Turn.CurrentValue.Players[player.Id].HasEndedAction, Is.False);
+
+        queue.Dispose();
+        zones.Dispose();
+        combatants.Dispose();
+    }
+
+    /// <summary>验证旧出牌命令即使同一卡牌在下一轮重抽，也不会跨轮消耗能量或移动卡牌。</summary>
+    [Test]
+    public void PlayCard_WhenCardIsRedrawnNextRound_QueuedOldCommandExpires()
+    {
+        var combatants = new BattleCombatantsData();
+        PlayerCombatantData player = combatants.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
+        EnemyCombatantData enemy = combatants.AddEnemy(templateId: 201, maxHealth: 1, strength: 0);
+        var zones = new BattleCardZonesData(new[] { 3001 }, shuffleSeed: 1);
+        var presentation = new ControllableBattleCommandPresentation();
+        BattleCommandQueue queue = BattleCommandQueueTestFactory.Create(
+            combatants,
+            presentation,
+            new Dictionary<CombatantId, BattleCardZonesData> { [player.Id] = zones },
+            new Dictionary<int, int> { [3001] = 1 },
+            new[] { enemy.Id },
+            initialHandCount: 1);
+        queue.Submit(new StartBattleCommand());
+        CardInstanceId queuedCardId = zones.Hand[0];
+        combatants.ApplyDamage(enemy.Id, 1);
+
+        queue.Submit(new EndPlayerActionCommand(player.Id));
+        queue.Submit(new PlayCardCommand(player.Id, queuedCardId));
+
+        presentation.CompleteNext();
+
+        Assert.That(queue.Turn.CurrentValue.RoundNumber, Is.EqualTo(2));
+        Assert.That(zones.Hand, Is.EqualTo(new[] { queuedCardId }));
+
+        presentation.CompleteNext();
+
+        Assert.That(presentation.Results[2].Succeeded, Is.False);
+        Assert.That(
+            presentation.Results[2].FailureReason,
+            Is.EqualTo(BattleCommandExecutionFailureReason.PlayerActionWindowExpired));
+        Assert.That(queue.Turn.CurrentValue.RoundNumber, Is.EqualTo(2));
+        Assert.That(queue.Turn.CurrentValue.Players[player.Id].Energy, Is.EqualTo(3));
+        Assert.That(zones.Hand, Is.EqualTo(new[] { queuedCardId }));
+        Assert.That(zones.DiscardPile, Is.Empty);
+
+        queue.Dispose();
+        zones.Dispose();
+        combatants.Dispose();
+    }
+
     /// <summary>验证死亡敌人会跳过，错误或重复完成命令不会越过当前行动敌人。</summary>
     [Test]
     public void CompleteEnemyAction_SkipsDeadAndRejectsWrongOrRepeatedEnemy()

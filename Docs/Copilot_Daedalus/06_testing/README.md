@@ -15,6 +15,8 @@ updated: 2026-08-01
 
 ## 验证记录
 
+- [2026-08-01 M4E 全量验证与双轴复审](2026-08-01-m4e-full-validation-review.md)
+- [2026-08-01 M4D 当前单玩家命令 UI 接线](2026-08-01-m4d-single-player-command-ui.md)
 - [2026-08-01 M4C 队列化结束行动与敌人顺序交接](2026-08-01-m4c-end-action-enemy-handoff.md)
 - [2026-08-01 M4B 队列化出牌、能量与执行期校验](2026-08-01-m4b-queued-card-play-energy.md)
 - [2026-08-01 M4A 权威命令队列与回合事实骨架](2026-08-01-m4a-authoritative-command-queue.md)

@@ -13,7 +13,6 @@ updated: 2026-08-01
 
 ## 现有计划
 
-- [2026-07-31 M4 回合调度、权威命令队列与每玩家能量](2026-07-31-m4-turn-scheduling-energy.md)
 - [2026-07-30 BattleScene M3A 参与者视图与生命 HUD](2026-07-30-battlescene-participant-views.md)
 - [2026-07-30 卡牌区域与确定性洗牌](2026-07-30-card-zones-deterministic-random.md)
 - [2026-07-30 YooAsset 到 Addressables 迁移](2026-07-30-addressables-migration.md)
@@ -24,6 +23,7 @@ updated: 2026-08-01
 
 ## 已替代 / 历史计划
 
+- [2026-07-31 M4 回合调度、权威命令队列与每玩家能量](2026-07-31-m4-turn-scheduling-energy.md) — M4A～M4E 已完成并通过全量验收。
 - [2026-07-31 牌面短键与 Addressables 逻辑地址迁移](2026-07-31-card-illustration-logical-keys.md) — 已完成并通过逻辑地址加载验收。
 - [2026-07-31 战斗 UI 首批美术与牌面配置链路接入](2026-07-31-battle-ui-art-integration.md) — 已完成并通过运行时验收。
 - [2026-07-30 战斗配置接入运行时](2026-07-30-battle-config-runtime-integration.md) — 已由卡牌区域与确定性洗牌计划承接运行时牌区。

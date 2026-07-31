@@ -55,6 +55,7 @@ namespace TinySpire.Battle
         None,
         BattleAlreadyStarted,
         InvalidTurnPhase,
+        PlayerActionWindowExpired,
         InvalidPlayer,
         PlayerNotAlive,
         PlayerActionAlreadyEnded,

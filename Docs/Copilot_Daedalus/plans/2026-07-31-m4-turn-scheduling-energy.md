@@ -1,7 +1,7 @@
 ---
 title: M4 回合调度、权威命令队列与每玩家能量
 page_type: plan
-lifecycle: active
+lifecycle: archived
 date: 2026-07-31
 updated: 2026-08-01
 scope: TinySpire 战斗时序层、状态层与 BattleScene M3C 接线
@@ -70,6 +70,7 @@ interface 约束：
 - `BattleCommandSubmissionResult.Accepted` 只表示命令已进入权威排序，不表示执行成功。
 - 队列一次只执行一个命令；当前命令的权威写入与展示完成前，不执行下一条。
 - 最终合法性在命令到达队首时校验。失败命令产生明确执行结果，但不得改变能量、卡区、阶段或轮次。
+- 玩家命令只属于提交时的轮次。队列内部信封记录提交 `RoundNumber`；`PlayCardCommand` 与 `EndPlayerActionCommand` 到达队首时若已经跨轮，返回 `PlayerActionWindowExpired` 且不进入阶段模块。
 - 内部容器、仲裁算法、状态节点和 `StateMachine<TEvent>` 组合不属于外部 interface，也不是测试 seam。
 
 ### 内部模块：BattleTurnController
@@ -132,6 +133,7 @@ NotStarted
 - 玩家之间没有 `CurrentPlayer`，也没有“一张牌后切人”的调度规则。
 - “并发”只描述命令提交；共享状态执行与效果展示不并发。
 - 某玩家的 `EndPlayerActionCommand` 只有在执行后才锁定该玩家。排在它后面的该玩家命令到队首时会被拒绝。
+- 玩家命令不能在 `BattleStart` 或 `EnemyAction` 为未来轮次预排；跨过提交轮次边界后，即使新一轮事实重新满足阶段、能量或手牌条件也不能恢复合法。
 - 当前 BattleScene 只有一名玩家，但仍走同一个提交、排队、执行和展示完成流程。
 
 ## 规则顺序
@@ -176,7 +178,7 @@ NotStarted
 
 ### M4A · 权威命令队列与调度事实骨架
 
-状态：**已完成并通过独立验收（2026-08-01）**。实现保持纯 C# 且未接生产场景；Unity MCP 定向 EditMode 9/9、两套相关程序集静态编译 0 error。详细证据见 `../06_testing/2026-08-01-m4a-authoritative-command-queue.md`。M4B～M4D 已于同日完成，M4E 尚未开始。
+状态：**已完成并通过独立验收（2026-08-01）**。实现保持纯 C# 且未接生产场景；Unity MCP 定向 EditMode 9/9、两套相关程序集静态编译 0 error。详细证据见 `../06_testing/2026-08-01-m4a-authoritative-command-queue.md`。M4B～M4D 已于同日完成；M4E 当前状态见本页对应小节。
 
 范围：新增但尚不接入生产场景的纯 C# 根，不改变当前 BattleScene。
 
@@ -204,7 +206,7 @@ NotStarted
 
 ### M4B · 队列化出牌、能量与执行期校验
 
-状态：**已完成并通过独立验收（2026-08-01）**。`EnergyPerRound` 默认与手写 JSON 均为 3；出牌在队首读取权威参与者、玩家卡区与 Luban `Card.Cost`，成功后扣除对应玩家能量并把指定实例移入弃牌堆。Unity MCP 相关 EditMode 18/18、两套相关程序集静态编译 0 error；本地 Addressables 构建成功。详细证据见 `../06_testing/2026-08-01-m4b-queued-card-play-energy.md`。M4C～M4D 已于同日完成，M4E 尚未开始。
+状态：**已完成并通过独立验收（2026-08-01）**。`EnergyPerRound` 默认与手写 JSON 均为 3；出牌在队首读取权威参与者、玩家卡区与 Luban `Card.Cost`，成功后扣除对应玩家能量并把指定实例移入弃牌堆。Unity MCP 相关 EditMode 18/18、两套相关程序集静态编译 0 error；本地 Addressables 构建成功。详细证据见 `../06_testing/2026-08-01-m4b-queued-card-play-energy.md`。M4C～M4D 已于同日完成；M4E 当前状态见本页对应小节。
 
 范围：费用与卡区规则进入队首命令，不执行真实 Effect。
 
@@ -225,7 +227,7 @@ NotStarted
 
 ### M4C · 队列化结束行动与敌人顺序交接
 
-状态：**已完成并通过独立验收（2026-08-01）**。结束行动、全体玩家门槛、显式 Encounter 敌人顺序、死亡跳过、错误/重复完成保护与下一轮重置均已进入队列；初始抽牌已迁移到 `PlayerRoundStart`，`BattleLifetimeScope` 已注册生产队列和每帧最多完成一名无行为敌人的驱动。Unity MCP 相关 EditMode 27/27、两套程序集静态编译 0 error；Bootstrap 实跑读取到 `PlayerAction / Round 1 / Energy 3 / Hand 5 / queueIdle=true` 且 Console Error 为 0。详细证据见 `../06_testing/2026-08-01-m4c-end-action-enemy-handoff.md`。M4D 已于同日完成，M4E 尚未开始。
+状态：**已完成并通过独立验收（2026-08-01）**。结束行动、全体玩家门槛、显式 Encounter 敌人顺序、死亡跳过、错误/重复完成保护与下一轮重置均已进入队列；初始抽牌已迁移到 `PlayerRoundStart`，`BattleLifetimeScope` 已注册生产队列和每帧最多完成一名无行为敌人的驱动。Unity MCP 相关 EditMode 27/27、两套程序集静态编译 0 error；Bootstrap 实跑读取到 `PlayerAction / Round 1 / Energy 3 / Hand 5 / queueIdle=true` 且 Console Error 为 0。详细证据见 `../06_testing/2026-08-01-m4c-end-action-enemy-handoff.md`。M4D 已于同日完成；M4E 当前状态见本页对应小节。
 
 范围：完整轮次闭环，不实现敌人行为内容。
 
@@ -246,7 +248,7 @@ NotStarted
 
 ### M4D · 当前单玩家 M3C 接线
 
-状态：**已完成并通过独立验收（2026-08-01）**。现有手牌、能量/轮次/阶段显示和结束行动按钮均只经 `BattleCommandQueue` 接入；排队、执行失败与执行完成具有独立反馈，失败不写权威事实并恢复卡牌交互。Unity MCP 定向 EditMode 30/30、两套相关程序集静态编译 0 error；本地 Addressables 构建成功，Bootstrap 实跑覆盖首轮事实、快速连续出牌、执行期失败和结束行动后的下一轮恢复。详细证据见 `../06_testing/2026-08-01-m4d-single-player-command-ui.md`。`DEP-002` 已解决，M4E 尚未开始。
+状态：**已完成并通过独立验收（2026-08-01）**。现有手牌、能量/轮次/阶段显示和结束行动按钮均只经 `BattleCommandQueue` 接入；排队、执行失败与执行完成具有独立反馈，失败不写权威事实并恢复卡牌交互。Unity MCP 定向 EditMode 30/30、两套相关程序集静态编译 0 error；本地 Addressables 构建成功，Bootstrap 实跑覆盖首轮事实、快速连续出牌、执行期失败和结束行动后的下一轮恢复。详细证据见 `../06_testing/2026-08-01-m4d-single-player-command-ui.md`。`DEP-002` 已解决；M4E 当前状态见本页对应小节。
 
 范围：把现有输入与显示接到队列，不扩展玩法。
 
@@ -267,15 +269,17 @@ NotStarted
 
 ### M4E · 全量验证、复审与文档收口
 
-状态：**尚未开始**。M4D 只运行与当前接线相称的定向测试和 Bootstrap 行为验证；全量 EditMode、至少两个完整轮次及 Standards / Spec 双轴复审仍留在本阶段。
+状态：**已完成并通过验收（2026-08-01）**。首次 Spec 复审发现全敌死亡时旧玩家命令可跨轮重新合法；用户确认“玩家命令只能属于提交时的轮次”后，队列内部轮次栅栏与两条 TDD 回归用例已落地。修复后的复审继续闭环了旧失败序号误清新 pending 与同 ID View 重建恢复问题。最终 M4 定向 EditMode 30/30、全量 EditMode 70/70、全量 solution build 0 error、Bootstrap 两轮闭环、生产跨轮与 View 重建探针和 Addressables 构建均通过，完整证据见 `../06_testing/2026-08-01-m4e-full-validation-review.md`。
 
-- 定向运行命令队列和回合控制 EditMode 测试。
-- 运行全量 EditMode 与 `dotnet build TinySpire/TinySpire.sln --no-restore --verbosity:minimal`。
-- 从 Bootstrap 实跑至少两个完整轮次，包含快速连续提交。
-- 最终执行 `TinySpire/Addressables/Build Local Content`。
-- 做 Standards / Spec 双轴审查，重点检查是否存在绕过队列的共享写入。
-- 更新 `SESSION_LOG.md`、`CODE_DECISIONS.md`、`DEPENDENCIES.md` 与 `06_testing/`。
-- 展示提交审查包，等待用户批准后才提交。
+- [x] 定向运行命令队列和回合控制 EditMode 测试。
+- [x] 运行全量 EditMode 与 `dotnet build TinySpire/TinySpire.sln --no-restore --verbosity:minimal`。
+- [x] 从 Bootstrap 实跑两个完整轮次并进入 Round 3，包含同一展示窗口内快速连续提交。
+- [x] 执行 `TinySpire/Addressables/Build Local Content` 并核验构建报告。
+- [x] 做 Standards / Spec 双轴审查，确认生产共享写入未绕过队列，并闭环跨轮玩家命令逃逸。
+- [x] 更新 `SESSION_LOG.md`、`CODE_DECISIONS.md` 与 `06_testing/`；复核 `DEPENDENCIES.md`，本缺陷属于当前 M4 已承诺行为，未新增未来依赖项。
+- [x] 经用户确认后，为玩家命令建立队列内部轮次栅栏，并补重复结束与同卡重抽旧出牌两条回归测试。
+- [x] 将卡牌 pending 视觉绑定到权威序号；View 重建恢复最新待定序号，旧失败只清除匹配序号。
+- [x] 修复后重跑本节全部验证；M4 计划转为历史归档，展示未提交审查包并等待用户批准后才提交。
 
 ## TDD 测试 seam
 
@@ -297,9 +301,12 @@ NotStarted
 | 把提交接受误当执行成功 | 分离 Submission 与 Execution 结果 | M4A 结果类型 |
 | 单玩家结构渗入根 | 能量、命令提交者和卡区映射始终按 `CombatantId` | M4A/M4C 接线 |
 | UI 或系统绕过队列 | M4D 后生产写链只允许 `Submit` | M4D UI 接线 |
+| 旧玩家命令在同步换轮后重新合法 | 内部信封记录提交轮次，跨轮玩家命令在控制器写入前失败 | M4E 轮次栅栏 |
 | 网络细节提前污染 M4 | 当前只做本地权威排序；网络 adapter 列为排除 | M4A queue interface |
 | M4 顺手实现 M5/M7/M9 | 只提供命令和展示完成 seam，内容保持排除 | 对应分步提交 |
 
 ## 完成定义
 
 M4 完成不等于 Effect 闭环。完成标准是：当前单玩家 BattleScene 也通过统一命令队列运行；多人可以在模型测试中并发提交，权威命令按唯一顺序逐条执行和展示；能量、卡区、阶段和结束行动无法绕过队列写入；轮次可经过稳定敌人顺序闭环，并通过自动测试、Unity 实跑与 Addressables 构建。
+
+该完成定义已由 M4E 验收满足；真实敌人行为、Effect、目标、胜败和多人生产装配仍按既有 M5/M7 与依赖项继续推进，不属于本计划遗留工作。

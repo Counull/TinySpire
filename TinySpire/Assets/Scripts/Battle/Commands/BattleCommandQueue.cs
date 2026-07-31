@@ -60,7 +60,11 @@ namespace TinySpire.Battle
             }
 
             long authoritySequence = _nextAuthoritySequence++;
-            _pendingCommands.Enqueue(new QueuedBattleCommand(authoritySequence, command));
+            int submittedRoundNumber = Turn.CurrentValue.RoundNumber;
+            _pendingCommands.Enqueue(new QueuedBattleCommand(
+                authoritySequence,
+                submittedRoundNumber,
+                command));
             if (_currentCommand == null)
                 BeginNextCommand();
             else
@@ -110,6 +114,12 @@ namespace TinySpire.Battle
                     ? BattleCommandExecutionFailureReason.None
                     : BattleCommandExecutionFailureReason.BattleAlreadyStarted;
             }
+            else if ((queuedCommand.Command is PlayCardCommand ||
+                      queuedCommand.Command is EndPlayerActionCommand) &&
+                     queuedCommand.SubmittedRoundNumber != Turn.CurrentValue.RoundNumber)
+            {
+                failureReason = BattleCommandExecutionFailureReason.PlayerActionWindowExpired;
+            }
             else if (queuedCommand.Command is PlayCardCommand playCardCommand)
             {
                 failureReason = _turnController.TryPlayCard(playCardCommand);
@@ -151,13 +161,20 @@ namespace TinySpire.Battle
             /// <summary>本地权威调度层分配的单调序号。</summary>
             internal long AuthoritySequence { get; }
 
+            /// <summary>该命令提交时观察到的权威轮次。</summary>
+            internal int SubmittedRoundNumber { get; }
+
             /// <summary>等待执行的原始战斗意图。</summary>
             internal BattleCommand Command { get; }
 
-            /// <summary>把权威序号与命令绑定为一个内部排队条目。</summary>
-            internal QueuedBattleCommand(long authoritySequence, BattleCommand command)
+            /// <summary>把权威序号、提交轮次与命令绑定为一个内部排队条目。</summary>
+            internal QueuedBattleCommand(
+                long authoritySequence,
+                int submittedRoundNumber,
+                BattleCommand command)
             {
                 AuthoritySequence = authoritySequence;
+                SubmittedRoundNumber = submittedRoundNumber;
                 Command = command;
             }
         }

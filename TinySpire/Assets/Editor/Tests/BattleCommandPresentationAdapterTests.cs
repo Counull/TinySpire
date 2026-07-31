@@ -4,6 +4,7 @@ using NUnit.Framework;
 using R3;
 using TinySpire.Battle;
 using TinySpire.UI.Battle;
+using UnityEngine;
 
 public sealed class BattleCommandPresentationAdapterTests
 {
@@ -160,5 +161,30 @@ public sealed class BattleCommandPresentationAdapterTests
         }
 
         adapter.Dispose();
+    }
+
+    /// <summary>确认旧权威序号的失败反馈不会清除同一视图上更新命令的待定状态。</summary>
+    [Test]
+    public void CardVisual_OlderFailureDoesNotClearNewerPendingSequence()
+    {
+        var cardObject = new GameObject("PendingSequenceTestCard");
+        HandCardVisual visual = cardObject.AddComponent<HandCardVisual>();
+        try
+        {
+            visual.SetCommandPending(authoritySequence: 7);
+            visual.SetCommandPending(authoritySequence: 8);
+
+            visual.PlayCommandFailureFeedback(authoritySequence: 7);
+
+            Assert.That(visual.IsCommandPending, Is.True);
+
+            visual.PlayCommandFailureFeedback(authoritySequence: 8);
+
+            Assert.That(visual.IsCommandPending, Is.False);
+        }
+        finally
+        {
+            Object.DestroyImmediate(cardObject);
+        }
     }
 }

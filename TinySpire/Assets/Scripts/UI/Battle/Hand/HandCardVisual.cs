@@ -22,12 +22,12 @@ public sealed class HandCardVisual : MonoBehaviour
     private Tween _feedbackTween;
     private bool _hasPlayFeedback;
     private bool _isPlayerInputEnabled = true;
-    private bool _isCommandPending;
+    private long? _pendingCommandSequence;
 
     public CardInstanceId CardId { get; private set; }
     public float CurrentAnchoredY => _cardContent.anchoredPosition.y;
     public RectTransform CardContent => _cardContent;
-    public bool IsCommandPending => _isCommandPending;
+    public bool IsCommandPending => _pendingCommandSequence.HasValue;
 
     /// <summary>
     /// 初始化该 View 对应的卡牌实例及拖拽反馈依赖。
@@ -121,31 +121,38 @@ public sealed class HandCardVisual : MonoBehaviour
         RefreshInteractionState();
     }
 
-    /// <summary>切换命令待定视觉，并只锁定该张卡牌而不阻塞其他手牌。</summary>
-    public void SetCommandPending(bool isPending)
+    /// <summary>把待定视觉绑定到权威序号；空值表示当前没有待定出牌。</summary>
+    public void SetCommandPending(long? authoritySequence)
     {
-        if (_dragFeedbackCanvasGroup == null || _isCommandPending == isPending)
+        if (_pendingCommandSequence == authoritySequence)
             return;
 
-        _isCommandPending = isPending;
+        _pendingCommandSequence = authoritySequence;
         _hasPlayFeedback = false;
         KillFeedbackTween();
-        _feedbackTween = _dragFeedbackCanvasGroup
-            .DOFade(isPending ? 0.58f : 1f, 0.1f)
-            .SetEase(Ease.OutQuad);
+        if (_dragFeedbackCanvasGroup != null)
+        {
+            _feedbackTween = _dragFeedbackCanvasGroup
+                .DOFade(authoritySequence.HasValue ? 0.58f : 1f, 0.1f)
+                .SetEase(Ease.OutQuad);
+        }
+
         RefreshInteractionState();
     }
 
-    /// <summary>执行期失败时清除待定状态、恢复交互并播放一次明确的失败闪烁。</summary>
-    public void PlayCommandFailureFeedback()
+    /// <summary>只在失败序号仍绑定当前待定视觉时清除状态并播放反馈。</summary>
+    public void PlayCommandFailureFeedback(long authoritySequence)
     {
-        if (_dragFeedbackCanvasGroup == null)
+        if (_pendingCommandSequence != authoritySequence)
             return;
 
-        _isCommandPending = false;
+        _pendingCommandSequence = null;
         _hasPlayFeedback = false;
         RefreshInteractionState();
         KillFeedbackTween();
+        if (_dragFeedbackCanvasGroup == null)
+            return;
+
         _feedbackTween = DOTween.Sequence()
             .Append(_dragFeedbackCanvasGroup.DOFade(0.28f, 0.08f).SetEase(Ease.OutQuad))
             .Append(_dragFeedbackCanvasGroup.DOFade(1f, 0.16f).SetEase(Ease.OutQuad));
@@ -166,7 +173,7 @@ public sealed class HandCardVisual : MonoBehaviour
     public void SetDragPlayFeedback(bool isPastPlayLine)
     {
         if (_dragFeedbackCanvasGroup == null ||
-            _isCommandPending ||
+            IsCommandPending ||
             _hasPlayFeedback == isPastPlayLine)
             return;
 
@@ -184,7 +191,7 @@ public sealed class HandCardVisual : MonoBehaviour
         if (_dragFeedbackCanvasGroup == null)
             return;
 
-        bool canInteract = _isPlayerInputEnabled && !_isCommandPending;
+        bool canInteract = _isPlayerInputEnabled && !IsCommandPending;
         _dragFeedbackCanvasGroup.interactable = canInteract;
         _dragFeedbackCanvasGroup.blocksRaycasts = canInteract;
     }

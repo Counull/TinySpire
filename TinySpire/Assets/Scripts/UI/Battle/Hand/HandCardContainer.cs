@@ -205,17 +205,18 @@ public sealed class HandCardContainer : MonoBehaviour
     private void SubmitPlayCard(HandCardVisual card)
     {
         CardInstanceId cardId = card.CardId;
-        card.SetCommandPending(true);
         var command = new PlayCardCommand(_player.Id, cardId);
         BattleCommandSubmissionResult submission = _commandQueue.Submit(command);
         if (!submission.Accepted || !submission.AuthoritySequence.HasValue)
         {
-            card.SetCommandPending(false);
+            card.SetCommandPending(null);
             LayoutCards(immediate: false);
             return;
         }
 
-        _pendingPlayCards.Add(submission.AuthoritySequence.Value, cardId);
+        long authoritySequence = submission.AuthoritySequence.Value;
+        _pendingPlayCards.Add(authoritySequence, cardId);
+        card.SetCommandPending(authoritySequence);
         _commandPresentation.PublishQueued(command, submission);
         LayoutCards(immediate: false);
     }
@@ -237,7 +238,7 @@ public sealed class HandCardContainer : MonoBehaviour
         if (card == null)
             return;
 
-        card.PlayCommandFailureFeedback();
+        card.PlayCommandFailureFeedback(feedback.AuthoritySequence);
         LayoutCards(immediate: false);
     }
 
@@ -283,7 +284,13 @@ public sealed class HandCardContainer : MonoBehaviour
                 BindCardPresentation(card, cardState);
 
             if (card != null)
+            {
+                card.SetCommandPending(
+                    TryGetLatestPendingPlaySequence(cardId, out long authoritySequence)
+                        ? authoritySequence
+                        : (long?)null);
                 orderedCards.Add(card);
+            }
         }
 
         _cards.Clear();
@@ -475,6 +482,25 @@ public sealed class HandCardContainer : MonoBehaviour
         }
 
         return null;
+    }
+
+    /// <summary>返回指定卡牌实例当前记录的最新待定权威序号。</summary>
+    private bool TryGetLatestPendingPlaySequence(
+        CardInstanceId cardId,
+        out long authoritySequence)
+    {
+        authoritySequence = 0;
+        bool found = false;
+        foreach (KeyValuePair<long, CardInstanceId> entry in _pendingPlayCards)
+        {
+            if (entry.Value != cardId || (found && entry.Key <= authoritySequence))
+                continue;
+
+            authoritySequence = entry.Key;
+            found = true;
+        }
+
+        return found;
     }
 
     /// <summary>判断一个卡牌实例是否仍属于指定卡区快照。</summary>

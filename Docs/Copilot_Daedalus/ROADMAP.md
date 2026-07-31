@@ -4,7 +4,7 @@ owner: Daedalus
 page_type: roadmap
 lifecycle: active
 created: 2026-07-29
-updated: 2026-07-30
+updated: 2026-08-01
 status_source: SESSION_LOG.md
 note: 本文件是 BattleScene 实现侧的阶段化路线图；项目级玩法口径仍以 Hermes_Pegasus 的设计事实源为准。
 ---
@@ -271,6 +271,7 @@ NotStarted
 - 玩家、系统阶段与未来敌人/Effect 都通过同一个 `BattleCommandQueue.Submit` interface 提交命令；UI 不直接调用阶段或卡区写入口。
 - 命令提交不等待其他玩家输入或当前效果展示；已确认命令按权威序号一次执行和展示一条，共享状态不并行修改。
 - 提交接受不等于执行成功；最终合法性以命令到达队首时的权威状态为准。
+- 玩家命令只属于提交时的轮次；跨轮后即使新一轮事实重新满足条件也返回 `PlayerActionWindowExpired`，且不写能量、卡区或阶段。
 - `BattleTurnController` 只在队首命令执行期间写阶段、能量和行动结束状态。
 - 战斗开始只执行一次初始化；首次与后续 `PlayerRoundStart` 都把每名玩家能量重置为 3，并抽到目标手牌数。
 - `PlayerAction` 才允许玩家命令在执行期通过阶段校验；玩家之间不设固定行动顺序。
@@ -280,7 +281,7 @@ NotStarted
 
 当前 BattleScene 只接入一名玩家，不实现联网、输入仲裁或多玩家 UI。完整分步与测试 seam 见 `plans/2026-07-31-m4-turn-scheduling-energy.md`。
 
-测试重点是并发提交不阻塞、权威序号与执行/展示顺序一致、执行期重新校验、多人结束门槛、每玩家能量隔离、死亡敌人跳过，以及一帧内连续转换不会重复进入。
+测试重点是并发提交不阻塞、权威序号与执行/展示顺序一致、执行期重新校验、玩家命令不能跨提交轮次、多人结束门槛、每玩家能量隔离、死亡敌人跳过，以及一帧内连续转换不会重复进入。
 
 ### M5 · 敌人生成、意图与随机行为
 

@@ -3,6 +3,17 @@ created: 2026-07-06
 updated: 2026-08-01
 ---
 
+## 2026-08-01 · M4E 全量验证、轮次栅栏修复与文档收口（已完成）
+
+- 首次 Spec 复审与生产探针发现：全体敌人已死亡时，上一轮排在结束命令后的玩家命令会在同步开始的新一轮重新合法。用户确认“玩家命令只能属于提交时的轮次”，并授权采用队列内部轮次栅栏；该问题属于当前 M4 已承诺行为，没有登记为未来依赖。
+- `BattleCommandQueue` 的内部排队信封现在记录提交 `RoundNumber`。`PlayCardCommand` 与 `EndPlayerActionCommand` 到达队首时若已经跨轮，返回 `PlayerActionWindowExpired`，不调用 `BattleTurnController`；公共命令构造参数、`Submit` / `Queue` / `Turn` seam、`BattleTurnData` 与 DI 均未改变。两条 TDD 用例分别覆盖全敌死亡后的重复结束，以及同一 `CardInstanceId` 下一轮重抽后的旧出牌，均先复现旧行为再通过修复。
+- 修复后的 Spec 复审又发现同 ID View 的展示关联风险：旧序号失败可能误清更新序号 pending。`HandCardVisual` 现以 nullable 权威序号作为 pending 唯一事实，失败只清除匹配序号；`HandCardContainer` 在 View 重建时从既有映射恢复最新待定序号。该行为同样完成红灯到绿灯闭环。
+- 最终 Unity MCP 三项缺陷复合切片 **3/3**、M4 队列/回合/展示定向 EditMode **30/30**、全量 EditMode **70/70** 通过，均为 0 failed、0 skipped；串行 `dotnet build TinySpire/TinySpire.sln --no-restore -m:1` 为 0 error，保留 12 条既有依赖版本冲突 warning。
+- Bootstrap 正常路径完成两个轮次并进入 `PlayerAction / Round 3`。生产跨轮探针将两条结束命令同时排在 Round 3：第一条进入 Round 4，第二条反馈 `Failed #8 · EndPlayerAction · PlayerActionWindowExpired`；最终仍为 `PlayerAction / Round 4 / Energy 3 / HasEndedAction false`、队列空闲，运行期 Console Error/Warning 为 0。
+- 生产 View 重建探针在 Round 3 观察到与旧手牌重叠的 ID 4、9 两个新 View 均恢复 pending；旧跨轮出牌全部失败后当前 5 个 View pending 为 0、队列空闲，Console Error/Warning 为 0/0。
+- 最终 `TinySpire/Addressables/Build Local Content` 成功；报告 `buildlayout_2026.08.01.06.41.41.json` 的 `BuildError` 为空、`BuildResultHash=259e02cf2d79b5cd0bd291f571b46782`、耗时 `16.9804458s`，场景与七个 GameData JSON 保持完整稳定地址。本阶段未修改 `DataTables/Datas/`、生成 JSON、场景、Prefab、ProjectSettings、asmdef、DI 或启动流程，因此未运行 Luban。
+- Standards / Spec 双轴复审通过本次修复范围；既有三个 M4 提交摘要缺少冒号后空格的问题只记录、不改写历史，`BattleTurnController` 重复校验链也不借此扩展重构。M4E 与 M4 已完成，计划转入历史归档；详细证据见 `06_testing/2026-08-01-m4e-full-validation-review.md`，实现决策见 CD-031。
+
 ## 2026-08-01 · M4D 当前单玩家命令 UI 接线（已验证并接生产）
 
 - `HandCardContainer` 不再直接弃牌或推进阶段：拖牌越过出牌线只提交 `PlayCardCommand`，并用权威序号关联该卡的短生命周期 pending 视觉。当前结果展示期间其他合法卡仍可继续提交；成功后由权威卡区布局移除 View，执行期失败则清除 pending、恢复交互，且能量和卡区保持不变。
