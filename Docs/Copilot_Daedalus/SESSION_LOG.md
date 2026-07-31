@@ -3,6 +3,22 @@ created: 2026-07-06
 updated: 2026-08-01
 ---
 
+## 2026-08-01 · M4C 队列化结束行动与敌人顺序交接（已验证并接生产）
+
+- `EndPlayerActionCommand` 现在在队首执行时校验阶段、玩家身份与存活、重复结束及玩家卡区；成功后只弃置该玩家剩余手牌并设置其结束标记。仍有存活玩家未结束时继续保持 `PlayerAction`，全体完成后才进入敌人阶段；重复结束和排在结束命令后的旧出牌均明确失败且不重复写入事实。
+- 敌人阶段只读取 `BattleSession.EnemyCombatantIdsInEncounterOrder`：死亡或缺失敌人会跳过，每次只发布一个 `CurrentActingEnemyId`，错误或重复的 `CompleteEnemyActionCommand` 不会越过当前敌人。当前无行为敌人由生产逐帧入口在后续帧经同一 `BattleCommandQueue.Submit` 完成，每帧最多一名，没有场景直通阶段写入。
+- `BattleSession` 现在只创建参与者、运行时卡牌实例和洗牌后的未发牌抽牌堆；`StartBattleCommand -> PlayerRoundStart` 成为首轮与后续轮次重置每玩家能量、结束标记并抽到目标手牌数的唯一入口。`BattleLifetimeScope` 已注册队列、即时表现 adapter 与 `BattleCommandRuntimeDriver`；当前生产 Session 仍只映射唯一玩家卡区，`DEP-008` 保持 open。
+- Unity MCP 定向 EditMode **27/27** 通过；`Assembly-CSharp` 与 `Assembly-CSharp-Editor` 静态编译均为 0 error（保留 6/12 条既有依赖版本冲突 warning），脚本刷新后 Console Error 为 0。Bootstrap 实跑进入 BattleScene 后从生产容器读取到 `PlayerAction / Round 1 / Energy 3 / Hand 5 / queueIdle=true`，加载日志正常且 Error 为 0，随后正常退出 Play Mode。
+- 本切片未修改 Excel/Luban 表、手写 JSON、Addressables 内容、场景、Prefab、asmdef、HybridCLR 或现有 UI，因此未运行 Luban 或重建 Addressables。拖牌提交、能量/回合显示和结束按钮仍属于 M4D；真实敌人行为与 Effect 仍分别属于 M5/M7。M4C 已满足独立停止点，M4D～M4E 尚未开始。决策见 CD-029，计划见 `plans/2026-07-31-m4-turn-scheduling-energy.md`，验收见 `06_testing/2026-08-01-m4c-end-action-enemy-handoff.md`。
+
+## 2026-08-01 · M4B 队列化出牌、能量与执行期校验（已验证，未接生产）
+
+- `GameConfig` 新增 `EnergyPerRound`，代码默认值、`DataTables/game-config.json` 与 `Assets/GameData/game-config.json` 均为 3；两份 JSON 内容一致。该配置是手写运行时规则，不是 Luban Excel 表，因此本切片未改工作簿或生成代码。
+- `BattleCommandQueue` 现在把权威参与者、`CombatantId -> BattleCardZonesData`、Luban `Tables` 与每轮能量交给内部 `BattleTurnController`。`PlayCardCommand` 到达队首后依次校验阶段、玩家身份与存活、结束行动标记、玩家卡区、手牌实例、静态 `Card.Cost` 和当前能量；成功才把指定实例移入弃牌堆并扣该玩家能量，失败只返回明确执行原因且不发布新事实。
+- 公共 `Submit` / `Queue` / `Turn` seam 的相关 EditMode **18/18** 通过：新增覆盖费用 1+2 顺序归零、首张牌展示期间另一玩家继续提交、旧能量重校验防透支、排队期间卡牌离手、敌人冒充玩家、死亡玩家、缺少玩家卡区和缺少静态模板；M4A 原有顺序与重复回调行为继续通过。
+- `Assembly-CSharp` 与 `Assembly-CSharp-Editor` 静态编译均为 0 error（保留 6/12 条既有依赖版本冲突 warning），Unity 刷新后 Console Error 为 0。`TinySpire/Addressables/Build Local Content` 已完成；报告 `buildlayout_2026.08.01.01.41.10.json` 的 `BuildError` 为空、哈希为 `4877b4655f41f300d0ffc1bb4c37fb25`、耗时 `52.562s`，并确认 `Assets/GameData/game-config.json` 仍以完整稳定地址进入 `TinySpire GameData`。Bootstrap 短时运行打印“game-config.json 已加载。”，Error 与 `InvalidKey` 均为 0，随后正常退出 Play Mode；模式切换期间仅有 MCP 传输 warning。
+- 未修改 `BattleSession` 初始抽牌、`BattleLifetimeScope`、场景、Prefab、asmdef 或 UI，也未实现真实 Effect、结束玩家行动或敌人交接；未运行 Luban、全量 EditMode 或完整 BattleScene 功能实跑。M4B 已满足独立停止点，M4C～M4E 尚未开始。决策见 CD-028，计划见 `plans/2026-07-31-m4-turn-scheduling-energy.md`，验收见 `06_testing/2026-08-01-m4b-queued-card-play-energy.md`。
+
 ## 2026-08-01 · M4A 权威命令队列与回合事实骨架（已验证，未接生产）
 
 - 新增纯 C# `BattleCommandQueue` 调度根、四类首批命令、提交/执行结果与只读 `Queue`/`Turn` R3 事实；本地权威序号从 1 单调递增，当前命令执行和等待表现期间都可继续提交，只有绑定当前序号的表现完成回调可以推进下一条。

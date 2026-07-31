@@ -176,7 +176,7 @@ NotStarted
 
 ### M4A · 权威命令队列与调度事实骨架
 
-状态：**已完成并通过独立验收（2026-08-01）**。实现保持纯 C# 且未接生产场景；Unity MCP 定向 EditMode 9/9、两套相关程序集静态编译 0 error。详细证据见 `../06_testing/2026-08-01-m4a-authoritative-command-queue.md`。M4B～M4E 仍未开始。
+状态：**已完成并通过独立验收（2026-08-01）**。实现保持纯 C# 且未接生产场景；Unity MCP 定向 EditMode 9/9、两套相关程序集静态编译 0 error。详细证据见 `../06_testing/2026-08-01-m4a-authoritative-command-queue.md`。M4B、M4C 已于同日完成，M4D～M4E 尚未开始。
 
 范围：新增但尚不接入生产场景的纯 C# 根，不改变当前 BattleScene。
 
@@ -204,6 +204,8 @@ NotStarted
 
 ### M4B · 队列化出牌、能量与执行期校验
 
+状态：**已完成并通过独立验收（2026-08-01）**。`EnergyPerRound` 默认与手写 JSON 均为 3；出牌在队首读取权威参与者、玩家卡区与 Luban `Card.Cost`，成功后扣除对应玩家能量并把指定实例移入弃牌堆。Unity MCP 相关 EditMode 18/18、两套相关程序集静态编译 0 error；本地 Addressables 构建成功。详细证据见 `../06_testing/2026-08-01-m4b-queued-card-play-energy.md`。M4C 已于同日完成，M4D～M4E 尚未开始。
+
 范围：费用与卡区规则进入队首命令，不执行真实 Effect。
 
 - `GameConfig` 新增每轮基础能量，默认与 JSON 均为 3。
@@ -222,6 +224,8 @@ NotStarted
 - 修改 `game-config.json` 后执行 `TinySpire/Addressables/Build Local Content`。
 
 ### M4C · 队列化结束行动与敌人顺序交接
+
+状态：**已完成并通过独立验收（2026-08-01）**。结束行动、全体玩家门槛、显式 Encounter 敌人顺序、死亡跳过、错误/重复完成保护与下一轮重置均已进入队列；初始抽牌已迁移到 `PlayerRoundStart`，`BattleLifetimeScope` 已注册生产队列和每帧最多完成一名无行为敌人的驱动。Unity MCP 相关 EditMode 27/27、两套程序集静态编译 0 error；Bootstrap 实跑读取到 `PlayerAction / Round 1 / Energy 3 / Hand 5 / queueIdle=true` 且 Console Error 为 0。详细证据见 `../06_testing/2026-08-01-m4c-end-action-enemy-handoff.md`。M4D～M4E 尚未开始。
 
 范围：完整轮次闭环，不实现敌人行为内容。
 

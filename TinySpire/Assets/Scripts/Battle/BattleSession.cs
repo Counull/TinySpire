@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using cfg;
-using TinySpire.Core;
 
 namespace TinySpire.Battle
 {
@@ -78,14 +77,12 @@ namespace TinySpire.Battle
         }
 
         /// <summary>
-        /// 从显式配置表和全局战斗配置创建一场战斗，便于启动流程与测试复用。
+        /// 从显式静态配置表创建尚未发牌的一场战斗，便于启动流程与测试复用。
         /// </summary>
-        public static BattleSession FromConfig(Tables tables, GameConfig gameConfig, BattleSetupOptions options)
+        public static BattleSession FromConfig(Tables tables, BattleSetupOptions options)
         {
             if (tables == null)
                 throw new ArgumentNullException(nameof(tables));
-            if (gameConfig == null)
-                throw new ArgumentNullException(nameof(gameConfig));
             if (options == null)
                 throw new ArgumentNullException(nameof(options));
 
@@ -112,8 +109,6 @@ namespace TinySpire.Battle
             var cardZones = new BattleCardZonesData(
                 deck.CardTemplateIds,
                 options.RandomSeed);
-            int initialHandCount = Math.Min(Math.Max(0, gameConfig.InitialHandCount), deck.CardTemplateIds.Length);
-            cardZones.Draw(initialHandCount);
 
             return new BattleSession(
                 combatants,
@@ -135,10 +130,10 @@ namespace TinySpire.Battle
         {
             if (configs == null)
                 throw new ArgumentNullException(nameof(configs));
-            if (configs.Tables == null || configs.GameConfig == null)
+            if (configs.Tables == null)
                 throw new InvalidOperationException("ConfigService must be initialized before creating a battle session.");
 
-            return FromConfig(configs.Tables, configs.GameConfig, options);
+            return FromConfig(configs.Tables, options);
         }
 
         /// <summary>确认初始牌组引用的每张静态卡牌模板均存在。</summary>

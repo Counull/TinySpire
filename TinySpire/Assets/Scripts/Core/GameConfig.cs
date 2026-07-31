@@ -9,4 +9,6 @@ using Newtonsoft.Json;
 public sealed class GameConfig
 {
     [JsonProperty] public int InitialHandCount { get; private set; } = 5;
+
+    [JsonProperty] public int EnergyPerRound { get; private set; } = 3;
 }

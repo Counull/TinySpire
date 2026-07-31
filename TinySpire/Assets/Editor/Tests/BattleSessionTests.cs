@@ -6,13 +6,14 @@ using TinySpire.Battle;
 
 public sealed class BattleSessionTests
 {
+    /// <summary>验证 Session 只创建参与者与洗牌后的未发牌卡区，不提前执行首轮抽牌。</summary>
     [Test]
-    public void FromConfig_CreatesCombatantsAndInitialHandFromStaticTemplates()
+    public void FromConfig_CreatesCombatantsAndUndealtDeckFromStaticTemplates()
     {
         Tables tables = CreateTables();
         var options = new BattleSetupOptions(heroTemplateId: 1001, encounterTemplateId: 5001);
 
-        BattleSession session = BattleSession.FromConfig(tables, new GameConfig(), options);
+        BattleSession session = BattleSession.FromConfig(tables, options);
 
         Assert.That(session.Combatants.All.Count, Is.EqualTo(2));
 
@@ -36,14 +37,15 @@ public sealed class BattleSessionTests
         Assert.That(session.EnemyCombatantIdsInEncounterOrder, Is.EqualTo(new[] { enemy.Id }));
 
         Assert.That(session.CardZones.Cards.Count, Is.EqualTo(10));
-        Assert.That(session.CardZones.Hand.Count, Is.EqualTo(5));
-        Assert.That(session.CardZones.DrawPile.Count, Is.EqualTo(5));
+        Assert.That(session.CardZones.Hand, Is.Empty);
+        Assert.That(session.CardZones.DrawPile.Count, Is.EqualTo(10));
         Assert.That(session.CardZones.DiscardPile, Is.Empty);
         Assert.That(session.CardZones.ExhaustPile, Is.Empty);
     }
 
+    /// <summary>验证相同战斗种子产生完全相同的洗牌后抽牌堆。</summary>
     [Test]
-    public void FromConfig_WithTheSameSeed_CreatesTheSameInitialHand()
+    public void FromConfig_WithTheSameSeed_CreatesTheSameShuffledDrawPile()
     {
         Tables tables = CreateTables();
         var options = new BattleSetupOptions(
@@ -51,19 +53,20 @@ public sealed class BattleSessionTests
             encounterTemplateId: 5001,
             randomSeed: 2468);
 
-        BattleSession first = BattleSession.FromConfig(tables, new GameConfig(), options);
-        BattleSession second = BattleSession.FromConfig(tables, new GameConfig(), options);
+        BattleSession first = BattleSession.FromConfig(tables, options);
+        BattleSession second = BattleSession.FromConfig(tables, options);
 
-        Assert.That(second.CardZones.Hand, Is.EqualTo(first.CardZones.Hand));
+        Assert.That(second.CardZones.DrawPile, Is.EqualTo(first.CardZones.DrawPile));
     }
 
+    /// <summary>验证 Session 保留 Encounter 配置顺序对应的敌人运行时标识。</summary>
     [Test]
     public void FromConfig_PreservesEncounterEnemyOrderAsCombatantIds()
     {
         Tables tables = CreateTables("[2002,2001,2002]");
         var options = new BattleSetupOptions(heroTemplateId: 1001, encounterTemplateId: 5001);
 
-        BattleSession session = BattleSession.FromConfig(tables, new GameConfig(), options);
+        BattleSession session = BattleSession.FromConfig(tables, options);
 
         Assert.That(session.EnemyCombatantIdsInEncounterOrder.Count, Is.EqualTo(3));
         Assert.That(
@@ -77,6 +80,7 @@ public sealed class BattleSessionTests
             Is.EqualTo(2002));
     }
 
+    /// <summary>创建包含测试英雄、牌组、卡牌与可配置敌人顺序的最小静态表。</summary>
     private static Tables CreateTables(string encounterEnemyTemplateIds = "[2001]")
     {
         var data = new Dictionary<string, JArray>

@@ -1,6 +1,6 @@
 ---
 created: 2026-07-06
-updated: 2026-07-31
+updated: 2026-08-01
 ---
 
 # Daedalus · 代码决策记录
@@ -189,6 +189,8 @@ updated: 2026-07-31
 
 **兼容与后续**：`UnityEngine.Random` 仍可用于不影响规则的纯视觉随机。地图、奖励和敌人行为后续分别创建独立 `GameRandom`，不得共享洗牌流。当前 BattleScene 种子由 Inspector 提供；Run 生命周期建立后由 `RunState` 派生/恢复，见 `DEP-007`。
 
+**M4C 修订**：CD-029 将“构造时抽初始手牌”改为“`BattleSession` 只创建并洗牌，`PlayerRoundStart` 统一负责首轮与后续轮次抽牌”。本决策关于实例随机流、四区唯一归属和弃牌重洗的结论继续有效。
+
 **影响**：新增 `TinySpire/Assets/Scripts/Core/GameRandom.cs`、`TinySpire/Assets/Scripts/Battle/CardZoneState.cs` 及测试；`BattleSession` 和手牌 UI 改读 `CardZoneState`，解决 CD-014 的临时前 N 张限制与 `DEP-006`。未实现效果器、目标、费用或回合流程，也未修改表格和资源包。
 
 ## CD-016：本地资源管线从 YooAsset 迁移到 Addressables
@@ -308,3 +310,25 @@ updated: 2026-07-31
 **理由**：并发提交消除玩家输入等待，串行执行保证能量、卡区、伤害、触发和表现顺序确定。小 interface 同时隐藏排序、执行期校验、阶段转换和展示等待；当前单玩家也走相同路径，因此后续加入网络时不需要把直通 UI 调用重写为命令。
 
 **影响**：M4A 同时建立命令队列与调度事实骨架；M4B 实现队列化出牌、能量和执行期校验；M4C 实现队列化结束行动、敌人交接和生产接线；M4D 接 UI；M4E 全量验证。命令中途需要本地输入登记为 `DEP-010`，未来网络权威确认与重放登记为 `DEP-011`。完整计划见 `plans/2026-07-31-m4-turn-scheduling-energy.md`。
+
+## CD-028：M4B 在队首从权威卡区与静态模板解析出牌费用
+
+**问题**：提交 `PlayCardCommand` 时看到的手牌和能量可能在排队期间过期；若命令携带 UI 计算的费用，或先扣能量再发现卡牌已经离手，会产生透支、跨玩家卡区误用和半完成写入。
+
+**选择**：`BattleTurnController` 通过构造参数接收 `BattleCombatantsData`、`CombatantId -> BattleCardZonesData`、Luban `Tables` 与每轮基础能量。`PlayCardCommand` 到达队首后依次校验阶段、玩家身份与存活、结束行动标记、玩家卡区、手牌归属、静态卡牌模板和当前能量；命令不携带费用。全部通过后才把指定运行时实例移入弃牌堆，并以新的 `PlayerTurnData` 快照扣除该玩家能量。任一失败只产生明确 `BattleCommandExecutionFailureReason`，不发布新的回合或卡区事实。
+
+**理由**：权威顺序只能保证写入串行，不能保证提交时预览到的事实仍有效。把身份、卡区归属和静态费用解析集中到队列内部，可让不同玩家继续提交而不提前占用能量，并让同一玩家基于旧能量排队的后续命令在执行时自然失败。
+
+**影响**：`GameConfig.EnergyPerRound` 与 `game-config.json` 默认均为 3；M4B 暂以进入弃牌堆作为出牌结束位置，不执行 Effect。`BattleLifetimeScope`、现有单玩家 UI、结束行动、敌人交接和初始抽牌迁移仍分别留给 M4C/M4D，不在本决策中接线。
+
+## CD-029：M4C 由回合开始统一发牌，并按 Encounter 顺序逐帧交接敌人
+
+**问题**：若 `BattleSession` 在构造时先抽初始手牌，首轮与后续轮次会拥有两条不同的发牌路径；若敌人阶段依赖参与者字典枚举或场景脚本直接跳阶段，也无法保证遭遇顺序、死亡跳过和重复完成信号的幂等性。
+
+**选择**：`BattleSession` 只实例化参与者、运行时卡牌与确定性洗牌后的未发牌抽牌堆；`StartBattleCommand` 进入 `PlayerRoundStart` 时，与所有后续轮次共用同一入口重置每玩家能量和结束标记，并补抽到 `GameConfig.InitialHandCount`。`EndPlayerActionCommand` 到达队首后弃置该玩家剩余手牌并设置结束标记，只有全体存活玩家都结束才进入敌人阶段。敌人只按 `EnemyCombatantIdsInEncounterOrder` 查找下一名存活参与者，阶段事实一次只公开一个 `CurrentActingEnemyId`，且只有匹配当前敌人的完成命令能够推进。
+
+**生产接线**：`BattleLifetimeScope` 注册 `BattleCommandQueue`、可替换的即时表现 adapter 与实现 `IStartable`/`ITickable` 的 `BattleCommandRuntimeDriver`。驱动器启动时提交唯一 `StartBattleCommand`；队列空闲且处于 `EnemyAction` 时，每帧最多为当前无行为敌人提交一条完成命令。当前 Session 只有一套卡区，因此生产工厂只映射唯一玩家并在出现第二名玩家时明确失败；多人根 interface 不变，完整生产多人装配继续由 `DEP-008` 跟踪。
+
+**理由**：首轮与后续轮次共用一条发牌路径后，轮次、能量、结束标记与卡区事实不会因启动特例分叉。显式 Encounter 顺序和当前敌人身份让死亡跳过、错误完成与重复回调都能在队首按权威事实判定；逐帧只提交一个系统命令则保留了未来 M5 敌人行为替换 seam，不让同步即时 adapter 在同一帧越过整轮敌人。
+
+**影响**：M4C 已把队列和阶段模块接入生产生命周期，但未改 `HandCardContainer`、场景或 UI；玩家拖牌、能量/轮次显示与结束按钮仍由 M4D 接到同一 `Submit` seam。当前敌人命令没有行为内容，M5 将替换内容而不替换顺序根；真实 Effect、目标和动画不在本决策范围。

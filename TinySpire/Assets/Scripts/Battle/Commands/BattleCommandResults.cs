@@ -54,6 +54,16 @@ namespace TinySpire.Battle
     {
         None,
         BattleAlreadyStarted,
+        InvalidTurnPhase,
+        InvalidPlayer,
+        PlayerNotAlive,
+        PlayerActionAlreadyEnded,
+        PlayerCardZonesNotFound,
+        CardNotInHand,
+        CardTemplateNotFound,
+        InsufficientEnergy,
+        InvalidEnemy,
+        EnemyNotCurrentActor,
         UnsupportedCommand
     }
 

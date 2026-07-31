@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using cfg;
 using R3;
 
 namespace TinySpire.Battle
@@ -23,13 +24,24 @@ namespace TinySpire.Battle
         /// <summary>权威回合状态的只读响应式事实。</summary>
         public ReadOnlyReactiveProperty<BattleTurnData> Turn => _turnController.Turn;
 
-        /// <summary>以参与战斗的玩家映射和表现 adapter 创建统一命令队列。</summary>
+        /// <summary>以权威战斗事实、静态卡牌配置和表现 adapter 创建统一命令队列。</summary>
         public BattleCommandQueue(
-            IEnumerable<CombatantId> playerIds,
+            BattleCombatantsData combatants,
+            IReadOnlyDictionary<CombatantId, BattleCardZonesData> playerCardZones,
+            IReadOnlyList<CombatantId> enemyCombatantIdsInEncounterOrder,
+            Tables tables,
+            int energyPerRound,
+            int initialHandCount,
             IBattleCommandPresentation presentation)
         {
             _presentation = presentation ?? throw new ArgumentNullException(nameof(presentation));
-            _turnController = new BattleTurnController(playerIds);
+            _turnController = new BattleTurnController(
+                combatants,
+                playerCardZones,
+                enemyCombatantIdsInEncounterOrder,
+                tables,
+                energyPerRound,
+                initialHandCount);
             _queue = new ReactiveProperty<BattleCommandQueueData>(BattleCommandQueueData.Empty());
             Queue = _queue.ToReadOnlyReactiveProperty();
         }
@@ -92,11 +104,23 @@ namespace TinySpire.Battle
         private BattleCommandExecutionResult Execute(QueuedBattleCommand queuedCommand)
         {
             BattleCommandExecutionFailureReason failureReason;
-            if (queuedCommand.Command.Type == BattleCommandType.StartBattle)
+            if (queuedCommand.Command is StartBattleCommand)
             {
                 failureReason = _turnController.TryStartBattle()
                     ? BattleCommandExecutionFailureReason.None
                     : BattleCommandExecutionFailureReason.BattleAlreadyStarted;
+            }
+            else if (queuedCommand.Command is PlayCardCommand playCardCommand)
+            {
+                failureReason = _turnController.TryPlayCard(playCardCommand);
+            }
+            else if (queuedCommand.Command is EndPlayerActionCommand endPlayerActionCommand)
+            {
+                failureReason = _turnController.TryEndPlayerAction(endPlayerActionCommand);
+            }
+            else if (queuedCommand.Command is CompleteEnemyActionCommand completeEnemyActionCommand)
+            {
+                failureReason = _turnController.TryCompleteEnemyAction(completeEnemyActionCommand);
             }
             else
             {

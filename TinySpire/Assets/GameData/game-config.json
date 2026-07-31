@@ -1,3 +1,4 @@
 {
-  "initialHandCount": 5
+  "initialHandCount": 5,
+  "energyPerRound": 3
 }

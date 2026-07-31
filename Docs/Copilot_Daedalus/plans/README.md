@@ -2,7 +2,7 @@
 title: plans · 实现计划（03_design 角色）
 page_type: plan
 lifecycle: active
-updated: 2026-07-31
+updated: 2026-08-01
 ---
 
 # plans · 实现计划
