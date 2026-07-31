@@ -241,37 +241,42 @@ en:    Deal {damage} damage. Apply {vulnerable} {keywordVulnerable}.
 
 ### M4 · 回合调度与能量
 
-建议阶段状态：
+M4 采用“多人根基、当前单玩家接线”。所有玩家共享行动阶段，能量和结束状态按 `CombatantId` 归属；不存在全局 `CurrentEnergy` 或固定轮转的 `CurrentPlayer`。
+
+阶段状态：
 
 ```text
-BattleStart
-  → PlayerTurnStart
-  → PlayerAction
-  → PlayerTurnEnd
-  → EnemyTurnStart
-  → EnemyAct（逐个敌人）
-  → EnemyTurnEnd
+NotStarted
+  → BattleStart
+  → PlayerRoundStart
+  → PlayerAction（玩家交错行动，各自结束）
+  → PlayerRoundEnd（全体玩家结束后）
+  → EnemyRoundStart
+  → EnemyAction（按 Encounter 顺序逐个敌人）
+  → EnemyRoundEnd
   → RoundEnd
-  → PlayerTurnStart / Victory / Defeat
+  → PlayerRoundStart
 ```
 
 权威事实：
 
-- `TurnPhase`
+- `BattleTurnPhase`
 - `RoundNumber`
-- `CurrentEnergy`
-- 必要时的当前行动敌人 ID
+- `CombatantId → PlayerTurnData`：每名玩家的当前能量与结束行动标记
+- `CurrentActingEnemyId`：仅敌人行动阶段存在
 
 规则：
 
-- 战斗开始只初始化一次卡牌区域、敌人意图和 UI。
-- 玩家回合开始：格挡按规则清理、能量重置为 3、抽到目标手牌数。
-- `PlayerAction` 才接受出牌与结束回合命令。
-- 玩家结束回合：锁输入、弃掉剩余手牌、进入敌人阶段。
+- `BattleTurnController` 是阶段推进、能量和行动结束状态的唯一写入者；UI 只提交命令并读取只读事实。
+- 战斗开始只执行一次初始化；首次与后续 `PlayerRoundStart` 都把每名玩家能量重置为 3，并抽到目标手牌数。
+- `PlayerAction` 才接受出牌与结束玩家行动命令；玩家之间不设固定行动顺序。
+- 单名玩家结束行动后只锁定该玩家并弃掉其剩余手牌；全部玩家结束后才进入敌人阶段。
 - 敌人按稳定的行动顺序逐个执行；不依赖字典遍历顺序，行动顺序必须成为明确事实。
 - 每个状态的进入和退出只承担本阶段职责，避免一个“大 Update”同时修改所有系统。
 
-测试重点是阶段顺序、重复点击结束回合、死亡时中断、状态切换后输入锁定，以及一帧内连续转换不会重复进入。
+当前 BattleScene 只接入一名玩家，不实现联网、输入仲裁或多玩家 UI。完整分步与测试 seam 见 `plans/2026-07-31-m4-turn-scheduling-energy.md`。
+
+测试重点是多人结束门槛、阶段顺序、每玩家能量隔离、重复点击结束行动、死亡敌人跳过、状态切换后输入锁定，以及一帧内连续转换不会重复进入。
 
 ### M5 · 敌人生成、意图与随机行为
 

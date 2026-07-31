@@ -3,6 +3,14 @@ created: 2026-07-06
 updated: 2026-07-31
 ---
 
+## 2026-07-31 · M4 多人回合根基分步确认（计划完成，尚未实施）
+
+- 用户确认 M4 采用“多人根基、当前单玩家接线”：所有玩家共享 `PlayerAction`，能量和结束行动状态按 `CombatantId` 归属；玩家可交错出牌，全部玩家结束后才进入敌人阶段。当前 BattleScene 仍只创建和显示一名玩家，不提前实现联网、输入仲裁或多玩家 UI。
+- 已规划深模块 `BattleTurnController`：外部只通过开始战斗、提交出牌、结束玩家行动、完成敌人行动四类命令与只读 `BattleTurnData` 使用；UI 不再直接设置阶段、扣能量或移动已提交卡牌。内部状态节点继续组合既有最小 `StateMachine<TEvent>`，不扩展 Core 状态机接口。
+- M4 拆为 M4A 调度事实与骨架、M4B 能量与统一出牌命令、M4C 全体玩家结束与敌人顺序交接、M4D 当前单玩家 M3C UI 接线、M4E 全量验证与复审。每一步有独立停止点，先纯 C# TDD，后修改高影响场景。
+- 当前单玩家仅有一套卡区登记为 `DEP-008`；敌人意图/行为执行登记为 `DEP-009`。本轮仅同步计划、路线图、决策、术语与依赖账本，未修改代码、场景、配置或资源，未运行 Unity 测试。
+- 完整计划见 `plans/2026-07-31-m4-turn-scheduling-energy.md`，代码决策见 CD-027。
+
 ## 2026-07-31 · 牌面短键与 Addressables 逻辑地址迁移（已验证）
 
 - `battle.card.xlsx` 已由 `illustration_address` 迁移为 `illustration_key`，策划只填写不带目录和扩展名的文件短名；ClosedXML 临时副本比较确认除 H1、H4、H5:H8 外，值、公式、样式与版式均未变化。Luban 已生成 `Card.IllustrationKey` 和对应 JSON。

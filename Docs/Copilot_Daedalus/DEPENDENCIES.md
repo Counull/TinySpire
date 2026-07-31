@@ -3,7 +3,7 @@ title: Daedalus · 依赖项账本（Dependency Ledger）
 page_type: registry
 lifecycle: active
 created: 2026-07-29
-updated: 2026-07-30
+updated: 2026-07-31
 status_source: ../SESSION_LOG.md
 note: 全项目范围唯一的依赖项 ID 分配与状态账本；实现计划文档只引用 ID，不重复维护完整描述。
 ---
@@ -30,3 +30,5 @@ note: 全项目范围唯一的依赖项 ID 分配与状态账本；实现计划�
 | DEP-005 | `BattleLifetimeScope` 已注册战斗会话，但回合调度器与其余战斗局内模块仍待确定后注册 | 需要先完成路线图 M3～M4 的视图与回合流程边界 | `TinySpire/Assets/Scripts/Battle/BattleLifetimeScope.cs` | `plans/2026-07-30-battle-config-runtime-integration.md` | open | — |
 | DEP-006 | 初始手牌临时取初始卡组的前 N 张，尚未经过抽牌堆洗牌与抽取 | 需要先实现 `CardZoneState`、战斗专属确定性随机源与抽牌/重洗流程 | `TinySpire/Assets/Scripts/Battle/BattleSession.cs` | `plans/2026-07-30-battle-config-runtime-integration.md` | resolved | `plans/2026-07-30-card-zones-deterministic-random.md`：创建完整卡组、确定性洗牌后抽取初始手牌，并实现弃牌重洗。 |
 | DEP-007 | BattleScene 的战斗种子当前由 Inspector 常量提供，尚未来自 Run 的根种子/存档 | 需要先实现 `RunState`、战斗创建标识与随机流派生/恢复规则 | `TinySpire/Assets/Scripts/Battle/BattleLifetimeScope.cs` | `plans/2026-07-30-card-zones-deterministic-random.md` | open | — |
+| DEP-008 | 多人根模型当前只接入一个玩家与一套 `BattleCardZonesData` | 需要 Party/Run 装配能够创建多名玩家及各自独立牌组，再把 `CombatantId` 映射到对应卡区 | `TinySpire/Assets/Scripts/Battle/BattleSession.cs`、`TinySpire/Assets/Scripts/Battle/Turn/` | `plans/2026-07-31-m4-turn-scheduling-energy.md` | open | — |
+| DEP-009 | M4 只有敌人行动顺序与完成交接，没有意图选择和行为执行 | 需要 M5 定义敌人行为组、意图事实、确定性选择和 Effect 执行入口 | `TinySpire/Assets/Scripts/Battle/Turn/` | `plans/2026-07-31-m4-turn-scheduling-energy.md` | open | — |

@@ -2,7 +2,7 @@
 title: TinySpire 战斗领域术语
 page_type: glossary
 lifecycle: active
-updated: 2026-07-30
+updated: 2026-07-31
 status_source: SESSION_LOG.md
 ---
 
@@ -18,5 +18,9 @@ status_source: SESSION_LOG.md
 - **战斗卡区数据（`BattleCardZonesData`）**：本局卡牌实例及其可观察卡区布局的所有者。
 - **参与者视觉（Combatant View）**：只保存一个 `CombatantId` 的场景角色或 HUD 表现对象；静态名称与 Prefab 由模板派生，生命和力量从 `CombatantData` 读取，不成为领域事实或可变镜像。
 - **参与者视图编排者（`BattleParticipantPresenter`）**：属于 BattleScene 生命周期的场景组件；负责按模板 Addressables 地址创建/释放角色和 HUD，不拥有第二份参与者集合或战斗数值。
+- **战斗调度根（`BattleTurnController`）**：M4 的深模块；通过命令统一推进阶段、校验玩家行动并写入每玩家能量与结束状态。UI、未来 Effect 和敌人行为模块都通过它的 interface 协作，不直接设置阶段或能量。
+- **一轮（Round）**：一次全体玩家行动阶段加一次全体敌人行动阶段。玩家共享 `PlayerAction` 窗口并可交错出牌，不存在固定轮转的当前玩家。
+- **玩家行动数据（`PlayerTurnData`）**：某个 `CombatantId` 在当前一轮内的能量与是否结束行动；不保存生命、手牌、控制器身份或静态英雄字段。
+- **结束玩家行动（End Player Action）**：单名玩家声明本轮不再行动。只有全部玩家都结束后才进入敌人阶段；当前单玩家 UI 可以继续显示“结束回合”，但领域命令不采用单人回合语义。
 
 `State` 只保留给将来的状态机、状态节点或明确的状态模式对象，不能作为上述运行时数据的通用尾缀。
