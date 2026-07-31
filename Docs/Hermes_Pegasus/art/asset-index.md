@@ -9,9 +9,9 @@
 | 目录 | 用途 | 当前内容 |
 |---|---|---:|
 | `agent-mythic-characters/concepts/` | 神话人物与 Agent 角色概念探索 | 12 张 PNG |
-| `agent-mythic-characters/turnaround-sheets/` | 角色身份锚点、三视图、服装变体 | 13 张 PNG |
+| `agent-mythic-characters/turnaround-sheets/` | 角色身份锚点、三视图、服装变体 | 14 张 PNG |
 | `art-style/anchors/` | TinySpire 全局风格锚点 | 1 张 PNG |
-| `art-style/characters/` | 游戏角色、敌人及姿势概念 | 6 张 PNG |
+| `art-style/characters/` | 游戏角色、敌人及姿势概念 | 7 张 PNG |
 | `art-style/covers/` | 封面、姿势与互动构图 | 7 张 PNG |
 | `art-style/loading-screens/` | Loading Screen 方案 | 4 张 PNG |
 | `art-style/scenes/` | 战斗背景与场景概念 | 1 张 PNG |
@@ -57,6 +57,7 @@
 - `pegasus_turnaround.png`
 - `sisyphus-low-collar-registrar_turnaround.png`
 - `sisyphus-tower-witness_turnaround.png`
+- `tinyspire-cultist-cawing-hook-weapons-turnaround-v02.png` — 持环钩武器、可开合鸟首头套邪教徒三视图。
 - `tinyspire-cultist-turnaround-v01.png`
 - `tinyspire-towel-turnaround-solid-offwhite-v01.png`
 
@@ -86,6 +87,7 @@
 目录：`assets/art-style/characters/`
 
 - `calliope-towel-upright-hold-v01.png` — Calliope 与 Towel 全身姿势参考。
+- `tinyspire-cultist-cawing-hook-weapons-concept-v02.png` — 持双环钩武器、发声中的蓝羽邪教徒概念。
 - `tinyspire-cultist-fullbody-concept-v01.png` — TinySpire 邪教徒全身概念。
 - `tinyspire-order-warden-enemy-concept.png` — 秩序守卫敌人概念。
 - `tinyspire-plague-doctor-executor-concept.png` — 鸟嘴面具执行员概念。
@@ -175,3 +177,4 @@
 
 - 2026-07-14：首次建立索引。
 - 2026-07-31：按实际视觉内容重新分类；神话人物概念移出 `game-icons/`，并拆分 `art-style/characters/`、`anchors/`、`scenes/`。
+- 2026-08-01：新增蓝羽环钩邪教徒动态概念图及对应三视图。
