@@ -23,5 +23,6 @@ updated: 2026-07-31
 
 ## 已替代 / 历史计划
 
+- [2026-07-31 牌面短键与 Addressables 逻辑地址迁移](2026-07-31-card-illustration-logical-keys.md) — 已完成并通过逻辑地址加载验收。
 - [2026-07-31 战斗 UI 首批美术与牌面配置链路接入](2026-07-31-battle-ui-art-integration.md) — 已完成并通过运行时验收。
 - [2026-07-30 战斗配置接入运行时](2026-07-30-battle-config-runtime-integration.md) — 已由卡牌区域与确定性洗牌计划承接运行时牌区。

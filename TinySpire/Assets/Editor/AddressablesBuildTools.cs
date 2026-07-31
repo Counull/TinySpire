@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using Newtonsoft.Json.Linq;
+using TinySpire.Battle;
 using UnityEditor;
 using UnityEditor.AddressableAssets;
 using UnityEditor.AddressableAssets.Build;
@@ -17,6 +18,7 @@ public static class AddressablesBuildTools
     private const string CardArtGroupName = "TinySpire Card Art";
     private const string GameDataLabel = "GameData";
     private const string CardTableJsonPath = "Assets/GameData/battle_tbcard.json";
+    private const string CardIllustrationRoot = "Assets/Arts/Runtime/Card/Illustrations";
 
     private static readonly string[] ScenePaths =
     {
@@ -70,7 +72,7 @@ public static class AddressablesBuildTools
             settings,
             CardArtGroupName,
             BundledAssetGroupSchema.BundlePackingMode.PackTogether);
-        SyncEntries(settings, cardArt, ReadCardIllustrationAddresses(), label: null);
+        SyncEntries(settings, cardArt, ReadCardIllustrationEntries(), label: null);
 
         EditorUtility.SetDirty(settings);
         AssetDatabase.SaveAssets();
@@ -117,56 +119,99 @@ public static class AddressablesBuildTools
         return group;
     }
 
-    /// <summary>从 Luban 生成的卡牌表读取并校验唯一牌面 Sprite 稳定地址。</summary>
-    private static IReadOnlyList<string> ReadCardIllustrationAddresses()
+    /// <summary>从 Luban 生成的牌表读取短键，并解析为资源路径与逻辑地址。</summary>
+    private static IReadOnlyDictionary<string, string> ReadCardIllustrationEntries()
     {
         if (!File.Exists(CardTableJsonPath))
             throw new InvalidOperationException($"Generated card table does not exist: {CardTableJsonPath}");
 
+        IReadOnlyDictionary<string, string> pathsByKey = IndexCardIllustrationPaths();
         JObject cards = JObject.Parse(File.ReadAllText(CardTableJsonPath));
-        var addresses = new List<string>();
-        var uniqueAddresses = new HashSet<string>(StringComparer.Ordinal);
+        var entries = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (JProperty card in cards.Properties())
         {
-            string address = (string)card.Value["illustration_address"];
-            if (string.IsNullOrWhiteSpace(address))
-                throw new InvalidOperationException($"Card template {card.Name} has no illustration_address.");
-            if (!address.StartsWith("Assets/", StringComparison.Ordinal))
+            string key = (string)card.Value["illustration_key"];
+            if (string.IsNullOrWhiteSpace(key))
+                throw new InvalidOperationException($"Card template {card.Name} has no illustration_key.");
+
+            if (!pathsByKey.TryGetValue(key, out string assetPath))
+                throw new InvalidOperationException($"Card template {card.Name} illustration key does not exist: {key}");
+
+            string assetKey = Path.GetFileNameWithoutExtension(assetPath);
+            if (!string.Equals(key, assetKey, StringComparison.Ordinal))
             {
                 throw new InvalidOperationException(
-                    $"Card template {card.Name} illustration address must start with 'Assets/': {address}");
+                    $"Card template {card.Name} illustration key casing must match the asset filename: {key} != {assetKey}");
             }
-            if (AssetDatabase.LoadAssetAtPath<Sprite>(address) == null)
-            {
-                throw new InvalidOperationException(
-                    $"Card template {card.Name} illustration is not an importable Sprite: {address}");
-            }
-            if (uniqueAddresses.Add(address))
-                addresses.Add(address);
+
+            ValidateSingleSprite(assetPath, key);
+            entries[assetPath] = CardIllustrationAddress.FromKey(key);
         }
 
-        if (addresses.Count == 0)
-            throw new InvalidOperationException("Generated card table does not contain any illustration addresses.");
+        if (entries.Count == 0)
+            throw new InvalidOperationException("Generated card table does not contain any illustration keys.");
 
-        return addresses;
+        return entries;
+    }
+
+    /// <summary>递归索引专用目录内的图片短名，并用不区分大小写的规则阻止重名。</summary>
+    private static IReadOnlyDictionary<string, string> IndexCardIllustrationPaths()
+    {
+        var pathsByKey = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string guid in AssetDatabase.FindAssets("t:Texture2D", new[] { CardIllustrationRoot }))
+        {
+            string assetPath = AssetDatabase.GUIDToAssetPath(guid);
+            string key = Path.GetFileNameWithoutExtension(assetPath);
+            CardIllustrationAddress.FromKey(key);
+            if (pathsByKey.TryGetValue(key, out string existingPath))
+            {
+                throw new InvalidOperationException(
+                    $"Duplicate card illustration key '{key}': {existingPath}, {assetPath}");
+            }
+
+            pathsByKey.Add(key, assetPath);
+        }
+
+        if (pathsByKey.Count == 0)
+            throw new InvalidOperationException($"Card illustration folder is empty: {CardIllustrationRoot}");
+
+        return pathsByKey;
+    }
+
+    /// <summary>确保短键指向单 Sprite 且关闭 mipmap，避免运行时加载到错误的主资源。</summary>
+    private static void ValidateSingleSprite(string assetPath, string key)
+    {
+        if (AssetDatabase.LoadAssetAtPath<Sprite>(assetPath) == null)
+            throw new InvalidOperationException($"Card illustration key '{key}' is not an importable Sprite: {assetPath}");
+
+        var importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
+        if (importer == null
+            || importer.textureType != TextureImporterType.Sprite
+            || importer.spriteImportMode != SpriteImportMode.Single
+            || importer.mipmapEnabled)
+        {
+            throw new InvalidOperationException(
+                $"Card illustration key '{key}' must use Sprite/Single with mipmaps disabled: {assetPath}");
+        }
     }
 
     /// <summary>让专用资源组与当前配置地址集合完全一致，并移除已经失效的旧条目。</summary>
     private static void SyncEntries(
         AddressableAssetSettings settings,
         AddressableAssetGroup group,
-        IReadOnlyList<string> assetPaths,
+        IReadOnlyDictionary<string, string> addressesByAssetPath,
         string label)
     {
         var expectedGuids = new HashSet<string>(StringComparer.Ordinal);
-        foreach (string assetPath in assetPaths)
+        foreach (KeyValuePair<string, string> addressByAssetPath in addressesByAssetPath)
         {
+            string assetPath = addressByAssetPath.Key;
             string guid = AssetDatabase.AssetPathToGUID(assetPath);
             if (string.IsNullOrEmpty(guid))
                 throw new InvalidOperationException($"Addressable asset does not exist: {assetPath}");
 
             expectedGuids.Add(guid);
-            AddEntry(settings, group, assetPath, label);
+            AddEntry(settings, group, assetPath, label, addressByAssetPath.Value);
         }
 
         var staleEntries = new List<AddressableAssetEntry>();
@@ -179,19 +224,20 @@ public static class AddressablesBuildTools
             group.RemoveAssetEntry(staleEntry, postEvent: false);
     }
 
-    /// <summary>将指定资源以完整 Assets 路径作为稳定地址加入目标资源组。</summary>
+    /// <summary>将资源加入目标组；未指定逻辑地址时继续使用完整 Assets 路径。</summary>
     private static void AddEntry(
         AddressableAssetSettings settings,
         AddressableAssetGroup group,
         string assetPath,
-        string label)
+        string label,
+        string address = null)
     {
         string guid = AssetDatabase.AssetPathToGUID(assetPath);
         if (string.IsNullOrEmpty(guid))
             throw new InvalidOperationException($"Addressable asset does not exist: {assetPath}");
 
         AddressableAssetEntry entry = settings.CreateOrMoveEntry(guid, group, readOnly: false, postEvent: false);
-        entry.address = assetPath;
+        entry.address = string.IsNullOrEmpty(address) ? assetPath : address;
         if (!string.IsNullOrEmpty(label))
             entry.SetLabel(label, enable: true, force: true, postEvent: false);
     }

@@ -11,7 +11,7 @@
         "effect_id": 4001
       }
     ],
-    "illustration_address": "Assets/Arts/Runtime/Card/card_art_strength.png"
+    "illustration_key": "card_art_strength"
   },
   "3002": {
     "id": 3002,
@@ -25,7 +25,7 @@
         "effect_id": 4002
       }
     ],
-    "illustration_address": "Assets/Arts/Runtime/Card/card_art_strike.png"
+    "illustration_key": "card_art_strike"
   },
   "3003": {
     "id": 3003,
@@ -39,7 +39,7 @@
         "effect_id": 4003
       }
     ],
-    "illustration_address": "Assets/Arts/Runtime/Card/card_art_defend.png"
+    "illustration_key": "card_art_defend"
   },
   "3004": {
     "id": 3004,
@@ -57,6 +57,6 @@
         "effect_id": 4005
       }
     ],
-    "illustration_address": "Assets/Arts/Runtime/Card/card_art_bash.png"
+    "illustration_key": "card_art_bash"
   }
 }

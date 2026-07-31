@@ -329,9 +329,11 @@ public sealed class HandCardContainer : MonoBehaviour
 
             cfg.battle.Card cardTemplate = _configs.Tables.TbCard.GetOrDefault(templateId)
                 ?? throw new InvalidOperationException($"Card template {templateId} does not exist.");
-            string address = cardTemplate.IllustrationAddress;
-            if (string.IsNullOrWhiteSpace(address))
-                throw new InvalidOperationException($"Card template {templateId} has no illustration_address.");
+            string illustrationKey = cardTemplate.IllustrationKey;
+            if (string.IsNullOrWhiteSpace(illustrationKey))
+                throw new InvalidOperationException($"Card template {templateId} has no illustration_key.");
+
+            string address = CardIllustrationAddress.FromKey(illustrationKey);
 
             AsyncOperationHandle<Sprite> handle = Addressables.LoadAssetAsync<Sprite>(address);
             try

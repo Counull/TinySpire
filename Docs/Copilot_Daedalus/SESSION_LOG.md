@@ -3,6 +3,13 @@ created: 2026-07-06
 updated: 2026-07-31
 ---
 
+## 2026-07-31 · 牌面短键与 Addressables 逻辑地址迁移（已验证）
+
+- `battle.card.xlsx` 已由 `illustration_address` 迁移为 `illustration_key`，策划只填写不带目录和扩展名的文件短名；ClosedXML 临时副本比较确认除 H1、H4、H5:H8 外，值、公式、样式与版式均未变化。Luban 已生成 `Card.IllustrationKey` 和对应 JSON。
+- 四张动态牌面已集中到 `Assets/Arts/Runtime/Card/Illustrations/`，原 `.meta` GUID 全部保留。运行时统一把短键转换为 `card-art/{key}`；构建工具按文件短名建立不区分大小写的索引，阻止重名、缺失引用和非 `Sprite / Single / no mipmap` 资源。
+- `TinySpire Card Art` 继续使用本地 `PackTogether` AssetBundle，但四个条目地址已改为 `card-art/*`。最终 `TinySpire/Addressables/Build Local Content` 成功（6.7 秒）；定向 EditMode 4/4、全量 EditMode 38/38、静态编译 0 error，四个逻辑地址均可通过 Addressables API 加载 Sprite。
+- BootstrapScene 短时启动未出现 Error、`InvalidKey` 或资源地址错误。未修改图片像素、卡背、Prefab、场景、战斗逻辑及其他资源配置字段。实现见 `plans/2026-07-31-card-illustration-logical-keys.md`，验收见 `06_testing/2026-07-31-card-illustration-logical-keys.md`，决策见 CD-026。
+
 ## 2026-07-31 · DataTables 工作簿简易配色（已验证）
 
 - `DataTables/Datas/` 下 10 个 `.xlsx` 已统一使用低饱和配色：首行深蓝底白色粗体，Luban 类型行浅蓝、分组行浅灰、说明行浅金；内容区按列循环使用蓝、绿、金、紫、橙、青六组淡色，并用同色深浅交替区分相邻数据行。没有新增、删除或改写任何单元格内容、公式、字段、表定义或共享字符串。

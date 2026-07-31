@@ -15,6 +15,7 @@ updated: 2026-07-31
 
 ## 验证记录
 
+- [2026-07-31 牌面短键与 Addressables 逻辑地址迁移](2026-07-31-card-illustration-logical-keys.md)
 - [2026-07-31 DataTables 工作簿简易配色](2026-07-31-datatables-simple-colors.md)
 - [2026-07-31 战斗 UI 首批美术与牌面配置链路接入](2026-07-31-battle-ui-art-integration.md)
 - [2026-07-30 BattleScene M3A 参与者配置与 Prefab 工厂](2026-07-30-battlescene-participant-views.md)

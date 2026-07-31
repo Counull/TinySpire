@@ -277,7 +277,7 @@ updated: 2026-07-31
 
 **影响**：M3A 只展示名称、生命和非零力量，支持一名玩家和一至三名按 Encounter 配置顺序从右向左布局的敌人。格挡、状态、意图、能量、回合、死亡表现和胜败覆盖层不在本决策实现，分别等待 M3B-M3E 的前置事实。详见 `plans/2026-07-30-battlescene-participant-views.md`。
 
-## CD-025：卡牌模板持有牌面稳定地址，手牌 View 管理加载生命周期
+## CD-025：卡牌模板持有牌面稳定地址，手牌 View 管理加载生命周期（地址表示已由 CD-026 替代）
 
 **问题**：牌面 PNG 已进入项目，但卡牌模板没有资源地址。若按模板 ID 在 UI 中硬编码 Sprite、把所有图片直接序列化到场景，或让运行时卡牌实例保存资源对象，都会重复静态事实并使新增卡牌需要修改 UI 代码。
 
@@ -286,3 +286,13 @@ updated: 2026-07-31
 **理由**：静态模板继续决定展示资源，卡牌实例只保存身份与局内事实，View 负责其实际使用期内的资源句柄。新增或替换牌面只需修改表格与资源，不需要增加 UI 分支；地址、导入类型或加载失败会直接暴露为构建/运行错误。
 
 **影响**：`DataTables/Datas/battle.card.xlsx`、Luban 生成的 `Card`/JSON、四张牌面导入设置、`AddressablesBuildTools`、`TinySpire Card Art` 资源组、`HandCardContainer`、`HandCardVisual` 与 `CardView.prefab`。本决策不新增能量、回合、意图、状态、效果执行、胜败覆盖层或其他尚无运行时事实的 UI。
+
+## CD-026：卡牌配置保存牌面短键，Addressables 构建期生成逻辑地址
+
+**问题**：CD-025 把完整 `Assets/...` 路径写入 `battle.Card`。这使牌面移动或目录整理必须同步改表，也让策划承担 Unity 工程路径知识；直接用文件名搜索又需要明确处理重名、缺失和错误导入。
+
+**选择**：`battle.Card` 只保存无目录、无扩展名的 `illustration_key`。动态牌面统一放在 `Assets/Arts/Runtime/Card/Illustrations/`；`AddressablesBuildTools` 递归建立不区分大小写的文件短名索引，在构建期拒绝重名、缺失、大小写不一致和非 `Sprite / Single / no mipmap` 资源，并将牌表引用映射为 `card-art/{key}`。运行时只通过 `CardIllustrationAddress.FromKey` 生成相同逻辑地址，继续使用 `Addressables.LoadAssetAsync<Sprite>` 与本地 `PackTogether` AssetBundle。
+
+**理由**：配置表达业务身份，目录和扩展名属于资产组织细节，Addressables 地址属于发布细节。短键使素材在专用目录内移动或替换时不必改表；集中转换函数和构建期索引让运行时与构建工具共享同一地址规则，并把名字冲突或资源错误提前为构建失败。
+
+**影响**：CD-025 关于手牌预加载、句柄释放和 View 生命周期的选择继续有效，但其“配置保存完整地址”部分被本决策替代。角色 Prefab 等其他字段仍保留完整地址，本次不扩展为全项目通用资源键系统。

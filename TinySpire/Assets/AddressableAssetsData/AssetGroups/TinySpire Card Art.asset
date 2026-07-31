@@ -16,22 +16,22 @@ MonoBehaviour:
   m_GUID: a3ee3858b84ed7440bb1465fb7aea900
   m_SerializeEntries:
   - m_GUID: 20f0dac7a8776dc40bb75b1514e35b13
-    m_Address: Assets/Arts/Runtime/Card/card_art_strike.png
+    m_Address: card-art/card_art_strike
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 5f52c176836b32341a30d16c860079de
-    m_Address: Assets/Arts/Runtime/Card/card_art_bash.png
+    m_Address: card-art/card_art_bash
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 6b5532daf1e1b484f91b369ce4eeaa66
-    m_Address: Assets/Arts/Runtime/Card/card_art_strength.png
+    m_Address: card-art/card_art_strength
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: cdeea30fd10b72a409c28bca6e2ff8c9
-    m_Address: Assets/Arts/Runtime/Card/card_art_defend.png
+    m_Address: card-art/card_art_defend
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
