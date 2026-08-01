@@ -12,6 +12,7 @@ namespace TinySpire.Battle
     {
         private readonly IBattleCommandPresentation _presentation;
         private readonly BattleTurnController _turnController;
+        private readonly BattleEnemyIntentsData _enemyIntents;
         private readonly ReactiveProperty<BattleCommandQueueData> _queue;
         private readonly Queue<QueuedBattleCommand> _pendingCommands = new Queue<QueuedBattleCommand>();
         private long _nextAuthoritySequence = 1;
@@ -29,12 +30,14 @@ namespace TinySpire.Battle
             BattleCombatantsData combatants,
             IReadOnlyDictionary<CombatantId, BattleCardZonesData> playerCardZones,
             IReadOnlyList<CombatantId> enemyCombatantIdsInEncounterOrder,
+            BattleEnemyIntentsData enemyIntents,
             Tables tables,
             int energyPerRound,
             int initialHandCount,
             IBattleCommandPresentation presentation)
         {
             _presentation = presentation ?? throw new ArgumentNullException(nameof(presentation));
+            _enemyIntents = enemyIntents ?? throw new ArgumentNullException(nameof(enemyIntents));
             _turnController = new BattleTurnController(
                 combatants,
                 playerCardZones,
@@ -130,7 +133,12 @@ namespace TinySpire.Battle
             }
             else if (queuedCommand.Command is CompleteEnemyActionCommand completeEnemyActionCommand)
             {
-                failureReason = _turnController.TryCompleteEnemyAction(completeEnemyActionCommand);
+                failureReason = _turnController.ValidateCompleteEnemyAction(completeEnemyActionCommand);
+                if (failureReason == BattleCommandExecutionFailureReason.None)
+                {
+                    _enemyIntents.CompleteAndSelectNext(completeEnemyActionCommand.EnemyId);
+                    _turnController.AdvanceAfterValidatedEnemyAction();
+                }
             }
             else
             {

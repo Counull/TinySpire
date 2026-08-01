@@ -18,7 +18,9 @@ public sealed class ConfigService
         "battle_tbdeck",
         "battle_tbcard",
         "battle_tbcardeffect",
-        "battle_tbencounter"
+        "battle_tbencounter",
+        "battle_tbenemybehaviorgroup",
+        "battle_tbenemybehavior"
     };
 
     public Tables Tables { get; private set; }

@@ -15,6 +15,10 @@ updated: 2026-08-01
 
 ## 验证记录
 
+- [2026-08-01 M5D 全量验证与复审](2026-08-01-m5d-full-validation-review.md)
+- [2026-08-01 M5C 敌人意图 HUD](2026-08-01-m5c-enemy-intent-hud.md)
+- [2026-08-01 M5B Session、权威命令队列与生产接线](2026-08-01-m5b-session-command-queue-wiring.md)
+- [2026-08-01 M5A 敌人行为配置与确定性选择核心](2026-08-01-m5a-enemy-behavior-selection.md)
 - [2026-08-01 M4E 全量验证与双轴复审](2026-08-01-m4e-full-validation-review.md)
 - [2026-08-01 M4D 当前单玩家命令 UI 接线](2026-08-01-m4d-single-player-command-ui.md)
 - [2026-08-01 M4C 队列化结束行动与敌人顺序交接](2026-08-01-m4c-end-action-enemy-handoff.md)

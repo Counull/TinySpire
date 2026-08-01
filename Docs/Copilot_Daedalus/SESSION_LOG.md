@@ -3,6 +3,42 @@ created: 2026-07-06
 updated: 2026-08-01
 ---
 
+## 2026-08-01 · M5D 全量验证、双轴复审与 M5 收口（已完成）
+
+- M5A～M5D 已串行完成：Enemy 静态模板引用有序行为组；`BattleEnemyIntentsData` 以独立确定性随机流和不可变完整快照持有每名敌人的权威当前 `BehaviorId`；M4 合法敌人完成命令先原子选择下一意图，再保证推进 Encounter 顺序；M3D HUD 从同一意图、静态 Effect 与当前参与者事实派生正式图标和值。
+- 最终 Luban 等价命令成功生成 C# 与 `Assets/GameData` JSON；生成器清理的手写 `game-config.json` 已从既有源逐字恢复，双方 SHA-256 为 `048CDC9E8DB80F80BE9E43D409ED1A91A011E0118CBAB18EC207509B3C904CF8`。最终 Addressables 报告 `buildlayout_2026.08.01.09.39.35.json` 的 `BuildError` 为空、`BuildResultHash=d030cfdcfd7d76e4ca432b66eae62cea`、耗时 `8.6252568s`，M5 JSON、game-config、BattleScene 与 HUD Prefab 的完整稳定地址均存在。
+- Unity MCP 最终 M5 定向 EditMode **73/73**、全量 EditMode **98/98** 通过，均为 0 failed、0 skipped；串行 `dotnet build TinySpire/TinySpire.sln --no-restore -m:1` 为 0 error，保留 12 条既有依赖版本冲突 warning。
+- 两次从 Bootstrap 使用同一 Inspector 种子 `1` 实跑得到完全相同序列：初始 ID `2 → 3`、`7001 Attack / 7003 Defend`；ID 2 完成后发布 `7001/7003`，ID 3 完成后发布 `7001/7002`；第二轮双方 HUD 均为正式攻击图标和值 6，玩家意图隐藏。两次 Console Error/Warning 为 `0/0`，没有 `InvalidKey` 或 VContainer 错误。
+- M5C 已在实际 Game View 用不保存资产的运行期夹具目视确认 1～3 敌人图标语义、数值可读性和 HUD 不重叠。计划内 attack/defend/buff/debuff/special 五类正式图标全部存在且导入合约正确，没有缺失美术资源。
+- Standards / Spec 首轮并行复审各自只指出同一项 P2：最终验证已写入验收页，但 `SESSION_LOG.md` 与计划状态尚未收口。现已通过本条状态源、计划归档和 M5D 验收页回填修复；两轴均未发现代码实现、规格偏差、scope creep 或明确代码气味。M5 未实现真实 Effect、伤害、格挡、状态、死亡动画、胜败、行为树或 DSL；`DEP-009` 保持 open，剩余工作为 M7/M8 的真实敌人 Effect 执行。
+- 本次保护了启动前唯一既有未跟踪计划文件，并在其上同步状态；未修改 `BattleScene.unity`、ProjectSettings、asmdef、HybridCLR、Run 生命周期或启动流程，未 commit、未 push。详细证据见 `06_testing/2026-08-01-m5d-full-validation-review.md`，决策见 CD-032～CD-034。
+
+## 2026-08-01 · M5C 敌人意图 HUD（已验证）
+
+- `ParticipantHudView.prefab` 以静态 `IntentRoot / IntentIcon / IntentValueText` 子树接入五类正式意图 Sprite；所有 `_ref_` 参考图均未进入生产 Prefab。玩家 HUD 固定隐藏意图，存活敌人从同一 `EnemyIntentLayoutData` 的 `BehaviorId`、Luban 行为/Effect 模板和当前参与者事实即时派生图标与数值，死亡时隐藏。
+- 原 `CardValueCalculator` 以保留 Meta GUID 的方式最小深化为 `BattleEffectValueCalculator`，卡牌文本与敌人 HUD 共用同一效果值计算入口；力量、生命、Locale、意图快照或 View 重建只触发展示重派生，不保存预测值，也不调用行为选择。`BattleParticipantPresenter` 只把现有 Session、Tables 与世界 View 交给 HUD，没有新增事实镜像或 DI 层。
+- Unity MCP 定向 EditMode **39/39** 通过，覆盖共享效果值、HUD 纯投影、Prefab 正式资源/层级合约、权威意图核心、Session 和命令队列。`TinySpire/Addressables/Build Local Content` 成功；报告 `buildlayout_2026.08.01.09.25.30.json` 的 `BuildError` 为空、`BuildResultHash=d030cfdcfd7d76e4ca432b66eae62cea`、耗时 `15.5289761s`。
+- Bootstrap 生产实跑首轮显示 Enemy 2001 `Behavior 7001 / Attack / 6`、Enemy 2002 `Behavior 7003 / Defend / 5`，玩家意图隐藏；第一轮完成后进入 Round 2，Enemy 2002 变为 `Behavior 7002 / Attack / 6`，HUD 与事实同步。重复读取前后敌人随机状态均为 `2144564843`。
+- Game View 用现有正式 View/HUD 构造了不保存场景或 Prefab 的运行期 1/2/3 敌人视觉夹具，确认意图不与名称、生命和力量 HUD 重叠。MCP 截图实现自身曾写入 5 条 `PlayerLoop recursive` 错误；销毁夹具、退出并从 Bootstrap 干净复跑后 Console Error/Warning 为 `0/0`，未出现 `InvalidKey` 或 VContainer 错误。
+- 本切片只修改 `ParticipantHudView.prefab`，未修改 `BattleScene.unity`、asmdef、ProjectSettings、启动流程或 DI 架构；未执行真实 Effect、伤害、格挡、状态、死亡动画或胜败。五类计划内正式意图图标均已存在，没有缺失美术资源。决策见 CD-034，验收见 `06_testing/2026-08-01-m5c-enemy-intent-hud.md`。
+
+## 2026-08-01 · M5B Session、权威命令队列与生产接线（已验证）
+
+- `BattleSession` 现在在按 Encounter 顺序创建敌人后建立并公开唯一 `BattleEnemyIntentsData`，构造失败会释放已经创建的意图、卡区与参与者，正常销毁时由 Session 先释放意图再释放其依赖事实。`BattleLifetimeScope` 把该同一实例交给命令队列，没有第二份聚合或额外 DI 层。
+- `CompleteEnemyActionCommand` 到达队首后，`BattleTurnController` 先只读校验阶段、敌人身份与当前行动者；通过后由队列调用 `EnemyIntents.CompleteAndSelectNext`，成功才调用不可失败的 Encounter 顺序推进。无候选异常会让队列停在当前命令，意图、随机与回合均不变；错误阶段、错误敌人和重复完成继续返回 M4 原失败原因且零写入。
+- `BattleCommandRuntimeDriver` 仍只在队列空闲时每帧提交一条当前敌人完成命令，不直接读取候选或调用随机。进入敌人轮前已死亡的敌人继续由 M4 Encounter 顺序跳过，不为其补选意图；第一版仍不执行伤害或其他 Effect。
+- Unity MCP 相关 EditMode **47/47** 通过，覆盖 M5A 核心、Session、M5B 意图/队列集成与完整 `BattleCommandQueueTests` 回归。特别验证意图发布先于 Turn 推进、第一名完成不改变第二名、错误/重复完成零写入、死亡跳过、无候选停止命令链，以及生产驱动两轮每帧最多完成一名敌人。
+- `TinySpire/Addressables/Build Local Content` 成功；报告 `buildlayout_2026.08.01.09.07.56.json` 的 `BuildError` 为空、`BuildResultHash=d8794bc54bf6fa0df3cc1595bc89c6ef`、耗时 `13.7309617s`，两个新增行为 JSON 与 BattleScene 均保留完整稳定地址。
+- Bootstrap 实跑初始为 `PlayerAction / Round 1`，Enemy 2001 为 Behavior 7001 / Attack、Enemy 2002 为 Behavior 7003 / Defend；生产命令链完成两轮后进入 `PlayerAction / Round 3`，两名敌人生命均保持 20，Console Error/Warning 为 0。M5B 未修改场景、Prefab 或 HUD；M5C 尚未开始。决策见 CD-033，验收见 `06_testing/2026-08-01-m5b-session-command-queue-wiring.md`。
+
+## 2026-08-01 · M5A 敌人行为配置与确定性选择核心（已验证）
+
+- 新增 `EnemyBehaviorGroup` / `EnemyBehavior` Luban 表与 `EnemyIntentType` 枚举；Enemy 通过 `behavior_group_id` 引用行为组，默认 Encounter 5001 现在按顺序包含固定行为 Enemy 2001 与加权随机 Enemy 2002。行为只引用既有 `CardEffect` 数值，不执行 Effect。
+- 新增 `BattleEnemyIntentsData`：按 Encounter 顺序为每名敌人选择初始意图，以不可变完整 R3 快照持有唯一的 `CombatantId -> BehaviorId` 事实；每名敌人只保存冷却与最大连续次数所需的已完成历史。敌人行为随机从战斗种子以稳定盐派生独立 `GameRandom`，单候选不消费随机，多候选只调用一次整数权重选择。
+- 行动完成后的候选过滤、历史更新、随机选择与意图发布先在副本上完成；无候选或配置错误会恢复随机状态且不发布新快照。错误引用、非正权重、负冷却/连续上限、重复行为和权重溢出均显式失败，没有随机回退。
+- 六份工作簿已通过 `@oai/artifact-tool` 编辑、渲染与公式错误扫描；Luban 等价命令成功生成新增配置 C# 与 `Assets/GameData` JSON，`ConfigService` 已预加载两张新表。Unity MCP 定向 `BattleEnemyIntentsDataTests + BattleSessionTests` **18/18** 通过，脚本编译与 Console Error 为 0。
+- 本切片未修改 `BattleSession` 生产持有关系、M4 命令队列、回合推进、场景、Prefab 或 HUD，也未实现真实伤害、格挡、状态、胜败、行为树或条件 DSL。M5A 已满足独立停止点；M5B 尚未开始。决策见 CD-032，验收见 `06_testing/2026-08-01-m5a-enemy-behavior-selection.md`。
+
 ## 2026-08-01 · M4E 全量验证、轮次栅栏修复与文档收口（已完成）
 
 - 首次 Spec 复审与生产探针发现：全体敌人已死亡时，上一轮排在结束命令后的玩家命令会在同步开始的新一轮重新合法。用户确认“玩家命令只能属于提交时的轮次”，并授权采用队列内部轮次栅栏；该问题属于当前 M4 已承诺行为，没有登记为未来依赖。

@@ -165,8 +165,8 @@ namespace TinySpire.Battle
             return BattleCommandExecutionFailureReason.None;
         }
 
-        /// <summary>只允许当前行动敌人的权威完成命令推进 Encounter 顺序。</summary>
-        internal BattleCommandExecutionFailureReason TryCompleteEnemyAction(
+        /// <summary>只读取权威阶段与身份，校验敌人完成命令是否可以进入写入链。</summary>
+        internal BattleCommandExecutionFailureReason ValidateCompleteEnemyAction(
             CompleteEnemyActionCommand command)
         {
             if (command == null)
@@ -185,9 +185,14 @@ namespace TinySpire.Battle
                 return BattleCommandExecutionFailureReason.EnemyNotCurrentActor;
             }
 
+            return BattleCommandExecutionFailureReason.None;
+        }
+
+        /// <summary>在队列已完成校验和下一意图选择后，推进 Encounter 中的敌人顺序。</summary>
+        internal void AdvanceAfterValidatedEnemyAction()
+        {
             _stateMachine.Dispatch(BattleTurnEvent.CompleteEnemyAction);
             _stateMachine.Tick(TimeSpan.Zero);
-            return BattleCommandExecutionFailureReason.None;
         }
 
         /// <summary>释放回合事实持有的响应式资源。</summary>

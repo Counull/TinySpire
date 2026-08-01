@@ -15,6 +15,12 @@ MonoBehaviour:
   m_GroupName: TinySpire GameData
   m_GUID: a1f0a6a90f0ff154483e46063046d29d
   m_SerializeEntries:
+  - m_GUID: 06227a415229c934189868b02e130fd5
+    m_Address: Assets/GameData/battle_tbenemybehavior.json
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - GameData
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 300d79d5b2dc27542973ef3a5108596f
     m_Address: Assets/GameData/battle_tbcardeffect.json
     m_ReadOnly: 0
@@ -23,6 +29,12 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 716d5c44c73818847b4b0bd18e867a15
     m_Address: Assets/GameData/battle_tbdeck.json
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - GameData
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 83e233ce3142d70449e7a2939dfb2922
+    m_Address: Assets/GameData/battle_tbenemybehaviorgroup.json
     m_ReadOnly: 0
     m_SerializedLabels:
     - GameData

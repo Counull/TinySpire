@@ -37,6 +37,14 @@ public partial class Tables
     /// Battle encounter static template
     /// </summary>
     public battle.TbEncounter TbEncounter {get; }
+    /// <summary>
+    /// Enemy behavior group static template
+    /// </summary>
+    public battle.TbEnemyBehaviorGroup TbEnemyBehaviorGroup {get; }
+    /// <summary>
+    /// Enemy behavior static template
+    /// </summary>
+    public battle.TbEnemyBehavior TbEnemyBehavior {get; }
 
 
       public Tables(System.Func<string, JArray> loader)
@@ -47,6 +55,8 @@ public partial class Tables
         TbCard = new battle.TbCard(loader("battle_tbcard"));
         TbCardEffect = new battle.TbCardEffect(loader("battle_tbcardeffect"));
         TbEncounter = new battle.TbEncounter(loader("battle_tbencounter"));
+        TbEnemyBehaviorGroup = new battle.TbEnemyBehaviorGroup(loader("battle_tbenemybehaviorgroup"));
+        TbEnemyBehavior = new battle.TbEnemyBehavior(loader("battle_tbenemybehavior"));
         ResolveRef();
     }
     
@@ -58,6 +68,8 @@ public partial class Tables
         TbCard.ResolveRef(this);
         TbCardEffect.ResolveRef(this);
         TbEncounter.ResolveRef(this);
+        TbEnemyBehaviorGroup.ResolveRef(this);
+        TbEnemyBehavior.ResolveRef(this);
     }
 }
 

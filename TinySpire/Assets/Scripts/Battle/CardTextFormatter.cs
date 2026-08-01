@@ -82,7 +82,7 @@ namespace TinySpire.Battle
                 cfg.battle.CardEffect effect = _configs.Tables.TbCardEffect.GetOrDefault(binding.EffectId)
                     ?? throw new InvalidOperationException(
                         $"Card {card.Id} references missing effect {binding.EffectId}.");
-                arguments.Add(binding.ArgumentKey, CardValueCalculator.Calculate(effect, source));
+                arguments.Add(binding.ArgumentKey, BattleEffectValueCalculator.Calculate(effect, source));
             }
 
             return arguments;

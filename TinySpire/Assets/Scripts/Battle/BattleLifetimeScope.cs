@@ -58,6 +58,7 @@ public sealed class BattleLifetimeScope : LifetimeScope
             session.Combatants,
             playerCardZones,
             session.EnemyCombatantIdsInEncounterOrder,
+            session.EnemyIntents,
             configs.Tables,
             configs.GameConfig.EnergyPerRound,
             configs.GameConfig.InitialHandCount,
@@ -92,7 +93,7 @@ public sealed class BattleLifetimeScope : LifetimeScope
 namespace TinySpire.Battle
 {
     /// <summary>
-    /// 生产生命周期入口：启动战斗，并让当前无行为敌人在后续帧通过同一队列依次完成。
+    /// 生产生命周期入口：启动战斗，并让当前敌人在后续帧通过同一队列依次完成当前意图。
     /// </summary>
     public sealed class BattleCommandRuntimeDriver : IStartable, ITickable
     {

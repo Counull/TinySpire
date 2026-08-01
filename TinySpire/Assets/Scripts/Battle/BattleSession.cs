@@ -48,6 +48,9 @@ namespace TinySpire.Battle
         /// <summary>本场战斗的卡区运行时数据。</summary>
         public BattleCardZonesData CardZones { get; }
 
+        /// <summary>本场战斗中每名敌人的权威当前意图与独立确定性选择历史。</summary>
+        public BattleEnemyIntentsData EnemyIntents { get; }
+
         /// <summary>
         /// Encounter 配置顺序对应的敌方参与者标识，供布局和未来敌方行动使用。
         /// 这不是由字典枚举派生的镜像列表。
@@ -62,6 +65,7 @@ namespace TinySpire.Battle
             BattleSession initialized = CreateFromConfigService(configs, options);
             Combatants = initialized.Combatants;
             CardZones = initialized.CardZones;
+            EnemyIntents = initialized.EnemyIntents;
             EnemyCombatantIdsInEncounterOrder = initialized.EnemyCombatantIdsInEncounterOrder;
         }
 
@@ -69,10 +73,12 @@ namespace TinySpire.Battle
         private BattleSession(
             BattleCombatantsData combatants,
             BattleCardZonesData cardZones,
+            BattleEnemyIntentsData enemyIntents,
             IReadOnlyList<CombatantId> enemyCombatantIdsInEncounterOrder)
         {
             Combatants = combatants;
             CardZones = cardZones;
+            EnemyIntents = enemyIntents;
             EnemyCombatantIdsInEncounterOrder = enemyCombatantIdsInEncounterOrder;
         }
 
@@ -106,21 +112,40 @@ namespace TinySpire.Battle
                 enemyCombatantIdsInEncounterOrder.Add(combatant.Id);
             }
 
-            var cardZones = new BattleCardZonesData(
-                deck.CardTemplateIds,
-                options.RandomSeed);
+            BattleCardZonesData cardZones = null;
+            BattleEnemyIntentsData enemyIntents = null;
+            try
+            {
+                cardZones = new BattleCardZonesData(
+                    deck.CardTemplateIds,
+                    options.RandomSeed);
+                enemyIntents = new BattleEnemyIntentsData(
+                    combatants,
+                    enemyCombatantIdsInEncounterOrder,
+                    tables,
+                    options.RandomSeed);
 
-            return new BattleSession(
-                combatants,
-                cardZones,
-                enemyCombatantIdsInEncounterOrder.AsReadOnly());
+                return new BattleSession(
+                    combatants,
+                    cardZones,
+                    enemyIntents,
+                    enemyCombatantIdsInEncounterOrder.AsReadOnly());
+            }
+            catch
+            {
+                enemyIntents?.Dispose();
+                cardZones?.Dispose();
+                combatants.Dispose();
+                throw;
+            }
         }
 
         /// <summary>
-        /// 释放本场战斗持有的参与者和卡区响应式资源。
+        /// 释放本场战斗持有的敌人意图、参与者和卡区响应式资源。
         /// </summary>
         public void Dispose()
         {
+            EnemyIntents.Dispose();
             Combatants.Dispose();
             CardZones.Dispose();
         }

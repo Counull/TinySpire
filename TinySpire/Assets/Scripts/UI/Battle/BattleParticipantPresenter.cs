@@ -190,7 +190,14 @@ namespace TinySpire.UI.Battle
             {
                 hudView = Instantiate(_hudViewPrefab, _hudCanvas.transform);
                 hudView.name = $"CombatantHud_{combatantId.Value:00}_Template_{templateId}";
-                hudView.Bind(combatant, nameI18nKey, view.transform, _hudCanvas, _localization);
+                hudView.Bind(
+                    combatant,
+                    nameI18nKey,
+                    view.transform,
+                    _hudCanvas,
+                    _localization,
+                    _configs.Tables,
+                    _session.EnemyIntents);
                 _hudViews.Add(combatantId, hudView);
             }
             catch

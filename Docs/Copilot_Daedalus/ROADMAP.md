@@ -68,8 +68,8 @@ note: 本文件是 BattleScene 实现侧的阶段化路线图；项目级玩法�
 | `BattleSession` | 本场战斗拥有的各运行时聚合引用 | 战斗状态、卡牌区域、回合状态 | 仅负责从配置创建和装配 |
 | `BattleCombatantsData` | `CombatantId → CombatantData` | 阵营、存活目标、胜负 | 伤害、治疗、格挡、状态变更 |
 | `BattleCardZonesData` | 卡牌实例定义；`CardZoneLayoutData` 中抽牌/手牌/弃牌/消耗区的有序且互斥集合 | 各区数量、某卡所在区域 | `Draw`、`DiscardFromHand`、`ExhaustFromHand`、`DiscardHand`；空抽牌堆时内部重洗 |
-| `TurnState`（待建） | 阶段、回合号、当前能量 | 是否可出牌、是否可结束回合 | 回合调度器 |
-| `EnemyIntentState`（待建） | 每名存活敌人本轮已选意图 | 意图图标、预测数值 | 敌人行为选择器 |
+| `BattleCommandQueue` / `BattleTurnData` | 阶段、回合号、每玩家能量与结束状态、当前行动敌人、权威命令顺序 | 是否可出牌、是否可结束行动、当前行动者 | `BattleCommandQueue.Submit` |
+| `BattleEnemyIntentsData` | `CombatantId → BehaviorId` 当前意图、最小选择历史、敌人行为专属随机流 | 意图类型、目标、图标与预测数值均从模板和当前参与者事实派生 | 合法敌人完成命令协调 `CompleteAndSelectNext` |
 | `GameRandom` | 单个规则随机流的 `uint State` | 可复现的抽样与 Fisher–Yates 洗牌 | 由拥有该随机域的聚合推进；不同随机域不共享实例 |
 | `CardTextFormatter` | 不持有战斗事实 | 当前语言的卡名、说明、关键词与动态参数 | 纯格式化，无状态写入口 |
 
@@ -203,7 +203,7 @@ en:    Deal {damage} damage. Apply {vulnerable} {keywordVulnerable}.
 
 ### M3 · BattleScene 主 HUD 与参与者视图
 
-当前将 M3 拆为按事实依赖推进的切片：M3A 参与者世界视图与生命 HUD；M3B 抽牌/弃牌计数；M3C 能量与结束回合；M3D 敌人意图；M3E 格挡、状态、死亡、回合提示与胜败覆盖层。M3A 与 M3B 已完成设计确认，分别见 `plans/2026-07-30-battlescene-participant-views.md` 与 `plans/2026-07-30-battlescene-card-pile-hud.md`；M3B 可复用已完成的 M2 卡区事实，其余切片分别等待 M4、M5 与 M7-M9。
+当前将 M3 拆为按事实依赖推进的切片：M3A 参与者世界视图与生命 HUD；M3B 抽牌/弃牌计数；M3C 能量与结束回合；M3D 敌人意图；M3E 格挡、状态、死亡、回合提示与胜败覆盖层。M3A～M3D 已分别随 M1/M2、M4 与 M5 落地；M3E 继续等待 M7～M9 的真实结算与战斗结束事实。参与者设计见 `plans/2026-07-30-battlescene-participant-views.md`，敌人意图设计见 `plans/2026-08-01-m5-enemy-intents-deterministic-behavior.md`。
 
 主界面至少包含：
 
@@ -285,23 +285,24 @@ NotStarted
 
 ### M5 · 敌人生成、意图与随机行为
 
-静态表需要后续扩展，但不要把随机算法写进 UI：
+M5 复用 Encounter 既有敌人生成和 M4 权威顺序，只增加行为模板、当前意图、独立确定性选择与 M3D HUD；完整计划和验收分别见 `plans/2026-08-01-m5-enemy-intents-deterministic-behavior.md` 与 `06_testing/2026-08-01-m5d-full-validation-review.md`。
 
 - 敌人模板引用一个行为组。
-- 行为定义包含动作效果、权重、冷却/连续次数限制和可选前置条件。
-- 意图是“已经选定、下一敌人阶段会执行的动作”，必须保存在运行时，UI 和执行读取同一个结果。
+- 行为组以稳定顺序引用行为模板；行为模板包含意图类型、目标规则、既有 `CardEffect` 引用、正整数权重、冷却选择次数和最大连续次数。
+- 当前意图只保存已经选定的 `BehaviorId`；意图类型、目标、图标和预测数值从静态模板与当前参与者事实派生。
+- `BattleEnemyIntentsData` 拥有每名敌人的最小选择历史和敌人行为专属 `GameRandom`；洗牌、地图或奖励不得共享该实例。
+- HUD、命令队列与未来 Effect 执行读取同一个当前意图，读取、订阅、语言变化、力量变化或 View 重建不得重新随机。
 
 选择流程：
 
-1. 收集满足条件的候选行为。
-2. 按连续次数、冷却或历史规则过滤。
-3. 使用 `BattleRandom` 做加权选择。
-4. 把结果写为该敌人的当前意图。
-5. UI 展示意图。
-6. 敌人阶段执行同一个意图，不再次随机。
-7. 行动结束后选择下一轮意图。
+1. 初始选择严格按 Encounter 敌人顺序执行；候选严格按行为组显式顺序收集。
+2. 按最大连续次数与冷却历史过滤；第一版没有通用条件 DSL 或可选前置条件抽象。
+3. 单候选不消费随机；多候选使用专属随机流执行一次稳定整数加权选择。
+4. 一次发布完整、不可变的 `CombatantId → BehaviorId` 快照。
+5. 合法完成当前敌人行动时，先原子选择并发布该敌人的下一意图，再保证推进既有 Encounter 顺序。
+6. 错误、重复、死亡跳过或无候选不得部分推进；配置错误显式失败，不随机回退或静默跳过。
 
-第一版只需要一个可预测敌人和一个加权随机敌人。随机测试必须固定种子，验证序列、约束和无候选时的显式失败策略。
+第一版默认 Encounter 包含一个固定攻击敌人与一个攻击/防御加权随机敌人。意图 HUD 使用正式五类图标，并与卡牌文本共用 `BattleEffectValueCalculator` 解释当前可计算数值。M5 不执行真实 Effect、伤害、格挡、状态或胜败；这些仍由 M7/M8 承接，`DEP-009` 保持 open。
 
 ### M6 · 出牌命令、合法性与目标选择
 

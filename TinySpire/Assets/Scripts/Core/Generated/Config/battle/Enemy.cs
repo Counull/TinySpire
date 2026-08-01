@@ -25,6 +25,7 @@ public sealed partial class Enemy : Luban.BeanBase
         MaxHealth = (int)_obj.GetValue("max_health");
         BaseStrength = (int)_obj.GetValue("base_strength");
         ViewPrefabAddress = (string)_obj.GetValue("view_prefab_address");
+        BehaviorGroupId = (int)_obj.GetValue("behavior_group_id");
     }
 
     public static Enemy DeserializeEnemy(JToken _buf)
@@ -52,6 +53,10 @@ public sealed partial class Enemy : Luban.BeanBase
     /// View Prefab Address
     /// </summary>
     public readonly string ViewPrefabAddress;
+    /// <summary>
+    /// Behavior group ID
+    /// </summary>
+    public readonly int BehaviorGroupId;
 
 
     public const int __ID__ = 1095086770;
@@ -69,6 +74,7 @@ public sealed partial class Enemy : Luban.BeanBase
         + "maxHealth:" + MaxHealth + ","
         + "baseStrength:" + BaseStrength + ","
         + "viewPrefabAddress:" + ViewPrefabAddress + ","
+        + "behaviorGroupId:" + BehaviorGroupId + ","
         + "}";
     }
 }

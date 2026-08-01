@@ -1,0 +1,29 @@
+{
+  "7001": {
+    "id": 7001,
+    "intent_type": 0,
+    "target_rule": 1,
+    "effect_id": 4002,
+    "weight": 1,
+    "cooldown_selections": 0,
+    "max_consecutive": 0
+  },
+  "7002": {
+    "id": 7002,
+    "intent_type": 0,
+    "target_rule": 1,
+    "effect_id": 4002,
+    "weight": 3,
+    "cooldown_selections": 0,
+    "max_consecutive": 2
+  },
+  "7003": {
+    "id": 7003,
+    "intent_type": 1,
+    "target_rule": 0,
+    "effect_id": 4003,
+    "weight": 1,
+    "cooldown_selections": 1,
+    "max_consecutive": 1
+  }
+}

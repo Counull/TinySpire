@@ -8,6 +8,13 @@ using TinySpire.Battle;
 
 public sealed class BattleCommandQueueTests
 {
+    /// <summary>每个用例结束后释放测试工厂代建的敌人意图响应式资源。</summary>
+    [TearDown]
+    public void TearDown()
+    {
+        BattleCommandQueueTestFactory.DisposeOwnedEnemyIntents();
+    }
+
     /// <summary>验证战斗开始前的玩家命令会在提交 seam 被拒绝，且不会占用权威序号。</summary>
     [Test]
     public void Submit_PlayerCommandBeforeBattleStart_RejectsWithoutQueueing()
@@ -964,6 +971,9 @@ public sealed class BattleCommandQueueTests
 
 internal static class BattleCommandQueueTestFactory
 {
+    private static readonly List<BattleEnemyIntentsData> OwnedEnemyIntents =
+        new List<BattleEnemyIntentsData>();
+
     /// <summary>用最小静态表和可选玩家卡区创建只供纯模型测试使用的命令队列。</summary>
     internal static BattleCommandQueue Create(
         BattleCombatantsData combatants,
@@ -972,22 +982,52 @@ internal static class BattleCommandQueueTestFactory
         IReadOnlyDictionary<int, int> cardCosts = null,
         IReadOnlyList<CombatantId> enemyCombatantIdsInEncounterOrder = null,
         int energyPerRound = 3,
-        int initialHandCount = 0)
+        int initialHandCount = 0,
+        BattleEnemyIntentsData enemyIntents = null,
+        Tables tables = null,
+        uint battleSeed = 1)
     {
         IReadOnlyDictionary<CombatantId, BattleCardZonesData> resolvedCardZones =
             playerCardZones ?? new Dictionary<CombatantId, BattleCardZonesData>();
+        IReadOnlyList<CombatantId> resolvedEnemyIds =
+            enemyCombatantIdsInEncounterOrder ?? Array.Empty<CombatantId>();
+        Tables resolvedTables = tables ?? CreateTables(cardCosts, combatants, resolvedEnemyIds);
+        BattleEnemyIntentsData resolvedEnemyIntents = enemyIntents;
+        if (resolvedEnemyIntents == null)
+        {
+            resolvedEnemyIntents = new BattleEnemyIntentsData(
+                combatants,
+                resolvedEnemyIds,
+                resolvedTables,
+                battleSeed);
+            OwnedEnemyIntents.Add(resolvedEnemyIntents);
+        }
+
         return new BattleCommandQueue(
             combatants,
             resolvedCardZones,
-            enemyCombatantIdsInEncounterOrder ?? Array.Empty<CombatantId>(),
-            CreateTables(cardCosts),
+            resolvedEnemyIds,
+            resolvedEnemyIntents,
+            resolvedTables,
             energyPerRound,
             initialHandCount,
             presentation);
     }
 
-    /// <summary>创建仅填充测试所需卡牌费用、其余表为空的 Luban 静态表集合。</summary>
-    private static Tables CreateTables(IReadOnlyDictionary<int, int> cardCosts)
+    /// <summary>释放当前用例中由工厂创建、但不归命令队列所有的敌人意图聚合。</summary>
+    internal static void DisposeOwnedEnemyIntents()
+    {
+        foreach (BattleEnemyIntentsData enemyIntents in OwnedEnemyIntents)
+            enemyIntents.Dispose();
+
+        OwnedEnemyIntents.Clear();
+    }
+
+    /// <summary>创建测试所需卡牌费用与固定敌人行为的最小 Luban 静态表集合。</summary>
+    private static Tables CreateTables(
+        IReadOnlyDictionary<int, int> cardCosts,
+        BattleCombatantsData combatants,
+        IReadOnlyList<CombatantId> enemyIds)
     {
         var cards = new JArray();
         if (cardCosts != null)
@@ -1007,14 +1047,41 @@ internal static class BattleCommandQueueTestFactory
             }
         }
 
+        var enemies = new JArray();
+        var enemyTemplateIds = new HashSet<int>();
+        foreach (CombatantId enemyId in enemyIds)
+        {
+            if (!combatants.TryGet(enemyId, out CombatantData combatant) ||
+                !(combatant is EnemyCombatantData) ||
+                !enemyTemplateIds.Add(combatant.TemplateId))
+            {
+                continue;
+            }
+
+            enemies.Add(new JObject
+            {
+                ["id"] = combatant.TemplateId,
+                ["name_i18n_key"] = $"battle.enemy.test_{combatant.TemplateId}.name",
+                ["max_health"] = combatant.MaxHealth,
+                ["base_strength"] = combatant.Strength.CurrentValue,
+                ["view_prefab_address"] = string.Empty,
+                ["behavior_group_id"] = 6001
+            });
+        }
+
         var data = new Dictionary<string, JArray>
         {
             ["battle_tbhero"] = new JArray(),
-            ["battle_tbenemy"] = new JArray(),
+            ["battle_tbenemy"] = enemies,
             ["battle_tbdeck"] = new JArray(),
             ["battle_tbcard"] = cards,
-            ["battle_tbcardeffect"] = new JArray(),
-            ["battle_tbencounter"] = new JArray()
+            ["battle_tbcardeffect"] = JArray.Parse(
+                "[{\"id\":4999,\"effect_type\":1,\"attribute\":0,\"value\":1}]"),
+            ["battle_tbencounter"] = new JArray(),
+            ["battle_tbenemybehaviorgroup"] = JArray.Parse(
+                "[{\"id\":6001,\"behavior_ids\":[7001]}]"),
+            ["battle_tbenemybehavior"] = JArray.Parse(
+                "[{\"id\":7001,\"intent_type\":0,\"target_rule\":1,\"effect_id\":4999,\"weight\":1,\"cooldown_selections\":0,\"max_consecutive\":0}]")
         };
         return new Tables(tableName => data[tableName]);
     }

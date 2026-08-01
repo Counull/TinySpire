@@ -356,3 +356,39 @@ updated: 2026-08-01
 **理由**：用户确认的规则是“玩家命令只能属于提交时的轮次”，因此轮次号已经是所需的权威行动窗口身份，不需要增加可变 epoch、把提交轮次暴露给 UI，或让阶段模块反向依赖队列。栅栏位于队列进入控制器写链之前，可直接保证跨轮失败零写入；同时不改变同轮展示期间继续入队和队首最终事实校验。
 
 **影响**：玩家命令不能在 `BattleStart` 或 `EnemyAction` 为未来轮次预排；即使同一张卡在下一轮重抽、能量重置且阶段重新变为 `PlayerAction`，旧命令也不会恢复合法。展示层同时按 CD-030 的精确权威序号关联 pending，避免跨轮失败反馈误解锁更新命令或重建 View。当前只显式覆盖已有的两类玩家命令；未来新增玩家命令时必须纳入同一判定，但本次不为尚不存在的类型引入命令分类抽象。验证见 `06_testing/2026-08-01-m4e-full-validation-review.md`。
+
+## CD-032：敌人当前意图以 BehaviorId 快照持有，并使用独立确定性随机流
+
+**问题**：M4 只提供敌人行动顺序与完成命令，尚无敌人行为事实。若 HUD、队列或未来 Effect 在读取时各自随机，或让敌人行为共用洗牌随机流，同一场战斗会因展示刷新、订阅顺序或卡区操作得到不同序列；若运行时复制行为类型、目标和数值，又会与 Luban 模板形成多份事实。
+
+**选择**：`battle.Enemy` 只引用有序的 `EnemyBehaviorGroup`，行为模板保存 `EnemyIntentType`、`TargetRule`、既有 `CardEffect` 引用、正整数权重、冷却选择次数和最大连续次数。`BattleEnemyIntentsData` 按 `EnemyCombatantIdsInEncounterOrder` 建立每名敌人的权威 `BehaviorId`，以一个不可变完整 `EnemyIntentLayoutData` R3 快照发布；行为细节和显示值始终回查静态表与当前参与者事实。该聚合拥有由战斗种子和固定命名域盐派生的独立 `GameRandom`，单候选不消费随机，多候选按行为组稳定顺序只执行一次整数权重抽样。
+
+**原子性**：每名敌人的冷却与连续次数只记录已完成行为所需的最小历史。完成当前行为时先复制历史并保存随机状态，再过滤候选和选择；只有成功后才替换该敌人历史并一次发布完整快照。无候选或配置契约错误会恢复随机状态，不修改当前意图或权威历史；不提供随机回退、静默跳过或通用条件 DSL。
+
+**理由**：`BehaviorId` 足以表达本局已经作出的选择，其他字段均可派生，因此 HUD、命令队列与未来 Effect 可以读取同一事实而不产生镜像。独立实例随机流保证卡区洗牌与敌人选择互不推进，明确 Encounter 顺序则消除字典枚举对随机消费次序的影响。
+
+**影响**：M5A 新增两张行为工作簿、意图枚举、生成配置、`BattleEnemyIntentsData` 与纯 C# 测试；固定敌人和加权随机敌人共用同一选择核心。`BattleSession`、M4 队列与 HUD 的生产接线分别留给 M5B/M5C；真实 Effect、伤害、格挡、状态、胜败和 Run 根种子不在本决策范围。验证见 `06_testing/2026-08-01-m5a-enemy-behavior-selection.md`。
+
+## CD-033：敌人完成命令先选择下一意图，再保证推进 Encounter 顺序
+
+**问题**：M4 的 `TryCompleteEnemyAction` 把阶段/身份校验和 Encounter 推进放在一个方法中。M5 若先调用它再选下一意图，无候选配置错误会留下“回合已推进、意图未推进”的半完成状态；若意图发布后再次执行可能失败的校验，则“失败零写入”又依赖没有重入或状态变化的隐含前提。
+
+**选择**：`BattleCommandQueue` 对敌人完成使用固定三段写链：`ValidateCompleteEnemyAction` 只读校验当前阶段、敌人类型与 `CurrentActingEnemyId`；成功后调用同一 Session 持有的 `BattleEnemyIntentsData.CompleteAndSelectNext`；意图成功发布后调用无参数、不可失败的 `AdvanceAfterValidatedEnemyAction`，只负责向既有 M4 状态机派发完成事件并 Tick。无候选异常不转成普通表现失败，而是停住当前队首命令并显式暴露配置契约错误。
+
+**所有权**：`BattleSession` 在敌人创建完成后按同一 Encounter 顺序建立并公开意图聚合，正常销毁时统一释放；`BattleCommandQueue` 和 HUD 只借用该实例，不创建或释放第二份。生产驱动继续只提交 `CompleteEnemyActionCommand`，不直接调用意图选择。
+
+**理由**：所有可失败步骤都发生在回合写入之前，因此错误阶段、错误/重复敌人和无候选都不会部分推进。意图成功后只剩既有状态机的确定性交接，保证下一名敌人看到的回合事实与已经发布的下一意图一致；公共队列 seam 与 M4 权威顺序不变。
+
+**影响**：M5B 修改 `BattleSession`、`BattleCommandQueue`、`BattleTurnController` 和 `BattleLifetimeScope` 的最小接线及测试；`BattleCommandRuntimeDriver` 只更新过期的“无行为敌人”注释。没有新增命令类型、普通失败枚举、行为执行层、场景或 Prefab，也不实现真实 Effect、伤害或死亡事件驱动交接。验证见 `06_testing/2026-08-01-m5b-session-command-queue-wiring.md`。
+
+## CD-034：敌人意图 HUD 只投影权威 BehaviorId，并与卡牌文本共享效果值计算
+
+**问题**：若 HUD 保存第二份意图类型或预测数值，意图切换、力量变化、死亡和 View 重建都可能让画面偏离 Session 的权威事实；若敌人预测另写一套数值公式，又会与既有卡牌动态文本对同一 `CardEffect` 得出不同结果。运行时动态创建固定意图节点还会把静态 UI 结构与 Prefab 资产分离。
+
+**选择**：`ParticipantHudView.prefab` 静态持有意图根、正式图标和数值文本，玩家隐藏，敌人订阅同一 `BattleEnemyIntentsData.Layout`。展示层只读取当前 `BehaviorId`，再从 Luban `EnemyBehavior.IntentType / EffectId` 与当前 `EnemyCombatantData` 派生可见性、Sprite 和数值；力量、生命、Locale 或意图变化均重新投影，不保存玩法事实镜像。原 `CardValueCalculator` 保留 Meta GUID 并最小更名为 `BattleEffectValueCalculator`，卡牌文本与敌人 HUD 通过同一个纯计算入口解释 `CardEffect`，但不执行 Effect。
+
+**资源与布局**：Prefab 只序列化 `ui_battle_intent_attack/defend/buff/debuff/special` 五类正式 Sprite，拒绝 `_ref_` 参考图；意图行位于名称上方，继续由既有世界点投影跟随角色。1～3 敌人仍使用 M3A 的 Encounter 顺序和等间距世界布局，不创建第二套敌人或 HUD 布局事实。
+
+**理由**：`BehaviorId`、静态模板和当前参与者事实已经足以得到完整展示，把所有投影留在 View 边界可确保刷新不消费随机，且未来真实 Effect 入口仍可读取同一意图。静态 Prefab 结构让引用、导入模式和相对布局可在 EditMode 合约测试中验证，生产运行只实例化可变数量的 HUD。
+
+**影响**：M5C 修改 `ParticipantHudView.prefab`、`ParticipantHudView`、`ParticipantHudPresentation`、`BattleParticipantPresenter`、共享效果值计算器及对应测试；不修改 `BattleScene.unity`、Session/队列公共 seam、DI 架构或启动流程，也不增加伤害、格挡、状态、死亡动画或胜败。验证见 `06_testing/2026-08-01-m5c-enemy-intent-hud.md`。
