@@ -4,7 +4,7 @@ owner: Daedalus
 page_type: roadmap
 lifecycle: active
 created: 2026-07-29
-updated: 2026-08-01
+updated: 2026-08-02
 status_source: SESSION_LOG.md
 note: 本文件是 BattleScene 实现侧的阶段化路线图；项目级玩法口径仍以 Hermes_Pegasus 的设计事实源为准。
 ---
@@ -306,33 +306,34 @@ M5 复用 Encounter 既有敌人生成和 M4 权威顺序，只增加行为模�
 
 ### M6 · 出牌命令、合法性与目标选择
 
-把当前“越线即删除”替换为一次完整命令：
+M4 已经把旧“越线即删除”替换为权威 `PlayCardCommand`，并完成阶段、手牌、费用、能量、提交轮次和队首执行期校验。M6 不重做该基础，而是在同一命令和 `BattleCommandQueue.Submit` seam 上补充显式目标、派生预览、目标失效重校验与当前单玩家 UI；完整实施边界见 `plans/2026-08-01-m6-card-play-legality-target-selection.md`。
 
 ```text
 PlayCardCommand
-  CardInstanceId
-  SourceCombatantId
-  TargetCombatantId?
+  ActorId
+  CardId
+  TargetId?
 ```
 
-统一验证：
+队首在 M4 既有顺序后统一补充验证：
 
 - 当前是否为 `PlayerAction`。
 - 卡牌实例是否仍在手牌。
 - 能量是否足够。
+- 当前双方是否仍各有存活参与者；只派生可否出牌，不提前实现胜负流程。
 - 目标规则是否满足。
 - 目标是否存在且存活。
-- 战斗是否已经结束。
 
-验证成功后才扣能量并进入结算；失败不改变任何权威状态，UI 回弹并展示原因。`CanPlayCard`、目标高亮与费用颜色是上述事实的派生预览，最终仍以提交命令时的验证为准。
+验证成功后仍只沿用 M4 的临时闭环：扣能量并把指定实例移入弃牌堆，不执行真实 Effect；失败不改变任何权威状态，UI 回弹并展示原因。`CanPlayCard`、目标高亮与费用颜色是上述事实的派生预览，最终仍以命令到达队首时的事实为准。
 
 目标交互建议：
 
-- `Self`：越线松手即可提交玩家自身目标。
-- `Enemy`：拖拽时显示目标箭头和合法敌人高亮，松手命中敌人后提交。
+- `Self`：越线松手，由 UI 自动提交玩家自身 `CombatantId`。
+- `Enemy`：越线后显示功能性目标箭头和合法敌人高亮，松手命中存活敌人后提交。
+- 第一版命中复用 `BattleParticipantPresenter` 的唯一 View 映射，把世界角色 `SpriteRenderer.bounds` 投影为屏幕矩形；不增加 Collider、Physics2D Raycaster 或第二套参与者注册表。
 - 未来的 AllEnemy/RandomEnemy 不复用单目标命中结果，由目标解析规则派生目标集合。
 
-完成后解决 `DEP-001` 与 `DEP-002`。
+M6A～M6D 已串行完成：显式 Self/Enemy 目标、UI/队首共享规则、目标失效零写入、功能性箭头/高亮/命中、费用不足视觉拖动，以及定向/全量 EditMode、Addressables、Bootstrap、真实 Game View 与双轴复审均有证据；详见 `06_testing/2026-08-02-m6d-full-validation-review.md`。`DEP-001` resolved，`DEP-002` 已由 M4D 解决。目标选择发生在 Submit 前，不解决命令执行中途等待局部输入的 `DEP-010`。
 
 ### M7 · Effect 执行器（本轮明确不实施）
 
@@ -376,6 +377,7 @@ MVP 效果类型：
 - 敌人行动反馈结束后再进入下一敌人或下一回合。
 - 状态的回合开始/回合结束触发与衰减。
 - 整个调度器等待表现层的必要动画屏障，但权威状态不由动画回调决定。
+- 在增加敌人和系统提交者前，把 Hand/Turn HUD 各自维护的 `Submit → pending → PublishQueued → feedback` 协议收敛为一个具体协作者；权威序号只由该 owner 对账，View 不再承担调度身份。该改造应与队列事件驱动、按命令类型的表现描述和 `Queued` 协议裁决一起完成，避免在 M6 只抽出单一 Hand helper 形成浅 module。
 
 验收：玩家可用初始卡组与一个敌人完成多回合战斗，抽牌、弃牌、能量、格挡、意图、敌人行动和死亡全部闭环。
 
@@ -406,6 +408,7 @@ MVP 效果类型：
 - 30/60/120 FPS 下拖拽和动画不改变规则结果。
 - 场景重复进入退出不残留旧 `BattleSession`、订阅或 Tween。
 - EditMode 覆盖状态与计算；PlayMode 覆盖 DI、场景生成、UI 绑定与完整单战斗冒烟。
+- 配置地址缺失、JSON 损坏或规则表预加载失败必须显式进入启动失败路径，`ConfigService` 不再以代码默认值静默继续；手工 `TableNames` 清单同时改为生成或构建期校验，并覆盖 Bootstrap 失败路径测试。
 
 ## 6. 实施顺序与切片大小
 
@@ -428,6 +431,7 @@ MVP 效果类型：
 - 新游戏选择角色/种子后创建 `RunState`；返回主菜单或本局结束时销毁。
 - 落地 CD-009 的 `RunScope`/`RunFlowService`，让 Run 跨地图、战斗、商店、事件场景存活。
 - `BattleSession` 从 `RunState` 的当前牌组和当前玩家生命创建，不再固定英雄 1001。
+- 让 `BattleSession` 成为玩家集合与 `CombatantId → BattleCardZonesData` 的唯一装配/解析出口，消除 LifetimeScope、Hand、Turn HUD 与 Presenter 对“当前唯一玩家”的重复扫描；只有真实 Party 输入到位后才解除 `DEP-008`，不预造第二玩家。
 - 验收：开始新 Run → 进入地图 → 进入战斗 → 返回地图，牌组与生命连续；退出到主菜单后旧 Run 不残留。
 
 ### G2 · RunState、存档与确定性

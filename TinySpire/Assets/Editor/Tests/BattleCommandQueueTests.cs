@@ -220,6 +220,7 @@ public sealed class BattleCommandQueueTests
         var combatants = new BattleCombatantsData();
         PlayerCombatantData firstPlayer = combatants.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
         PlayerCombatantData secondPlayer = combatants.AddPlayer(templateId: 102, maxHealth: 28, strength: 0);
+        EnemyCombatantData enemy = combatants.AddEnemy(templateId: 201, maxHealth: 20, strength: 0);
         var firstZones = new BattleCardZonesData(new[] { 3001, 3001 }, shuffleSeed: 1);
         var secondZones = new BattleCardZonesData(new[] { 3001 }, shuffleSeed: 2);
         firstZones.Draw(2);
@@ -235,13 +236,14 @@ public sealed class BattleCommandQueueTests
             combatants,
             presentation,
             cardZones,
-            new Dictionary<int, int> { [3001] = 1 });
+            new Dictionary<int, int> { [3001] = 1 },
+            enemyCombatantIdsInEncounterOrder: new[] { enemy.Id });
         queue.Submit(new StartBattleCommand());
         presentation.CompleteNext();
 
         queue.Submit(new EndPlayerActionCommand(firstPlayer.Id));
         BattleCommandSubmissionResult secondSubmission =
-            queue.Submit(new PlayCardCommand(secondPlayer.Id, secondPlayerCardId));
+            queue.Submit(new PlayCardCommand(secondPlayer.Id, secondPlayerCardId, secondPlayer.Id));
 
         Assert.That(presentation.Results[1].Succeeded, Is.True);
         Assert.That(queue.Turn.CurrentValue.Phase, Is.EqualTo(BattleTurnPhase.PlayerAction));
@@ -295,7 +297,7 @@ public sealed class BattleCommandQueueTests
 
         queue.Submit(new EndPlayerActionCommand(firstPlayer.Id));
         queue.Submit(new EndPlayerActionCommand(secondPlayer.Id));
-        queue.Submit(new PlayCardCommand(firstPlayer.Id, lateCardId));
+        queue.Submit(new PlayCardCommand(firstPlayer.Id, lateCardId, firstPlayer.Id));
 
         Assert.That(queue.Turn.CurrentValue.Phase, Is.EqualTo(BattleTurnPhase.PlayerAction));
         Assert.That(queue.Turn.CurrentValue.Players[firstPlayer.Id].HasEndedAction, Is.True);
@@ -389,7 +391,7 @@ public sealed class BattleCommandQueueTests
         combatants.ApplyDamage(enemy.Id, 1);
 
         queue.Submit(new EndPlayerActionCommand(player.Id));
-        queue.Submit(new PlayCardCommand(player.Id, queuedCardId));
+        queue.Submit(new PlayCardCommand(player.Id, queuedCardId, player.Id));
 
         presentation.CompleteNext();
 
@@ -496,7 +498,7 @@ public sealed class BattleCommandQueueTests
 
         presentation.CompleteNext();
         CardInstanceId playedCardId = zones.Hand[0];
-        queue.Submit(new PlayCardCommand(player.Id, playedCardId));
+        queue.Submit(new PlayCardCommand(player.Id, playedCardId, player.Id));
 
         Assert.That(queue.Turn.CurrentValue.Players[player.Id].Energy, Is.EqualTo(2));
         Assert.That(zones.Hand.Count, Is.EqualTo(1));
@@ -570,6 +572,7 @@ public sealed class BattleCommandQueueTests
     {
         var combatants = new BattleCombatantsData();
         PlayerCombatantData player = combatants.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
+        EnemyCombatantData enemy = combatants.AddEnemy(templateId: 201, maxHealth: 20, strength: 0);
         var zones = new BattleCardZonesData(new[] { 3001, 3002 }, shuffleSeed: 1234);
         zones.Draw(2);
         CardInstanceId oneCostCardId = FindCardByTemplate(zones, 3001);
@@ -581,14 +584,15 @@ public sealed class BattleCommandQueueTests
             combatants,
             presentation,
             cardZones,
-            cardCosts);
+            cardCosts,
+            enemyCombatantIdsInEncounterOrder: new[] { enemy.Id });
         queue.Submit(new StartBattleCommand());
         presentation.CompleteNext();
 
         BattleCommandSubmissionResult firstSubmission =
-            queue.Submit(new PlayCardCommand(player.Id, oneCostCardId));
+            queue.Submit(new PlayCardCommand(player.Id, oneCostCardId, player.Id));
         BattleCommandSubmissionResult secondSubmission =
-            queue.Submit(new PlayCardCommand(player.Id, twoCostCardId));
+            queue.Submit(new PlayCardCommand(player.Id, twoCostCardId, player.Id));
 
         Assert.That(firstSubmission.AuthoritySequence, Is.EqualTo(2));
         Assert.That(secondSubmission.AuthoritySequence, Is.EqualTo(3));
@@ -616,6 +620,7 @@ public sealed class BattleCommandQueueTests
         var combatants = new BattleCombatantsData();
         PlayerCombatantData firstPlayer = combatants.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
         PlayerCombatantData secondPlayer = combatants.AddPlayer(templateId: 102, maxHealth: 28, strength: 0);
+        EnemyCombatantData enemy = combatants.AddEnemy(templateId: 201, maxHealth: 20, strength: 0);
         var firstZones = new BattleCardZonesData(new[] { 3001 }, shuffleSeed: 1);
         var secondZones = new BattleCardZonesData(new[] { 3002 }, shuffleSeed: 2);
         firstZones.Draw(1);
@@ -633,13 +638,14 @@ public sealed class BattleCommandQueueTests
             combatants,
             presentation,
             cardZones,
-            cardCosts);
+            cardCosts,
+            enemyCombatantIdsInEncounterOrder: new[] { enemy.Id });
         queue.Submit(new StartBattleCommand());
         presentation.CompleteNext();
-        queue.Submit(new PlayCardCommand(firstPlayer.Id, firstCardId));
+        queue.Submit(new PlayCardCommand(firstPlayer.Id, firstCardId, firstPlayer.Id));
 
         BattleCommandSubmissionResult secondSubmission =
-            queue.Submit(new PlayCardCommand(secondPlayer.Id, secondCardId));
+            queue.Submit(new PlayCardCommand(secondPlayer.Id, secondCardId, secondPlayer.Id));
 
         Assert.That(secondSubmission.Accepted, Is.True);
         Assert.That(secondSubmission.AuthoritySequence, Is.EqualTo(3));
@@ -668,6 +674,7 @@ public sealed class BattleCommandQueueTests
     {
         var combatants = new BattleCombatantsData();
         PlayerCombatantData player = combatants.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
+        EnemyCombatantData enemy = combatants.AddEnemy(templateId: 201, maxHealth: 20, strength: 0);
         var zones = new BattleCardZonesData(new[] { 3002, 3002 }, shuffleSeed: 1234);
         zones.Draw(2);
         CardInstanceId firstCardId = zones.Hand[0];
@@ -679,11 +686,12 @@ public sealed class BattleCommandQueueTests
             combatants,
             presentation,
             cardZones,
-            cardCosts);
+            cardCosts,
+            enemyCombatantIdsInEncounterOrder: new[] { enemy.Id });
         queue.Submit(new StartBattleCommand());
         presentation.CompleteNext();
-        queue.Submit(new PlayCardCommand(player.Id, firstCardId));
-        queue.Submit(new PlayCardCommand(player.Id, secondCardId));
+        queue.Submit(new PlayCardCommand(player.Id, firstCardId, player.Id));
+        queue.Submit(new PlayCardCommand(player.Id, secondCardId, player.Id));
         BattleTurnData turnAfterFirstCard = queue.Turn.CurrentValue;
         CardZoneLayoutData layoutAfterFirstCard = zones.Layout.CurrentValue;
 
@@ -709,6 +717,7 @@ public sealed class BattleCommandQueueTests
     {
         var combatants = new BattleCombatantsData();
         PlayerCombatantData player = combatants.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
+        EnemyCombatantData enemy = combatants.AddEnemy(templateId: 201, maxHealth: 20, strength: 0);
         var zones = new BattleCardZonesData(new[] { 3001 }, shuffleSeed: 1234);
         zones.Draw(1);
         CardInstanceId cardId = zones.Hand[0];
@@ -719,9 +728,10 @@ public sealed class BattleCommandQueueTests
             combatants,
             presentation,
             cardZones,
-            cardCosts);
+            cardCosts,
+            enemyCombatantIdsInEncounterOrder: new[] { enemy.Id });
         queue.Submit(new StartBattleCommand());
-        queue.Submit(new PlayCardCommand(player.Id, cardId));
+        queue.Submit(new PlayCardCommand(player.Id, cardId, player.Id));
         zones.DiscardFromHand(cardId);
         BattleTurnData turnBeforeExecution = queue.Turn.CurrentValue;
         CardZoneLayoutData layoutBeforeExecution = zones.Layout.CurrentValue;
@@ -734,6 +744,113 @@ public sealed class BattleCommandQueueTests
         Assert.That(queue.Turn.CurrentValue, Is.SameAs(turnBeforeExecution));
         Assert.That(queue.Turn.CurrentValue.Players[player.Id].Energy, Is.EqualTo(3));
         Assert.That(zones.Layout.CurrentValue, Is.SameAs(layoutBeforeExecution));
+
+        queue.Dispose();
+        zones.Dispose();
+        combatants.Dispose();
+    }
+
+    /// <summary>验证 Enemy 目标在排队期间死亡后，队首重校验失败且所有权威事实保持目标死亡后的原值。</summary>
+    [Test]
+    public void QueuedPlayCard_WhenEnemyTargetDiesBeforeHead_FailsWithoutMutation()
+    {
+        var combatants = new BattleCombatantsData();
+        PlayerCombatantData player = combatants.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
+        EnemyCombatantData enemy = combatants.AddEnemy(templateId: 201, maxHealth: 1, strength: 0);
+        EnemyCombatantData survivingEnemy = combatants.AddEnemy(templateId: 202, maxHealth: 5, strength: 0);
+        var zones = new BattleCardZonesData(new[] { 3001 }, shuffleSeed: 1234);
+        zones.Draw(1);
+        CardInstanceId cardId = zones.Hand[0];
+        var cardZones = new Dictionary<CombatantId, BattleCardZonesData> { [player.Id] = zones };
+        var cardCosts = new Dictionary<int, int> { [3001] = 1 };
+        var targetRules = new Dictionary<int, cfg.battle.TargetRule>
+        {
+            [3001] = cfg.battle.TargetRule.Enemy
+        };
+        var presentation = new ControllableBattleCommandPresentation();
+        BattleCommandQueue queue = BattleCommandQueueTestFactory.Create(
+            combatants,
+            presentation,
+            cardZones,
+            cardCosts,
+            enemyCombatantIdsInEncounterOrder: new[] { enemy.Id, survivingEnemy.Id },
+            cardTargetRules: targetRules);
+        queue.Submit(new StartBattleCommand());
+        BattleCommandSubmissionResult playSubmission =
+            queue.Submit(new PlayCardCommand(player.Id, cardId, enemy.Id));
+        combatants.ApplyDamage(enemy.Id, damage: 1);
+        BattleTurnData turnBeforeExecution = queue.Turn.CurrentValue;
+        CardZoneLayoutData layoutBeforeExecution = zones.Layout.CurrentValue;
+        var healthFactBeforeExecution = enemy.Health;
+        int healthValueBeforeExecution = enemy.CurrentHealth;
+
+        presentation.CompleteNext();
+
+        Assert.That(
+            presentation.Results[1].FailureReason,
+            Is.EqualTo(BattleCommandExecutionFailureReason.TargetNotAlive));
+        Assert.That(presentation.Results[1].AuthoritySequence, Is.EqualTo(playSubmission.AuthoritySequence));
+        Assert.That(queue.Turn.CurrentValue, Is.SameAs(turnBeforeExecution));
+        Assert.That(queue.Turn.CurrentValue.Players[player.Id].Energy, Is.EqualTo(3));
+        Assert.That(zones.Layout.CurrentValue, Is.SameAs(layoutBeforeExecution));
+        Assert.That(zones.Hand, Is.EqualTo(new[] { cardId }));
+        Assert.That(enemy.Health, Is.SameAs(healthFactBeforeExecution));
+        Assert.That(enemy.CurrentHealth, Is.EqualTo(healthValueBeforeExecution));
+
+        presentation.CompleteNext();
+
+        Assert.That(queue.Queue.CurrentValue.PendingCount, Is.Zero);
+        Assert.That(queue.Queue.CurrentValue.IsWaitingForPresentation, Is.False);
+
+        queue.Dispose();
+        zones.Dispose();
+        combatants.Dispose();
+    }
+
+    /// <summary>验证合法 Enemy 出牌只扣一次能量、只移动一次指定实例，且不会提前执行目标效果。</summary>
+    [Test]
+    public void PlayCard_WithLegalEnemyTarget_SpendsAndMovesOnceWithoutChangingTargetHealth()
+    {
+        var combatants = new BattleCombatantsData();
+        PlayerCombatantData player = combatants.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
+        EnemyCombatantData enemy = combatants.AddEnemy(templateId: 201, maxHealth: 20, strength: 0);
+        var zones = new BattleCardZonesData(new[] { 3001 }, shuffleSeed: 1234);
+        zones.Draw(1);
+        CardInstanceId cardId = zones.Hand[0];
+        var cardZones = new Dictionary<CombatantId, BattleCardZonesData> { [player.Id] = zones };
+        var cardCosts = new Dictionary<int, int> { [3001] = 1 };
+        var targetRules = new Dictionary<int, cfg.battle.TargetRule>
+        {
+            [3001] = cfg.battle.TargetRule.Enemy
+        };
+        var presentation = new ControllableBattleCommandPresentation();
+        BattleCommandQueue queue = BattleCommandQueueTestFactory.Create(
+            combatants,
+            presentation,
+            cardZones,
+            cardCosts,
+            enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
+            cardTargetRules: targetRules);
+        queue.Submit(new StartBattleCommand());
+        presentation.CompleteNext();
+        var healthBeforeExecution = enemy.Health;
+        int healthValueBeforeExecution = enemy.CurrentHealth;
+
+        queue.Submit(new PlayCardCommand(player.Id, cardId, enemy.Id));
+
+        Assert.That(presentation.Results[1].Succeeded, Is.True);
+        Assert.That(queue.Turn.CurrentValue.Players[player.Id].Energy, Is.EqualTo(2));
+        Assert.That(zones.Hand, Is.Empty);
+        Assert.That(zones.DiscardPile, Is.EqualTo(new[] { cardId }));
+        Assert.That(enemy.Health, Is.SameAs(healthBeforeExecution));
+        Assert.That(enemy.CurrentHealth, Is.EqualTo(healthValueBeforeExecution));
+
+        presentation.CompleteNext();
+
+        Assert.That(queue.Turn.CurrentValue.Players[player.Id].Energy, Is.EqualTo(2));
+        Assert.That(zones.DiscardPile, Is.EqualTo(new[] { cardId }));
+        Assert.That(enemy.Health, Is.SameAs(healthBeforeExecution));
+        Assert.That(enemy.CurrentHealth, Is.EqualTo(healthValueBeforeExecution));
 
         queue.Dispose();
         zones.Dispose();
@@ -763,7 +880,7 @@ public sealed class BattleCommandQueueTests
         BattleTurnData turnBeforeExecution = queue.Turn.CurrentValue;
         CardZoneLayoutData layoutBeforeExecution = zones.Layout.CurrentValue;
 
-        queue.Submit(new PlayCardCommand(enemy.Id, cardId));
+        queue.Submit(new PlayCardCommand(enemy.Id, cardId, enemy.Id));
 
         Assert.That(
             presentation.Results[1].FailureReason,
@@ -799,7 +916,7 @@ public sealed class BattleCommandQueueTests
         BattleTurnData turnBeforeExecution = queue.Turn.CurrentValue;
         CardZoneLayoutData layoutBeforeExecution = zones.Layout.CurrentValue;
 
-        queue.Submit(new PlayCardCommand(player.Id, cardId));
+        queue.Submit(new PlayCardCommand(player.Id, cardId, player.Id));
 
         Assert.That(
             presentation.Results[1].FailureReason,
@@ -818,6 +935,7 @@ public sealed class BattleCommandQueueTests
     {
         var combatants = new BattleCombatantsData();
         PlayerCombatantData player = combatants.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
+        EnemyCombatantData enemy = combatants.AddEnemy(templateId: 201, maxHealth: 20, strength: 0);
         var zones = new BattleCardZonesData(new[] { 3001 }, shuffleSeed: 1234);
         zones.Draw(1);
         CardInstanceId cardId = zones.Hand[0];
@@ -827,12 +945,13 @@ public sealed class BattleCommandQueueTests
             combatants,
             presentation,
             playerCardZones: null,
-            cardCosts: cardCosts);
+            cardCosts: cardCosts,
+            enemyCombatantIdsInEncounterOrder: new[] { enemy.Id });
         queue.Submit(new StartBattleCommand());
         presentation.CompleteNext();
         BattleTurnData turnBeforeExecution = queue.Turn.CurrentValue;
 
-        queue.Submit(new PlayCardCommand(player.Id, cardId));
+        queue.Submit(new PlayCardCommand(player.Id, cardId, player.Id));
 
         Assert.That(
             presentation.Results[1].FailureReason,
@@ -851,6 +970,7 @@ public sealed class BattleCommandQueueTests
     {
         var combatants = new BattleCombatantsData();
         PlayerCombatantData player = combatants.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
+        EnemyCombatantData enemy = combatants.AddEnemy(templateId: 201, maxHealth: 20, strength: 0);
         var zones = new BattleCardZonesData(new[] { 3999 }, shuffleSeed: 1234);
         zones.Draw(1);
         CardInstanceId cardId = zones.Hand[0];
@@ -859,13 +979,14 @@ public sealed class BattleCommandQueueTests
         BattleCommandQueue queue = BattleCommandQueueTestFactory.Create(
             combatants,
             presentation,
-            cardZones);
+            cardZones,
+            enemyCombatantIdsInEncounterOrder: new[] { enemy.Id });
         queue.Submit(new StartBattleCommand());
         presentation.CompleteNext();
         BattleTurnData turnBeforeExecution = queue.Turn.CurrentValue;
         CardZoneLayoutData layoutBeforeExecution = zones.Layout.CurrentValue;
 
-        queue.Submit(new PlayCardCommand(player.Id, cardId));
+        queue.Submit(new PlayCardCommand(player.Id, cardId, player.Id));
 
         Assert.That(
             presentation.Results[1].FailureReason,
@@ -985,13 +1106,18 @@ internal static class BattleCommandQueueTestFactory
         int initialHandCount = 0,
         BattleEnemyIntentsData enemyIntents = null,
         Tables tables = null,
-        uint battleSeed = 1)
+        uint battleSeed = 1,
+        IReadOnlyDictionary<int, cfg.battle.TargetRule> cardTargetRules = null)
     {
         IReadOnlyDictionary<CombatantId, BattleCardZonesData> resolvedCardZones =
             playerCardZones ?? new Dictionary<CombatantId, BattleCardZonesData>();
         IReadOnlyList<CombatantId> resolvedEnemyIds =
             enemyCombatantIdsInEncounterOrder ?? Array.Empty<CombatantId>();
-        Tables resolvedTables = tables ?? CreateTables(cardCosts, combatants, resolvedEnemyIds);
+        Tables resolvedTables = tables ?? CreateTables(
+            cardCosts,
+            cardTargetRules,
+            combatants,
+            resolvedEnemyIds);
         BattleEnemyIntentsData resolvedEnemyIntents = enemyIntents;
         if (resolvedEnemyIntents == null)
         {
@@ -1023,9 +1149,10 @@ internal static class BattleCommandQueueTestFactory
         OwnedEnemyIntents.Clear();
     }
 
-    /// <summary>创建测试所需卡牌费用与固定敌人行为的最小 Luban 静态表集合。</summary>
+    /// <summary>创建测试所需卡牌费用、目标规则与固定敌人行为的最小 Luban 静态表集合。</summary>
     private static Tables CreateTables(
         IReadOnlyDictionary<int, int> cardCosts,
+        IReadOnlyDictionary<int, cfg.battle.TargetRule> cardTargetRules,
         BattleCombatantsData combatants,
         IReadOnlyList<CombatantId> enemyIds)
     {
@@ -1040,7 +1167,10 @@ internal static class BattleCommandQueueTestFactory
                     ["name_i18n_key"] = $"battle.card.test_{entry.Key}.name",
                     ["description_i18n_key"] = $"battle.card.test_{entry.Key}.description",
                     ["cost"] = entry.Value,
-                    ["target_rule"] = 0,
+                    ["target_rule"] = cardTargetRules != null &&
+                                        cardTargetRules.TryGetValue(entry.Key, out cfg.battle.TargetRule targetRule)
+                        ? (int)targetRule
+                        : (int)cfg.battle.TargetRule.Self,
                     ["effect_bindings"] = new JArray(),
                     ["illustration_key"] = string.Empty
                 });

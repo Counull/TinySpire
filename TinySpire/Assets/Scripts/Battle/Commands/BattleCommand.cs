@@ -48,22 +48,31 @@ namespace TinySpire.Battle
         /// <summary>尝试打出的运行时卡牌实例。</summary>
         public CardInstanceId CardId { get; }
 
+        /// <summary>调用方选择的单个运行时目标；缺失目标由执行期规则明确拒绝。</summary>
+        public CombatantId? TargetId { get; }
+
         /// <summary>返回出牌命令类型。</summary>
         public override BattleCommandType Type => BattleCommandType.PlayCard;
 
         /// <summary>返回尝试出牌的玩家。</summary>
         public override CombatantId? SubmitterId => ActorId;
 
-        /// <summary>创建出牌意图并拒绝无效参与者或卡牌实例标识。</summary>
-        public PlayCardCommand(CombatantId actorId, CardInstanceId cardId)
+        /// <summary>创建出牌意图并拒绝无效参与者、卡牌实例或非空目标标识。</summary>
+        public PlayCardCommand(
+            CombatantId actorId,
+            CardInstanceId cardId,
+            CombatantId? targetId)
         {
             if (actorId.Value <= 0)
                 throw new ArgumentOutOfRangeException(nameof(actorId));
             if (cardId.Value <= 0)
                 throw new ArgumentOutOfRangeException(nameof(cardId));
+            if (targetId.HasValue && targetId.Value.Value <= 0)
+                throw new ArgumentOutOfRangeException(nameof(targetId));
 
             ActorId = actorId;
             CardId = cardId;
+            TargetId = targetId;
         }
     }
 

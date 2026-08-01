@@ -65,7 +65,13 @@ namespace TinySpire.Battle
         InsufficientEnergy,
         InvalidEnemy,
         EnemyNotCurrentActor,
-        UnsupportedCommand
+        UnsupportedCommand,
+        BattleAlreadyEnded,
+        TargetRequired,
+        TargetNotFound,
+        TargetNotAlive,
+        TargetRuleMismatch,
+        UnsupportedTargetRule
     }
 
     /// <summary>

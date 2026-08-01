@@ -66,6 +66,7 @@ public sealed class BattleCommandPresentationAdapterTests
         using (var zones = new BattleCardZonesData(new[] { 1001, 1002 }, shuffleSeed: 1u))
         {
             PlayerCombatantData player = combatants.AddPlayer(1001, 30, 0);
+            EnemyCombatantData enemy = combatants.AddEnemy(2001, 20, 0);
             var playerZones = new Dictionary<CombatantId, BattleCardZonesData>
             {
                 [player.Id] = zones
@@ -80,6 +81,7 @@ public sealed class BattleCommandPresentationAdapterTests
                        adapter,
                        playerZones,
                        costs,
+                       enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
                        energyPerRound: 3,
                        initialHandCount: 2))
             {
@@ -90,10 +92,10 @@ public sealed class BattleCommandPresentationAdapterTests
                 deltaTime = 0f;
                 CardInstanceId firstCardId = zones.Hand[0];
                 CardInstanceId secondCardId = zones.Hand[1];
-                var firstCommand = new PlayCardCommand(player.Id, firstCardId);
+                var firstCommand = new PlayCardCommand(player.Id, firstCardId, player.Id);
                 BattleCommandSubmissionResult firstSubmission = queue.Submit(firstCommand);
                 adapter.PublishQueued(firstCommand, firstSubmission);
-                var secondCommand = new PlayCardCommand(player.Id, secondCardId);
+                var secondCommand = new PlayCardCommand(player.Id, secondCardId, player.Id);
                 BattleCommandSubmissionResult secondSubmission = queue.Submit(secondCommand);
                 adapter.PublishQueued(secondCommand, secondSubmission);
 
@@ -124,6 +126,7 @@ public sealed class BattleCommandPresentationAdapterTests
         using (var zones = new BattleCardZonesData(new[] { 1001 }, shuffleSeed: 1u))
         {
             PlayerCombatantData player = combatants.AddPlayer(1001, 30, 0);
+            EnemyCombatantData enemy = combatants.AddEnemy(2001, 20, 0);
             var playerZones = new Dictionary<CombatantId, BattleCardZonesData>
             {
                 [player.Id] = zones
@@ -137,6 +140,7 @@ public sealed class BattleCommandPresentationAdapterTests
                        adapter,
                        playerZones,
                        costs,
+                       enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
                        energyPerRound: 0,
                        initialHandCount: 1))
             {
@@ -145,7 +149,7 @@ public sealed class BattleCommandPresentationAdapterTests
                 feedback.Clear();
 
                 CardInstanceId cardId = zones.Hand[0];
-                var command = new PlayCardCommand(player.Id, cardId);
+                var command = new PlayCardCommand(player.Id, cardId, player.Id);
                 BattleCommandSubmissionResult submission = queue.Submit(command);
                 adapter.PublishQueued(command, submission);
                 adapter.Tick();

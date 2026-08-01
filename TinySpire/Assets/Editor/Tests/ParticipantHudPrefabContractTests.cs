@@ -71,6 +71,28 @@ public sealed class ParticipantHudPrefabContractTests
         Assert.That(intentBottom, Is.GreaterThan(nameTop));
     }
 
+    /// <summary>验证目标候选高亮由独立锚点承载，默认隐藏且不截获指针事件。</summary>
+    [Test]
+    public void ParticipantHudPrefab_TargetHighlightIsHiddenAndNonRaycastByDefault()
+    {
+        GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
+        ParticipantHudView view = prefab.GetComponent<ParticipantHudView>();
+        var serializedView = new SerializedObject(view);
+
+        var highlightAnchor =
+            serializedView.FindProperty("_targetHighlightAnchor").objectReferenceValue as RectTransform;
+        var highlightImage =
+            serializedView.FindProperty("_targetHighlightImage").objectReferenceValue as Image;
+
+        Assert.That(highlightAnchor, Is.Not.Null);
+        Assert.That(highlightImage, Is.Not.Null);
+        Assert.That(highlightAnchor.name, Is.EqualTo("TargetHighlightAnchor"));
+        Assert.That(highlightImage.name, Is.EqualTo("TargetHighlightVisual"));
+        Assert.That(highlightImage.transform.parent, Is.EqualTo(highlightAnchor));
+        Assert.That(highlightImage.gameObject.activeSelf, Is.False);
+        Assert.That(highlightImage.raycastTarget, Is.False);
+    }
+
     /// <summary>验证序列化 Sprite 来自精确正式路径，并保持单子图、无 mipmap 的当前导入契约。</summary>
     private static void AssertOfficialSprite(
         SerializedObject serializedView,

@@ -1,7 +1,55 @@
 ---
 created: 2026-07-06
-updated: 2026-08-01
+updated: 2026-08-02
 ---
+
+## 2026-08-02 · M6D 全量验证、双轴复审与 M6 收口（已完成）
+
+- M6A～M6D 已按唯一计划串行完成：`PlayCardCommand` 显式携带 Self/Enemy 目标；UI 预览与队首执行共用同一 `BattleCardPlayRules`；目标排队后死亡会以 `TargetNotAlive` 零写入失败；生产 UI 只通过既有 `BattleCommandQueue.Submit` 提交，并提供功能性费用颜色、箭头、高亮、屏幕命中和回弹。
+- 最终 Unity MCP M6 定向 EditMode **53/53**、全量 EditMode **122/122** 通过，均为 0 failed、0 skipped；串行 `dotnet build TinySpire/TinySpire.sln --no-restore -m:1` 为 0 error，保留 12 条既有 Unity/R3/UniTask 依赖 warning；`git diff --check` 在最终文档收口后通过。
+- `TinySpire/Addressables/Build Local Content` 成功；报告 `buildlayout_2026.08.02.01.52.06.json` 的 `BuildError` 为空、`BuildResultHash=2f21014862b879079e277deb7b7d1cbb`、耗时 `18.4565022s`。从 Bootstrap 生产链进入 BattleScene 后，运行时手牌 5、参与者 HUD 3、目标箭头已接线，Console 无 Error、InvalidKey 或 VContainer 错误。
+- 真实 Game View 使用累计最终证据收口：M6C 已物理确认 Self、左右 Enemy、无效释放、结束行动/下一轮和 16:7/16:9/16:10/16:11/16:14；最终 transition 修订后，用户又确认费用不足红色卡可拿起跟手，但不进入出牌反馈、瞄准、resolver 或 Submit，释放回弹且权威事实不变。因此不要求重复整套已通过动作。
+- Standards / Spec 以 M5 commit `bbfb650ce9643c470fa59345cba91be26b82420a` 为固定基线，并行读取 tracked diff 与全部未跟踪 M6 文件。Spec 首轮为 0 finding；Standards 唯一硬 finding 是 M6C 页残留过期状态，已修正。Container 职责与三处短线性目标扫描是判断性气味：前者真正收敛需跨 Hand/TurnHUD/Presentation/Queue，已排入 M8；后者保留各自局部边界，不新增浅通用 helper。最终文档回填后，原两个审查者复核为 **Standards 0 finding / Spec 0 finding**。
+- 已完整复核 M5 回顾并谨慎采纳：统一规则链、`TargetId` 承诺、纯拖拽 transition 与 Presenter 唯一 View 映射已落实；结算/事务留 M7，队列/提交/pending/阶段屏障留 M8，HUD/Prefab/最终反馈留 M3E/M9，配置 fail-fast 与构建前校验留 M10，Session 唯一玩家/卡区装配出口留 G1。没有提前实施 M7～M9，也没有修改 `BattleScene.unity`、`CardView.prefab`、角色 Prefab、ProjectSettings、Physics、asmdef、HybridCLR、Luban、Localization、Run/网络/启动流程。
+- `DEP-001` 保持 resolved，`DEP-003/004/009/010/011` 保持原状态；M6 计划已归档到计划索引历史区。Linear LXX-6 后续回复确认四张同名 PNG 已按尺寸、RGBA、透明中心及文件一致性完成美术验收，Issue 状态为 Done，并再次明确只供后续 M9 接入。Unity 随后为这些工作区文件生成未跟踪 Meta，但它们未接入 M6 Prefab、未纳入本次 Addressables/验收，也不进入 M6 提交。详细证据见 `06_testing/2026-08-02-m6d-full-validation-review.md`。本次 M6 提交由用户在验收完成后另行授权，仍不 push，并继续保护范围外改动。
+
+## 2026-08-02 · M6C 人工审阅回填与费用不足拖动修订（已完成）
+
+- 真实 Game View 人工审阅已回填：Self、Enemy 功能性箭头/高亮、无效释放、16:7/16:9/16:10/16:11/16:14、结束行动/下一轮清理及 Console 检查均有物理结果。最终 Enemy 聚焦与结束行动弃牌过渡属于 M9，已写入 `10_communication/2026-08-02-battle-card-motion-feedback-brief.md`；Linear LXX-6 已按用户澄清收窄为只请求箭身、箭头及合法/悬停高亮四张透明 PNG，不交付交互代码。尝试委派给 Linear AI 时曾被“workspace 未启用 coding sessions”阻止；随后该 Issue 收到正式资源交付回复并标记 Done，仍未创建重复工单或新项目。目标伤害/格挡/状态继续由 ROADMAP M7 与 `DEP-009` 承接，未提前实现。
+- 当前只采纳“费用不足卡仍可拖动”的窄修改：新增 UI 纯函数区分视觉拿起与规则许可；精确 `InsufficientEnergy` 保持红色并允许跟手，但出牌反馈、Enemy 瞄准、释放 resolver、最终评估与 `BattleCommandQueue.Submit` 仍要求原始规则许可。因此越线释放只回弹，不创建目标、pending、权威序号或任何卡区/能量/回合写入；其他失败仍锁定输入。决策见 CD-038。
+- TDD 先用新可供性用例得到旧实现红灯，再接入 `HandCardContainer`；独立审计随后发现“拖动中另一命令扣费”会错误取消当前卡牌，补充三态 `Disabled / VisualOnly / Playable` seam 的编译红灯后修复。二次复核继续按真实写入顺序发现 CardZones 在能量 Turn 前发布，旧 `RebuildCards` 仍会抢先取消拖拽；为避免只测成员 helper，新的 `CardZones → Turn → 被拖牌自身离手` tracer test 先以 11 个缺失 transition interface 编译错误失败，再以 `HandCardDragTransitionPolicy` 一次输出保留/取消、排除重排、下一阶段、清反馈/目标表现和重建 Enemy 瞄准，并由容器两个事实回调直接消费。最终 Unity MCP M6 定向 EditMode **53/53** 通过（0 failed、0 skipped，任务 `6de86cddde1d4cd7ac38cbf72431bb91`），串行 solution build 0 error、保留 12 条既有依赖 warning，`git diff --check` 通过。
+- M2/M4 的结束行动规则保持不变：剩余手牌权威移入弃牌堆，M6 不保留可交互旧 View 或手牌镜像；未来可见过渡只由 M9 文档承接。用户已在真实 Game View 确认费用不足红色卡可拿起跟手、无出牌反馈/箭头/高亮、越线释放回弹且权威事实不变，复测后的 Console 无错误；`DEP-001` resolved，M6C 独立停止点完成，下一步串行进入 M6D。未 commit、未 push。
+
+## 2026-08-01 · M6C Self / Enemy 目标选择 UI（当时完成自动验证，现已完成物理验收）
+
+- `HandCardInteraction` 现在把完整 `PointerEventData` 交给 `HandCardContainer`；容器从 M6A 同一 `BattleCardPlayRules` 即时派生交互、费用颜色和合法目标。Self 越线显式提交玩家自身，Enemy 首次越线后冻结卡牌并进入箭头瞄准，释放时只把 Presenter 命中的精确存活敌人 ID 交给既有 `BattleCommandQueue.Submit`。生产与测试调用均已显式提供目标，未增加第二条写链或目标结果流。
+- `BattleParticipantPresenter` 按 Encounter 稳定顺序把现有 `SpriteRenderer.bounds` 投影为屏幕矩形，重叠命中选择矩形中心最近者、同距保留先遇到者；`ParticipantHudView` 仅显示默认隐藏且不接收 Raycast 的合法/悬停高亮。`BattleHandUI.prefab` 接入功能性箭头 Prefab；未修改 `BattleScene.unity`、`CardView.prefab`、角色 Prefab、ProjectSettings、Physics、配置表或 Localization。
+- Bootstrap 自动诊断先后暴露两个生产接线问题：`BattleHandUI` 根节点缩放为 0 使箭头继承零缩放；箭头嵌套在有缩放/深度的 Screen Space Camera Canvas 下又使屏幕端点转换失败。现已把手牌根缩放恢复为 1，并由容器在运行时把序列化箭头提升为独立 `ScreenSpaceOverlay`、统一持有和销毁；新增 Prefab 与 Overlay 回归测试锁定该契约。
+- Unity MCP 最终 M6C 定向 EditMode **51/51** 通过，任务 `3b8af941470b4933a86f2c098d95098d`；串行 `dotnet build TinySpire/TinySpire.sln --no-restore -m:1` 为 0 error，保留 12 条既有依赖 warning；`git diff --check` 通过。Addressables 本地内容构建 `BuildError` 为空、`BuildResultHash=92b5408c9884e0ed9922ed56f9c10ffa`；Bootstrap 自动进入 BattleScene，手牌 5、HUD 3，未见 Error、InvalidKey 或 VContainer 错误。
+- 自动运行期探针确认箭头成为独立 Overlay、可见且不接收 Raycast，左右敌人屏幕命中与合法/悬停高亮可生成；这些只用于当时的接线定位，**没有冒充真实 Game View 物理鼠标验收**。该条记录中的待验项后来已由用户在多个分辨率完成，`DEP-001` 已 resolved，M6C/M6D 均已完成；最终证据见 `06_testing/2026-08-02-m6d-full-validation-review.md`，实现决策见 CD-037。
+
+## 2026-08-01 · M6B 队首目标重校验与权威写链（已验证）
+
+- `BattleTurnController.TryPlayCard` 现在在首次权威写入前调用 M6A 的同一 `BattleCardPlayRules`；全部当前事实通过后才沿用既有“指定实例离手进入弃牌堆 → 扣除该玩家能量 → 发布 Turn”写链。`BattleCommandQueue.Submit`、只读 `Queue` / `Turn`、提交轮次栅栏与 public interface 均未改变。
+- 队列测试工厂可为测试卡显式配置 `TargetRule`；现有命令与 presentation 测试已全部显式传 Self/Enemy 目标。因 `BattleAlreadyEnded` 的既定优先级，相关旧出牌夹具逐用例加入 Encounter 中的存活敌人，没有在工厂内隐式伪造战斗事实；生产 `HandCardContainer` 的显式目标迁移仍严格留给 M6C。
+- TDD 首先证明旧控制器会让“目标排队后死亡”错误成功；接线后该场景稳定返回 `TargetNotAlive`。失败时 Turn 与卡区快照、目标 `Health` 只读对象和当前值保持不变，表现完成后队列正常回到空闲；合法 Enemy 出牌只扣 1 点能量、只移动指定实例一次，表现回调前后目标生命均不变化，因此没有提前执行 M7 Effect。
+- Unity MCP 最终相关 EditMode **60/60** 通过，覆盖纯规则、队列、presentation、回合控制与 M5 敌人意图回归；Console Error 为 0。串行 `dotnet build TinySpire/TinySpire.sln --no-restore -m:1` 为 0 error，保留 12 条既有 Unity/R3/UniTask 依赖版本冲突 warning。
+- M6B 未修改场景、Prefab、Luban、Localization、Addressables、生产 UI、Effect、伤害、格挡、状态或胜负；未运行 Addressables、Bootstrap 或 Game View，它们按唯一计划留给 M6C/M6D。验收见 `06_testing/2026-08-01-m6b-queue-head-target-revalidation.md`，决策见 CD-036；下一步严格进入 M6C。
+
+## 2026-08-01 · M6A 目标契约与纯合法性 module（已验证）
+
+- `PlayCardCommand` 增加可空 `CombatantId? TargetId`，非空的零/负结构标识在构造时拒绝；M6A 暂保留默认空目标供既有调用方编译，默认值将在 M6C 完成全部显式迁移后移除。
+- 新增具体纯 C# `BattleCardPlayRules` 与不可变 `BattleCardPlayEvaluation`。规则只读取当前 `BattleTurnData`、`BattleCombatantsData`、玩家卡区、静态 `Tables` 和 `EnemyCombatantIdsInEncounterOrder`，即时派生 Self/Enemy、费用可支付性、战斗可继续性与稳定合法目标快照，不保存 `CanPlayCard`、存活列表或目标历史镜像。
+- 新增 `BattleAlreadyEnded`、`TargetRequired`、`TargetNotFound`、`TargetNotAlive`、`TargetRuleMismatch` 与 `UnsupportedTargetRule`。Self 只接受 Actor；Enemy 只接受 Encounter 顺序中的存活敌人；重复预览不改变 Turn、卡区、生命或洗牌/敌人意图随机流。
+- TDD 先得到缺失规则类型/三参数命令构造器的编译红灯，再得到 Enemy 规则行为红灯；最终 Unity MCP `BattleCardPlayRulesTests` **8/8** 通过，M6A 前相关队列/回合基线 **26/26** 通过，Console Error 为 0。串行 `dotnet build TinySpire/TinySpire.sln --no-restore -m:1` 为 0 error，保留 12 条既有依赖版本冲突 warning。
+- M6A 未修改 `BattleCommandQueue`、`BattleTurnController`、场景、Prefab、Luban、Localization、Addressables、卡区写链或 Effect；`Submit` 与只读 `Queue` / `Turn` seam 保持不变。验收见 `06_testing/2026-08-01-m6a-card-play-rules.md`，决策见 CD-035；下一步严格进入 M6B 队首目标重校验。
+
+## 2026-08-01 · M6 总计划与 Goal 执行边界（待实施）
+
+- 新增 `plans/2026-08-01-m6-card-play-legality-target-selection.md`，按“一份总计划 + 一个总 Goal”拆为 M6A 目标契约与纯合法性、M6B 队首目标重校验、M6C Self/Enemy 目标 UI、M6D 全量验证与收口。每个切片具有独立停止点，新会话可直接复制计划内 Goal 文案串行执行。
+- M6 基线按当前实现修正：M4 已完成 `PlayCardCommand`、阶段/手牌/费用/能量执行期校验、权威队列和 UI pending 恢复；M6 不重做这些内容，只增加显式目标、派生合法性、队首失效保护与目标交互。成功仍只扣能量并进入弃牌堆，不实施 M7 Effect、M8 敌人真实行动或 M9 胜负/最终反馈。
+- 第一版目标命中方案使用 `BattleParticipantPresenter` 现有 `CombatantId → world view/HUD` 映射，把世界角色 `SpriteRenderer.bounds` 投影为屏幕矩形；不增加 Collider、Physics2D Raycaster、角色 Prefab 身份脚本或第二套 View 注册表。`DEP-001` 当前仍 open，只有 M6C 实现并通过真实 Game View 验证后才能 resolved。
+- 本次只创建计划并对齐 `ROADMAP.md`、`DEPENDENCIES.md` 与计划索引；未修改任何 C#、场景、Prefab、配置、生成文件或测试，未运行 Unity、Addressables、EditMode 或构建，也未 commit、未 push。下一步由用户在新会话启动总 Goal。
 
 ## 2026-08-01 · M5D 全量验证、双轴复审与 M5 收口（已完成）
 

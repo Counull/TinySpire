@@ -25,6 +25,8 @@ namespace TinySpire.UI.Battle
         [SerializeField] private GameObject _intentRoot;
         [SerializeField] private Image _intentIcon;
         [SerializeField] private Text _intentValueText;
+        [SerializeField] private RectTransform _targetHighlightAnchor;
+        [SerializeField] private Image _targetHighlightImage;
         [SerializeField] private Sprite _attackIntentSprite;
         [SerializeField] private Sprite _defendIntentSprite;
         [SerializeField] private Sprite _buffIntentSprite;
@@ -32,6 +34,8 @@ namespace TinySpire.UI.Battle
         [SerializeField] private Sprite _specialIntentSprite;
         [SerializeField, Min(0f)] private float _headOffset = 0.2f;
         [SerializeField, Min(0f)] private float _feetOffset = 0.2f;
+        [SerializeField] private Color _legalTargetColor = new Color(0.3f, 0.85f, 1f, 0.18f);
+        [SerializeField] private Color _hoveredTargetColor = new Color(1f, 0.82f, 0.25f, 0.34f);
 
         private CombatantData _combatant;
         private Transform _worldView;
@@ -82,7 +86,26 @@ namespace TinySpire.UI.Battle
             _localization.LocaleChanged.Subscribe(_ => RefreshLocalizedText()).AddTo(this);
             if (_enemyCombatant != null)
                 _enemyIntents.Layout.Subscribe(RefreshIntent).AddTo(this);
+            SetTargetHighlight(isLegalCandidate: false, isHovered: false);
             RefreshLocalizedText();
+        }
+
+        /// <summary>只切换当前 HUD 的功能性合法/命中高亮，不保存目标合法性玩法事实。</summary>
+        public void SetTargetHighlight(bool isLegalCandidate, bool isHovered)
+        {
+            if (_targetHighlightImage == null)
+                return;
+
+            _targetHighlightImage.gameObject.SetActive(isLegalCandidate);
+            if (isLegalCandidate)
+                _targetHighlightImage.color = isHovered ? _hoveredTargetColor : _legalTargetColor;
+        }
+
+        /// <summary>HUD 暂停时隐藏纯表现目标高亮，避免对象重新启用前残留旧候选。</summary>
+        private void OnDisable()
+        {
+            if (_targetHighlightImage != null)
+                _targetHighlightImage.gameObject.SetActive(false);
         }
 
         /// <summary>在布局结束后将名称和生命 HUD 投影到角色的头顶与脚下。</summary>
@@ -92,6 +115,7 @@ namespace TinySpire.UI.Battle
                 return;
 
             Bounds bounds = _spriteRenderer.bounds;
+            PositionAtWorldPoint(_targetHighlightAnchor, bounds.center);
             PositionAtWorldPoint(_nameAnchor, new Vector3(bounds.center.x, bounds.max.y + _headOffset, bounds.center.z));
             PositionAtWorldPoint(_vitalsAnchor, new Vector3(bounds.center.x, bounds.min.y - _feetOffset, bounds.center.z));
         }
@@ -206,6 +230,8 @@ namespace TinySpire.UI.Battle
                 || _intentRoot == null
                 || _intentIcon == null
                 || _intentValueText == null
+                || _targetHighlightAnchor == null
+                || _targetHighlightImage == null
                 || _attackIntentSprite == null
                 || _defendIntentSprite == null
                 || _buffIntentSprite == null

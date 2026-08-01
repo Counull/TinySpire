@@ -2,7 +2,7 @@
 title: 06_testing · 测试记录
 page_type: testing
 lifecycle: active
-updated: 2026-08-01
+updated: 2026-08-02
 ---
 
 - [2026-07-30 BattleScene LifetimeScope](2026-07-30-battle-lifetime-scope.md)
@@ -15,6 +15,10 @@ updated: 2026-08-01
 
 ## 验证记录
 
+- [2026-08-02 M6D 全量验证、双轴复审与文档收口](2026-08-02-m6d-full-validation-review.md)
+- [2026-08-01 M6C Self / Enemy 目标选择 UI](2026-08-01-m6c-self-enemy-target-selection.md)
+- [2026-08-01 M6B 队首目标重校验与权威写链](2026-08-01-m6b-queue-head-target-revalidation.md)
+- [2026-08-01 M6A 目标契约与纯合法性 module](2026-08-01-m6a-card-play-rules.md)
 - [2026-08-01 M5D 全量验证与复审](2026-08-01-m5d-full-validation-review.md)
 - [2026-08-01 M5C 敌人意图 HUD](2026-08-01-m5c-enemy-intent-hud.md)
 - [2026-08-01 M5B Session、权威命令队列与生产接线](2026-08-01-m5b-session-command-queue-wiring.md)

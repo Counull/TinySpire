@@ -1,6 +1,6 @@
 ---
 created: 2026-07-06
-updated: 2026-08-01
+updated: 2026-08-02
 ---
 
 # Daedalus · 代码决策记录
@@ -392,3 +392,45 @@ updated: 2026-08-01
 **理由**：`BehaviorId`、静态模板和当前参与者事实已经足以得到完整展示，把所有投影留在 View 边界可确保刷新不消费随机，且未来真实 Effect 入口仍可读取同一意图。静态 Prefab 结构让引用、导入模式和相对布局可在 EditMode 合约测试中验证，生产运行只实例化可变数量的 HUD。
 
 **影响**：M5C 修改 `ParticipantHudView.prefab`、`ParticipantHudView`、`ParticipantHudPresentation`、`BattleParticipantPresenter`、共享效果值计算器及对应测试；不修改 `BattleScene.unity`、Session/队列公共 seam、DI 架构或启动流程，也不增加伤害、格挡、状态、死亡动画或胜败。验证见 `06_testing/2026-08-01-m5c-enemy-intent-hud.md`。
+
+## CD-035：出牌合法性由一个纯规则 module 从当前权威事实派生
+
+**问题**：M4 的出牌校验只存在于队首写链，M6 又需要在 UI 选择目标前预览费用、目标规则和合法候选。若 UI 复制一套规则或保存 `CanPlayCard`、存活敌人列表与目标合法性，预览会在排队、生命或阶段变化后偏离队首事实；若命令携带这些结果，又会把非权威预判混入写链。
+
+**选择**：`PlayCardCommand` 只增加可空的单个运行时 `TargetId`，不携带费用、规则或合法性结果。具体纯 C# `BattleCardPlayRules` 从调用方提供的当前 `BattleTurnData`、唯一 `BattleCombatantsData`、玩家卡区、静态 `Tables` 与 `EnemyCombatantIdsInEncounterOrder` 即时产生不可变 `BattleCardPlayEvaluation`；结果包含稳定失败原因、静态 `TargetRule`、能否开始交互、费用是否可支付及一次性冻结的合法目标快照。Self 只派生 Actor，Enemy 只按 Encounter 顺序派生存活敌人；未知规则明确失败。重复读取不写 Turn、卡区、生命或随机流。
+
+**理由**：同一具体 module 可以在 M6B 队首与 M6C UI 预览复用，而不额外建立 validator/resolver interface、响应式合法性镜像或第二套目标注册表。命令目标可空让缺失目标成为可观察的执行失败；非空结构无效标识仍在构造期拒绝。最终权威性继续由 `BattleCommandQueue.Submit` 排序和队首当前事实重校验保证。
+
+**影响**：M6A 新增规则 module、评估结果与纯规则测试，并扩展命令契约和执行失败枚举；没有修改队列执行、回合写入、场景、Prefab、配置或 Effect。M6B 负责在首次写入前接入同一规则，M6C 负责生产 UI 的显式目标迁移并移除构造器默认值。验证见 `06_testing/2026-08-01-m6a-card-play-rules.md`。
+
+## CD-036：队首以当前目标事实通过同一规则后才写卡区与能量
+
+**问题**：UI 或提交时看到的合法目标可能在命令等待表现期间死亡、离开 Encounter 或因其他权威事实变化而失效。若先弃牌、扣能量再检查目标，会留下半完成写入；若队列另写一套目标校验，又会与 M6A 预览规则分叉。
+
+**选择**：`BattleTurnController.TryPlayCard` 在任何卡区或 Turn 写入之前，把当前 `BattleTurnData` 与完整 `PlayCardCommand` 交给同一 `BattleCardPlayRules` 重新评估。只有全部规则成功，才执行既有的指定实例弃牌和能量扣除；规则失败只返回稳定执行结果。玩家命令的提交轮次栅栏仍位于队列层并优先于控制器评估，`BattleCommandQueue.Submit` 与只读 `Queue` / `Turn` seam 不变。
+
+**理由**：所有可失败的目标、费用、身份、阶段与卡区检查都发生在首次权威写入之前，目标排队后失效自然得到零写入失败；UI 预览和队首执行共享一份规则语义，同时不把提交时预判携带进命令，也不增加第二条执行链。
+
+**影响**：M6B 的合法 Self/Enemy 命令仍只扣能量并把指定实例移入弃牌堆，Enemy 生命、格挡和状态不变，真实 Effect 继续属于 M7。测试夹具显式提供 `TargetRule`、目标与 Encounter 存活事实；生产 UI 的目标组成、箭头与命中仍由 M6C 完成。验证见 `06_testing/2026-08-01-m6b-queue-head-target-revalidation.md`。
+
+## CD-037：目标交互只编排派生规则、现有参与者 View 与同一命令提交 seam
+
+**问题**：M6C 既要让 Self 卡自动选择自身、Enemy 卡在世界角色上精确命中，又不能让 UI 保存第二份合法目标/存活事实、增加 Collider/Raycaster 或绕过权威队列。BattleHand 还位于带缩放与相机深度的 Screen Space Camera Canvas 中；若箭头直接继承该层级，屏幕坐标转换和缩放会受父级影响，无法稳定覆盖整个 Game View。
+
+**选择**：`HandCardContainer` 只从 M6A 同一 `BattleCardPlayRules` 重派生当前交互与一次性合法目标快照，并把显式 `TargetId` 交给既有 `BattleCommandQueue.Submit`。Self 越线使用 `ActorId`；Enemy 首次越线后冻结卡牌，由 `BattleParticipantPresenter` 按 Encounter 顺序把现有世界 `SpriteRenderer.bounds` 投影为屏幕矩形，再通过无状态 selector 选择“包含指针且中心最近”的候选，同距保留先遇到者。HUD 只接收 Legal/Hovered 表现状态，不持有玩法合法性。
+
+**箭头与生命周期**：箭头作为 `BattleHandUI.prefab` 的序列化依赖存在，但容器启动时把其实例脱离带缩放/深度的父 Canvas，提升为同场景独立 `ScreenSpaceOverlay`；容器统一隐藏、释放并在销毁时回收该脱离实例。箭头与高亮 Graphic 均不接收 Raycast。该选择不修改 `BattleScene.unity`、相机、角色 Prefab、`CardView.prefab`、Physics 或 Addressables 地址接口。
+
+**理由**：规则仍由同一纯 module 派生，参与者身份与世界 View 仍由现有 Presenter 映射持有，唯一玩法写入仍是权威队列；命中和箭头只交换屏幕坐标，不形成第二套注册表或状态事实。独立 Overlay 隔离了父 Canvas 的零缩放、缩放倍率和相机平面，同时保留静态 Prefab 依赖和可测试的默认隐藏/非 Raycast 契约。
+
+**影响**：M6C 新增纯屏幕 selector、释放目标 resolver、箭头 View/Prefab、HUD 高亮和对应 EditMode/Prefab 合约测试；费用不足只在精确 `InsufficientEnergy` 时改变费用颜色。自动验证、Bootstrap 诊断与真实 Game View 物理拖拽均已通过，`DEP-001` resolved；验收状态见 `06_testing/2026-08-01-m6c-self-enemy-target-selection.md`。
+
+## CD-038：费用不足只放开视觉拖动，不放开出牌语义
+
+**问题**：M6C 初版把规则 `CanStartInteraction=false` 直接映射为 CardView 不接收输入。真实 Game View 人工审阅确认费用红色和规则结果正确，但完全无法拿起费用不足卡会让玩家无法通过拖动理解“这张牌想打但当前不能支付”；若直接把规则改为可交互，又可能错误进入 Enemy 瞄准或提交权威命令。
+
+**选择**：保持 `BattleCardPlayRules` 对 `InsufficientEnergy` 的 `CanStartInteraction=false` 与队首失败优先级不变，只在 UI 边界用纯策略 `HandCardInteractionAvailability.ResolveMode` 收敛 `Disabled / VisualOnly / Playable`。该策略仅把“规则已允许”映射为 Playable、把精确 `InsufficientEnergy` 映射为 VisualOnly；阶段、身份、卡区、目标、战斗终止等其他失败均为 Disabled。`HandCardDragTransitionPolicy` 再把当前拖拽阶段、被拖牌是否仍在手中、交互模式与目标规则收敛为一份不可变转换结果，统一表达保留/取消、排除手牌重排、下一阶段、清反馈/目标表现和重建 Enemy 瞄准。`RebuildCards` 与 Turn/生命刷新直接消费该结果；`HandleDrag`、释放 resolver、提交前最终评估和 `BattleCommandQueue.Submit` 仍全部要求原始 `CanStartInteraction`/`Succeeded`。
+
+**理由**：拿起/拖动是可逆的视觉可供性，不等于组成合法命令。把例外限制在 UI 边界后，费用不足卡可以跟手并回弹，同时不会生成箭头、高亮、目标、pending 或权威序号，也不需要复制能量或目标事实。规则 module 和队首权威写链无需为手感需求分叉。
+
+**影响**：公开 transition、交互模式与 resolver seam 测试覆盖 `CardZones → Turn → 被拖牌自身离手`、三种交互模式及“费用不足不能产生释放目标”，CardView 合约测试覆盖红色时仍接收 Raycast；两轮独立审计补齐 `Playable → VisualOnly` 与真实发布顺序后，M6 定向 EditMode 53/53、串行 solution build 0 error。真实 Game View 已确认费用不足卡的跟手、无瞄准和回弹，M6C 完成；最终聚焦/弃牌动画与 Effect 继续属于 M9/M7。

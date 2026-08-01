@@ -22,6 +22,7 @@ namespace TinySpire.Battle
         private readonly IReadOnlyDictionary<CombatantId, BattleCardZonesData> _playerCardZones;
         private readonly IReadOnlyList<CombatantId> _enemyCombatantIdsInEncounterOrder;
         private readonly Tables _tables;
+        private readonly BattleCardPlayRules _cardPlayRules;
         private readonly int _energyPerRound;
         private readonly int _initialHandCount;
         private readonly Dictionary<CombatantId, PlayerTurnData> _players;
@@ -52,6 +53,11 @@ namespace TinySpire.Battle
 
             _energyPerRound = energyPerRound;
             _initialHandCount = initialHandCount;
+            _cardPlayRules = new BattleCardPlayRules(
+                _combatants,
+                _playerCardZones,
+                _enemyCombatantIdsInEncounterOrder,
+                _tables);
 
             _players = new Dictionary<CombatantId, PlayerTurnData>();
             foreach (CombatantData combatant in _combatants.All.Values)
@@ -87,36 +93,17 @@ namespace TinySpire.Battle
         {
             if (command == null)
                 throw new ArgumentNullException(nameof(command));
-            if (Turn.CurrentValue.Phase != BattleTurnPhase.PlayerAction)
-                return BattleCommandExecutionFailureReason.InvalidTurnPhase;
-            if (!_players.TryGetValue(command.ActorId, out PlayerTurnData playerTurn) ||
-                !_combatants.TryGet(command.ActorId, out CombatantData combatant) ||
-                !(combatant is PlayerCombatantData))
-            {
-                return BattleCommandExecutionFailureReason.InvalidPlayer;
-            }
-            if (!combatant.IsAlive)
-                return BattleCommandExecutionFailureReason.PlayerNotAlive;
-            if (playerTurn.HasEndedAction)
-                return BattleCommandExecutionFailureReason.PlayerActionAlreadyEnded;
-            if (!_playerCardZones.TryGetValue(command.ActorId, out BattleCardZonesData cardZones) ||
-                cardZones == null)
-            {
-                return BattleCommandExecutionFailureReason.PlayerCardZonesNotFound;
-            }
-            if (!IsCardInHand(cardZones, command.CardId) ||
-                !cardZones.TryGetCard(command.CardId, out CardInstanceData card))
-            {
-                return BattleCommandExecutionFailureReason.CardNotInHand;
-            }
 
+            BattleCardPlayEvaluation evaluation = _cardPlayRules.Evaluate(
+                Turn.CurrentValue,
+                command);
+            if (!evaluation.Succeeded)
+                return evaluation.FailureReason;
+
+            PlayerTurnData playerTurn = _players[command.ActorId];
+            BattleCardZonesData cardZones = _playerCardZones[command.ActorId];
+            CardInstanceData card = cardZones.Cards[command.CardId];
             cfg.battle.Card cardTemplate = _tables.TbCard.GetOrDefault(card.TemplateId);
-            if (cardTemplate == null)
-                return BattleCommandExecutionFailureReason.CardTemplateNotFound;
-            if (cardTemplate.Cost < 0)
-                return BattleCommandExecutionFailureReason.CardTemplateNotFound;
-            if (playerTurn.Energy < cardTemplate.Cost)
-                return BattleCommandExecutionFailureReason.InsufficientEnergy;
             if (!cardZones.DiscardFromHand(command.CardId))
                 return BattleCommandExecutionFailureReason.CardNotInHand;
 
@@ -283,18 +270,6 @@ namespace TinySpire.Battle
             }
 
             return new AutomaticPhaseState(this, BattleTurnPhase.EnemyRoundEnd);
-        }
-
-        /// <summary>只读取当前手牌快照，判断指定实例是否仍归属于该玩家手牌。</summary>
-        private static bool IsCardInHand(BattleCardZonesData cardZones, CardInstanceId cardId)
-        {
-            foreach (CardInstanceId handCardId in cardZones.Hand)
-            {
-                if (handCardId == cardId)
-                    return true;
-            }
-
-            return false;
         }
 
         /// <summary>战斗尚未开始时只接受开始战斗事件。</summary>

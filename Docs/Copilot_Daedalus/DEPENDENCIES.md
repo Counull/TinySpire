@@ -3,7 +3,7 @@ title: Daedalus · 依赖项账本（Dependency Ledger）
 page_type: registry
 lifecycle: active
 created: 2026-07-29
-updated: 2026-08-01
+updated: 2026-08-02
 status_source: ../SESSION_LOG.md
 note: 全项目范围唯一的依赖项 ID 分配与状态账本；实现计划文档只引用 ID，不重复维护完整描述。
 ---
@@ -23,14 +23,14 @@ note: 全项目范围唯一的依赖项 ID 分配与状态账本；实现计划�
 
 | ID | 内容 | 阻塞条件 | 涉及代码位置（预期/实际） | 来源 Plan | 状态 | 解决记录 |
 |---|---|---|---|---|---|---|
-| DEP-001 | 目标检测方式（UGUI `GraphicRaycaster` vs 2D `Collider`/`OverlapPoint`） | 取决于怪物/玩家锚点最终是 UGUI 元素还是 World Space Sprite（P0 待办，尚未开始） | `TinySpire/Assets/Scripts/UI/Battle/Hand/HandCardContainer.cs` | `plans/2026-07-29-battlescene-drag-to-play-minimal.md` | open | — |
+| DEP-001 | 当前世界空间参与者的屏幕目标命中、合法高亮与目标提交 | M3/M5 已确定参与者为世界空间 `SpriteRenderer`、HUD 为 UGUI；M6C 计划复用 `BattleParticipantPresenter` 唯一 View 映射，将 `SpriteRenderer.bounds` 投影为屏幕矩形并完成真实 Game View 验证，不增加 Collider、Physics2D Raycaster 或第二套注册表 | `TinySpire/Assets/Scripts/UI/Battle/Hand/HandCardContainer.cs`、`TinySpire/Assets/Scripts/UI/Battle/BattleParticipantPresenter.cs`、`TinySpire/Assets/Scripts/UI/Battle/ParticipantHudView.cs` | `plans/2026-07-29-battlescene-drag-to-play-minimal.md`、`plans/2026-08-01-m6-card-play-legality-target-selection.md` | resolved | M6C：复用 Presenter 唯一 View 映射完成 `SpriteRenderer.bounds` 屏幕矩形命中、稳定候选顺序、合法/悬停高亮及 Self/Enemy 精确目标提交；定向 EditMode、Addressables、Bootstrap 与真实 Game View（含左右敌人、无效释放、费用不足视觉拖动和多分辨率）均通过，未增加 Collider、Physics2D Raycaster 或第二套注册表。 |
 | DEP-002 | 费用/能量系统与检查逻辑 | 需先定义能量池数据结构；最终应由出牌命令在提交区域移动前统一校验 | `TinySpire/Assets/Scripts/UI/Battle/Hand/HandCardContainer.cs` | `plans/2026-07-29-battlescene-drag-to-play-minimal.md` | resolved | `plans/2026-07-31-m4-turn-scheduling-energy.md` M4D：UI 只提交 `PlayCardCommand`；队首按当前 `Card.Cost`、玩家能量和卡区事实校验，且仅在执行成功后扣能量并移动卡牌。 |
-| DEP-003 | 拖过出牌线的最终视觉样式 | 需要策划/美术确认最终表现 | `TinySpire/Assets/Scripts/UI/Battle/Hand/HandCardVisual.cs` | `plans/2026-07-29-battlescene-drag-to-play-minimal.md` | open | — |
-| DEP-004 | 打出后卡牌的销毁前过渡动作（按卡牌效果类型区分） | 需要 Effect 系统 / 卡牌数据结构先落地 | `TinySpire/Assets/Scripts/UI/Battle/Hand/HandCardContainer.cs` | `plans/2026-07-29-battlescene-drag-to-play-minimal.md` | open | — |
+| DEP-003 | 拖过出牌线的最终视觉样式 | 需要策划/美术确认最终表现 | `TinySpire/Assets/Scripts/UI/Battle/Hand/HandCardVisual.cs` | `plans/2026-07-29-battlescene-drag-to-play-minimal.md` | open | M6C 人工审阅确认功能性冻结/箭头可用，但最终聚焦位置与 Tween 留给 M9；需求见 `10_communication/2026-08-02-battle-card-motion-feedback-brief.md`。Linear [LXX-6](https://linear.app/lxxr/issue/LXX-6) 已完成箭身、箭头及合法/悬停高亮四张 PNG 的美术交付，并在回复中验证尺寸、RGBA、透明中心及文件一致性；Issue 明确不实施交互或资源接线。Unity 后续已为工作区文件生成未跟踪 Meta，但 M9 尚未确认最终切片/缩放契约或接入生产 Prefab，因此本依赖继续保持 open。 |
+| DEP-004 | 打出后卡牌的销毁前过渡动作（按卡牌效果类型区分） | 需要 Effect 系统 / 卡牌数据结构先落地 | `TinySpire/Assets/Scripts/UI/Battle/Hand/HandCardContainer.cs` | `plans/2026-07-29-battlescene-drag-to-play-minimal.md` | open | M6C 人工审阅补充结束行动弃牌过渡需求；M9 只观察权威卡区变化，不保留假手牌。需求见 `10_communication/2026-08-02-battle-card-motion-feedback-brief.md`，本轮不另建交互工单；按 Effect 类型区分仍等待 M7。 |
 | DEP-005 | `BattleLifetimeScope` 已注册战斗会话，但回合调度器与其余战斗局内模块仍待确定后注册 | 需要先完成路线图 M3～M4 的视图与回合流程边界 | `TinySpire/Assets/Scripts/Battle/BattleLifetimeScope.cs` | `plans/2026-07-30-battle-config-runtime-integration.md` | resolved | `plans/2026-07-31-m4-turn-scheduling-energy.md` M4C：注册 `BattleCommandQueue`、表现 adapter 与启动/逐帧驱动；阶段模块由队列内部持有。 |
 | DEP-006 | 初始手牌临时取初始卡组的前 N 张，尚未经过抽牌堆洗牌与抽取 | 需要先实现 `CardZoneState`、战斗专属确定性随机源与抽牌/重洗流程 | `TinySpire/Assets/Scripts/Battle/BattleSession.cs` | `plans/2026-07-30-battle-config-runtime-integration.md` | resolved | `plans/2026-07-30-card-zones-deterministic-random.md`：创建完整卡组、确定性洗牌后抽取初始手牌，并实现弃牌重洗。 |
 | DEP-007 | BattleScene 的战斗种子当前由 Inspector 常量提供，尚未来自 Run 的根种子/存档 | 需要先实现 `RunState`、战斗创建标识与随机流派生/恢复规则 | `TinySpire/Assets/Scripts/Battle/BattleLifetimeScope.cs` | `plans/2026-07-30-card-zones-deterministic-random.md` | open | — |
 | DEP-008 | 多人根模型当前只接入一个玩家与一套 `BattleCardZonesData` | 需要 Party/Run 装配能够创建多名玩家及各自独立牌组，再把 `CombatantId` 映射到对应卡区 | `TinySpire/Assets/Scripts/Battle/BattleSession.cs`、`TinySpire/Assets/Scripts/Battle/BattleLifetimeScope.cs`、`TinySpire/Assets/Scripts/Battle/Turn/` | `plans/2026-07-31-m4-turn-scheduling-energy.md` | open | — |
-| DEP-009 | M5 已完成敌人行为组、权威当前意图、确定性选择、HUD 与完成后下一意图，但仍没有真实行为 Effect 执行 | 需要 M7 建立共享 Effect/目标操作边界，并由 M8 让敌人当前意图执行伤害、格挡、状态及死亡/中止规则 | `TinySpire/Assets/Scripts/Battle/BattleEnemyIntentsData.cs`、`TinySpire/Assets/Scripts/Battle/Commands/BattleCommandQueue.cs`、未来 M7/M8 Effect 执行入口 | `plans/2026-07-31-m4-turn-scheduling-energy.md`、`plans/2026-08-01-m5-enemy-intents-deterministic-behavior.md` | open | M5 只解决意图选择、显示和完成后换意图；真实执行明确保留给 M7/M8，因此不标记 resolved。 |
+| DEP-009 | M5 已完成敌人行为组、权威当前意图、确定性选择、HUD 与完成后下一意图，但仍没有真实行为 Effect 执行 | 需要 M7 建立共享 Effect/目标操作边界，并由 M8 让敌人当前意图执行伤害、格挡、状态及死亡/中止规则 | `TinySpire/Assets/Scripts/Battle/BattleEnemyIntentsData.cs`、`TinySpire/Assets/Scripts/Battle/Commands/BattleCommandQueue.cs`、未来 M7/M8 Effect 执行入口 | `plans/2026-07-31-m4-turn-scheduling-energy.md`、`plans/2026-08-01-m5-enemy-intents-deterministic-behavior.md` | open | M5 只解决意图选择、显示和完成后换意图；M6C 人工审阅再次确认“高亮正确但没有效果”，该缺口仍由 M7/M8 承接，不在 M6 提前实现。 |
 | DEP-010 | 命令执行中途需要所属玩家做局部选择时，尚无暂停/续接协议 | 需要目标选择与 Effect 系统定义输入 token、所有权、取消和超时语义，同时保证其他玩家仍可提交命令 | `TinySpire/Assets/Scripts/Battle/Commands/` | `plans/2026-07-31-m4-turn-scheduling-energy.md` | open | — |
 | DEP-011 | M4 只实现单机本地权威序号，尚无联机 Host 确认、广播、重放和失同步恢复 | 需要 Lobby/Run 生命周期、玩家网络身份、可靠消息与确定性状态校验方案 | `TinySpire/Assets/Scripts/Battle/Commands/` | `plans/2026-07-31-m4-turn-scheduling-energy.md` | open | — |

@@ -23,6 +23,8 @@ public sealed class HandCardVisual : MonoBehaviour
     private bool _hasPlayFeedback;
     private bool _isPlayerInputEnabled = true;
     private long? _pendingCommandSequence;
+    private Color _normalCostColor;
+    private bool _hasNormalCostColor;
 
     public CardInstanceId CardId { get; private set; }
     public float CurrentAnchoredY => _cardContent.anchoredPosition.y;
@@ -41,6 +43,8 @@ public sealed class HandCardVisual : MonoBehaviour
         _baseScale = baseScale;
         CardId = cardId;
         _dragFeedbackCanvasGroup = dragFeedbackCanvasGroup;
+        _normalCostColor = _costText.color;
+        _hasNormalCostColor = true;
         _canvas.overrideSorting = true;
         RefreshInteractionState();
     }
@@ -183,6 +187,30 @@ public sealed class HandCardVisual : MonoBehaviour
         // TODO(DEP-003): Final drag-over-play-line visual style requires design/art confirmation.
         float targetAlpha = isPastPlayLine ? 0.82f : 1f;
         _feedbackTween = _dragFeedbackCanvasGroup.DOFade(targetAlpha, 0.1f).SetEase(Ease.OutQuad);
+    }
+
+    /// <summary>只在明确费用不足时切换费用颜色，可支付或其他失败均恢复 Prefab 原色。</summary>
+    public void SetCostPaymentFeedback(bool canPayCost, Color insufficientCostColor)
+    {
+        EnsureReferences();
+        if (!_hasNormalCostColor)
+        {
+            _normalCostColor = _costText.color;
+            _hasNormalCostColor = true;
+        }
+
+        _costText.color = canPayCost ? _normalCostColor : insufficientCostColor;
+    }
+
+    /// <summary>把当前卡牌中心投影为屏幕坐标，供目标箭头与其他 Canvas 交换位置。</summary>
+    public Vector2 GetScreenCenter()
+    {
+        EnsureReferences();
+        Camera camera = _canvas.renderMode == RenderMode.ScreenSpaceOverlay
+            ? null
+            : _canvas.worldCamera;
+        Vector3 worldCenter = _cardContent.TransformPoint(_cardContent.rect.center);
+        return RectTransformUtility.WorldToScreenPoint(camera, worldCenter);
     }
 
     /// <summary>由玩家阶段与该牌待定状态共同派生实际射线和交互开关。</summary>
