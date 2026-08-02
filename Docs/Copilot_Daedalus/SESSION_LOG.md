@@ -3,6 +3,15 @@ created: 2026-07-06
 updated: 2026-08-02
 ---
 
+## 2026-08-02 · M8 总计划与 Goal 边界（待实施）
+
+- 新增 `plans/2026-08-02-m8-enemy-actions-status-timing-battle-loop.md` 作为 M8 唯一实施计划，按 M8A 契约 → M8B 提交/Queue 生命周期与屏障 → M8C 敌人 Effect 联合事务 module → M8D 生产接线/状态/死亡/完整循环 → M8E 全量验证与双轴复审串行推进；每个切片必须形成独立验收页并完成文档停止点后再继续。
+- 计划锁定当前单玩家 MVP：敌人 Self 指向自身、Enemy 只允许唯一存活玩家；玩家 Block 在下一 PlayerRoundStart 清除，敌人 Block 在自身行动前清除，玩家 Vulnerable 在弃手后减 1，敌人 Vulnerable 在 Effect 后减 1；死亡敌人不执行状态时机/Effect/意图推进，玩家死亡中止剩余敌人，终局从存活事实派生。
+- M8 将保持 `BattleCommandQueue.Submit`、只读 `Queue`/`Turn` 与 M7 共享 Effect；coordinator 在 Submit 前预注册 token/handle，Queue 唯一拥有 Queued、非重入 drain、`Execute` 后/`Present` 前的 continuation 排序、一次性 system token、显式 fault 与按结果表现屏障。普通失败继续零写入且结算为空；多玩家目标、敌人多 Effect、配置/可寻址内容或其他排除路径需要扩大范围时必须停止确认。
+- 本轮只新增/同步计划、计划索引、ROADMAP、依赖来源与状态源，没有修改 C#、测试、配置、生成内容或 Unity 资产，也没有运行 M8 EditMode、build、Bootstrap、Game View、Luban 或 Addressables。规划前的干净代码/资源基线为 `c46950ff4026f383487b1b2c15755b60ae2b2c3d`；正式 M8 Goal 必须现场记录实际起始 HEAD 与全部 tracked/untracked 工作区，本计划本身属于受保护基线。
+- 计划候选经压缩后为 112 行，并完成只读复核：Standards **0 Hard / 0 Judgement**、Spec **0 Hard / 0 Judgement**、深 module/原子性/continuation 接口审计剩余 finding **0**；本地 Markdown 链接、真实代码路径和 `git diff --check` 均通过。
+- M7 权威结算 review package 已本地提交为 `7b9463e`；用户确认的能量 HUD 位置调整已隔离提交为 `c46950f`。提交期间只按用户明确授权移除了精确的零字节 `.git/index.lock`，未结束 Git/Unity 进程；当前未 push。
+
 ## 2026-08-02 · M7E 全量验证、真实 Game View、双轴复审与 M7 收口（已完成）
 
 - M7A～M7E 已按唯一计划串行完成：`BattleCardPlayRules` 队首重校验 → 全量 Effect 预构建/快照校验 → 支付能量 → 按 `effect_bindings` 原序写入 → 当前卡牌进入 DiscardPile → 发布 Turn。失败命令保持能量、卡区、参与者、回合零写入且结算记录为空；阶段抽牌、弃手与重洗仍属于既有命令调用栈。

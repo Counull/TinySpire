@@ -368,6 +368,8 @@ MVP 效果类型：
 
 ### M8 · 敌人行动与完整循环
 
+唯一实施计划：[`plans/2026-08-02-m8-enemy-actions-status-timing-battle-loop.md`](plans/2026-08-02-m8-enemy-actions-status-timing-battle-loop.md)。计划锁定 M8A～M8E 的串行停止点、单玩家目标边界、Block/Vulnerable 时机、失败原子性、queue fault、阶段 continuation、终局和最终验证；实施状态仍只见 `SESSION_LOG.md`。
+
 敌人行为最终也走与卡牌相同或兼容的效果操作边界，避免玩家一套伤害公式、敌人另一套公式。
 
 需要处理：

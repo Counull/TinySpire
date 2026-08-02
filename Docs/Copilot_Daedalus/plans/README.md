@@ -13,6 +13,7 @@ updated: 2026-08-02
 
 ## 现有计划
 
+- [2026-08-02 M8 敌人行动、状态时机与完整战斗循环](2026-08-02-m8-enemy-actions-status-timing-battle-loop.md) — 唯一实施计划；M8A～M8E 待按独立停止点串行执行。
 - [2026-07-30 BattleScene M3A 参与者视图与生命 HUD](2026-07-30-battlescene-participant-views.md)
 - [2026-07-30 卡牌区域与确定性洗牌](2026-07-30-card-zones-deterministic-random.md)
 - [2026-07-30 YooAsset 到 Addressables 迁移](2026-07-30-addressables-migration.md)
