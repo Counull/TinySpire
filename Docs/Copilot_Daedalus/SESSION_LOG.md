@@ -3,6 +3,51 @@ created: 2026-07-06
 updated: 2026-08-02
 ---
 
+## 2026-08-02 · M8E 全量验证、双轴复审与 M8 收口（已完成）
+
+- M8A～M8E 已按唯一计划串行完成：Queue 唯一拥有 Queued、非重入 drain、continuation、表现屏障与 fault；玩家/敌人状态时机、ordered enemy Effect、下一意图、多敌稳定顺序、死亡跳过/中止和 `BattleEnded` 已接入同一权威循环。
+- 最终 M8 定向 **84/84**（任务 `3a5af905f4b1434ea4397c2f78a4555a`）、M2～M7 相关回归 **200/200**（任务 `6bc09fcecf4f48e89b93d6fba205dbf4`）、审查修正聚焦 **86/86**（任务 `4d51ecf7ceba4a9ebcb69e2d0cca3879`）与最终全量 EditMode **285/285**（任务 `63967ec19cf64333921c72ea27293f67`）均为 0 failed、0 skipped；串行 solution build 0 error、12 条既有依赖 warning。
+- Bootstrap 真实 Game View 已完成四轮物理胜利、Encounter 启动时跳过已死亡敌人、玩家死亡中止剩余敌人、一次性表现屏障暂停/恢复、状态时机、最后敌人死亡立即终局及终局后稳定失败；排队后 source 才死亡的 source-only skip 由专用自动测试证明。Standards 修正后又经生产 End listener 短 sanity 进入 Round 2，最终 Console Error/Warning 为 0/0。
+- Standards 首轮 **1 Hard / 2 Judgement** 已关闭：旧意图写入口与 enemy target/terminal helper 收窄为 internal，联合事务只保留一个 guard；最终复核 **0 Hard / 0 Judgement**。Spec 首轮唯一 Hard 是 M8E 文档尚未收口；生产规格与 scope finding 为 0，最终文档同步后复核 **0 Hard / 0 Judgement**。
+- M8 未修改配置、生成内容、Localization、Addressables、Scene/Prefab、ProjectSettings、asmdef、HybridCLR、启动或 DI 架构，也未实现 M3E/M9 表现与其他明确排除能力；无需 Luban/Addressables 重建。用户 Hermes/Candidates 美术持续排除并保护，未 commit、未 push。
+- `DEP-009` 与 `DEP-013` 已 resolved；其余 M9、多人、网络、Exhaust 与 Run 依赖保持原状态。计划已归档，最终证据见 `06_testing/2026-08-02-m8e-full-validation-review.md`，下一阶段为 M9。
+
+## 2026-08-02 · M8D 生产状态时机、死亡与完整战斗循环（已完成）
+
+- 生产 Queue 已接入 M8C 联合敌人事务；玩家 RoundStart 为 Block → Energy → Draw，EndPlayerAction 为 Discard → Vulnerable，敌人为 Block → ordered Effect → Vulnerable → Intent。Queue 只合并连续 settlement、派生 terminal 与排 frozen continuation，没有在命令分支复制 Behavior/Effect/公式。
+- 双敌严格按 Encounter 顺序；死亡 source 只产出 source-only skip。当前敌人致死玩家后仍完成本次 Intent commit，再进入 `BattleEnded` 且不排剩余敌人；玩家击杀最后敌人时同一出牌命令直接终局。普通失败零写入/空 settlement，direct fault 为 `partial=false`，提交后未预期异常才为 `partial=true`。
+- M8D 定向 **11/11**（任务 `c043935ab8f64ff2b95ea6631e77044c`）、M8D 加旧阶段重洗聚焦 **12/12**（任务 `d96ef64e291a4171ae77f06e83400c24`）、最终全量 EditMode **285/285**（任务 `b07b41b753a24865b50b73fb652be332`）均为 0 failed、0 skipped；串行 solution build 0 error、12 条既有 warning，`git diff --check` 通过。
+- Bootstrap 真实系统指针完成四轮胜利：玩家残余 Block 在下一 RoundStart 清零，敌人旧 5 Block 在自身 attack 前清零，Bash 的 Vulnerable `2 → 1`，易伤 Strike 为 9 点，最后敌人死亡立即 `BattleEnded`。终局后物理 End 点击不推进，Console Error/Warning 为 0/0。
+- 独立致死路线让玩家以 5 HP 进入 Round 4；首敌 attack 致死后，剩余敌人保持 `20 HP / Behavior 7003`，Intent RNG `853394020` 前后不变。一次性只读屏障探针还锁定 `current=3 / CompleteEnemyAction / pending=1 / waiting=true`：首敌伤害已提交，次敌事实/意图未执行；恢复后才进入下一轮。
+- M8D 未修改配置/生成内容、Localization、Addressables、Scene/Prefab、ProjectSettings、asmdef、HybridCLR、启动或 DI 架构，也未实现 M3E/M9 表现或其他排除能力。决策见 CD-047，验收见 `06_testing/2026-08-02-m8d-status-death-battle-loop.md`；下一步严格进入 M8E。
+
+## 2026-08-02 · M8C 敌人 Effect、状态投影与下一意图联合事务（已完成）
+
+- Effect 核心已改为 source + 显式 target + ordered `BattleEffectId`；Card 只在 `BattleTurnController` 边缘把合法 `CardEffectBinding` 保序适配为 ID，null/零/负绑定经公开 Queue 在能量、状态、卡区与 Turn 首写前稳定失败。敌人事务没有伪造 Card binding，也没有复制 M7 公式或状态写链。
+- `BattleEnemyIntentsData` 已落地三段式 completion plan：Prepare 使用复制 history 与恢复到同一权威 state 的本地 RNG，固定单候选不推进随机；Validate 只允许一次，Commit 只允许一次并按 history → random → Layout 发布下一意图记录。
+- internal `BattleEnemyActionExecutor` 以同一初始 source/target/Turn/Intent 快照联合预构建 Block 清理投影、Effect、Effect 后 Vulnerable、下一 Intent/random 与 continuation；唯一校验后按 Block → Effect → Vulnerable → Intent 无普通失败提交。Self defend 从 Block=0 得到最终 5，attack 复用 Strength/Vulnerable/Block/致死公式。
+- 死亡 source 在读取 Behavior、目标、Effect 或 Intent 前 source-only skip；活 source 的零玩家 terminal、多玩家 fault，以及缺配置、未知枚举、无下一意图、序号容量和 prepared 漂移均为首次写入前空结算零写入。阶段、无效敌人和非当前行动者保持普通失败。
+- M8C 最终定向 **25/25**（任务 `93fb4cb0fd384ea6a4acec931616ae27`）、Effect/Intent/Card/Queue 相关 **200/200**（任务 `9ee5346a6ecd4ea08712d01af8a9aa5b`）均为 0 failed、0 skipped；串行 solution build 0 error、12 条既有 warning，`git diff --check`、接口与排除路径审计通过。
+- 本切片只交付纯 module/fixture，没有把 executor 注册进 Queue/LifetimeScope 或生产循环；不要求 Bootstrap/真实 Game View，生产敌人仍保持 M5 占位。未改配置/生成内容、Localization、Addressables、Scene/Prefab、ProjectSettings、asmdef、HybridCLR、启动或 DI 架构。决策见 CD-046，验收见 `06_testing/2026-08-02-m8c-enemy-effect-transaction.md`；下一步严格进入 M8D。
+
+## 2026-08-02 · M8B 统一提交、Queue 生命周期与阶段屏障（已完成）
+
+- 生产 `BattleCommandQueue` 现唯一持有调度 core、权威序号、Queued、非重入 drain、continuation FIFO、一次性 system token、按非空结算形成的单次表现屏障与冻结 fault。统一 coordinator 只在 Submit 前为同一命令引用预注册 opaque handle 并转发生命周期；Hand/Turn 不再保存序号或手工发布 Queued，只按精确 handle 清理当前 Failed/Completed/Faulted。
+- continuation 在 Execute 返回后、Present 前入队，既有 accepted、continuation 与表现期间新提交的顺序已由公开 seam 锁定。每条命令只聚合一次前后 Turn 的 `BattlePhaseChanged`；普通失败为空结算且零 presentation，零结算 system continuation 直通；同步 completion 使用缓存/arm 边界，表现抛错仍会冻结当前 fault，旧 completion 无效。
+- Runtime driver 已移除 `ITickable` 轮询，只在启动时预注册并提交唯一 Start。`NoLegalNextIntent` 通过 typed fault 稳定分类为首次写入前零写入；该桥接在 M8C 将由 intent 三段式联合事务取代。生产敌人此时仍只推进 M5 占位意图，不执行 Effect、Block/Vulnerable 时机、死亡或终局。
+- M8B 定向 **11/11**（任务 `e58b73dbf30146af9c3c872452b480f8`）、相关回归 **86/86**（任务 `9ff3cfac1fd04c8985225a8fab372f8d`）、最终全量 EditMode **240/240**（任务 `4641e50e1b1b4f089997571a76d23a8f`）均为 0 failed、0 skipped；串行 solution build 0 error、12 条既有依赖 warning，`git diff --check` 与排除路径审计通过。
+- Bootstrap 真实输入完成：物理结束行动 Round 1 → 2、Round 2 物理双击只产生一次 End 并进入 Round 3、真实拖放 Self 卡使能量 `3 → 2`、手牌 `5 → 4`、弃牌 `0 → 1`；生产状态最终为 `Completed #8 · PlayCard`，运行期 Console Error/Warning 为 0/0，随后正常退出 Play Mode。证据见 `TinySpire/Temp/CodexEvidence/m8b_*.png`。
+- 本切片只对 `BattleLifetimeScope` 做 coordinator 注册和 runtime polling 移除；未修改配置/生成内容、Localization、Addressables、Scene/Prefab、ProjectSettings、asmdef、HybridCLR、启动/Run/网络或 DI 架构。并发的 Hermes/Candidates 美术始终排除。决策见 CD-045，验收见 `06_testing/2026-08-02-m8b-command-lifecycle-presentation-barrier.md`；下一步严格进入只交付纯 module/fixture 的 M8C。
+
+## 2026-08-02 · M8A 命令、状态与终局契约（已完成）
+
+- M8 Goal 实际起始 HEAD 为 `937b6fe50ec890cb3e71048da13a67c9d6815067`，开始时 `git status --short` 为空。实施期间新增的 `TinySpire/Assets/Arts/Runtime/UI/Battle/Candidates*` 为用户并发未跟踪美术，已逐次从 diff、测试与范围结论中排除并保持未触碰。
+- M8A 建立 opaque handle/coordinator、internal scheduling core、生命周期/fault、六类新 settlement、中立 `BattleEnded`、敌人 Self/唯一存活玩家目标、死亡 source-only skip、四个状态时点与派生 terminal。外部伪造 system command、错配 handle 与 fault 后提交均无序号拒绝；continuation 由 Queue token 授权一次，非空 settlement 自动建立精确 completion 屏障，提交后表现异常进入明确的可能部分写入 fault。
+- 敌人联合初始快照真实冻结 source/target 标量、完整 Turn、Intent Layout/history/random、恰好一个 ordered EffectId 与 continuation；只允许一次 validate/commit，commit 不复验中间写入。状态投影复用现有标量快照，Self defend 契约从清理后的 Block=0 开始，Effect 后 Vulnerable 减 1；没有伪造 CardEffectBinding、复制公式或新增 outcome/目标镜像。
+- 最终 M8A 定向 EditMode **58/58** 通过（任务 `d0ba59205b67451c97a895f99afb6a28`），M4～M7 契约回归 **145/145** 通过（任务 `940eaf0766564474b95e04800ab257cd`），均为 0 failed、0 skipped；串行 solution build 0 error、12 条既有依赖 warning，最终 Unity Console Error 0，`git diff --check` 与新增 authored C# 尾随空白检查通过。
+- 两轴只读复审最终均为 **0 Hard**。Spec 保留 1 条明确 judgement：M8A 的玩家 Block → Energy → Draw、Discard → Vulnerable 只是纯 settlement 顺序口径，尚未接生产；M8D 必须用公开 Queue 的真实结算顺序测试替代。Editor friend access 只服务 M8 internal contract tests，M8E 强制复审并尽可能删除，决策见 CD-043～044。
+- M8A 没有迁移现有 Queue、View 手工 Queued/sequence、pending、runtime polling 或自动阶段，生产敌人仍不造成伤害；未改配置/生成内容、Localization、Addressables、Scene/Prefab、ProjectSettings、asmdef、HybridCLR、启动/Run/网络、DI 或 `BattleLifetimeScope`，无需 Luban/Addressables 重建。验收见 `06_testing/2026-08-02-m8a-command-status-terminal-contract.md`；下一步严格进入 M8B。
+
 ## 2026-08-02 · M8 总计划与 Goal 边界（待实施）
 
 - 新增 `plans/2026-08-02-m8-enemy-actions-status-timing-battle-loop.md` 作为 M8 唯一实施计划，按 M8A 契约 → M8B 提交/Queue 生命周期与屏障 → M8C 敌人 Effect 联合事务 module → M8D 生产接线/状态/死亡/完整循环 → M8E 全量验证与双轴复审串行推进；每个切片必须形成独立验收页并完成文档停止点后再继续。

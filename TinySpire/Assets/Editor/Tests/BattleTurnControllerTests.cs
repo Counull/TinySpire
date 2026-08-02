@@ -20,7 +20,7 @@ public sealed class BattleTurnControllerTests
         var presentation = new ControllableBattleCommandPresentation();
         BattleCommandQueue queue = BattleCommandQueueTestFactory.Create(combatants, presentation);
 
-        queue.Submit(new StartBattleCommand());
+        queue.SubmitRegistered(new StartBattleCommand());
 
         BattleTurnData turn = queue.Turn.CurrentValue;
         Assert.That(turn.Players.Count, Is.EqualTo(2));
@@ -44,18 +44,23 @@ public sealed class BattleTurnControllerTests
         PlayerCombatantData player = combatants.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
         var presentation = new ControllableBattleCommandPresentation();
         BattleCommandQueue queue = BattleCommandQueueTestFactory.Create(combatants, presentation);
-        queue.Submit(new StartBattleCommand());
+        queue.SubmitRegistered(new StartBattleCommand());
         BattleTurnData turnAfterStart = queue.Turn.CurrentValue;
 
-        BattleCommandSubmissionResult duplicateSubmission = queue.Submit(new StartBattleCommand());
+        using BattleCommandLifecycleExecutionRecorder recorder =
+            queue.RecordExecutionLifecycle();
+        BattleCommandSubmissionResult duplicateSubmission = queue.SubmitRegistered(new StartBattleCommand());
         presentation.CompleteNext();
+        BattleCommandLifecycleEvent duplicateResult = recorder.RequireTerminal(duplicateSubmission);
 
         Assert.That(duplicateSubmission.Accepted, Is.True);
         Assert.That(duplicateSubmission.AuthoritySequence, Is.EqualTo(2));
-        Assert.That(presentation.Results[1].Succeeded, Is.False);
+        Assert.That(duplicateResult.Stage, Is.EqualTo(BattleCommandLifecycleStage.ExecutionFailed));
         Assert.That(
-            presentation.Results[1].FailureReason,
+            duplicateResult.FailureReason,
             Is.EqualTo(BattleCommandExecutionFailureReason.BattleAlreadyStarted));
+        Assert.That(duplicateResult.Settlements, Is.Empty);
+        Assert.That(presentation.Results, Has.Count.EqualTo(1));
         Assert.That(queue.Turn.CurrentValue, Is.SameAs(turnAfterStart));
         Assert.That(queue.Turn.CurrentValue.RoundNumber, Is.EqualTo(1));
 

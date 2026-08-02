@@ -159,6 +159,22 @@ namespace TinySpire.Battle
             _vulnerable.Value = checked(CurrentVulnerable + amount);
         }
 
+        /// <summary>仅由内部状态时机 module 提交已经完整预构建的 Block 与 Vulnerable 结果。</summary>
+        internal void ApplyStatusTimingValues(int blockAfter, int vulnerableAfter)
+        {
+            if (!IsAlive)
+                throw new InvalidOperationException("死亡参与者不能提交状态时机写入。");
+            if (blockAfter < 0)
+                throw new ArgumentOutOfRangeException(nameof(blockAfter));
+            if (vulnerableAfter < 0)
+                throw new ArgumentOutOfRangeException(nameof(vulnerableAfter));
+
+            if (blockAfter != CurrentBlock)
+                _block.Value = blockAfter;
+            if (vulnerableAfter != CurrentVulnerable)
+                _vulnerable.Value = vulnerableAfter;
+        }
+
         /// <summary>
         /// 释放此参与者持有的响应式资源；由所属战斗聚合统一调用。
         /// </summary>

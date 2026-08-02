@@ -13,7 +13,6 @@ updated: 2026-08-02
 
 ## 现有计划
 
-- [2026-08-02 M8 敌人行动、状态时机与完整战斗循环](2026-08-02-m8-enemy-actions-status-timing-battle-loop.md) — 唯一实施计划；M8A～M8E 待按独立停止点串行执行。
 - [2026-07-30 BattleScene M3A 参与者视图与生命 HUD](2026-07-30-battlescene-participant-views.md)
 - [2026-07-30 卡牌区域与确定性洗牌](2026-07-30-card-zones-deterministic-random.md)
 - [2026-07-30 YooAsset 到 Addressables 迁移](2026-07-30-addressables-migration.md)
@@ -24,6 +23,7 @@ updated: 2026-08-02
 
 ## 已替代 / 历史计划
 
+- [2026-08-02 M8 敌人行动、状态时机与完整战斗循环](2026-08-02-m8-enemy-actions-status-timing-battle-loop.md) — M8A～M8E 已串行完成；最终自动验证、Bootstrap、真实 Game View 与双轴复审见 `../06_testing/2026-08-02-m8e-full-validation-review.md`。
 - [2026-08-02 M7 Effect 执行器](2026-08-02-m7-effect-executor.md) — M7A～M7E 已串行完成；最终自动验证、Bootstrap、真实 Game View 与双轴复审见 `../06_testing/2026-08-02-m7e-full-validation-review.md`。
 - [2026-08-01 M6 出牌命令、合法性与目标选择](2026-08-01-m6-card-play-legality-target-selection.md) — M6A～M6D 已串行完成，含目标失效零写入、真实 Game View、Addressables、Bootstrap 与双轴复审。
 - [2026-08-01 M5 敌人意图与确定性行为选择](2026-08-01-m5-enemy-intents-deterministic-behavior.md) — M5A～M5D 已完成，含确定性复现、Game View 与双轴复审。

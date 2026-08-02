@@ -264,7 +264,7 @@ internal static class BattleEffectStateTestDriver
         return executor.Execute(new BattleEffectExecutionRequest(
             sourceId,
             targetId,
-            new[] { CreateBinding() }));
+            new[] { new BattleEffectId(FixtureEffectId) }));
     }
 
     /// <summary>以明确来源和目标执行一次伤害，失败时让夹具立即暴露错误。</summary>
@@ -341,13 +341,4 @@ internal static class BattleEffectStateTestDriver
         return new cfg.Tables(tableName => data[tableName]);
     }
 
-    /// <summary>创建指向固定测试 Effect 的单一绑定。</summary>
-    private static cfg.battle.CardEffectBinding CreateBinding()
-    {
-        return new cfg.battle.CardEffectBinding(new JObject
-        {
-            ["argument_key"] = string.Empty,
-            ["effect_id"] = FixtureEffectId,
-        });
-    }
 }

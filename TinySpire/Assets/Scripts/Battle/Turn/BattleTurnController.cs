@@ -64,12 +64,15 @@ namespace TinySpire.Battle
         private readonly Tables _tables;
         private readonly BattleCardPlayRules _cardPlayRules;
         private readonly BattleEffectExecutor _effectExecutor;
+        private readonly BattleStatusTiming _statusTiming;
+        private readonly BattleTerminalRules _terminalRules;
         private readonly int _energyPerRound;
         private readonly int _initialHandCount;
         private readonly Dictionary<CombatantId, PlayerTurnData> _players;
         private readonly ReactiveProperty<BattleTurnData> _turn;
         private readonly StateMachine<BattleTurnEvent> _stateMachine;
         private List<BattleSettlementRecord> _activeSettlements;
+        private int _activeSettlementStartingOrder;
 
         /// <summary>回合事实的只读响应式视图。</summary>
         internal ReadOnlyReactiveProperty<BattleTurnData> Turn { get; }
@@ -101,6 +104,8 @@ namespace TinySpire.Battle
                 _enemyCombatantIdsInEncounterOrder,
                 _tables);
             _effectExecutor = new BattleEffectExecutor(_tables, _combatants);
+            _statusTiming = new BattleStatusTiming(_combatants);
+            _terminalRules = new BattleTerminalRules(_combatants);
 
             _players = new Dictionary<CombatantId, PlayerTurnData>();
             foreach (CombatantData combatant in _combatants.All.Values)
@@ -152,10 +157,16 @@ namespace TinySpire.Battle
             BattleCardZonesData cardZones = _playerCardZones[command.ActorId];
             CardInstanceData card = cardZones.Cards[command.CardId];
             cfg.battle.Card cardTemplate = _tables.TbCard.GetOrDefault(card.TemplateId);
+            if (!TryCreateOrderedCardEffectIds(cardTemplate.EffectBindings, out IReadOnlyList<BattleEffectId> effectIds))
+            {
+                return BattleTurnOperationResult.Failed(
+                    BattleCommandExecutionFailureReason.InvalidEffectBinding);
+            }
+
             var effectRequest = new BattleEffectExecutionRequest(
                 command.ActorId,
                 command.TargetId.Value,
-                cardTemplate.EffectBindings);
+                effectIds);
             BattleEffectPreparationResult preparation = _effectExecutor.Prepare(effectRequest);
             if (!preparation.Succeeded)
                 return BattleTurnOperationResult.Failed(preparation.FailureReason);
@@ -182,9 +193,8 @@ namespace TinySpire.Battle
                 energyAfter,
                 playerTurn.HasEndedAction);
 
-            BattleEffectExecutionResult effectResult = _effectExecutor.ExecutePrepared(
-                preparation.Plan,
-                startingOrder: settlements.Count);
+            BattleEffectExecutionResult effectResult =
+                _effectExecutor.CommitPrepared(preparation.Plan);
             settlements.AddRange(effectResult.Settlements);
 
             BattleCardZoneOperationResult discardResult = cardZones.DiscardFromHand(
@@ -197,10 +207,51 @@ namespace TinySpire.Battle
             }
 
             settlements.AddRange(discardResult.Settlements);
-            PublishCurrentPhase();
+            BattleTerminalOutcome terminalOutcome = _terminalRules.Evaluate();
+            if (terminalOutcome == BattleTerminalOutcome.Ongoing)
+            {
+                PublishCurrentPhase();
+            }
+            else if (terminalOutcome == BattleTerminalOutcome.Victory ||
+                     terminalOutcome == BattleTerminalOutcome.Defeat)
+            {
+                EnterBattleEnded();
+            }
+            else
+            {
+                throw new InvalidOperationException("出牌事务完成后派生出无效的双方阵营事实。");
+            }
+
             return new BattleTurnOperationResult(
                 BattleCommandExecutionFailureReason.None,
                 settlements);
+        }
+
+        /// <summary>只在 Card 边缘按配置原序把绑定适配为核心认识的强类型 Effect 标识。</summary>
+        private static bool TryCreateOrderedCardEffectIds(
+            IEnumerable<cfg.battle.CardEffectBinding> bindings,
+            out IReadOnlyList<BattleEffectId> effectIds)
+        {
+            var orderedEffectIds = new List<BattleEffectId>();
+            if (bindings == null)
+            {
+                effectIds = Array.Empty<BattleEffectId>();
+                return false;
+            }
+
+            foreach (cfg.battle.CardEffectBinding binding in bindings)
+            {
+                if (binding == null || binding.EffectId <= 0)
+                {
+                    effectIds = Array.Empty<BattleEffectId>();
+                    return false;
+                }
+
+                orderedEffectIds.Add(new BattleEffectId(binding.EffectId));
+            }
+
+            effectIds = orderedEffectIds.AsReadOnly();
+            return true;
         }
 
         /// <summary>在玩家行动阶段结束指定存活玩家的行动，并把其剩余手牌全部移入弃牌堆。</summary>
@@ -237,13 +288,32 @@ namespace TinySpire.Battle
                     BattleCommandExecutionFailureReason.PlayerCardZonesNotFound);
             }
 
+            BattleStatusTimingPreparationResult statusPreparation = _statusTiming.Prepare(
+                BattleStatusTimingPoint.PlayerActionEnded,
+                command.ActorId,
+                cardZones.Hand.Count);
+            if (!statusPreparation.Succeeded)
+                return BattleTurnOperationResult.Failed(statusPreparation.FailureReason);
+            if (!_statusTiming.ValidatePrepared(statusPreparation.Plan))
+                throw new InvalidOperationException("玩家行动结束状态计划在首次写入前发生快照漂移。");
+
+            BattleTerminalOutcome terminalOutcome = _terminalRules.Evaluate();
+            if (terminalOutcome == BattleTerminalOutcome.InvalidFacts)
+                throw new InvalidOperationException("玩家行动结束前派生出无效的双方阵营事实。");
+
             return CollectSuccessfulOperation(() =>
             {
                 AppendCardZoneResult(cardZones.DiscardHand(CurrentSettlementOrder));
+                AppendStatusTimingResult(_statusTiming.CommitPrepared(statusPreparation.Plan));
                 _players[command.ActorId] = new PlayerTurnData(
                     playerTurn.Energy,
                     hasEndedAction: true);
-                if (HaveAllLivingPlayersEndedAction())
+                if (terminalOutcome == BattleTerminalOutcome.Victory ||
+                    terminalOutcome == BattleTerminalOutcome.Defeat)
+                {
+                    EnterBattleEnded();
+                }
+                else if (HaveAllLivingPlayersEndedAction())
                 {
                     _stateMachine.Dispatch(BattleTurnEvent.CompletePlayerRound);
                     _stateMachine.Tick(TimeSpan.Zero);
@@ -278,11 +348,47 @@ namespace TinySpire.Battle
             return BattleCommandExecutionFailureReason.None;
         }
 
-        /// <summary>在队列已完成校验和下一意图选择后，推进 Encounter 中的敌人顺序。</summary>
-        internal BattleTurnOperationResult AdvanceAfterValidatedEnemyAction()
+        /// <summary>只读预览当前敌人之后 Encounter 中下一名存活敌人的 Queue continuation。</summary>
+        internal CompleteEnemyActionCommand CreateNextEnemyContinuation()
         {
-            return CollectSuccessfulOperation(() =>
+            BattleTurnData current = Turn.CurrentValue;
+            if (current.Phase != BattleTurnPhase.EnemyAction ||
+                !current.CurrentActingEnemyId.HasValue)
             {
+                return null;
+            }
+            if (!(_stateMachine.CurrentState is EnemyActionState enemyState))
+                throw new InvalidOperationException("敌人行动阶段缺少对应的 Encounter 状态。");
+
+            return TryFindNextLivingEnemy(
+                enemyState.NextEncounterIndex,
+                out CombatantId enemyId,
+                out _)
+                    ? new CompleteEnemyActionCommand(enemyId)
+                    : null;
+        }
+
+        /// <summary>在敌人事务提交后进入终局，或从指定记录序号继续推进 Encounter 与下一轮。</summary>
+        internal BattleTurnOperationResult AdvanceAfterValidatedEnemyAction(
+            BattleTerminalOutcome terminalOutcome,
+            int startingOrder)
+        {
+            if (startingOrder < 0)
+                throw new ArgumentOutOfRangeException(nameof(startingOrder));
+            if (terminalOutcome == BattleTerminalOutcome.InvalidFacts)
+                throw new InvalidOperationException("敌人事务完成后派生出无效的双方阵营事实。");
+            if (!Enum.IsDefined(typeof(BattleTerminalOutcome), terminalOutcome))
+                throw new ArgumentOutOfRangeException(nameof(terminalOutcome));
+
+            return CollectSuccessfulOperation(startingOrder, () =>
+            {
+                if (terminalOutcome == BattleTerminalOutcome.Victory ||
+                    terminalOutcome == BattleTerminalOutcome.Defeat)
+                {
+                    EnterBattleEnded();
+                    return;
+                }
+
                 _stateMachine.Dispatch(BattleTurnEvent.CompleteEnemyAction);
                 _stateMachine.Tick(TimeSpan.Zero);
             });
@@ -309,13 +415,38 @@ namespace TinySpire.Battle
             _turn.Value = new BattleTurnData(phase, roundNumber, _players, currentActingEnemyId);
         }
 
-        /// <summary>为新一轮替换每名玩家的独立回合事实，并恢复静态规则定义的基础能量。</summary>
+        /// <summary>为每名存活玩家依次清 Block、恢复变化的能量并补抽手牌。</summary>
         private void ResetPlayersForRound()
         {
             var playerIds = new List<CombatantId>(_players.Keys);
             playerIds.Sort((left, right) => left.Value.CompareTo(right.Value));
             foreach (CombatantId playerId in playerIds)
             {
+                if (!_combatants.TryGet(playerId, out CombatantData combatant) ||
+                    !(combatant is PlayerCombatantData) ||
+                    !combatant.IsAlive)
+                {
+                    continue;
+                }
+
+                BattleStatusTimingResult blockResult = _statusTiming.Execute(
+                    BattleStatusTimingPoint.PlayerRoundStart,
+                    playerId,
+                    CurrentSettlementOrder);
+                if (!blockResult.Succeeded)
+                    throw new InvalidOperationException("存活玩家的回合开始状态时机意外失败。");
+                AppendStatusTimingResult(blockResult);
+
+                PlayerTurnData playerTurn = _players[playerId];
+                if (playerTurn.Energy != _energyPerRound)
+                {
+                    _activeSettlements.Add(new BattleEnergyRefilledSettlement(
+                        CurrentSettlementOrder,
+                        playerId,
+                        playerTurn.Energy,
+                        _energyPerRound));
+                }
+
                 _players[playerId] = new PlayerTurnData(_energyPerRound, hasEndedAction: false);
                 DrawPlayerToTargetHand(playerId);
             }
@@ -350,15 +481,29 @@ namespace TinySpire.Battle
                         "当前没有可接收阶段卡区变化的命令结算作用域。");
                 }
 
-                return _activeSettlements.Count;
+                long order = (long)_activeSettlementStartingOrder + _activeSettlements.Count;
+                if (order > int.MaxValue)
+                    throw new InvalidOperationException("当前命令结算记录顺序超出 Int32 范围。");
+
+                return (int)order;
             }
         }
 
         /// <summary>在一次同步命令内收集阶段推进产生的全部卡区记录，并在返回前冻结结果。</summary>
         private BattleTurnOperationResult CollectSuccessfulOperation(Action operation)
         {
+            return CollectSuccessfulOperation(0, operation);
+        }
+
+        /// <summary>从指定序号开始收集阶段推进记录，并保持与前序事务记录连续。</summary>
+        private BattleTurnOperationResult CollectSuccessfulOperation(
+            int startingOrder,
+            Action operation)
+        {
             if (operation == null)
                 throw new ArgumentNullException(nameof(operation));
+            if (startingOrder < 0)
+                throw new ArgumentOutOfRangeException(nameof(startingOrder));
             if (_activeSettlements != null)
             {
                 throw new InvalidOperationException(
@@ -367,6 +512,7 @@ namespace TinySpire.Battle
 
             var settlements = new List<BattleSettlementRecord>();
             _activeSettlements = settlements;
+            _activeSettlementStartingOrder = startingOrder;
             try
             {
                 operation();
@@ -377,6 +523,7 @@ namespace TinySpire.Battle
             finally
             {
                 _activeSettlements = null;
+                _activeSettlementStartingOrder = 0;
             }
         }
 
@@ -398,11 +545,30 @@ namespace TinySpire.Battle
 
             foreach (BattleSettlementRecord settlement in result.Settlements)
             {
-                if (settlement.Order != _activeSettlements.Count)
+                if (settlement.Order != CurrentSettlementOrder)
                 {
                     throw new InvalidOperationException(
                         "卡区结算记录必须与当前命令保持连续顺序。");
                 }
+
+                _activeSettlements.Add(settlement);
+            }
+        }
+
+        /// <summary>校验状态时机记录连续后，将其追加到当前命令结算。</summary>
+        private void AppendStatusTimingResult(BattleStatusTimingResult result)
+        {
+            if (result == null)
+                throw new ArgumentNullException(nameof(result));
+            if (_activeSettlements == null)
+                throw new InvalidOperationException("当前没有可追加状态记录的命令结算作用域。");
+            if (!result.Succeeded)
+                throw new InvalidOperationException("已完成前置校验的状态时机意外失败。");
+
+            foreach (BattleSettlementRecord settlement in result.Settlements)
+            {
+                if (settlement.Order != CurrentSettlementOrder)
+                    throw new InvalidOperationException("状态结算记录必须与当前命令保持连续顺序。");
 
                 _activeSettlements.Add(settlement);
             }
@@ -417,6 +583,20 @@ namespace TinySpire.Battle
                 current.RoundNumber,
                 _players,
                 current.CurrentActingEnemyId);
+        }
+
+        /// <summary>停止内部状态机并发布不保存胜负镜像的中立终局阶段。</summary>
+        private void EnterBattleEnded()
+        {
+            if (_stateMachine.IsRunning)
+                _stateMachine.Stop();
+
+            BattleTurnData current = Turn.CurrentValue;
+            _turn.Value = new BattleTurnData(
+                BattleTurnPhase.BattleEnded,
+                current.RoundNumber,
+                _players,
+                currentActingEnemyId: null);
         }
 
         /// <summary>判断所有仍存活的玩家是否都已经执行了本轮结束行动。</summary>
@@ -438,18 +618,37 @@ namespace TinySpire.Battle
         /// <summary>从 Encounter 指定位置起查找下一名存活敌人，并返回稳定的敌人行动状态。</summary>
         private IState<BattleTurnEvent> CreateNextEnemyState(int startIndex)
         {
+            if (TryFindNextLivingEnemy(startIndex, out CombatantId enemyId, out int nextIndex))
+                return new EnemyActionState(this, enemyId, nextIndex);
+
+            return new AutomaticPhaseState(this, BattleTurnPhase.EnemyRoundEnd);
+        }
+
+        /// <summary>从 Encounter 指定游标起只读查找下一名存活敌人及其后继游标。</summary>
+        private bool TryFindNextLivingEnemy(
+            int startIndex,
+            out CombatantId enemyId,
+            out int nextIndex)
+        {
+            if (startIndex < 0 || startIndex > _enemyCombatantIdsInEncounterOrder.Count)
+                throw new ArgumentOutOfRangeException(nameof(startIndex));
+
             for (int index = startIndex; index < _enemyCombatantIdsInEncounterOrder.Count; index++)
             {
-                CombatantId enemyId = _enemyCombatantIdsInEncounterOrder[index];
-                if (_combatants.TryGet(enemyId, out CombatantData combatant) &&
+                CombatantId candidateId = _enemyCombatantIdsInEncounterOrder[index];
+                if (_combatants.TryGet(candidateId, out CombatantData combatant) &&
                     combatant is EnemyCombatantData &&
                     combatant.IsAlive)
                 {
-                    return new EnemyActionState(this, enemyId, index + 1);
+                    enemyId = candidateId;
+                    nextIndex = index + 1;
+                    return true;
                 }
             }
 
-            return new AutomaticPhaseState(this, BattleTurnPhase.EnemyRoundEnd);
+            enemyId = default;
+            nextIndex = _enemyCombatantIdsInEncounterOrder.Count;
+            return false;
         }
 
         /// <summary>战斗尚未开始时只接受开始战斗事件。</summary>
@@ -561,6 +760,9 @@ namespace TinySpire.Battle
             private readonly BattleTurnController _owner;
             private readonly CombatantId _enemyId;
             private readonly int _nextEncounterIndex;
+
+            /// <summary>下一次 Encounter 查找必须沿用的稳定游标。</summary>
+            internal int NextEncounterIndex => _nextEncounterIndex;
 
             /// <summary>保存当前敌人和后续查找起点，确保完成后不依赖字典枚举。</summary>
             internal EnemyActionState(

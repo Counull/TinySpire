@@ -4,33 +4,33 @@ using System.Collections.ObjectModel;
 
 namespace TinySpire.Battle
 {
-    /// <summary>调用 Effect executor 所需的来源、显式目标与稳定有序绑定。</summary>
+    /// <summary>调用 Effect executor 所需的来源、显式目标与稳定有序 Effect 标识。</summary>
     public sealed class BattleEffectExecutionRequest
     {
         /// <summary>本次 Effect 链的来源参与者。</summary>
         public CombatantId SourceId { get; }
 
-        /// <summary>M7 已验证的单个显式目标。</summary>
+        /// <summary>调用方已经解析并验证的单个显式目标。</summary>
         public CombatantId TargetId { get; }
 
-        /// <summary>按配置顺序冻结的 Effect 绑定。</summary>
-        public IReadOnlyList<cfg.battle.CardEffectBinding> EffectBindings { get; }
+        /// <summary>按调用方领域顺序冻结的强类型 Effect 标识。</summary>
+        public IReadOnlyList<BattleEffectId> EffectIds { get; }
 
         /// <summary>复制并冻结一次 Effect 执行请求。</summary>
         public BattleEffectExecutionRequest(
             CombatantId sourceId,
             CombatantId targetId,
-            IEnumerable<cfg.battle.CardEffectBinding> effectBindings)
+            IEnumerable<BattleEffectId> effectIds)
         {
-            if (effectBindings == null)
+            if (effectIds == null)
             {
-                throw new ArgumentNullException(nameof(effectBindings));
+                throw new ArgumentNullException(nameof(effectIds));
             }
 
             SourceId = sourceId;
             TargetId = targetId;
-            EffectBindings = new ReadOnlyCollection<cfg.battle.CardEffectBinding>(
-                new List<cfg.battle.CardEffectBinding>(effectBindings));
+            EffectIds = new ReadOnlyCollection<BattleEffectId>(
+                new List<BattleEffectId>(effectIds));
         }
     }
 
@@ -141,7 +141,7 @@ namespace TinySpire.Battle
         }
     }
 
-    /// <summary>可在支付能量后无普通失败执行的内部 Effect 计划。</summary>
+    /// <summary>可在调用方联合校验后无普通失败执行的内部 Effect 计划。</summary>
     internal sealed class BattlePreparedEffectPlan
     {
         /// <summary>创建此计划的 executor，用于阻止跨实例执行。</summary>
@@ -153,7 +153,7 @@ namespace TinySpire.Battle
         /// <summary>计划显式目标。</summary>
         internal CombatantId TargetId { get; }
 
-        /// <summary>按绑定顺序冻结的已验证操作。</summary>
+        /// <summary>按 Effect 标识顺序冻结的已验证操作。</summary>
         internal IReadOnlyList<BattlePreparedEffectOperation> Operations { get; }
 
         /// <summary>预构建时的来源标量。</summary>
@@ -162,20 +162,62 @@ namespace TinySpire.Battle
         /// <summary>预构建时的目标标量。</summary>
         internal BattleCombatantScalarSnapshot TargetSnapshot { get; }
 
+        /// <summary>全部已验证操作完成后的 source 投影，用于后续状态时机预构建。</summary>
+        internal BattleEffectTargetSnapshot ProjectedSourceAfterEffect { get; }
+
+        /// <summary>全部已验证操作完成后的显式 target 投影，用于联合计划在首写前派生终局。</summary>
+        internal BattleEffectTargetSnapshot ProjectedTargetAfterEffect { get; }
+
+        /// <summary>计划是否已经在首次写入前通过快照校验。</summary>
+        internal bool IsValidated { get; private set; }
+
+        /// <summary>计划是否已经完成无普通失败提交。</summary>
+        internal bool IsConsumed { get; private set; }
+
+        /// <summary>通过校验后冻结的结算起始序号。</summary>
+        internal int StartingOrder { get; private set; }
+
         /// <summary>冻结一次完整预构建计划。</summary>
         internal BattlePreparedEffectPlan(
             BattleEffectExecutor owner,
             CombatantData source,
             CombatantData target,
-            IEnumerable<BattlePreparedEffectOperation> operations)
+            IEnumerable<BattlePreparedEffectOperation> operations,
+            BattleEffectTargetSnapshot projectedSourceAfterEffect,
+            BattleEffectTargetSnapshot projectedTargetAfterEffect)
         {
             Owner = owner ?? throw new ArgumentNullException(nameof(owner));
             SourceId = source.Id;
             TargetId = target.Id;
             SourceSnapshot = new BattleCombatantScalarSnapshot(source);
             TargetSnapshot = new BattleCombatantScalarSnapshot(target);
+            ProjectedSourceAfterEffect = projectedSourceAfterEffect;
+            ProjectedTargetAfterEffect = projectedTargetAfterEffect;
             Operations = new ReadOnlyCollection<BattlePreparedEffectOperation>(
                 new List<BattlePreparedEffectOperation>(operations));
+        }
+
+        /// <summary>在唯一首次写入前校验成功后冻结记录起点。</summary>
+        internal void MarkValidated(int startingOrder)
+        {
+            if (IsValidated)
+                throw new InvalidOperationException("Effect 计划已经完成过校验。");
+            if (IsConsumed)
+                throw new InvalidOperationException("Effect 计划已经提交。");
+
+            StartingOrder = startingOrder;
+            IsValidated = true;
+        }
+
+        /// <summary>在无普通失败提交开始时消费计划，阻止重复写入。</summary>
+        internal void MarkConsumed()
+        {
+            if (!IsValidated)
+                throw new InvalidOperationException("Effect 计划尚未通过首次写入前校验。");
+            if (IsConsumed)
+                throw new InvalidOperationException("Effect 计划已经提交。");
+
+            IsConsumed = true;
         }
     }
 

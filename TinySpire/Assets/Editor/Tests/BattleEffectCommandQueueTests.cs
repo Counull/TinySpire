@@ -29,7 +29,7 @@ public sealed class BattleEffectCommandQueueTests
         {
             CardInstanceId cardId = scenario.FindCard(3001);
 
-            scenario.Queue.Submit(new PlayCardCommand(
+            scenario.Queue.SubmitRegistered(new PlayCardCommand(
                 scenario.Player.Id,
                 cardId,
                 scenario.Player.Id));
@@ -99,7 +99,7 @@ public sealed class BattleEffectCommandQueueTests
             scenario.ExecuteSetupCardEffects(3998, scenario.Enemy.Id);
             CardInstanceId cardId = scenario.FindCard(3002);
 
-            scenario.Queue.Submit(new PlayCardCommand(
+            scenario.Queue.SubmitRegistered(new PlayCardCommand(
                 scenario.Player.Id,
                 cardId,
                 scenario.Enemy.Id));
@@ -156,7 +156,7 @@ public sealed class BattleEffectCommandQueueTests
         {
             CardInstanceId cardId = scenario.FindCard(3003);
 
-            scenario.Queue.Submit(new PlayCardCommand(
+            scenario.Queue.SubmitRegistered(new PlayCardCommand(
                 scenario.Player.Id,
                 cardId,
                 scenario.Player.Id));
@@ -212,7 +212,7 @@ public sealed class BattleEffectCommandQueueTests
         {
             CardInstanceId cardId = scenario.FindCard(3004);
 
-            scenario.Queue.Submit(new PlayCardCommand(
+            scenario.Queue.SubmitRegistered(new PlayCardCommand(
                 scenario.Player.Id,
                 cardId,
                 scenario.Enemy.Id));
@@ -277,17 +277,18 @@ public sealed class BattleEffectCommandQueueTests
         {
             CardInstanceId cardId = scenario.FindCard(3004);
 
-            scenario.Queue.Submit(new PlayCardCommand(
+            scenario.Queue.SubmitRegistered(new PlayCardCommand(
                 scenario.Player.Id,
                 cardId,
                 scenario.Enemy.Id));
 
             BattleCommandExecutionResult result = scenario.Presentation.Results[1];
             Assert.That(result.Succeeded, Is.True);
-            Assert.That(result.Settlements.Count, Is.EqualTo(4));
+            Assert.That(result.Settlements.Count, Is.EqualTo(5));
             var damageRecord = result.Settlements[1] as BattleDamageAppliedSettlement;
             var skipped = result.Settlements[2] as BattleOperationSkippedSettlement;
             var moved = result.Settlements[3] as BattleCardMovedSettlement;
+            var phaseChanged = result.Settlements[4] as BattlePhaseChangedSettlement;
             Assert.That(damageRecord, Is.Not.Null);
             Assert.That(damageRecord.WasFatal, Is.True);
             Assert.That(damageRecord.HealthAfter, Is.Zero);
@@ -298,6 +299,9 @@ public sealed class BattleEffectCommandQueueTests
             Assert.That(moved, Is.Not.Null);
             Assert.That(moved.Order, Is.EqualTo(3));
             Assert.That(moved.CardId, Is.EqualTo(cardId));
+            Assert.That(phaseChanged, Is.Not.Null);
+            Assert.That(phaseChanged.Order, Is.EqualTo(4));
+            Assert.That(phaseChanged.PhaseAfter, Is.EqualTo(BattleTurnPhase.BattleEnded));
             Assert.That(scenario.Enemy.CurrentVulnerable, Is.Zero);
             Assert.That(scenario.Zones.DiscardPile, Is.EqualTo(new[] { cardId }));
         }
@@ -321,23 +325,25 @@ public sealed class BattleEffectCommandQueueTests
         {
             BattleCommandExecutionResult start = scenario.Presentation.Results[0];
             Assert.That(start.Succeeded, Is.True);
-            Assert.That(start.Settlements.Count, Is.EqualTo(2));
-            for (int index = 0; index < start.Settlements.Count; index++)
+            Assert.That(start.Settlements.Count, Is.EqualTo(4));
+            Assert.That(start.Settlements[0], Is.TypeOf<BattleEnergyRefilledSettlement>());
+            for (int index = 0; index < scenario.Zones.Hand.Count; index++)
             {
-                var moved = start.Settlements[index] as BattleCardMovedSettlement;
+                var moved = start.Settlements[index + 1] as BattleCardMovedSettlement;
                 Assert.That(moved, Is.Not.Null);
-                Assert.That(moved.Order, Is.EqualTo(index));
+                Assert.That(moved.Order, Is.EqualTo(index + 1));
                 Assert.That(moved.CardId, Is.EqualTo(scenario.Zones.Hand[index]));
                 Assert.That(moved.FromZone, Is.EqualTo(BattleCardZone.DrawPile));
                 Assert.That(moved.ToZone, Is.EqualTo(BattleCardZone.Hand));
             }
+            Assert.That(start.Settlements[3], Is.TypeOf<BattlePhaseChangedSettlement>());
 
             CardInstanceId[] handBeforeEnd = new List<CardInstanceId>(scenario.Zones.Hand).ToArray();
-            scenario.Queue.Submit(new EndPlayerActionCommand(scenario.Player.Id));
+            scenario.Queue.SubmitRegistered(new EndPlayerActionCommand(scenario.Player.Id));
             BattleCommandExecutionResult end = scenario.Presentation.Results[1];
             Assert.That(end.Succeeded, Is.True);
-            Assert.That(end.Settlements.Count, Is.EqualTo(2));
-            for (int index = 0; index < end.Settlements.Count; index++)
+            Assert.That(end.Settlements.Count, Is.EqualTo(3));
+            for (int index = 0; index < handBeforeEnd.Length; index++)
             {
                 var moved = end.Settlements[index] as BattleCardMovedSettlement;
                 Assert.That(moved, Is.Not.Null);
@@ -346,20 +352,28 @@ public sealed class BattleEffectCommandQueueTests
                 Assert.That(moved.FromZone, Is.EqualTo(BattleCardZone.Hand));
                 Assert.That(moved.ToZone, Is.EqualTo(BattleCardZone.DiscardPile));
             }
+            Assert.That(end.Settlements[2], Is.TypeOf<BattlePhaseChangedSettlement>());
 
             scenario.Presentation.CompleteNext();
-            scenario.Queue.Submit(new CompleteEnemyActionCommand(scenario.Enemy.Id));
             BattleCommandExecutionResult completeEnemy = scenario.Presentation.Results[2];
             Assert.That(completeEnemy.Succeeded, Is.True);
-            Assert.That(completeEnemy.Settlements.Count, Is.EqualTo(5));
+            Assert.That(completeEnemy.Settlements.Count, Is.EqualTo(8));
             for (int index = 0; index < completeEnemy.Settlements.Count; index++)
                 Assert.That(completeEnemy.Settlements[index].Order, Is.EqualTo(index));
 
-            var residualDraw = completeEnemy.Settlements[0] as BattleCardMovedSettlement;
-            var firstRecycled = completeEnemy.Settlements[1] as BattleCardMovedSettlement;
-            var secondRecycled = completeEnemy.Settlements[2] as BattleCardMovedSettlement;
-            var reshuffled = completeEnemy.Settlements[3] as BattleCardsReshuffledSettlement;
-            var continuedDraw = completeEnemy.Settlements[4] as BattleCardMovedSettlement;
+            var damage = completeEnemy.Settlements[0] as BattleDamageAppliedSettlement;
+            var intent = completeEnemy.Settlements[1] as BattleEnemyIntentAdvancedSettlement;
+            var residualDraw = completeEnemy.Settlements[2] as BattleCardMovedSettlement;
+            var firstRecycled = completeEnemy.Settlements[3] as BattleCardMovedSettlement;
+            var secondRecycled = completeEnemy.Settlements[4] as BattleCardMovedSettlement;
+            var reshuffled = completeEnemy.Settlements[5] as BattleCardsReshuffledSettlement;
+            var continuedDraw = completeEnemy.Settlements[6] as BattleCardMovedSettlement;
+            var phaseChanged = completeEnemy.Settlements[7] as BattlePhaseChangedSettlement;
+            Assert.That(damage, Is.Not.Null);
+            Assert.That(damage.SourceId, Is.EqualTo(scenario.Enemy.Id));
+            Assert.That(damage.TargetId, Is.EqualTo(scenario.Player.Id));
+            Assert.That(intent, Is.Not.Null);
+            Assert.That(intent.SourceId, Is.EqualTo(scenario.Enemy.Id));
             Assert.That(residualDraw, Is.Not.Null);
             Assert.That(residualDraw.FromZone, Is.EqualTo(BattleCardZone.DrawPile));
             Assert.That(residualDraw.ToZone, Is.EqualTo(BattleCardZone.Hand));
@@ -377,6 +391,9 @@ public sealed class BattleEffectCommandQueueTests
                 Is.EqualTo(reshuffled.NewDrawPileOrder[reshuffled.NewDrawPileOrder.Count - 1]));
             Assert.That(continuedDraw.FromZone, Is.EqualTo(BattleCardZone.DrawPile));
             Assert.That(continuedDraw.ToZone, Is.EqualTo(BattleCardZone.Hand));
+            Assert.That(phaseChanged, Is.Not.Null);
+            Assert.That(phaseChanged.PhaseBefore, Is.EqualTo(BattleTurnPhase.EnemyAction));
+            Assert.That(phaseChanged.PhaseAfter, Is.EqualTo(BattleTurnPhase.PlayerAction));
             Assert.That(scenario.Zones.Hand, Is.EqualTo(new[]
             {
                 residualDraw.CardId,
@@ -420,17 +437,20 @@ public sealed class BattleEffectCommandQueueTests
             var blockBefore = scenario.Player.Block;
             var vulnerableBefore = scenario.Player.Vulnerable;
 
-            scenario.Queue.Submit(new PlayCardCommand(
+            using BattleCommandLifecycleExecutionRecorder recorder =
+                scenario.Queue.RecordExecutionLifecycle();
+            BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(new PlayCardCommand(
                 scenario.Player.Id,
                 cardId,
                 scenario.Player.Id));
 
-            BattleCommandExecutionResult result = scenario.Presentation.Results[1];
-            Assert.That(result.Succeeded, Is.False);
+            BattleCommandLifecycleEvent result = recorder.RequireTerminal(submission);
+            Assert.That(result.Stage, Is.EqualTo(BattleCommandLifecycleStage.ExecutionFailed));
             Assert.That(
                 result.FailureReason,
                 Is.EqualTo(BattleCommandExecutionFailureReason.EffectTemplateNotFound));
             Assert.That(result.Settlements, Is.Empty);
+            Assert.That(scenario.Presentation.Results, Has.Count.EqualTo(1));
             Assert.That(scenario.Queue.Turn.CurrentValue, Is.SameAs(turnBefore));
             Assert.That(scenario.Zones.Layout.CurrentValue, Is.SameAs(layoutBefore));
             Assert.That(scenario.Player.Health, Is.SameAs(healthBefore));
@@ -441,6 +461,112 @@ public sealed class BattleEffectCommandQueueTests
             Assert.That(scenario.Player.CurrentStrength, Is.EqualTo(1));
             Assert.That(scenario.Player.CurrentBlock, Is.Zero);
             Assert.That(scenario.Player.CurrentVulnerable, Is.Zero);
+            Assert.That(scenario.Queue.Turn.CurrentValue.Players[scenario.Player.Id].Energy, Is.EqualTo(3));
+            Assert.That(scenario.Zones.Hand, Is.EqualTo(new[] { cardId }));
+            Assert.That(scenario.Zones.DiscardPile, Is.Empty);
+        }
+    }
+
+    /// <summary>验证 Card 边缘拒绝零 Effect 绑定，并在支付能量、写状态或移牌前整体失败。</summary>
+    [TestCase(0)]
+    [TestCase(-1)]
+    public void Submit_CardWithInvalidEffectBinding_FailsBeforeAnyWrite(int effectId)
+    {
+        JObject invalidCard = CreateCard(
+            3902,
+            cost: 1,
+            cfg.battle.TargetRule.Self,
+            effectId);
+        using (var scenario = new QueueScenario(
+                   new[] { invalidCard },
+                   Array.Empty<JObject>(),
+                   new[] { 3902 },
+                   playerStrength: 1,
+                   energyPerRound: 3))
+        {
+            CardInstanceId cardId = scenario.FindCard(3902);
+            BattleTurnData turnBefore = scenario.Queue.Turn.CurrentValue;
+            CardZoneLayoutData layoutBefore = scenario.Zones.Layout.CurrentValue;
+            var healthBefore = scenario.Player.Health;
+            var strengthBefore = scenario.Player.Strength;
+            var blockBefore = scenario.Player.Block;
+            var vulnerableBefore = scenario.Player.Vulnerable;
+
+            using BattleCommandLifecycleExecutionRecorder recorder =
+                scenario.Queue.RecordExecutionLifecycle();
+            BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(
+                new PlayCardCommand(
+                    scenario.Player.Id,
+                    cardId,
+                    scenario.Player.Id));
+
+            BattleCommandLifecycleEvent result = recorder.RequireTerminal(submission);
+            Assert.That(result.Stage, Is.EqualTo(BattleCommandLifecycleStage.ExecutionFailed));
+            Assert.That(result.FailureReason,
+                Is.EqualTo(BattleCommandExecutionFailureReason.InvalidEffectBinding));
+            Assert.That(result.Settlements, Is.Empty);
+            Assert.That(scenario.Presentation.Results, Has.Count.EqualTo(1));
+            Assert.That(scenario.Queue.Turn.CurrentValue, Is.SameAs(turnBefore));
+            Assert.That(scenario.Zones.Layout.CurrentValue, Is.SameAs(layoutBefore));
+            Assert.That(scenario.Player.Health, Is.SameAs(healthBefore));
+            Assert.That(scenario.Player.Strength, Is.SameAs(strengthBefore));
+            Assert.That(scenario.Player.Block, Is.SameAs(blockBefore));
+            Assert.That(scenario.Player.Vulnerable, Is.SameAs(vulnerableBefore));
+            Assert.That(scenario.Queue.Turn.CurrentValue.Players[scenario.Player.Id].Energy, Is.EqualTo(3));
+            Assert.That(scenario.Zones.Hand, Is.EqualTo(new[] { cardId }));
+            Assert.That(scenario.Zones.DiscardPile, Is.Empty);
+        }
+    }
+
+    /// <summary>验证 Card 边缘拒绝运行时空绑定，并在任何权威写入前返回稳定失败。</summary>
+    [Test]
+    public void Submit_CardWithNullEffectBinding_FailsBeforeAnyWrite()
+    {
+        JObject invalidCard = CreateCard(
+            3903,
+            cost: 1,
+            cfg.battle.TargetRule.Self,
+            4903);
+        JObject effect = CreateEffect(
+            4903,
+            cfg.battle.EffectType.GainBlock,
+            cfg.battle.Attribute.None,
+            value: 5);
+        using (var scenario = new QueueScenario(
+                   new[] { invalidCard },
+                   new[] { effect },
+                   new[] { 3903 },
+                   playerStrength: 1,
+                   energyPerRound: 3))
+        {
+            scenario.Tables.TbCard.GetOrDefault(3903).EffectBindings[0] = null;
+            CardInstanceId cardId = scenario.FindCard(3903);
+            BattleTurnData turnBefore = scenario.Queue.Turn.CurrentValue;
+            CardZoneLayoutData layoutBefore = scenario.Zones.Layout.CurrentValue;
+            var healthBefore = scenario.Player.Health;
+            var strengthBefore = scenario.Player.Strength;
+            var blockBefore = scenario.Player.Block;
+            var vulnerableBefore = scenario.Player.Vulnerable;
+
+            using BattleCommandLifecycleExecutionRecorder recorder =
+                scenario.Queue.RecordExecutionLifecycle();
+            BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(
+                new PlayCardCommand(
+                    scenario.Player.Id,
+                    cardId,
+                    scenario.Player.Id));
+
+            BattleCommandLifecycleEvent result = recorder.RequireTerminal(submission);
+            Assert.That(result.Stage, Is.EqualTo(BattleCommandLifecycleStage.ExecutionFailed));
+            Assert.That(result.FailureReason,
+                Is.EqualTo(BattleCommandExecutionFailureReason.InvalidEffectBinding));
+            Assert.That(result.Settlements, Is.Empty);
+            Assert.That(scenario.Queue.Turn.CurrentValue, Is.SameAs(turnBefore));
+            Assert.That(scenario.Zones.Layout.CurrentValue, Is.SameAs(layoutBefore));
+            Assert.That(scenario.Player.Health, Is.SameAs(healthBefore));
+            Assert.That(scenario.Player.Strength, Is.SameAs(strengthBefore));
+            Assert.That(scenario.Player.Block, Is.SameAs(blockBefore));
+            Assert.That(scenario.Player.Vulnerable, Is.SameAs(vulnerableBefore));
             Assert.That(scenario.Queue.Turn.CurrentValue.Players[scenario.Player.Id].Energy, Is.EqualTo(3));
             Assert.That(scenario.Zones.Hand, Is.EqualTo(new[] { cardId }));
             Assert.That(scenario.Zones.DiscardPile, Is.Empty);
@@ -540,7 +666,7 @@ public sealed class BattleEffectCommandQueueTests
                 initialHandCount: initialHandCount,
                 enemyIntents: EnemyIntents,
                 tables: Tables);
-            Queue.Submit(new StartBattleCommand());
+            Queue.SubmitRegistered(new StartBattleCommand());
             Presentation.CompleteNext();
         }
 
@@ -551,12 +677,21 @@ public sealed class BattleEffectCommandQueueTests
             if (card == null)
                 throw new InvalidOperationException($"测试准备卡牌 {cardTemplateId} 不存在。");
 
+            var effectIds = new List<BattleEffectId>(card.EffectBindings.Length);
+            foreach (cfg.battle.CardEffectBinding binding in card.EffectBindings)
+            {
+                if (binding == null || binding.EffectId <= 0)
+                    throw new InvalidOperationException("测试准备卡牌包含非法 Effect 绑定。");
+
+                effectIds.Add(new BattleEffectId(binding.EffectId));
+            }
+
             var executor = new BattleEffectExecutor(Tables, Combatants);
             BattleEffectExecutionResult result = executor.Execute(
                 new BattleEffectExecutionRequest(
                     Player.Id,
                     targetId,
-                    card.EffectBindings));
+                    effectIds));
             if (!result.Succeeded)
             {
                 throw new InvalidOperationException(

@@ -6,18 +6,17 @@ using R3;
 namespace TinySpire.Battle
 {
     /// <summary>
-    /// 为全部战斗命令建立统一权威顺序的调度根。
+    /// 为全部战斗命令建立唯一权威顺序，并独占 drain、continuation、表现屏障与 fault。
     /// </summary>
     public sealed class BattleCommandQueue : IDisposable
     {
         private readonly IBattleCommandPresentation _presentation;
+        private readonly BattleCommandSubmissionCoordinator _coordinator;
+        private readonly BattleCommandSchedulingCore _scheduling;
         private readonly BattleTurnController _turnController;
-        private readonly BattleEnemyIntentsData _enemyIntents;
+        private readonly BattleEnemyActionExecutor _enemyActionExecutor;
+        private readonly BattleTerminalRules _terminalRules;
         private readonly ReactiveProperty<BattleCommandQueueData> _queue;
-        private readonly Queue<QueuedBattleCommand> _pendingCommands = new Queue<QueuedBattleCommand>();
-        private long _nextAuthoritySequence = 1;
-        private QueuedBattleCommand _currentCommand;
-        private bool _isWaitingForPresentation;
 
         /// <summary>权威命令顺序的只读响应式事实。</summary>
         public ReadOnlyReactiveProperty<BattleCommandQueueData> Queue { get; }
@@ -25,7 +24,7 @@ namespace TinySpire.Battle
         /// <summary>权威回合状态的只读响应式事实。</summary>
         public ReadOnlyReactiveProperty<BattleTurnData> Turn => _turnController.Turn;
 
-        /// <summary>以权威战斗事实、静态卡牌配置和表现 adapter 创建统一命令队列。</summary>
+        /// <summary>以战斗事实、静态配置、表现适配器与唯一提交协调器创建命令队列。</summary>
         public BattleCommandQueue(
             BattleCombatantsData combatants,
             IReadOnlyDictionary<CombatantId, BattleCardZonesData> playerCardZones,
@@ -34,10 +33,22 @@ namespace TinySpire.Battle
             Tables tables,
             int energyPerRound,
             int initialHandCount,
-            IBattleCommandPresentation presentation)
+            IBattleCommandPresentation presentation,
+            BattleCommandSubmissionCoordinator coordinator)
         {
             _presentation = presentation ?? throw new ArgumentNullException(nameof(presentation));
-            _enemyIntents = enemyIntents ?? throw new ArgumentNullException(nameof(enemyIntents));
+            _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
+            _scheduling = new BattleCommandSchedulingCore(_coordinator);
+            if (combatants == null)
+                throw new ArgumentNullException(nameof(combatants));
+            if (enemyIntents == null)
+                throw new ArgumentNullException(nameof(enemyIntents));
+
+            _enemyActionExecutor = new BattleEnemyActionExecutor(
+                tables,
+                combatants,
+                enemyIntents);
+            _terminalRules = new BattleTerminalRules(combatants);
             _turnController = new BattleTurnController(
                 combatants,
                 playerCardZones,
@@ -45,99 +56,239 @@ namespace TinySpire.Battle
                 tables,
                 energyPerRound,
                 initialHandCount);
-            _queue = new ReactiveProperty<BattleCommandQueueData>(BattleCommandQueueData.Empty());
+            _queue = new ReactiveProperty<BattleCommandQueueData>(_scheduling.CreateQueueSnapshot());
             Queue = _queue.ToReadOnlyReactiveProperty();
         }
 
-        /// <summary>通过统一 seam 提交命令；未开始时玩家命令不会进入权威顺序。</summary>
+        /// <summary>消费同一命令引用的预注册句柄，并通过唯一迭代 drain 接受或执行命令。</summary>
         public BattleCommandSubmissionResult Submit(BattleCommand command)
         {
             if (command == null)
                 throw new ArgumentNullException(nameof(command));
-
-            if (Turn.CurrentValue.Phase == BattleTurnPhase.NotStarted &&
-                command.Type != BattleCommandType.StartBattle)
+            if (!_coordinator.TryResolvePreRegistered(command, out BattleCommandHandle handle))
             {
                 return BattleCommandSubmissionResult.Rejected(
+                    BattleCommandSubmissionFailureReason.InvalidSubmissionHandle);
+            }
+
+            BattleCommandSchedulingAcceptance acceptance;
+            BattleTurnPhase phase = Turn.CurrentValue.Phase;
+            if (_scheduling.Fault != null)
+            {
+                acceptance = _scheduling.AcceptPreRegistered(
+                    handle,
+                    command,
+                    Turn.CurrentValue.RoundNumber);
+            }
+            else if (phase == BattleTurnPhase.NotStarted && command.Type != BattleCommandType.StartBattle)
+            {
+                return _scheduling.RejectPreRegistered(
+                    handle,
                     BattleCommandSubmissionFailureReason.BattleNotStarted);
             }
-
-            long authoritySequence = _nextAuthoritySequence++;
-            int submittedRoundNumber = Turn.CurrentValue.RoundNumber;
-            _pendingCommands.Enqueue(new QueuedBattleCommand(
-                authoritySequence,
-                submittedRoundNumber,
-                command));
-            if (_currentCommand == null)
-                BeginNextCommand();
-            else
-                PublishQueueSnapshot();
-
-            return BattleCommandSubmissionResult.AcceptedWith(authoritySequence);
-        }
-
-        /// <summary>收到表现完成信号后只推进下一条队首命令，队列耗尽时恢复空闲。</summary>
-        private void CompleteCurrentPresentation(long authoritySequence)
-        {
-            if (_currentCommand == null ||
-                !_isWaitingForPresentation ||
-                _currentCommand.AuthoritySequence != authoritySequence)
+            else if (phase == BattleTurnPhase.BattleEnded)
             {
-                return;
+                return _scheduling.RejectPreRegistered(
+                    handle,
+                    BattleCommandSubmissionFailureReason.BattleAlreadyEnded);
+            }
+            else
+            {
+                acceptance = _scheduling.AcceptPreRegistered(
+                    handle,
+                    command,
+                    Turn.CurrentValue.RoundNumber);
             }
 
-            _isWaitingForPresentation = false;
-            _currentCommand = null;
-            if (_pendingCommands.Count > 0)
-                BeginNextCommand();
-            else
-                _queue.Value = BattleCommandQueueData.Empty();
+            if (!acceptance.Submission.Accepted)
+            {
+                PublishQueueSnapshot();
+                return acceptance.Submission;
+            }
+
+            bool ownsDrain = _scheduling.TryEnterDrain();
+            if (!ownsDrain)
+            {
+                PublishLifecycle(acceptance.QueuedLifecycle);
+                PublishQueueSnapshot();
+                return acceptance.Submission;
+            }
+
+            try
+            {
+                PublishLifecycle(acceptance.QueuedLifecycle);
+                PublishQueueSnapshot();
+                DrainOwnedCommands();
+            }
+            finally
+            {
+                _scheduling.ExitDrain();
+            }
+
+            return acceptance.Submission;
         }
 
-        /// <summary>从权威顺序取出队首命令，执行后交给表现 adapter。</summary>
-        private void BeginNextCommand()
+        /// <summary>在当前外层 drain 内迭代执行，任何同步回调提交都只能追加 FIFO。</summary>
+        private void DrainOwnedCommands()
         {
-            _currentCommand = _pendingCommands.Dequeue();
-            _isWaitingForPresentation = false;
-            PublishQueueSnapshot();
-            BattleCommandExecutionResult executionResult = Execute(_currentCommand);
-            _isWaitingForPresentation = true;
-            PublishQueueSnapshot();
-            var completion = new PresentationCompletion(this, _currentCommand.AuthoritySequence);
-            _presentation.Present(executionResult, completion.Complete);
+            while (_scheduling.TryBeginNext(out BattleCommandSchedulingEntry entry))
+            {
+                PublishQueueSnapshot();
+                BattleQueueExecutionOutcome execution;
+                try
+                {
+                    execution = Execute(entry);
+                }
+                catch (Exception)
+                {
+                    FaultCurrent(
+                        entry,
+                        BattleCommandQueueFaultReason.UnexpectedException,
+                        mayHavePartialWrites: true);
+                    return;
+                }
+
+                if (execution.FaultReason.HasValue)
+                {
+                    FaultCurrent(
+                        entry,
+                        execution.FaultReason.Value,
+                        mayHavePartialWrites: false);
+                    return;
+                }
+
+                BattleCommandExecutionResult executionResult = execution.Result;
+                BattleCommandSchedulingCompletion completion;
+                try
+                {
+                    completion = _scheduling.CompleteCurrent(
+                        entry,
+                        executionResult.FailureReason,
+                        executionResult.Settlements,
+                        execution.Continuation,
+                        Turn.CurrentValue.RoundNumber);
+                }
+                catch (Exception)
+                {
+                    FaultCurrent(
+                        entry,
+                        BattleCommandQueueFaultReason.UnexpectedException,
+                        mayHavePartialWrites: true);
+                    return;
+                }
+
+                if (completion.ContinuationQueuedLifecycle != null)
+                    PublishLifecycle(completion.ContinuationQueuedLifecycle);
+                PublishQueueSnapshot();
+
+                if (executionResult.Settlements.Count == 0)
+                {
+                    PublishLifecycle(completion.CurrentLifecycle);
+                    continue;
+                }
+
+                var presentationCompletion = new PresentationCompletion(
+                    this,
+                    entry.AuthoritySequence);
+                try
+                {
+                    _presentation.Present(executionResult, presentationCompletion.Complete);
+                }
+                catch (Exception)
+                {
+                    presentationCompletion.Cancel();
+                    FaultCurrent(
+                        entry,
+                        BattleCommandQueueFaultReason.UnexpectedException,
+                        mayHavePartialWrites: true);
+                    return;
+                }
+
+                PublishLifecycle(completion.CurrentLifecycle);
+                presentationCompletion.Arm();
+            }
         }
 
-        /// <summary>仅由队首命令调用回合模块并形成执行结果。</summary>
-        private BattleCommandExecutionResult Execute(QueuedBattleCommand queuedCommand)
+        /// <summary>执行一条队首命令，并把整次同步阶段变化压缩为至多一条可见记录。</summary>
+        private BattleQueueExecutionOutcome Execute(BattleCommandSchedulingEntry entry)
         {
+            BattleTurnData turnBefore = Turn.CurrentValue;
             BattleTurnOperationResult operationResult;
-            if (queuedCommand.Command is StartBattleCommand)
+            BattleCommand frozenContinuation = null;
+            bool hasFrozenContinuation = false;
+            if (turnBefore.Phase == BattleTurnPhase.BattleEnded)
+            {
+                operationResult = BattleTurnOperationResult.Failed(
+                    BattleCommandExecutionFailureReason.BattleAlreadyEnded);
+            }
+            else if (entry.Command is StartBattleCommand)
             {
                 operationResult = _turnController.TryStartBattle();
             }
-            else if ((queuedCommand.Command is PlayCardCommand ||
-                      queuedCommand.Command is EndPlayerActionCommand) &&
-                     queuedCommand.SubmittedRoundNumber != Turn.CurrentValue.RoundNumber)
+            else if ((entry.Command is PlayCardCommand ||
+                      entry.Command is EndPlayerActionCommand) &&
+                     entry.SubmittedRoundNumber != turnBefore.RoundNumber)
             {
                 operationResult = BattleTurnOperationResult.Failed(
                     BattleCommandExecutionFailureReason.PlayerActionWindowExpired);
             }
-            else if (queuedCommand.Command is PlayCardCommand playCardCommand)
+            else if (entry.Command is PlayCardCommand playCardCommand)
             {
                 operationResult = _turnController.TryPlayCard(playCardCommand);
             }
-            else if (queuedCommand.Command is EndPlayerActionCommand endPlayerActionCommand)
+            else if (entry.Command is EndPlayerActionCommand endPlayerActionCommand)
             {
                 operationResult = _turnController.TryEndPlayerAction(endPlayerActionCommand);
             }
-            else if (queuedCommand.Command is CompleteEnemyActionCommand completeEnemyActionCommand)
+            else if (entry.Command is CompleteEnemyActionCommand completeEnemyActionCommand)
             {
                 BattleCommandExecutionFailureReason failureReason =
                     _turnController.ValidateCompleteEnemyAction(completeEnemyActionCommand);
                 if (failureReason == BattleCommandExecutionFailureReason.None)
                 {
-                    _enemyIntents.CompleteAndSelectNext(completeEnemyActionCommand.EnemyId);
-                    operationResult = _turnController.AdvanceAfterValidatedEnemyAction();
+                    CompleteEnemyActionCommand plannedContinuation =
+                        _turnController.CreateNextEnemyContinuation();
+                    BattleEnemyActionExecutionResult enemyResult =
+                        _enemyActionExecutor.Execute(
+                            completeEnemyActionCommand.EnemyId,
+                            turnBefore,
+                            plannedContinuation,
+                            startingOrder: 0);
+                    if (enemyResult.Kind == BattleEnemyActionResultKind.Faulted)
+                    {
+                        return BattleQueueExecutionOutcome.Faulted(
+                            enemyResult.FaultReason.Value);
+                    }
+                    if (enemyResult.Kind == BattleEnemyActionResultKind.Failed)
+                    {
+                        operationResult = BattleTurnOperationResult.Failed(
+                            enemyResult.FailureReason.Value);
+                    }
+                    else
+                    {
+                        BattleTerminalOutcome terminalOutcome = _terminalRules.Evaluate();
+                        BattleTurnOperationResult turnAdvance =
+                            _turnController.AdvanceAfterValidatedEnemyAction(
+                                terminalOutcome,
+                                enemyResult.Settlements.Count);
+                        if (turnAdvance.FailureReason != BattleCommandExecutionFailureReason.None)
+                        {
+                            throw new InvalidOperationException(
+                                "敌人事务提交后的回合推进不应再返回普通失败。");
+                        }
+
+                        var settlements = new List<BattleSettlementRecord>(
+                            enemyResult.Settlements.Count + turnAdvance.Settlements.Count);
+                        settlements.AddRange(enemyResult.Settlements);
+                        settlements.AddRange(turnAdvance.Settlements);
+                        operationResult = new BattleTurnOperationResult(
+                            BattleCommandExecutionFailureReason.None,
+                            settlements);
+                        hasFrozenContinuation = true;
+                        frozenContinuation = terminalOutcome == BattleTerminalOutcome.Ongoing
+                            ? enemyResult.Continuation.Command
+                            : null;
+                    }
                 }
                 else
                 {
@@ -150,75 +301,233 @@ namespace TinySpire.Battle
                     BattleCommandExecutionFailureReason.UnsupportedCommand);
             }
 
-            return new BattleCommandExecutionResult(
-                queuedCommand.AuthoritySequence,
-                queuedCommand.Command.Type,
-                queuedCommand.Command.SubmitterId,
-                operationResult.FailureReason,
-                operationResult.Settlements);
+            BattleTurnOperationResult visibleResult = AppendPhaseSettlement(
+                operationResult,
+                turnBefore,
+                Turn.CurrentValue);
+            var executionResult = new BattleCommandExecutionResult(
+                entry.AuthoritySequence,
+                entry.Command.Type,
+                entry.Command.SubmitterId,
+                visibleResult.FailureReason,
+                visibleResult.Settlements);
+            BattleCommand continuation = hasFrozenContinuation
+                ? frozenContinuation
+                : CreateTurnContinuation(executionResult);
+            return BattleQueueExecutionOutcome.Completed(
+                executionResult,
+                continuation);
         }
 
-        /// <summary>根据当前命令和待执行数量发布完整队列事实。</summary>
+        /// <summary>非敌人命令成功写入后若进入敌人行动，则冻结恰好一条 Queue 内部 continuation。</summary>
+        private BattleCommand CreateTurnContinuation(BattleCommandExecutionResult executionResult)
+        {
+            if (!executionResult.Succeeded)
+                return null;
+
+            BattleTurnData turn = Turn.CurrentValue;
+            if (turn.Phase != BattleTurnPhase.EnemyAction ||
+                !turn.CurrentActingEnemyId.HasValue)
+            {
+                return null;
+            }
+
+            return new CompleteEnemyActionCommand(turn.CurrentActingEnemyId.Value);
+        }
+
+        /// <summary>把命令前后的稳定回合事实差异追加为唯一阶段记录。</summary>
+        private static BattleTurnOperationResult AppendPhaseSettlement(
+            BattleTurnOperationResult operationResult,
+            BattleTurnData turnBefore,
+            BattleTurnData turnAfter)
+        {
+            if (operationResult == null)
+                throw new ArgumentNullException(nameof(operationResult));
+            if (turnBefore == null)
+                throw new ArgumentNullException(nameof(turnBefore));
+            if (turnAfter == null)
+                throw new ArgumentNullException(nameof(turnAfter));
+            if (operationResult.FailureReason != BattleCommandExecutionFailureReason.None ||
+                (turnBefore.Phase == turnAfter.Phase &&
+                 turnBefore.RoundNumber == turnAfter.RoundNumber &&
+                 turnBefore.CurrentActingEnemyId == turnAfter.CurrentActingEnemyId))
+            {
+                return operationResult;
+            }
+
+            var settlements = new List<BattleSettlementRecord>(operationResult.Settlements)
+            {
+                new BattlePhaseChangedSettlement(
+                    operationResult.Settlements.Count,
+                    turnBefore.Phase,
+                    turnAfter.Phase,
+                    turnBefore.RoundNumber,
+                    turnAfter.RoundNumber,
+                    turnBefore.CurrentActingEnemyId,
+                    turnAfter.CurrentActingEnemyId),
+            };
+            return new BattleTurnOperationResult(
+                BattleCommandExecutionFailureReason.None,
+                settlements);
+        }
+
+        /// <summary>精确 completion 只解除所属屏障，随后尝试由新的外层 drain 继续。</summary>
+        private void CompletePresentation(long authoritySequence)
+        {
+            if (!_scheduling.CompletePresentation(authoritySequence))
+                return;
+
+            PublishQueueSnapshot();
+            DrainIfAvailable();
+        }
+
+        /// <summary>仅在当前没有外层 drain 时取得所有权并继续迭代。</summary>
+        private void DrainIfAvailable()
+        {
+            if (!_scheduling.TryEnterDrain())
+                return;
+
+            try
+            {
+                DrainOwnedCommands();
+            }
+            finally
+            {
+                _scheduling.ExitDrain();
+            }
+        }
+
+        /// <summary>冻结当前 Queue fault 并发布不携带 battle settlement 的诊断生命周期。</summary>
+        private void FaultCurrent(
+            BattleCommandSchedulingEntry entry,
+            BattleCommandQueueFaultReason reason,
+            bool mayHavePartialWrites)
+        {
+            BattleCommandLifecycleEvent faulted = _scheduling.FaultCurrent(
+                entry,
+                reason,
+                mayHavePartialWrites);
+            PublishQueueSnapshot();
+            PublishLifecycle(faulted);
+        }
+
+        /// <summary>由 Queue 唯一触发生命周期发布，并让 coordinator 集中完成句柄对账。</summary>
+        private void PublishLifecycle(BattleCommandLifecycleEvent lifecycleEvent)
+        {
+            _coordinator.PublishFromQueue(lifecycleEvent);
+        }
+
+        /// <summary>从唯一调度核心发布完整只读 Queue 快照。</summary>
         private void PublishQueueSnapshot()
         {
-            _queue.Value = new BattleCommandQueueData(
-                _currentCommand.AuthoritySequence,
-                _currentCommand.Command.Type,
-                _currentCommand.Command.SubmitterId,
-                _pendingCommands.Count,
-                _isWaitingForPresentation);
+            _queue.Value = _scheduling.CreateQueueSnapshot();
         }
 
-        /// <summary>队列内部保存权威序号与原始命令的不可见信封。</summary>
-        private sealed class QueuedBattleCommand
-        {
-            /// <summary>本地权威调度层分配的单调序号。</summary>
-            internal long AuthoritySequence { get; }
-
-            /// <summary>该命令提交时观察到的权威轮次。</summary>
-            internal int SubmittedRoundNumber { get; }
-
-            /// <summary>等待执行的原始战斗意图。</summary>
-            internal BattleCommand Command { get; }
-
-            /// <summary>把权威序号、提交轮次与命令绑定为一个内部排队条目。</summary>
-            internal QueuedBattleCommand(
-                long authoritySequence,
-                int submittedRoundNumber,
-                BattleCommand command)
-            {
-                AuthoritySequence = authoritySequence;
-                SubmittedRoundNumber = submittedRoundNumber;
-                Command = command;
-            }
-        }
-
-        /// <summary>把表现完成回调绑定到创建它的权威序号，防止过期回调推进新队首。</summary>
-        private sealed class PresentationCompletion
-        {
-            private readonly BattleCommandQueue _owner;
-            private readonly long _authoritySequence;
-
-            /// <summary>记录队列与当前权威序号，供 adapter 回调时核对身份。</summary>
-            internal PresentationCompletion(BattleCommandQueue owner, long authoritySequence)
-            {
-                _owner = owner;
-                _authoritySequence = authoritySequence;
-            }
-
-            /// <summary>仅当绑定序号仍是当前等待项时请求队列推进。</summary>
-            internal void Complete()
-            {
-                _owner.CompleteCurrentPresentation(_authoritySequence);
-            }
-        }
-
-        /// <summary>释放队列与回合事实持有的响应式资源。</summary>
+        /// <summary>释放 Queue 与内部回合事实，不释放由场景容器独立拥有的 coordinator。</summary>
         public void Dispose()
         {
             Queue.Dispose();
             _queue.Dispose();
             _turnController.Dispose();
+        }
+
+        /// <summary>把一次表现 completion 永久绑定到创建它的权威序号。</summary>
+        private sealed class PresentationCompletion
+        {
+            private readonly BattleCommandQueue _owner;
+            private readonly long _authoritySequence;
+            private bool _isArmed;
+            private bool _isCompletionRequested;
+            private bool _isCanceled;
+            private bool _isCompleted;
+
+            /// <summary>保存 Queue 与精确序号，防止迟到回调跨过新屏障。</summary>
+            internal PresentationCompletion(BattleCommandQueue owner, long authoritySequence)
+            {
+                _owner = owner ?? throw new ArgumentNullException(nameof(owner));
+                _authoritySequence = authoritySequence;
+            }
+
+            /// <summary>在 Present 成功返回前只记录同步 completion，避免先完成后抛错逃逸 fault。</summary>
+            internal void Complete()
+            {
+                if (_isCanceled || _isCompleted)
+                    return;
+                if (!_isArmed)
+                {
+                    _isCompletionRequested = true;
+                    return;
+                }
+
+                _isCompleted = true;
+                _owner.CompletePresentation(_authoritySequence);
+            }
+
+            /// <summary>在生命周期终态发布后启用 completion，并兑现此前的同步请求。</summary>
+            internal void Arm()
+            {
+                if (_isCanceled || _isCompleted)
+                    return;
+
+                _isArmed = true;
+                if (!_isCompletionRequested)
+                    return;
+
+                _isCompleted = true;
+                _owner.CompletePresentation(_authoritySequence);
+            }
+
+            /// <summary>表现入口抛错后永久作废已给出的 completion，保留 fault 诊断现场。</summary>
+            internal void Cancel()
+            {
+                _isCanceled = true;
+                _isCompletionRequested = false;
+            }
+        }
+
+        /// <summary>Queue 内部一次执行的公开结果、冻结 continuation 或首次写入前 fault。</summary>
+        private sealed class BattleQueueExecutionOutcome
+        {
+            /// <summary>普通成功或失败时交给生命周期与表现层的不可变结果。</summary>
+            internal BattleCommandExecutionResult Result { get; }
+
+            /// <summary>成功执行后由 Queue 唯一签发的可选系统后继。</summary>
+            internal BattleCommand Continuation { get; }
+
+            /// <summary>首次写入前需要冻结 Queue 的结构化原因。</summary>
+            internal BattleCommandQueueFaultReason? FaultReason { get; }
+
+            /// <summary>冻结一次互斥的执行结果或 fault。</summary>
+            private BattleQueueExecutionOutcome(
+                BattleCommandExecutionResult result,
+                BattleCommand continuation,
+                BattleCommandQueueFaultReason? faultReason)
+            {
+                Result = result;
+                Continuation = continuation;
+                FaultReason = faultReason;
+            }
+
+            /// <summary>创建可进入现有完成、表现与 continuation 链的普通结果。</summary>
+            internal static BattleQueueExecutionOutcome Completed(
+                BattleCommandExecutionResult result,
+                BattleCommand continuation)
+            {
+                return new BattleQueueExecutionOutcome(
+                    result ?? throw new ArgumentNullException(nameof(result)),
+                    continuation,
+                    faultReason: null);
+            }
+
+            /// <summary>创建不携带 battle settlement 的首次写入前 Queue fault。</summary>
+            internal static BattleQueueExecutionOutcome Faulted(
+                BattleCommandQueueFaultReason reason)
+            {
+                return new BattleQueueExecutionOutcome(
+                    result: null,
+                    continuation: null,
+                    faultReason: reason);
+            }
         }
     }
 }

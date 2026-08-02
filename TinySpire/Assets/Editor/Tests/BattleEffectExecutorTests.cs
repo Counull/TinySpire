@@ -5,6 +5,35 @@ using TinySpire.Battle;
 
 public sealed class BattleEffectExecutorTests
 {
+    /// <summary>验证 Effect 核心直接冻结强类型 ID 顺序，不依赖卡牌绑定结构。</summary>
+    [Test]
+    public void Execute_OrderedEffectIds_PreservesCoreOrderWithoutCardBindings()
+    {
+        using (var combatants = new BattleCombatantsData())
+        {
+            PlayerCombatantData player = combatants.AddPlayer(101, 30, 0);
+            cfg.Tables tables = CreateTables(
+                CreateEffect(3991, cfg.battle.EffectType.ModifyAttribute, cfg.battle.Attribute.Strength, 2),
+                CreateEffect(3992, cfg.battle.EffectType.GainBlock, cfg.battle.Attribute.None, 3));
+            var request = new BattleEffectExecutionRequest(
+                player.Id,
+                player.Id,
+                new[] { new BattleEffectId(3991), new BattleEffectId(3992) });
+
+            BattleEffectExecutionResult result =
+                new BattleEffectExecutor(tables, combatants).Execute(request);
+
+            Assert.That(request.EffectIds, Is.EqualTo(new[]
+            {
+                new BattleEffectId(3991),
+                new BattleEffectId(3992),
+            }));
+            Assert.That(result.Succeeded, Is.True);
+            Assert.That(result.Settlements[0], Is.TypeOf<BattleAttributeModifiedSettlement>());
+            Assert.That(result.Settlements[1], Is.TypeOf<BattleBlockGainedSettlement>());
+        }
+    }
+
     /// <summary>验证 Strength 绑定经公开 executor seam 修改唯一力量事实并生成一条记录。</summary>
     [Test]
     public void Execute_StrengthBinding_AppliesAttributeAndReturnsSettlement()
@@ -24,7 +53,7 @@ public sealed class BattleEffectExecutorTests
             var request = new BattleEffectExecutionRequest(
                 player.Id,
                 player.Id,
-                new[] { CreateBinding(effectId: 4001) });
+                new[] { CreateEffectId(effectId: 4001) });
 
             BattleEffectExecutionResult result = executor.Execute(request);
 
@@ -69,7 +98,7 @@ public sealed class BattleEffectExecutorTests
                 new BattleEffectExecutionRequest(
                     player.Id,
                     enemy.Id,
-                    new[] { CreateBinding(effectId: 4002) }));
+                    new[] { CreateEffectId(effectId: 4002) }));
 
             Assert.That(result.Succeeded, Is.True);
             var settlement = result.Settlements[0] as BattleDamageAppliedSettlement;
@@ -103,7 +132,7 @@ public sealed class BattleEffectExecutorTests
                 new BattleEffectExecutionRequest(
                     player.Id,
                     player.Id,
-                    new[] { CreateBinding(effectId: 4003) }));
+                    new[] { CreateEffectId(effectId: 4003) }));
 
             Assert.That(result.Succeeded, Is.True);
             var settlement = result.Settlements[0] as BattleBlockGainedSettlement;
@@ -130,7 +159,7 @@ public sealed class BattleEffectExecutorTests
             var request = new BattleEffectExecutionRequest(
                 player.Id,
                 enemy.Id,
-                new[] { CreateBinding(4004), CreateBinding(4005) });
+                new[] { CreateEffectId(4004), CreateEffectId(4005) });
 
             BattleEffectExecutionResult first = executor.Execute(request);
             BattleEffectExecutionResult second = executor.Execute(request);
@@ -184,7 +213,7 @@ public sealed class BattleEffectExecutorTests
                 new BattleEffectExecutionRequest(
                     player.Id,
                     enemy.Id,
-                    new[] { CreateBinding(4101), CreateBinding(4102) }));
+                    new[] { CreateEffectId(4101), CreateEffectId(4102) }));
 
             Assert.That(result.Succeeded, Is.True);
             Assert.That(result.Settlements[0], Is.TypeOf<BattleStatusAppliedSettlement>());
@@ -212,7 +241,7 @@ public sealed class BattleEffectExecutorTests
                 new BattleEffectExecutionRequest(
                     player.Id,
                     enemy.Id,
-                    new[] { CreateBinding(4004), CreateBinding(4005) }));
+                    new[] { CreateEffectId(4004), CreateEffectId(4005) }));
 
             Assert.That(result.Succeeded, Is.True);
             Assert.That(result.Settlements.Count, Is.EqualTo(2));
@@ -245,7 +274,7 @@ public sealed class BattleEffectExecutorTests
                 new BattleEffectExecutionRequest(
                     player.Id,
                     player.Id,
-                    new cfg.battle.CardEffectBinding[0]));
+                    new BattleEffectId[0]));
 
             Assert.That(result.Succeeded, Is.True);
             Assert.That(result.Settlements, Is.Empty);
@@ -253,7 +282,7 @@ public sealed class BattleEffectExecutorTests
         }
     }
 
-    /// <summary>验证 null 与非正 EffectId 绑定在预构建阶段失败且保持全部参与者事实。</summary>
+    /// <summary>验证默认零值 EffectId 在预构建阶段失败且保持全部参与者事实。</summary>
     [Test]
     public void Execute_InvalidBindings_FailAtomically()
     {
@@ -268,15 +297,7 @@ public sealed class BattleEffectExecutorTests
                 executor.Execute(new BattleEffectExecutionRequest(
                     player.Id,
                     enemy.Id,
-                    new cfg.battle.CardEffectBinding[] { null })),
-                BattleCommandExecutionFailureReason.InvalidEffectBinding,
-                new CombatantFactsSnapshot(player),
-                new CombatantFactsSnapshot(enemy));
-            AssertAtomicFailure(
-                executor.Execute(new BattleEffectExecutionRequest(
-                    player.Id,
-                    enemy.Id,
-                    new[] { CreateBinding(0) })),
+                    new[] { default(BattleEffectId) })),
                 BattleCommandExecutionFailureReason.InvalidEffectBinding,
                 new CombatantFactsSnapshot(player),
                 new CombatantFactsSnapshot(enemy));
@@ -302,7 +323,7 @@ public sealed class BattleEffectExecutorTests
                 new BattleEffectExecutionRequest(
                     player.Id,
                     player.Id,
-                    new[] { CreateBinding(4201), CreateBinding(999999) }));
+                    new[] { CreateEffectId(4201), CreateEffectId(999999) }));
 
             AssertAtomicFailure(
                 result,
@@ -329,7 +350,7 @@ public sealed class BattleEffectExecutorTests
                 executor.Execute(new BattleEffectExecutionRequest(
                     player.Id,
                     player.Id,
-                    new[] { CreateBinding(4301) })),
+                    new[] { CreateEffectId(4301) })),
                 BattleCommandExecutionFailureReason.UnsupportedEffectType,
                 new CombatantFactsSnapshot(player));
         }
@@ -351,14 +372,14 @@ public sealed class BattleEffectExecutorTests
                 executor.Execute(new BattleEffectExecutionRequest(
                     player.Id,
                     player.Id,
-                    new[] { CreateBinding(4401) })),
+                    new[] { CreateEffectId(4401) })),
                 BattleCommandExecutionFailureReason.UnsupportedEffectAttribute,
                 new CombatantFactsSnapshot(player));
             AssertAtomicFailure(
                 executor.Execute(new BattleEffectExecutionRequest(
                     player.Id,
                     player.Id,
-                    new[] { CreateBinding(4402) })),
+                    new[] { CreateEffectId(4402) })),
                 BattleCommandExecutionFailureReason.UnsupportedEffectAttribute,
                 new CombatantFactsSnapshot(player));
         }
@@ -383,7 +404,7 @@ public sealed class BattleEffectExecutorTests
                 executor.Execute(new BattleEffectExecutionRequest(
                     default(CombatantId),
                     enemy.Id,
-                    new[] { CreateBinding(4501) })),
+                    new[] { CreateEffectId(4501) })),
                 BattleCommandExecutionFailureReason.EffectSourceNotFound,
                 new CombatantFactsSnapshot(player),
                 new CombatantFactsSnapshot(enemy));
@@ -391,7 +412,7 @@ public sealed class BattleEffectExecutorTests
                 executor.Execute(new BattleEffectExecutionRequest(
                     player.Id,
                     default(CombatantId),
-                    new[] { CreateBinding(4501) })),
+                    new[] { CreateEffectId(4501) })),
                 BattleCommandExecutionFailureReason.TargetNotFound,
                 new CombatantFactsSnapshot(player),
                 new CombatantFactsSnapshot(enemy));
@@ -422,7 +443,7 @@ public sealed class BattleEffectExecutorTests
                 executor.Execute(new BattleEffectExecutionRequest(
                     deadSource.Id,
                     target.Id,
-                    new[] { CreateBinding(4601) })),
+                    new[] { CreateEffectId(4601) })),
                 BattleCommandExecutionFailureReason.EffectSourceNotAlive,
                 new CombatantFactsSnapshot(deadSource),
                 new CombatantFactsSnapshot(target));
@@ -442,7 +463,7 @@ public sealed class BattleEffectExecutorTests
                 executor.Execute(new BattleEffectExecutionRequest(
                     source.Id,
                     deadTarget.Id,
-                    new[] { CreateBinding(4601) })),
+                    new[] { CreateEffectId(4601) })),
                 BattleCommandExecutionFailureReason.TargetNotAlive,
                 new CombatantFactsSnapshot(source),
                 new CombatantFactsSnapshot(deadTarget));
@@ -467,7 +488,7 @@ public sealed class BattleEffectExecutorTests
                 executor.Execute(new BattleEffectExecutionRequest(
                     player.Id,
                     player.Id,
-                    new[] { CreateBinding(4701), CreateBinding(4701) })),
+                    new[] { CreateEffectId(4701), CreateEffectId(4701) })),
                 BattleCommandExecutionFailureReason.EffectValueOverflow,
                 new CombatantFactsSnapshot(player));
         }
@@ -492,10 +513,81 @@ public sealed class BattleEffectExecutorTests
                 executor.Execute(new BattleEffectExecutionRequest(
                     player.Id,
                     enemy.Id,
-                    new[] { CreateBinding(4801), CreateBinding(999999) })),
+                    new[] { CreateEffectId(4801), CreateEffectId(999999) })),
                 BattleCommandExecutionFailureReason.EffectTemplateNotFound,
                 new CombatantFactsSnapshot(player),
                 new CombatantFactsSnapshot(enemy));
+        }
+    }
+
+    /// <summary>验证外部目标 Effect 在预构建时冻结目标最终投影，同时保持 source 投影与权威事实一致且零写入。</summary>
+    [Test]
+    public void Prepare_Damage_FreezesTargetProjectionWithoutWrites()
+    {
+        using (var combatants = new BattleCombatantsData())
+        {
+            PlayerCombatantData source = combatants.AddPlayer(101, 30, 2);
+            EnemyCombatantData target = combatants.AddEnemy(201, 8, 0);
+            cfg.Tables tables = CreateTables(CreateEffect(
+                4901,
+                cfg.battle.EffectType.DealDamage,
+                cfg.battle.Attribute.None,
+                4));
+            var executor = new BattleEffectExecutor(tables, combatants);
+
+            BattleEffectPreparationResult preparation = executor.Prepare(
+                new BattleEffectExecutionRequest(
+                    source.Id,
+                    target.Id,
+                    new[] { CreateEffectId(4901) }));
+
+            Assert.That(preparation.Succeeded, Is.True);
+            Assert.That(preparation.Plan.ProjectedTargetAfterEffect.Health, Is.EqualTo(2));
+            Assert.That(preparation.Plan.ProjectedTargetAfterEffect.Block, Is.Zero);
+            Assert.That(preparation.Plan.ProjectedTargetAfterEffect.Vulnerable, Is.Zero);
+            Assert.That(preparation.Plan.ProjectedSourceAfterEffect.Health, Is.EqualTo(30));
+            Assert.That(preparation.Plan.ProjectedSourceAfterEffect.Block, Is.Zero);
+            Assert.That(preparation.Plan.ProjectedSourceAfterEffect.Vulnerable, Is.Zero);
+            Assert.That(source.CurrentHealth, Is.EqualTo(30));
+            Assert.That(target.CurrentHealth, Is.EqualTo(8));
+        }
+    }
+
+    /// <summary>验证 Self Effect 以调用方投影预构建时，source 与 target 最终投影保持完全一致且不写权威事实。</summary>
+    [Test]
+    public void PrepareProjected_SelfTarget_KeepsSourceAndTargetProjectionAligned()
+    {
+        using (var combatants = new BattleCombatantsData())
+        {
+            EnemyCombatantData enemy = combatants.AddEnemy(201, 20, 0);
+            cfg.Tables tables = CreateTables(CreateEffect(
+                4902,
+                cfg.battle.EffectType.GainBlock,
+                cfg.battle.Attribute.None,
+                5));
+            var executor = new BattleEffectExecutor(tables, combatants);
+            var projected = new BattleEffectTargetSnapshot(20, 0, 2);
+
+            BattleEffectPreparationResult preparation = executor.PrepareProjected(
+                new BattleEffectExecutionRequest(
+                    enemy.Id,
+                    enemy.Id,
+                    new[] { CreateEffectId(4902) }),
+                projected,
+                projected);
+
+            Assert.That(preparation.Succeeded, Is.True);
+            Assert.That(preparation.Plan.ProjectedTargetAfterEffect.Health, Is.EqualTo(20));
+            Assert.That(preparation.Plan.ProjectedTargetAfterEffect.Block, Is.EqualTo(5));
+            Assert.That(preparation.Plan.ProjectedTargetAfterEffect.Vulnerable, Is.EqualTo(2));
+            Assert.That(preparation.Plan.ProjectedSourceAfterEffect.Health,
+                Is.EqualTo(preparation.Plan.ProjectedTargetAfterEffect.Health));
+            Assert.That(preparation.Plan.ProjectedSourceAfterEffect.Block,
+                Is.EqualTo(preparation.Plan.ProjectedTargetAfterEffect.Block));
+            Assert.That(preparation.Plan.ProjectedSourceAfterEffect.Vulnerable,
+                Is.EqualTo(preparation.Plan.ProjectedTargetAfterEffect.Vulnerable));
+            Assert.That(enemy.CurrentBlock, Is.Zero);
+            Assert.That(enemy.CurrentVulnerable, Is.Zero);
         }
     }
 
@@ -547,14 +639,10 @@ public sealed class BattleEffectExecutorTests
         };
     }
 
-    /// <summary>创建只引用指定 Effect 的有序绑定。</summary>
-    private static cfg.battle.CardEffectBinding CreateBinding(int effectId)
+    /// <summary>创建测试核心直接消费的强类型 Effect 标识。</summary>
+    private static BattleEffectId CreateEffectId(int effectId)
     {
-        return new cfg.battle.CardEffectBinding(new JObject
-        {
-            ["argument_key"] = string.Empty,
-            ["effect_id"] = effectId,
-        });
+        return new BattleEffectId(effectId);
     }
 
     /// <summary>冻结一个参与者四项只读事实对象与同步值，供原子性断言复用。</summary>

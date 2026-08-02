@@ -10,6 +10,139 @@ using TinySpire.Battle;
 
 public sealed class BattleEnemyIntentsDataTests
 {
+    /// <summary>验证意图完成先零写入 prepare，再只校验一次并只提交一次冻结结果。</summary>
+    [Test]
+    public void PreparedCompletion_IsZeroWriteUntilValidatedSingleCommit()
+    {
+        Tables tables = CreateWeightedTables();
+        BattleEnemyIntentsData intents = CreateIntents(
+            tables,
+            battleSeed: 2468,
+            out BattleCombatantsData combatants,
+            out IReadOnlyList<CombatantId> enemyIds,
+            2002);
+
+        try
+        {
+            CombatantId enemyId = enemyIds[0];
+            EnemyIntentLayoutData layoutBefore = intents.Layout.CurrentValue;
+            BattleEnemyIntentAuthoritySnapshot authorityBefore =
+                intents.CaptureAuthoritySnapshot(enemyId);
+            uint randomBefore = intents.RandomState;
+
+            BattleEnemyIntentCompletionPreparationResult preparation =
+                intents.PrepareCompletion(enemyId, startingOrder: 4);
+
+            Assert.That(preparation.Succeeded, Is.True);
+            Assert.That(intents.Layout.CurrentValue, Is.SameAs(layoutBefore));
+            Assert.That(intents.RandomState, Is.EqualTo(randomBefore));
+            Assert.That(authorityBefore.Matches(intents), Is.True);
+            Assert.That(intents.ValidatePreparedCompletion(preparation.Plan), Is.True);
+            Assert.That(() => intents.ValidatePreparedCompletion(preparation.Plan),
+                Throws.InvalidOperationException);
+            Assert.That(intents.Layout.CurrentValue, Is.SameAs(layoutBefore));
+            Assert.That(intents.RandomState, Is.EqualTo(randomBefore));
+
+            BattleEnemyIntentCompletionResult result =
+                intents.CommitPreparedCompletion(preparation.Plan);
+
+            Assert.That(result.Settlements, Has.Count.EqualTo(1));
+            var advanced = result.Settlements[0] as BattleEnemyIntentAdvancedSettlement;
+            Assert.That(advanced, Is.Not.Null);
+            Assert.That(advanced.Order, Is.EqualTo(4));
+            Assert.That(advanced.NextBehaviorId, Is.EqualTo(preparation.Plan.NextBehaviorId));
+            Assert.That(intents.Layout.CurrentValue, Is.Not.SameAs(layoutBefore));
+            Assert.That(intents.RandomState, Is.EqualTo(preparation.Plan.RandomStateAfter));
+            Assert.That(() => intents.CommitPreparedCompletion(preparation.Plan),
+                Throws.InvalidOperationException);
+        }
+        finally
+        {
+            intents.Dispose();
+            combatants.Dispose();
+        }
+    }
+
+    /// <summary>验证意图权威事实漂移后旧计划只失败一次，且拒绝提交或追加任何写入。</summary>
+    [Test]
+    public void PreparedCompletion_WhenAuthorityDrifts_ValidationFailsAndCommitIsRejected()
+    {
+        Tables tables = CreateWeightedTables();
+        BattleEnemyIntentsData intents = CreateIntents(
+            tables,
+            battleSeed: 9753,
+            out BattleCombatantsData combatants,
+            out IReadOnlyList<CombatantId> enemyIds,
+            2002);
+
+        try
+        {
+            CombatantId enemyId = enemyIds[0];
+            BattleEnemyIntentCompletionPreparationResult preparation =
+                intents.PrepareCompletion(enemyId, startingOrder: 2);
+            intents.CompleteAndSelectNext(enemyId);
+            EnemyIntentLayoutData layoutAfterDrift = intents.Layout.CurrentValue;
+            BattleEnemyIntentAuthoritySnapshot authorityAfterDrift =
+                intents.CaptureAuthoritySnapshot(enemyId);
+            uint randomAfterDrift = intents.RandomState;
+
+            Assert.That(intents.ValidatePreparedCompletion(preparation.Plan), Is.False);
+            Assert.That(() => intents.ValidatePreparedCompletion(preparation.Plan),
+                Throws.InvalidOperationException);
+            Assert.That(() => intents.CommitPreparedCompletion(preparation.Plan),
+                Throws.InvalidOperationException);
+            Assert.That(intents.Layout.CurrentValue, Is.SameAs(layoutAfterDrift));
+            Assert.That(intents.RandomState, Is.EqualTo(randomAfterDrift));
+            Assert.That(authorityAfterDrift.Matches(intents), Is.True);
+        }
+        finally
+        {
+            intents.Dispose();
+            combatants.Dispose();
+        }
+    }
+
+    /// <summary>验证非正行为标识在结算构造前形成配置 fault，不会先发布 history、random 或 Layout。</summary>
+    [Test]
+    public void PrepareCompletion_NonPositiveBehaviorId_FaultsWithoutWrites()
+    {
+        Tables tables = CreateTables(
+            new JArray(CreateEnemy(2001, 6001)),
+            new JArray(CreateGroup(6001, -7001)),
+            new JArray(CreateBehavior(-7001, weight: 1)));
+        BattleEnemyIntentsData intents = CreateIntents(
+            tables,
+            battleSeed: 8642,
+            out BattleCombatantsData combatants,
+            out IReadOnlyList<CombatantId> enemyIds,
+            2001);
+
+        try
+        {
+            CombatantId enemyId = enemyIds[0];
+            EnemyIntentLayoutData layoutBefore = intents.Layout.CurrentValue;
+            BattleEnemyIntentAuthoritySnapshot authorityBefore =
+                intents.CaptureAuthoritySnapshot(enemyId);
+            uint randomBefore = intents.RandomState;
+
+            BattleEnemyIntentCompletionPreparationResult preparation =
+                intents.PrepareCompletion(enemyId, startingOrder: 0);
+
+            Assert.That(preparation.Succeeded, Is.False);
+            Assert.That(preparation.FaultReason,
+                Is.EqualTo(BattleCommandQueueFaultReason.UnsupportedConfiguration));
+            Assert.That(preparation.Plan, Is.Null);
+            Assert.That(intents.Layout.CurrentValue, Is.SameAs(layoutBefore));
+            Assert.That(intents.RandomState, Is.EqualTo(randomBefore));
+            Assert.That(authorityBefore.Matches(intents), Is.True);
+        }
+        finally
+        {
+            intents.Dispose();
+            combatants.Dispose();
+        }
+    }
+
     /// <summary>验证 ConfigService 会预加载两张新增的敌人行为配置表。</summary>
     [Test]
     public void ConfigServiceTableNames_ContainEnemyBehaviorTables()
@@ -238,15 +371,21 @@ public sealed class BattleEnemyIntentsDataTests
             EnemyIntentLayoutData layoutBefore = intents.Layout.CurrentValue;
             uint randomStateBefore = intents.RandomState;
 
-            Assert.That(
-                () => intents.CompleteAndSelectNext(enemyId),
-                Throws.InvalidOperationException.With.Message.Contains("no legal candidate"));
+            BattleEnemyIntentCompletionPreparationResult firstFailure =
+                intents.PrepareCompletion(enemyId, startingOrder: 0);
+            Assert.That(firstFailure.Succeeded, Is.False);
+            Assert.That(firstFailure.FaultReason,
+                Is.EqualTo(BattleCommandQueueFaultReason.NoLegalNextIntent));
+            Assert.That(firstFailure.Plan, Is.Null);
             Assert.That(intents.Layout.CurrentValue, Is.SameAs(layoutBefore));
             Assert.That(intents.RandomState, Is.EqualTo(randomStateBefore));
 
-            Assert.That(
-                () => intents.CompleteAndSelectNext(enemyId),
-                Throws.InvalidOperationException.With.Message.Contains("no legal candidate"));
+            BattleEnemyIntentCompletionPreparationResult secondFailure =
+                intents.PrepareCompletion(enemyId, startingOrder: 0);
+            Assert.That(secondFailure.Succeeded, Is.False);
+            Assert.That(secondFailure.FaultReason,
+                Is.EqualTo(BattleCommandQueueFaultReason.NoLegalNextIntent));
+            Assert.That(secondFailure.Plan, Is.Null);
             Assert.That(intents.Layout.CurrentValue, Is.SameAs(layoutBefore));
             Assert.That(intents.RandomState, Is.EqualTo(randomStateBefore));
         }

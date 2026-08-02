@@ -34,20 +34,22 @@ namespace TinySpire.UI.Battle
             return phase.ToString();
         }
 
-        /// <summary>将三类命令反馈格式化为彼此明确区分的状态文本。</summary>
-        public static string FormatFeedback(BattleCommandFeedback feedback)
+        /// <summary>将 Queue 唯一生命周期格式化为彼此明确区分的状态文本。</summary>
+        public static string FormatFeedback(BattleCommandLifecycleEvent feedback)
         {
             if (feedback == null)
                 throw new ArgumentNullException(nameof(feedback));
 
             switch (feedback.Stage)
             {
-                case BattleCommandFeedbackStage.Queued:
+                case BattleCommandLifecycleStage.Queued:
                     return $"Queued #{feedback.AuthoritySequence} · {feedback.CommandType}";
-                case BattleCommandFeedbackStage.ExecutionFailed:
+                case BattleCommandLifecycleStage.ExecutionFailed:
                     return $"Failed #{feedback.AuthoritySequence} · {feedback.CommandType} · {feedback.FailureReason}";
-                case BattleCommandFeedbackStage.ExecutionCompleted:
+                case BattleCommandLifecycleStage.ExecutionCompleted:
                     return $"Completed #{feedback.AuthoritySequence} · {feedback.CommandType}";
+                case BattleCommandLifecycleStage.Faulted:
+                    return $"Faulted #{feedback.AuthoritySequence} · {feedback.CommandType} · {feedback.Fault.Reason}";
                 default:
                     throw new ArgumentOutOfRangeException(nameof(feedback));
             }
@@ -57,11 +59,13 @@ namespace TinySpire.UI.Battle
         public static bool CanSubmitEndAction(
             BattleTurnPhase phase,
             bool hasEndedAction,
-            bool hasPendingEndAction)
+            bool hasPendingEndAction,
+            bool queueFaulted = false)
         {
             return phase == BattleTurnPhase.PlayerAction &&
                    !hasEndedAction &&
-                   !hasPendingEndAction;
+                   !hasPendingEndAction &&
+                   !queueFaulted;
         }
     }
 }

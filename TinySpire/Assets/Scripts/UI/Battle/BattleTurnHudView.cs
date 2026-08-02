@@ -24,30 +24,29 @@ namespace TinySpire.UI.Battle
         private BattleSession _session;
         private ConfigService _configs;
         private BattleCommandQueue _queue;
-        private BattleCommandPresentationAdapter _presentation;
+        private BattleCommandSubmissionCoordinator _coordinator;
         private PlayerCombatantData _player;
-        private long? _pendingEndActionSequence;
-        private bool _isSubmittingEndAction;
+        private BattleCommandHandle _pendingEndActionHandle;
 
-        /// <summary>接收当前战斗事实、统一命令入口和展示反馈 adapter。</summary>
+        /// <summary>接收当前战斗事实、统一命令入口和生命周期协调器。</summary>
         [Inject]
         public void Construct(
             BattleSession session,
             ConfigService configs,
             BattleCommandQueue queue,
-            BattleCommandPresentationAdapter presentation)
+            BattleCommandSubmissionCoordinator coordinator)
         {
             _session = session ?? throw new ArgumentNullException(nameof(session));
             _configs = configs ?? throw new ArgumentNullException(nameof(configs));
             _queue = queue ?? throw new ArgumentNullException(nameof(queue));
-            _presentation = presentation ?? throw new ArgumentNullException(nameof(presentation));
+            _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
         }
 
         /// <summary>校验静态引用，并订阅权威回合事实和命令反馈。</summary>
         private void Start()
         {
             ValidateReferences();
-            if (_session == null || _configs?.GameConfig == null || _queue == null || _presentation == null)
+            if (_session == null || _configs?.GameConfig == null || _queue == null || _coordinator == null)
             {
                 throw new InvalidOperationException(
                     "BattleTurnHudView did not receive all initialized battle dependencies.");
@@ -56,7 +55,8 @@ namespace TinySpire.UI.Battle
             _player = ResolveCurrentPlayer();
             _endActionButton.onClick.AddListener(SubmitEndPlayerAction);
             _queue.Turn.Subscribe(RefreshTurn).AddTo(this);
-            _presentation.Feedback.Subscribe(HandleCommandFeedback).AddTo(this);
+            _queue.Queue.Subscribe(_ => RefreshTurn(_queue.Turn.CurrentValue)).AddTo(this);
+            _coordinator.Lifecycle.Subscribe(HandleCommandLifecycle).AddTo(this);
         }
 
         /// <summary>只向统一命令队列提交当前玩家的结束行动意图。</summary>
@@ -67,26 +67,27 @@ namespace TinySpire.UI.Battle
                 !BattleTurnHudPresentation.CanSubmitEndAction(
                     turn.Phase,
                     playerTurn.HasEndedAction,
-                    _isSubmittingEndAction || _pendingEndActionSequence.HasValue))
+                    _pendingEndActionHandle != null,
+                    _queue.Queue.CurrentValue.IsFaulted))
             {
                 return;
             }
 
-            _isSubmittingEndAction = true;
+            var command = new EndPlayerActionCommand(_player.Id);
+            BattleCommandHandle handle = _coordinator.PreRegister(command);
+            _pendingEndActionHandle = handle;
             RefreshTurn(turn);
 
-            var command = new EndPlayerActionCommand(_player.Id);
             BattleCommandSubmissionResult submission = _queue.Submit(command);
-            _isSubmittingEndAction = false;
             if (!submission.Accepted || !submission.AuthoritySequence.HasValue)
             {
+                if (ReferenceEquals(_pendingEndActionHandle, handle))
+                    _pendingEndActionHandle = null;
                 _commandStatusText.text = $"Rejected · {submission.FailureReason}";
                 RefreshTurn(_queue.Turn.CurrentValue);
                 return;
             }
 
-            _pendingEndActionSequence = submission.AuthoritySequence.Value;
-            _presentation.PublishQueued(command, submission);
             RefreshTurn(_queue.Turn.CurrentValue);
         }
 
@@ -114,21 +115,21 @@ namespace TinySpire.UI.Battle
             _endActionButton.interactable = BattleTurnHudPresentation.CanSubmitEndAction(
                 turn.Phase,
                 playerTurn.HasEndedAction,
-                _isSubmittingEndAction || _pendingEndActionSequence.HasValue);
+                _pendingEndActionHandle != null,
+                _queue.Queue.CurrentValue.IsFaulted);
         }
 
-        /// <summary>显示三类命令反馈，并在结束命令得到执行结果后清除其待定状态。</summary>
-        private void HandleCommandFeedback(BattleCommandFeedback feedback)
+        /// <summary>显示 Queue 生命周期，并只用精确句柄清除结束命令待定状态。</summary>
+        private void HandleCommandLifecycle(BattleCommandLifecycleEvent feedback)
         {
             _commandStatusText.text = BattleTurnHudPresentation.FormatFeedback(feedback);
-            if (!_pendingEndActionSequence.HasValue ||
-                feedback.AuthoritySequence != _pendingEndActionSequence.Value ||
-                feedback.Stage == BattleCommandFeedbackStage.Queued)
+            if (!ReferenceEquals(feedback.Handle, _pendingEndActionHandle) ||
+                feedback.Stage == BattleCommandLifecycleStage.Queued)
             {
                 return;
             }
 
-            _pendingEndActionSequence = null;
+            _pendingEndActionHandle = null;
             RefreshTurn(_queue.Turn.CurrentValue);
         }
 

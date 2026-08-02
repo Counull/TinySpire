@@ -322,4 +322,224 @@ namespace TinySpire.Battle
             Reason = reason;
         }
     }
+
+    /// <summary>参与者行动时机清除全部格挡的不可变记录。</summary>
+    public sealed class BattleBlockClearedSettlement : BattleSettlementRecord
+    {
+        /// <summary>清理前格挡。</summary>
+        public int BlockBefore { get; }
+
+        /// <summary>清理后格挡；M8 契约固定为零。</summary>
+        public int BlockAfter { get; }
+
+        /// <summary>实际清除量。</summary>
+        public int Amount { get; }
+
+        /// <summary>冻结一次非零格挡清理。</summary>
+        internal BattleBlockClearedSettlement(
+            int order,
+            CombatantId targetId,
+            int blockBefore)
+            : base(
+                order,
+                BattleSettlementRecordType.BlockCleared,
+                null,
+                null,
+                targetId)
+        {
+            if (blockBefore <= 0)
+                throw new ArgumentOutOfRangeException(nameof(blockBefore));
+
+            BlockBefore = blockBefore;
+            BlockAfter = 0;
+            Amount = blockBefore;
+        }
+    }
+
+    /// <summary>参与者行动时机衰减一层状态的不可变记录。</summary>
+    public sealed class BattleStatusReducedSettlement : BattleSettlementRecord
+    {
+        /// <summary>被衰减的状态。</summary>
+        public BattleStatusType Status { get; }
+
+        /// <summary>衰减前状态值。</summary>
+        public int ValueBefore { get; }
+
+        /// <summary>衰减后状态值。</summary>
+        public int ValueAfter { get; }
+
+        /// <summary>实际减少量。</summary>
+        public int Amount { get; }
+
+        /// <summary>冻结一次正数状态衰减。</summary>
+        internal BattleStatusReducedSettlement(
+            int order,
+            CombatantId targetId,
+            BattleStatusType status,
+            int valueBefore,
+            int valueAfter)
+            : base(
+                order,
+                BattleSettlementRecordType.StatusReduced,
+                null,
+                null,
+                targetId)
+        {
+            if (valueBefore <= valueAfter || valueAfter < 0)
+                throw new ArgumentOutOfRangeException(nameof(valueAfter));
+
+            Status = status;
+            ValueBefore = valueBefore;
+            ValueAfter = valueAfter;
+            Amount = valueBefore - valueAfter;
+        }
+    }
+
+    /// <summary>玩家新一轮恢复基础能量的不可变记录。</summary>
+    public sealed class BattleEnergyRefilledSettlement : BattleSettlementRecord
+    {
+        /// <summary>恢复前能量。</summary>
+        public int EnergyBefore { get; }
+
+        /// <summary>恢复后能量。</summary>
+        public int EnergyAfter { get; }
+
+        /// <summary>本次能量的有符号变化量。</summary>
+        public int Amount { get; }
+
+        /// <summary>冻结一次基础能量恢复。</summary>
+        internal BattleEnergyRefilledSettlement(
+            int order,
+            CombatantId sourceId,
+            int energyBefore,
+            int energyAfter)
+            : base(
+                order,
+                BattleSettlementRecordType.EnergyRefilled,
+                null,
+                sourceId,
+                null)
+        {
+            if (energyBefore < 0)
+                throw new ArgumentOutOfRangeException(nameof(energyBefore));
+            if (energyAfter < 0)
+                throw new ArgumentOutOfRangeException(nameof(energyAfter));
+
+            EnergyBefore = energyBefore;
+            EnergyAfter = energyAfter;
+            Amount = energyAfter - energyBefore;
+        }
+    }
+
+    /// <summary>敌人完成当前行为并提交下一权威意图的不可变记录。</summary>
+    public sealed class BattleEnemyIntentAdvancedSettlement : BattleSettlementRecord
+    {
+        /// <summary>本次已经完成的行为模板标识。</summary>
+        public int CompletedBehaviorId { get; }
+
+        /// <summary>完成后提交的下一行为模板标识。</summary>
+        public int NextBehaviorId { get; }
+
+        /// <summary>冻结一次敌人意图推进。</summary>
+        internal BattleEnemyIntentAdvancedSettlement(
+            int order,
+            CombatantId enemyId,
+            int completedBehaviorId,
+            int nextBehaviorId)
+            : base(
+                order,
+                BattleSettlementRecordType.EnemyIntentAdvanced,
+                null,
+                enemyId,
+                null)
+        {
+            if (completedBehaviorId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(completedBehaviorId));
+            if (nextBehaviorId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(nextBehaviorId));
+
+            CompletedBehaviorId = completedBehaviorId;
+            NextBehaviorId = nextBehaviorId;
+        }
+    }
+
+    /// <summary>排队后来源死亡而跳过整次敌人行动的不可变记录。</summary>
+    public sealed class BattleEnemyActionSkippedSettlement : BattleSettlementRecord
+    {
+        /// <summary>整次行动未执行的原因。</summary>
+        public BattleEnemyActionSkipReason Reason { get; }
+
+        /// <summary>冻结一次只关联行动来源、不伪造目标或 Effect 的敌人行动跳过。</summary>
+        internal BattleEnemyActionSkippedSettlement(
+            int order,
+            CombatantId sourceId,
+            BattleEnemyActionSkipReason reason)
+            : base(
+                order,
+                BattleSettlementRecordType.EnemyActionSkipped,
+                null,
+                sourceId,
+                null)
+        {
+            Reason = reason;
+        }
+    }
+
+    /// <summary>一条命令至多一次的权威阶段变化不可变记录。</summary>
+    public sealed class BattlePhaseChangedSettlement : BattleSettlementRecord
+    {
+        /// <summary>变化前阶段。</summary>
+        public BattleTurnPhase PhaseBefore { get; }
+
+        /// <summary>变化后阶段。</summary>
+        public BattleTurnPhase PhaseAfter { get; }
+
+        /// <summary>变化前轮次。</summary>
+        public int RoundNumberBefore { get; }
+
+        /// <summary>变化后轮次。</summary>
+        public int RoundNumberAfter { get; }
+
+        /// <summary>变化前的当前行动敌人。</summary>
+        public CombatantId? CurrentActingEnemyIdBefore { get; }
+
+        /// <summary>变化后的当前行动敌人。</summary>
+        public CombatantId? CurrentActingEnemyIdAfter { get; }
+
+        /// <summary>冻结一次完整阶段变化。</summary>
+        internal BattlePhaseChangedSettlement(
+            int order,
+            BattleTurnPhase phaseBefore,
+            BattleTurnPhase phaseAfter,
+            int roundNumberBefore,
+            int roundNumberAfter,
+            CombatantId? currentActingEnemyIdBefore,
+            CombatantId? currentActingEnemyIdAfter)
+            : base(
+                order,
+                BattleSettlementRecordType.BattlePhaseChanged,
+                null,
+                null,
+                null)
+        {
+            if (phaseBefore == phaseAfter &&
+                roundNumberBefore == roundNumberAfter &&
+                currentActingEnemyIdBefore == currentActingEnemyIdAfter)
+            {
+                throw new ArgumentException("阶段变化记录必须包含至少一项权威回合事实变化。");
+            }
+
+            if (roundNumberBefore < 0)
+                throw new ArgumentOutOfRangeException(nameof(roundNumberBefore));
+            if (roundNumberAfter < 0)
+                throw new ArgumentOutOfRangeException(nameof(roundNumberAfter));
+
+            PhaseBefore = phaseBefore;
+            PhaseAfter = phaseAfter;
+            RoundNumberBefore = roundNumberBefore;
+            RoundNumberAfter = roundNumberAfter;
+            CurrentActingEnemyIdBefore = currentActingEnemyIdBefore;
+            CurrentActingEnemyIdAfter = currentActingEnemyIdAfter;
+        }
+    }
 }

@@ -1,7 +1,7 @@
 ---
 title: TinySpire BattleScene M8 · 敌人行动、状态时机与完整战斗循环
 page_type: plan
-lifecycle: active
+lifecycle: archived
 created: 2026-08-02
 updated: 2026-08-02
 scope: BattleScene M8A-M8E
@@ -14,9 +14,9 @@ depends_on: 2026-08-02-m7-effect-executor.md（M7 已完成）
 
 ## 当前结论
 
-本页是 M8 的**唯一实施计划**。M8 在 M4～M7 的 `BattleCommandQueue.Submit`、只读 `Queue`/`Turn`、确定性意图、显式目标、共享 Effect 公式、完整预构建和不可变结算记录上，闭合敌人真实行动、Block/Vulnerable 时机、多敌顺序、死亡中止、规则层终局与表现屏障。严格按 **M8A → M8B → M8C → M8D → M8E** 串行，每个切片完成独立验收页与状态同步后才继续。
+本页是 M8 实施期间的**唯一实施计划**，现已归档。M8 在 M4～M7 的 `BattleCommandQueue.Submit`、只读 `Queue`/`Turn`、确定性意图、显式目标、共享 Effect 公式、完整预构建和不可变结算记录上，闭合了敌人真实行动、Block/Vulnerable 时机、多敌顺序、死亡中止、规则层终局与表现屏障。
 
-本轮只形成计划，没有实施或验证 M8。规划前干净代码/资源基线是 `c46950ff4026f383487b1b2c15755b60ae2b2c3d`；正式 Goal 必须现场记录实际起始 HEAD 与全部 tracked/untracked 既有改动，本计划无论已提交或仍在工作区都属于受保护基线。
+正式 M8 Goal 的实际起始 HEAD 为 `937b6fe50ec890cb3e71048da13a67c9d6815067`。M8 已按 **M8A → M8B → M8C → M8D → M8E** 串行完成，每个切片均先完成独立验收页与状态同步再继续；最终自动验证、Bootstrap、真实 Game View、范围审计与双轴复审见 `../06_testing/2026-08-02-m8e-full-validation-review.md`。并发出现的 Hermes/Candidates 美术改动始终作为用户范围排除并保护。
 
 ## 推荐 Goal 文案
 
@@ -67,7 +67,7 @@ depends_on: 2026-08-02-m7-effect-executor.md（M7 已完成）
 
 ## M8A · 命令、状态与终局契约
 
-状态：**待实施**
+状态：**已完成**
 
 实施：以纯 C# 测试锁定 token/lifecycle、continuation 入队边界、non-reentrancy、fault、target、状态时机、联合快照、source-skipped、terminal 与新增 settlement；只建立被 M8B～D 立即消费的最小类型，不接生产写链，并记录实际新决策。
 
@@ -75,7 +75,7 @@ depends_on: 2026-08-02-m7-effect-executor.md（M7 已完成）
 
 ## M8B · 统一提交、Queue 生命周期与阶段屏障
 
-状态：**待实施**
+状态：**已完成**
 
 实施：Coordinator 预注册 token/handle，Queue 发布一次 Queued；迁移 Hand/Turn 并删除 View sequence/手工 Queued。落实 drain guard、`Execute` 后/`Present` 前的 continuation 入队点、一次性 system token、fault、terminal admission、每命令一次 phase 与按结果 barrier；移除 runtime `ITickable` 轮询和 continuation 提交。敌人仍保留 M5 占位，不接真实 Effect/状态。
 
@@ -83,7 +83,7 @@ depends_on: 2026-08-02-m7-effect-executor.md（M7 已完成）
 
 ## M8C · 敌人意图与 Effect 联合事务 module
 
-状态：**待实施**
+状态：**已完成**
 
 实施：把 Effect 核心迁到 ordered `BattleEffectId`，Card 在边缘保持 M7 顺序；建立 intent 三段式 plan 与 enemy 联合事务，在 Block 清理后的投影事实上 prepare Effect，并以一次初始快照 validate 后无失败 commit。**本切片只交付纯 module/fixture，不注册到 Queue、LifetimeScope 或生产循环。**
 
@@ -91,7 +91,7 @@ depends_on: 2026-08-02-m7-effect-executor.md（M7 已完成）
 
 ## M8D · 生产接线、状态时机、死亡与多回合
 
-状态：**待实施**
+状态：**已完成**
 
 实施：首次把 enemy transaction 接到 Queue/生产链；接入玩家 RoundStart、EndPlayerAction、敌人状态时机、双敌 Encounter continuation、死亡 skip/中止和 `BattleEnded`。保证 Draw/Discard/Reshuffle/Energy/Block/Vulnerable/Intent/Damage/Phase 记录有序，同种子多轮可重放。
 
@@ -99,7 +99,7 @@ depends_on: 2026-08-02-m7-effect-executor.md（M7 已完成）
 
 ## M8E · 全量验证与双轴收口
 
-状态：**待实施**
+状态：**已完成**
 
 实施：运行 M8 定向、M2～M7 相关与全量 EditMode（0 failed/0 skipped），串行 `dotnet build TinySpire/TinySpire.sln --no-restore -m:1`；从 Bootstrap 生产链完成真实 Game View 双敌多轮、attack/defend、状态时机、反馈屏障、死亡/终局和 Console 清洁验收；审计所有排除路径；以 Goal 实际起始 HEAD 对完整 tracked/untracked diff 并行做 Standards/Spec 复审，修复后重跑并复审。
 

@@ -22,14 +22,14 @@ public sealed class HandCardVisual : MonoBehaviour
     private Tween _feedbackTween;
     private bool _hasPlayFeedback;
     private bool _isPlayerInputEnabled = true;
-    private long? _pendingCommandSequence;
+    private BattleCommandHandle _pendingCommandHandle;
     private Color _normalCostColor;
     private bool _hasNormalCostColor;
 
     public CardInstanceId CardId { get; private set; }
     public float CurrentAnchoredY => _cardContent.anchoredPosition.y;
     public RectTransform CardContent => _cardContent;
-    public bool IsCommandPending => _pendingCommandSequence.HasValue;
+    public bool IsCommandPending => _pendingCommandHandle != null;
 
     /// <summary>
     /// 初始化该 View 对应的卡牌实例及拖拽反馈依赖。
@@ -125,32 +125,52 @@ public sealed class HandCardVisual : MonoBehaviour
         RefreshInteractionState();
     }
 
-    /// <summary>把待定视觉绑定到权威序号；空值表示当前没有待定出牌。</summary>
-    public void SetCommandPending(long? authoritySequence)
+    /// <summary>把待定视觉绑定到 Submit 前取得的不透明句柄。</summary>
+    public void SetCommandPending(BattleCommandHandle handle)
     {
-        if (_pendingCommandSequence == authoritySequence)
+        if (handle == null)
+            throw new ArgumentNullException(nameof(handle));
+        if (ReferenceEquals(_pendingCommandHandle, handle))
             return;
 
-        _pendingCommandSequence = authoritySequence;
+        _pendingCommandHandle = handle;
         _hasPlayFeedback = false;
         KillFeedbackTween();
         if (_dragFeedbackCanvasGroup != null)
         {
             _feedbackTween = _dragFeedbackCanvasGroup
-                .DOFade(authoritySequence.HasValue ? 0.58f : 1f, 0.1f)
+                .DOFade(0.58f, 0.1f)
                 .SetEase(Ease.OutQuad);
         }
 
         RefreshInteractionState();
     }
 
-    /// <summary>只在失败序号仍绑定当前待定视觉时清除状态并播放反馈。</summary>
-    public void PlayCommandFailureFeedback(long authoritySequence)
+    /// <summary>只在精确句柄仍绑定当前待定视觉时安静清除状态。</summary>
+    public void ClearCommandPending(BattleCommandHandle handle)
     {
-        if (_pendingCommandSequence != authoritySequence)
+        if (!ReferenceEquals(_pendingCommandHandle, handle))
             return;
 
-        _pendingCommandSequence = null;
+        _pendingCommandHandle = null;
+        _hasPlayFeedback = false;
+        RefreshInteractionState();
+        KillFeedbackTween();
+        if (_dragFeedbackCanvasGroup != null)
+        {
+            _feedbackTween = _dragFeedbackCanvasGroup
+                .DOFade(1f, 0.1f)
+                .SetEase(Ease.OutQuad);
+        }
+    }
+
+    /// <summary>只在失败句柄仍绑定当前待定视觉时清除状态并播放反馈。</summary>
+    public void PlayCommandFailureFeedback(BattleCommandHandle handle)
+    {
+        if (!ReferenceEquals(_pendingCommandHandle, handle))
+            return;
+
+        _pendingCommandHandle = null;
         _hasPlayFeedback = false;
         RefreshInteractionState();
         KillFeedbackTween();

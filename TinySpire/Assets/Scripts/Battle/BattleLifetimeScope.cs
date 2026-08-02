@@ -29,11 +29,13 @@ public sealed class BattleLifetimeScope : LifetimeScope
         builder.RegisterComponentInHierarchy<BattleTurnHudView>();
         builder.RegisterEntryPoint<BattleCommandPresentationAdapter>()
             .AsSelf();
+        builder.Register<BattleCommandSubmissionCoordinator>(Lifetime.Singleton);
         builder.Register(
             resolver => CreateBattleCommandQueue(
                 resolver.Resolve<BattleSession>(),
                 resolver.Resolve<ConfigService>(),
-                resolver.Resolve<IBattleCommandPresentation>()),
+                resolver.Resolve<IBattleCommandPresentation>(),
+                resolver.Resolve<BattleCommandSubmissionCoordinator>()),
             Lifetime.Singleton);
         builder.RegisterEntryPoint<BattleCommandRuntimeDriver>();
     }
@@ -42,7 +44,8 @@ public sealed class BattleLifetimeScope : LifetimeScope
     private static BattleCommandQueue CreateBattleCommandQueue(
         BattleSession session,
         ConfigService configs,
-        IBattleCommandPresentation presentation)
+        IBattleCommandPresentation presentation,
+        BattleCommandSubmissionCoordinator coordinator)
     {
         if (session == null)
             throw new ArgumentNullException(nameof(session));
@@ -62,7 +65,8 @@ public sealed class BattleLifetimeScope : LifetimeScope
             configs.Tables,
             configs.GameConfig.EnergyPerRound,
             configs.GameConfig.InitialHandCount,
-            presentation);
+            presentation,
+            coordinator);
     }
 
     /// <summary>把当前唯一玩家映射到 Session 卡区，并在生产接线超出 DEP-008 边界时立即失败。</summary>
@@ -92,49 +96,29 @@ public sealed class BattleLifetimeScope : LifetimeScope
 
 namespace TinySpire.Battle
 {
-    /// <summary>
-    /// 生产生命周期入口：启动战斗，并让当前敌人在后续帧通过同一队列依次完成当前意图。
-    /// </summary>
-    public sealed class BattleCommandRuntimeDriver : IStartable, ITickable
+    /// <summary>生产生命周期入口：只提交启动命令，敌人推进完全由 Queue continuation 驱动。</summary>
+    public sealed class BattleCommandRuntimeDriver : IStartable
     {
         private readonly BattleCommandQueue _queue;
+        private readonly BattleCommandSubmissionCoordinator _coordinator;
 
-        /// <summary>保存生产命令队列，所有启动与敌人完成意图都只通过该 seam 提交。</summary>
-        public BattleCommandRuntimeDriver(BattleCommandQueue queue)
+        /// <summary>保存生产 Queue 与其唯一提交协调器，仅负责场景启动命令。</summary>
+        public BattleCommandRuntimeDriver(
+            BattleCommandQueue queue,
+            BattleCommandSubmissionCoordinator coordinator)
         {
             _queue = queue ?? throw new ArgumentNullException(nameof(queue));
+            _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
         }
 
         /// <summary>在 BattleLifetimeScope 启动时提交唯一的开始战斗命令。</summary>
         public void Start()
         {
-            BattleCommandSubmissionResult result = _queue.Submit(new StartBattleCommand());
+            var command = new StartBattleCommand();
+            _coordinator.PreRegister(command);
+            BattleCommandSubmissionResult result = _queue.Submit(command);
             if (!result.Accepted)
                 throw new InvalidOperationException("Battle command queue rejected StartBattleCommand.");
-        }
-
-        /// <summary>队列空闲且正在等待敌人时，每帧最多提交一名当前敌人的完成命令。</summary>
-        public void Tick()
-        {
-            BattleCommandQueueData queue = _queue.Queue.CurrentValue;
-            if (queue.CurrentAuthoritySequence.HasValue ||
-                queue.PendingCount > 0 ||
-                queue.IsWaitingForPresentation)
-            {
-                return;
-            }
-
-            BattleTurnData turn = _queue.Turn.CurrentValue;
-            if (turn.Phase != BattleTurnPhase.EnemyAction ||
-                !turn.CurrentActingEnemyId.HasValue)
-            {
-                return;
-            }
-
-            BattleCommandSubmissionResult result = _queue.Submit(
-                new CompleteEnemyActionCommand(turn.CurrentActingEnemyId.Value));
-            if (!result.Accepted)
-                throw new InvalidOperationException("Battle command queue rejected CompleteEnemyActionCommand.");
         }
     }
 }

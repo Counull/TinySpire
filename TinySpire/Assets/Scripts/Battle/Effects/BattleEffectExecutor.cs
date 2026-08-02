@@ -20,7 +20,7 @@ namespace TinySpire.Battle
             _stateOperations = new BattleCombatantEffectOperations(combatants);
         }
 
-        /// <summary>完整预构建后按绑定顺序执行 Effect，失败时保证零写入和空记录。</summary>
+        /// <summary>完整预构建后按 Effect 标识顺序执行，失败时保证零写入和空记录。</summary>
         public BattleEffectExecutionResult Execute(BattleEffectExecutionRequest request)
         {
             BattleEffectPreparationResult preparation = Prepare(request);
@@ -31,11 +31,30 @@ namespace TinySpire.Battle
                     Array.Empty<BattleSettlementRecord>());
             }
 
-            return ExecutePrepared(preparation.Plan, startingOrder: 0);
+            ValidatePreparedExecution(preparation.Plan, startingOrder: 0);
+            return CommitPrepared(preparation.Plan);
         }
 
-        /// <summary>在首次写入前解析全部绑定并模拟顺序结果。</summary>
+        /// <summary>在首次写入前解析全部 Effect 标识并模拟顺序结果。</summary>
         internal BattleEffectPreparationResult Prepare(BattleEffectExecutionRequest request)
+        {
+            return PrepareCore(request, projectedSource: null, projectedTarget: null);
+        }
+
+        /// <summary>在联合事务的投影事实上预构建 Effect，同时保留真实初始快照供唯一校验。</summary>
+        internal BattleEffectPreparationResult PrepareProjected(
+            BattleEffectExecutionRequest request,
+            BattleEffectTargetSnapshot projectedSource,
+            BattleEffectTargetSnapshot projectedTarget)
+        {
+            return PrepareCore(request, projectedSource, projectedTarget);
+        }
+
+        /// <summary>以实际事实或调用方提供的联合投影执行同一套全量解析与顺序模拟。</summary>
+        private BattleEffectPreparationResult PrepareCore(
+            BattleEffectExecutionRequest request,
+            BattleEffectTargetSnapshot? projectedSource,
+            BattleEffectTargetSnapshot? projectedTarget)
         {
             if (request == null)
             {
@@ -62,21 +81,31 @@ namespace TinySpire.Battle
                 return Failed(BattleCommandExecutionFailureReason.TargetNotAlive);
             }
 
+            BattleEffectTargetSnapshot sourceFacts = projectedSource ??
+                new BattleEffectTargetSnapshot(
+                    source.CurrentHealth,
+                    source.CurrentBlock,
+                    source.CurrentVulnerable);
+            BattleEffectTargetSnapshot targetFacts = projectedTarget ??
+                new BattleEffectTargetSnapshot(
+                    target.CurrentHealth,
+                    target.CurrentBlock,
+                    target.CurrentVulnerable);
             int simulatedSourceStrength = source.CurrentStrength;
             int simulatedTargetStrength = target.CurrentStrength;
-            int simulatedTargetHealth = target.CurrentHealth;
-            int simulatedTargetBlock = target.CurrentBlock;
-            int simulatedTargetVulnerable = target.CurrentVulnerable;
+            int simulatedTargetHealth = targetFacts.Health;
+            int simulatedTargetBlock = targetFacts.Block;
+            int simulatedTargetVulnerable = targetFacts.Vulnerable;
             var operations = new List<BattlePreparedEffectOperation>(
-                request.EffectBindings.Count);
-            foreach (cfg.battle.CardEffectBinding binding in request.EffectBindings)
+                request.EffectIds.Count);
+            foreach (BattleEffectId effectId in request.EffectIds)
             {
-                if (binding == null || binding.EffectId <= 0)
+                if (effectId.Value <= 0)
                 {
                     return Failed(BattleCommandExecutionFailureReason.InvalidEffectBinding);
                 }
 
-                cfg.battle.CardEffect effect = _tables.TbCardEffect.GetOrDefault(binding.EffectId);
+                cfg.battle.CardEffect effect = _tables.TbCardEffect.GetOrDefault(effectId.Value);
                 if (effect == null)
                 {
                     return Failed(BattleCommandExecutionFailureReason.EffectTemplateNotFound);
@@ -203,21 +232,35 @@ namespace TinySpire.Battle
                     shouldSkipTargetNotAlive));
             }
 
+            var projectedTargetAfterEffect = new BattleEffectTargetSnapshot(
+                simulatedTargetHealth,
+                simulatedTargetBlock,
+                simulatedTargetVulnerable);
+            BattleEffectTargetSnapshot projectedSourceAfterEffect =
+                request.SourceId == request.TargetId
+                    ? projectedTargetAfterEffect
+                    : sourceFacts;
             return new BattleEffectPreparationResult(
                 BattleCommandExecutionFailureReason.None,
                 new BattlePreparedEffectPlan(
                     this,
                     source,
                     target,
-                    operations));
+                    operations,
+                    projectedSourceAfterEffect,
+                    projectedTargetAfterEffect));
         }
 
-        /// <summary>执行已冻结计划；调用方可用起始顺序把记录并入更大的命令事务。</summary>
-        internal BattleEffectExecutionResult ExecutePrepared(
-            BattlePreparedEffectPlan plan,
-            int startingOrder)
+        /// <summary>提交已经验证的冻结计划；本阶段不复验中间事实，也不返回普通失败。</summary>
+        internal BattleEffectExecutionResult CommitPrepared(BattlePreparedEffectPlan plan)
         {
-            ValidatePreparedExecution(plan, startingOrder);
+            if (plan == null)
+                throw new ArgumentNullException(nameof(plan));
+            if (!ReferenceEquals(plan.Owner, this))
+                throw new InvalidOperationException("Effect 计划不能由另一个 executor 执行。");
+
+            plan.MarkConsumed();
+            int startingOrder = plan.StartingOrder;
 
             var settlements = new List<BattleSettlementRecord>(plan.Operations.Count);
             foreach (BattlePreparedEffectOperation operation in plan.Operations)
@@ -351,6 +394,9 @@ namespace TinySpire.Battle
                 throw new InvalidOperationException("Effect 计划不能由另一个 executor 执行。");
             }
 
+            if (plan.IsValidated || plan.IsConsumed)
+                throw new InvalidOperationException("Effect 计划已经校验或提交。");
+
             if (!_combatants.TryGet(plan.SourceId, out CombatantData source) ||
                 !plan.SourceSnapshot.Matches(source) ||
                 !_combatants.TryGet(plan.TargetId, out CombatantData target) ||
@@ -358,6 +404,8 @@ namespace TinySpire.Battle
             {
                 throw new InvalidOperationException("Effect 计划预构建后参与者事实发生了漂移。");
             }
+
+            plan.MarkValidated(startingOrder);
         }
 
         /// <summary>创建零计划、零记录的内部预构建失败结果。</summary>

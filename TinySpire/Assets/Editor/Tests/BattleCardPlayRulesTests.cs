@@ -33,7 +33,7 @@ public sealed class BattleCardPlayRulesTests
             cardZones,
             enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
             tables: tables);
-        queue.Submit(new StartBattleCommand());
+        queue.SubmitRegistered(new StartBattleCommand());
         BattleTurnData turnBeforeEvaluation = queue.Turn.CurrentValue;
         CardZoneLayoutData layoutBeforeEvaluation = zones.Layout.CurrentValue;
         uint shuffleRandomBeforeEvaluation = zones.ShuffleRandomState;
@@ -89,7 +89,7 @@ public sealed class BattleCardPlayRulesTests
             enemyCombatantIdsInEncounterOrder: enemyIds,
             enemyIntents: enemyIntents,
             tables: tables);
-        queue.Submit(new StartBattleCommand());
+        queue.SubmitRegistered(new StartBattleCommand());
         BattleTurnData turnBeforeEvaluation = queue.Turn.CurrentValue;
         CardZoneLayoutData layoutBeforeEvaluation = zones.Layout.CurrentValue;
         uint intentRandomBeforeEvaluation = enemyIntents.RandomState;
@@ -360,7 +360,7 @@ public sealed class BattleCardPlayRulesTests
                 cardZones,
                 enemyCombatantIdsInEncounterOrder: enemyIds,
                 tables: tables);
-            Queue.Submit(new StartBattleCommand());
+            Queue.SubmitRegistered(new StartBattleCommand());
             Rules = new BattleCardPlayRules(Combatants, cardZones, enemyIds, tables);
         }
 

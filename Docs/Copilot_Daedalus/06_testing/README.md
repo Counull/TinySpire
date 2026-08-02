@@ -15,6 +15,11 @@ updated: 2026-08-02
 
 ## 验证记录
 
+- [2026-08-02 M8E 全量验证、真实 Game View 与双轴复审](2026-08-02-m8e-full-validation-review.md)
+- [2026-08-02 M8D 状态时机、死亡与完整战斗循环](2026-08-02-m8d-status-death-battle-loop.md)
+- [2026-08-02 M8C 敌人意图与 Effect 联合事务](2026-08-02-m8c-enemy-effect-transaction.md)
+- [2026-08-02 M8B 命令生命周期、continuation 与表现屏障](2026-08-02-m8b-command-lifecycle-presentation-barrier.md)
+- [2026-08-02 M8A 命令、状态与终局契约](2026-08-02-m8a-command-status-terminal-contract.md)
 - [2026-08-02 M7E 全量验证、真实 Game View 与双轴复审](2026-08-02-m7e-full-validation-review.md)
 - [2026-08-02 M7D 出牌事务与卡区结算记录](2026-08-02-m7d-card-effect-transaction.md)
 - [2026-08-02 M7C 有序 Effect 执行 module](2026-08-02-m7c-ordered-effect-executor.md)

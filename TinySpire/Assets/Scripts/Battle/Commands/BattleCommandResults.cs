@@ -10,7 +10,11 @@ namespace TinySpire.Battle
     public enum BattleCommandSubmissionFailureReason
     {
         None,
-        BattleNotStarted
+        BattleNotStarted,
+        InvalidSubmissionHandle,
+        SystemCommandNotAuthorized,
+        BattleAlreadyEnded,
+        QueueFaulted,
     }
 
     /// <summary>

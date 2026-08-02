@@ -474,3 +474,63 @@ updated: 2026-08-02
 **理由**：能失败的规则、Binding、Effect 表项、类型/属性、数值与 prepared 快照都在 Energy 首写前完成，普通失败自然得到零写入和空记录。卡区深 module 仍独占随机、抽顶、重洗和单次 Layout 发布，返回明确结果比外层差分更深，也让未来 M9 可以按真实发生顺序表现。阶段状态机、Submit、权威序号、轮次栅栏与 completion 屏障不需要重写。
 
 **影响**：四张当前卡成功后统一进入 DiscardPile，因为配置尚无归宿字段；不按模板 ID 硬编码 Exhaust，`DEP-012` 保持 open。M7D 已经由公开队列 seam 覆盖四卡、致死 skipped、全部关键失败与阶段卡区记录；敌人真实 Effect、Block/Vulnerable 时机、队列事件化和 pending 协作者仍留 M8，最终动画与状态 HUD 仍留 M3E/M9。验证见 `06_testing/2026-08-02-m7d-card-effect-transaction.md`。
+
+## CD-043：预注册句柄只负责对账，Queue 内部核心独占排序、token、屏障与 fault
+
+**问题**：M4～M7 的 View 在调用 `BattleCommandQueue.Submit` 后才保存序号并手工发布 Queued；同步执行/回调会让结果先于 pending 注册。旧 Queue 又直接递归执行，没有 continuation 边界、非重入 drain 或冻结 fault。若把这些职责分散给 Hand、Turn、runtime polling 与 presentation，序号、pending 和阶段推进会继续出现时序窗口。
+
+**选择**：提交方先向 concrete `BattleCommandSubmissionCoordinator` 预注册不透明 `BattleCommandHandle`，随后只调用既有 Queue seam；handle 不暴露或替代权威序号。internal `BattleCommandSchedulingCore` 是未来生产 Queue 唯一持有的调度子部件：接受时分配序号并形成唯一 Queued，外层迭代 drain 防止 callback 重入；Execute 返回后、Present 前把 `CompleteEnemyAction` continuation 追加 FIFO，并自动消费所属 Queue 签发的一次性 system token。非空 settlement 自动建立一次 completion 屏障；普通失败为空 settlement，确定性 fault 固定为首次写入前，只有提交后不可预期异常可显式标记 `MayHavePartialWrites=true`。fault 独立保存在只读 Queue 事实，不继承 settlement。
+
+**理由**：coordinator 只解决“Submit 前已有对账身份”，不分配序号或调度；核心保持 internal，避免形成 `BattleCommandQueue.Submit` 之外的第二条公开写/排序 seam。system continuation 无法由外部伪造，拒绝路径撤销 handle 且不消耗序号；current/pending 在 fault 中保留，便于稳定诊断。M8A 为直接验证 internal 契约临时加入 `Assembly-CSharp-Editor` friend access；它仅是 Editor 测试能力，不是生产接口。
+
+**影响**：M8A 尚未迁移现有 Queue、View feedback、pending、runtime polling 或自动阶段。M8B 必须让真实 Queue 唯一持有并消费该核心，把 Hand/Turn 迁到 coordinator，并从公开 Submit/Queue seam 重测全部生命周期；M8B～D 应逐步迁移 internal 测试，M8E 必须复审 `AssemblyInfo.cs` 并在不再需要时删除。验证见 `06_testing/2026-08-02-m8a-command-status-terminal-contract.md`。
+
+## CD-044：敌人行动以同一初始权威快照联合验证，目标、状态与终局均即时派生
+
+**问题**：敌人行动要先清 source Block，再在投影事实上执行 Effect，随后衰减 Vulnerable、推进 intent/history/random 并排入 continuation。若每段分别读取或复验 live facts，Self defend 会把旧 Block 带入结果，Effect 后复验又会把本事务自己的写入误判为漂移；若保存目标、胜负或状态阶段镜像，则会产生第二份事实。
+
+**选择**：internal 敌人联合快照一次冻结 source/target 现有四标量、完整 `BattleTurnData`、当前 Intent Layout、目标敌人的 last/consecutive/cooldowns history、随机状态、恰好一个 ordered `BattleEffectId` 与可选 `CompleteEnemyAction` continuation。状态投影复用现有 `BattleEffectTargetSnapshot`：行动前 source Block=0，Effect 后 source Vulnerable 最多减 1。joint guard 只允许首次写入前一次 validate 与一次 commit；commit 不接收当前事实，因此不复验本事务中间写入。死亡 source 在目标解析前成功 skip；活 source 先即时统计存活玩家，零名 terminal、多名 configuration fault、唯一一名才解析 Self/Enemy。胜负每次从当前存活阵营派生，Turn 只保存中立 `BattleEnded` phase。
+
+**理由**：一个初始快照和一次 validate 能把所有普通失败/配置 fault 推到首次写入前，同时让清 Block、Effect、衰减与意图推进共享同一事实基础。复用 M7 标量快照与状态投影避免复制公式；source-only skip 不伪造 Effect/target，唯一玩家规则也不私定多人目标策略。中立 phase 与派生 outcome 保持 Turn 单一事实来源。
+
+**影响**：M8A 只建立并测试 contract module，没有执行 enemy Effect 或接生产链。玩家 Block → Energy → Draw、Discard → Vulnerable 在本切片只以纯 settlement 顺序口径记录，M8D 必须以真实公开 Queue 结算顺序替换该手工组合防回归；M8C 负责真正的 Effect/intent 三段式联合事务，M8D 才负责状态、死亡、稳定 Encounter 顺序与终局接线。验证见 `06_testing/2026-08-02-m8a-command-status-terminal-contract.md`。
+
+## CD-045：Queue 先发布唯一生命周期，再以一次屏障串行消费 continuation
+
+**问题**：M4～M7 的 Hand、Turn HUD 与 presentation 分别持有序号或手工 Queued，runtime 又轮询敌人阶段提交完成命令。同步执行会让结果早于 pending 登记，回调内提交可能重入；若 continuation 在表现完成后才入队，表现期间的新玩家命令会越过阶段推进；若同步 completion 在 `Present` 返回前直接清 current，随后抛出的表现异常又无法冻结正确 fault。
+
+**选择**：生产 `BattleCommandQueue` 唯一持有 M8A scheduling core。提交方以同一命令引用向 concrete coordinator 预注册 opaque handle，Queue 接受时先占有 drain、分配序号并发布唯一 Queued，再发布 Queue 快照；拒绝撤销 handle。执行返回后、`Present` 前，Queue 为预定 `CompleteEnemyAction` 签发并消费一次性 token，按 FIFO 入队并先发布其 Queued。每条命令只聚合一次前后 Turn 的 `BattlePhaseChanged`；非空结算建立一次 completion 屏障，零结算直接通过。同步 completion 先缓存，只有 `Present` 正常返回且当前终态已经发布后才生效；异常则取消缓存并冻结 fault。Hand/Turn 只按精确 handle 对账，runtime driver 只负责启动命令，不再轮询。
+
+**理由**：handle 解决调用方在 Submit 前建立身份的问题，权威序号、Queued、顺序、continuation 与 fault 仍全部留在 Queue 内部；因此 callback Submit 只能排队而不能重入执行，既有 accepted → continuation → presentation 期间新提交的顺序不依赖帧时机。表现屏障由真实非空结算自动产生，也不会被 adapter 或调用方以布尔参数绕过。
+
+**影响**：公开 seam 仍是 `BattleCommandQueue.Submit` 与只读 `Queue` / `Turn`；coordinator 只额外发布生命周期供 View 对账，不成为第二条排序或写入入口。普通失败不调用 presentation，当前 Failed/Faulted 只清除匹配 handle，旧终态/旧 completion 不影响新 pending。M8B 的 typed `BattleNoLegalNextIntentException` 仅是旧一步式意图推进到 fault 的稳定过渡桥；M8C 必须以三段式 intent plan 和联合事务替代，M8D 才接真实敌人 Effect、状态和终局。验证见 `06_testing/2026-08-02-m8b-command-lifecycle-presentation-barrier.md`。
+
+## CD-046：Effect 核心消费有序 ID，敌人行动以投影事实联合提交
+
+**问题**：M7 的 Effect request 直接携带 Card binding，敌人若复用就必须伪造卡牌语义；旧一步式 intent 完成又会先推进真实 RNG 再尝试回滚。敌人行动还必须先清 source Block，再从该投影执行 Effect、衰减 Effect 后 source 的 Vulnerable 并推进下一意图；若各段独立抓取或复验 live facts，Self defend 会叠加旧 Block，本事务自己的合法写入也会被误判为漂移。
+
+**选择**：`BattleEffectExecutionRequest` 只冻结 source、显式 target 与 ordered `BattleEffectId`，`BattleTurnController` 是唯一 Card binding → ID 边缘适配。Effect prepare 在实际或调用方提供的投影标量上完整解析和顺序模拟，同时保留真实初始参与者快照；首次写入前校验后，commit 不复验中间事实。`BattleEnemyIntentsData` 以同一 `BattleEnemyIntentAuthoritySnapshot` 建立 `PrepareCompletion → ValidatePreparedCompletion → CommitPreparedCompletion`，Prepare 用复制 history 和显式恢复 state 的本地 `GameRandom` 冻结 next history/random/Layout。internal concrete `BattleEnemyActionExecutor` 联合持有 Block、Effect、Vulnerable、Intent component plan 与 continuation 副本，唯一校验后按 Block → Effect → Vulnerable → Intent 提交。
+
+**理由**：ordered ID 让 Card 与 Enemy 共享同一个深 Effect module，却不把 Card 配置结构泄漏到敌人领域。投影事实把未来合法状态变化前移到零写入 prepare；同一初始快照和本地 RNG 又保证配置、目标、随机、序号或 authority 错误都在首次写入前形成空结算 fault。状态时机只写自己拥有的标量，因此不会覆盖 Self Effect；所有数值仍由 M7 公式和状态操作产生。
+
+**影响**：死亡 source 在 Behavior/target/Effect/Intent 之前直接产生 source-only skip；当前活 source 只允许唯一存活玩家，零玩家 terminal、多玩家 fault。M8C 只交付纯 module/fixture，未注册 Queue/LifetimeScope，生产敌人仍保持占位；M8D 才负责 Encounter continuation、玩家状态时机、死亡中止和终局接线。验证见 `06_testing/2026-08-02-m8c-enemy-effect-transaction.md`。
+
+## CD-047：当前命令原子发布权威阶段，表现 completion 只释放后继执行屏障
+
+**问题**：敌人命令成功后必须同时提交 Damage/Block/Vulnerable/Intent 与 Encounter 交接，但又要求“反馈完成前不切换下一敌人/轮次”。若为满足表现等待而把 Turn 暂存在 Queue 外，或让 completion 回调再写 Turn/Combatant/Intent/CardZones，会产生第二份阶段事实、破坏失败边界，并使同步/迟到 completion 可以越过权威排序。
+
+**选择**：每条命令仍在一次同步 `Execute` 中提交其完整事务和命令前后唯一 `BattlePhaseChanged`；因此只读 Turn 在 `Present` 前已经是该命令的权威终态。Queue 在同一时点预定并排入 frozen continuation，但非空 settlement 建立的 `IsWaitingForPresentation` 屏障阻止后继命令执行。presentation completion 只按精确序号解除屏障并重新进入非重入 drain，不写 Turn、Combatant、Intent 或 CardZones。敌人行动后若 terminal，Queue 丢弃已冻结后继并发布 `BattleEnded`；否则按 Encounter 顺序或玩家 RoundStart 继续。
+
+**理由**：命令结果、Turn 和 settlement 保持同一原子提交边界，presentation 只决定何时消费下一条命令，而不是何时让当前事实生效。这样既满足 continuation 在 Present 前获得权威序号和 FIFO 位置，也保证反馈期间下一敌人/下一轮的 Effect、状态、Intent 与卡区完全不执行；迟到 completion 仍不能跨过新屏障。
+
+**影响**：玩家 RoundStart 固定为 Block → Energy → Draw，EndPlayerAction 固定为 Discard → Vulnerable；敌人固定为 Block → Effect → Vulnerable → Intent，再由 Queue 派生 terminal 或 continuation。死亡 source、玩家致死中止、终局拒绝和 fault partial 语义均沿此边界实现。表现层可在屏障期间看到 Turn 已指向预定下一行动者，但不得把该指针误解为后继已经执行；验证见 `06_testing/2026-08-02-m8d-status-death-battle-loop.md`。
+
+## CD-048：M8 深 module 只向 Editor 测试开放友元，不保留生产 public 写旁路
+
+**问题**：M8 的 scheduling、状态时机、意图三段式计划、联合快照与敌人事务需要直接验证一次性 guard 和首次写入前原子性；若全部只测 Queue，会把细粒度失败原因藏在长链中。但把旧意图完成入口、目标 resolver 或 terminal rules 保持 public，又会让生产调用方绕过 `BattleCommandQueue.Submit` 或把内部规则误当扩展 API。
+
+**选择**：保留 `AssemblyInfo.cs` 对 `Assembly-CSharp-Editor` 的单一 `InternalsVisibleTo`，只供 Editor 契约测试访问 internal 深 module。旧 `CompleteAndSelectNext`、敌人目标解析结果/resolver 与 terminal outcome/rules 全部收窄为 internal；生产外部继续只持有 Queue `Submit` 与只读 `Queue`/`Turn`。敌人联合计划不再复制 validation/commit 状态，唯一一次完整 component validate 与 commit 均由 `BattleEnemyActionJointCommitGuard` 消费。
+
+**理由**：友元只扩大测试程序集可见性，不扩大生产 public API；因此既能直接证明联合预构建、漂移、失败零写入和重复消费保护，也不产生 Queue 外的权威写入 seam。单 guard 删除锁步状态，避免两个布尔状态机未来漂移。
+
+**影响**：现有 M5 intent/session/HUD 测试继续通过友元调用兼容入口，生产代码没有该入口的消费者；M8E 最终双轴复审确认 public 旁路与重复 guard finding 均已关闭。若未来 internal 契约测试全部迁到同等强度的公开可观察 seam，可再删除 `InternalsVisibleTo`，但本轮不以降低测试证据为代价提前移除。验证见 `06_testing/2026-08-02-m8e-full-validation-review.md`。

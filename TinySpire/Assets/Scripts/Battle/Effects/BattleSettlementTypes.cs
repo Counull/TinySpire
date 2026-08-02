@@ -11,6 +11,12 @@ namespace TinySpire.Battle
         CardMoved,
         CardsReshuffled,
         OperationSkipped,
+        BlockCleared,
+        StatusReduced,
+        EnergyRefilled,
+        EnemyIntentAdvanced,
+        EnemyActionSkipped,
+        BattlePhaseChanged,
     }
 
     /// <summary>M7 可被 Effect 修改的参与者属性。</summary>
@@ -38,5 +44,11 @@ namespace TinySpire.Battle
     public enum BattleOperationSkipReason
     {
         TargetNotAlive,
+    }
+
+    /// <summary>整次敌人行动未执行的明确规则原因。</summary>
+    public enum BattleEnemyActionSkipReason
+    {
+        SourceNotAlive,
     }
 }

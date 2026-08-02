@@ -17,7 +17,8 @@ namespace TinySpire.Battle
         EnemyRoundStart,
         EnemyAction,
         EnemyRoundEnd,
-        RoundEnd
+        RoundEnd,
+        BattleEnded
     }
 
     /// <summary>

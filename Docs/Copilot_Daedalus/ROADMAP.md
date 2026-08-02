@@ -203,7 +203,7 @@ en:    Deal {damage} damage. Apply {vulnerable} {keywordVulnerable}.
 
 ### M3 · BattleScene 主 HUD 与参与者视图
 
-当前将 M3 拆为按事实依赖推进的切片：M3A 参与者世界视图与生命 HUD；M3B 抽牌/弃牌计数；M3C 能量与结束回合；M3D 敌人意图；M3E 格挡、状态、死亡、回合提示与胜败覆盖层。M3A～M3D 已分别随 M1/M2、M4 与 M5 落地；M7 已提供格挡、状态与结算事实，M3E 继续等待 M8～M9 的状态时机、死亡/战斗结束和表现接入。参与者设计见 `plans/2026-07-30-battlescene-participant-views.md`，敌人意图设计见 `plans/2026-08-01-m5-enemy-intents-deterministic-behavior.md`。
+当前将 M3 拆为按事实依赖推进的切片：M3A 参与者世界视图与生命 HUD；M3B 抽牌/弃牌计数；M3C 能量与结束回合；M3D 敌人意图；M3E 格挡、状态、死亡、回合提示与胜败覆盖层。M3A～M3D 已分别随 M1/M2、M4 与 M5 落地；M7 已提供格挡、状态与结算事实，M8 已完成状态时机、死亡中止与规则层终局，M3E 继续等待 M9 的 HUD、死亡/胜负覆盖层和最终表现接入。参与者设计见 `plans/2026-07-30-battlescene-participant-views.md`，敌人意图设计见 `plans/2026-08-01-m5-enemy-intents-deterministic-behavior.md`。
 
 主界面至少包含：
 
@@ -302,7 +302,7 @@ M5 复用 Encounter 既有敌人生成和 M4 权威顺序，只增加行为模�
 5. 合法完成当前敌人行动时，先原子选择并发布该敌人的下一意图，再保证推进既有 Encounter 顺序。
 6. 错误、重复、死亡跳过或无候选不得部分推进；配置错误显式失败，不随机回退或静默跳过。
 
-第一版默认 Encounter 包含一个固定攻击敌人与一个攻击/防御加权随机敌人。意图 HUD 使用正式五类图标，并与卡牌文本共用 `BattleEffectValueCalculator` 解释当前可计算数值。M7 已建立玩家卡牌与未来敌人共用的 Effect/公式/结算 seam；敌人真实执行、状态时机与死亡中止仍由 M8 承接，`DEP-009` 保持 open。
+第一版默认 Encounter 包含一个固定攻击敌人与一个攻击/防御加权随机敌人。意图 HUD 使用正式五类图标，并与卡牌文本共用 `BattleEffectValueCalculator` 解释当前可计算数值。M7 建立玩家与敌人共用的 Effect/公式/结算 seam，M8 已完成敌人真实执行、状态时机、死亡中止与终局，`DEP-009` 已 resolved。
 
 ### M6 · 出牌命令、合法性与目标选择
 
@@ -361,18 +361,18 @@ MVP 效果类型：
 
 - M7 伤害 = `max(0, 卡牌基础伤害 + 力量)`；目标易伤时乘 `3/2` 并向下取整，M7 不实现虚弱。
 - 格挡先吸收伤害，剩余才扣生命。
-- 格挡与易伤先成为权威事实；清理/衰减和状态触发时机由 M8 完成，不能只存 UI 数字。
+- 格挡与易伤是权威事实；M8 已把清理/衰减接入命令调度并产生有序结算，UI 仍不得保存第二份数字。
 - 多效果卡严格按表中 `effect_bindings` 顺序执行。
 
 测试以纯 C# 为主：Strength、Strike、Defend、Bash、致死、格挡溢出、易伤倍率、无效目标、失败零写入、多效果顺序和阶段卡区记录。表现层只读取结算记录；数字、抖动和状态图标仍属于 M3E/M9。
 
 ### M8 · 敌人行动与完整循环
 
-唯一实施计划：[`plans/2026-08-02-m8-enemy-actions-status-timing-battle-loop.md`](plans/2026-08-02-m8-enemy-actions-status-timing-battle-loop.md)。计划锁定 M8A～M8E 的串行停止点、单玩家目标边界、Block/Vulnerable 时机、失败原子性、queue fault、阶段 continuation、终局和最终验证；实施状态仍只见 `SESSION_LOG.md`。
+唯一实施计划：[`plans/2026-08-02-m8-enemy-actions-status-timing-battle-loop.md`](plans/2026-08-02-m8-enemy-actions-status-timing-battle-loop.md)，现已归档。M8A～M8E 已按串行停止点完成；最终自动验证、Bootstrap、真实 Game View、范围审计与双轴复审见 [`06_testing/2026-08-02-m8e-full-validation-review.md`](06_testing/2026-08-02-m8e-full-validation-review.md)，动态状态仍只见 `SESSION_LOG.md`。
 
-敌人行为最终也走与卡牌相同或兼容的效果操作边界，避免玩家一套伤害公式、敌人另一套公式。
+敌人行为已走与卡牌相同的 ordered Effect、显式目标和共享公式边界，没有复制第二套伤害写链。
 
-需要处理：
+已完成：
 
 - 行动前目标仍有效。
 - 敌人死亡后跳过行动。
@@ -381,9 +381,9 @@ MVP 效果类型：
 - 敌人行动反馈结束后再进入下一敌人或下一回合。
 - 状态的回合开始/回合结束触发与衰减。
 - 整个调度器等待表现层的必要动画屏障，但权威状态不由动画回调决定。
-- 在增加敌人和系统提交者前，把 Hand/Turn HUD 各自维护的 `Submit → pending → PublishQueued → feedback` 协议收敛为一个具体协作者；权威序号只由该 owner 对账，View 不再承担调度身份。该改造应与队列事件驱动、按命令类型的表现描述和 `Queued` 协议裁决一起完成，避免在 M6 只抽出单一 Hand helper 形成浅 module。
+- 已把 Hand/Turn HUD 各自维护的 `Submit → pending → PublishQueued → feedback` 协议收敛为统一 coordinator；权威序号只由 Queue 对账，View 不再承担调度身份。该改造已与 Queue 生命周期、按结算形成的表现屏障和唯一 `Queued` 协议裁决一并完成。
 
-验收：玩家可用初始卡组与一个敌人完成多回合战斗，抽牌、弃牌、能量、格挡、意图、敌人行动和死亡全部闭环。
+验收已通过：当前双敌 Encounter 可用初始卡组完成多回合胜利或失败；抽牌、弃牌、能量、格挡、状态、意图、敌人行动、死亡、反馈屏障与规则层终局全部闭环。M9 只承接最终视觉反馈、胜负面板与重开。
 
 ### M9 · STS 式反馈、胜负与重开
 

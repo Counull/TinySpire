@@ -7,6 +7,142 @@ using TinySpire.Core;
 
 namespace TinySpire.Battle
 {
+    /// <summary>下一意图不存在合法候选时使用的稳定、首次写入前故障类型。</summary>
+    internal sealed class BattleNoLegalNextIntentException : InvalidOperationException
+    {
+        /// <summary>保留可诊断消息，同时让 Queue 无需解析文本即可稳定分类。</summary>
+        internal BattleNoLegalNextIntentException(string message)
+            : base(message)
+        {
+        }
+    }
+
+    /// <summary>下一意图零写入预构建形成的冻结计划。</summary>
+    internal sealed class BattlePreparedEnemyIntentCompletion
+    {
+        /// <summary>创建计划的唯一意图聚合。</summary>
+        internal BattleEnemyIntentsData Owner { get; }
+
+        /// <summary>预构建时当前意图、历史与随机的完整权威快照。</summary>
+        internal BattleEnemyIntentAuthoritySnapshot InitialSnapshot { get; }
+
+        /// <summary>本次完成行动的敌人。</summary>
+        internal CombatantId EnemyId { get; }
+
+        /// <summary>本次已经完成的行为模板标识。</summary>
+        internal int CompletedBehaviorId { get; }
+
+        /// <summary>预构建选择的下一行为模板标识。</summary>
+        internal int NextBehaviorId { get; }
+
+        /// <summary>成功选择下一意图后的确定性随机状态。</summary>
+        internal uint RandomStateAfter { get; }
+
+        /// <summary>成功提交时一次发布的完整下一布局。</summary>
+        internal EnemyIntentLayoutData NextLayout { get; }
+
+        /// <summary>成功提交时替换的完整下一选择历史。</summary>
+        internal BattleEnemyIntentsData.EnemyBehaviorHistory NextHistory { get; }
+
+        /// <summary>意图推进记录在联合事务中的冻结顺序。</summary>
+        internal int StartingOrder { get; }
+
+        /// <summary>首次写入前已经完整构造的下一意图结算记录。</summary>
+        internal BattleEnemyIntentAdvancedSettlement Settlement { get; }
+
+        /// <summary>计划是否已经执行过唯一校验尝试。</summary>
+        internal bool ValidationAttempted { get; private set; }
+
+        /// <summary>计划是否已经通过唯一校验。</summary>
+        internal bool IsValidated { get; private set; }
+
+        /// <summary>计划是否已经完成无普通失败提交。</summary>
+        internal bool IsCommitted { get; private set; }
+
+        /// <summary>冻结下一意图、历史、随机与记录顺序。</summary>
+        internal BattlePreparedEnemyIntentCompletion(
+            BattleEnemyIntentsData owner,
+            BattleEnemyIntentAuthoritySnapshot initialSnapshot,
+            BattleEnemyIntentsData.EnemyBehaviorHistory nextHistory,
+            int nextBehaviorId,
+            uint randomStateAfter,
+            EnemyIntentLayoutData nextLayout,
+            BattleEnemyIntentAdvancedSettlement settlement)
+        {
+            Owner = owner ?? throw new ArgumentNullException(nameof(owner));
+            InitialSnapshot = initialSnapshot ?? throw new ArgumentNullException(nameof(initialSnapshot));
+            NextHistory = nextHistory ?? throw new ArgumentNullException(nameof(nextHistory));
+            NextLayout = nextLayout ?? throw new ArgumentNullException(nameof(nextLayout));
+            Settlement = settlement ?? throw new ArgumentNullException(nameof(settlement));
+
+            EnemyId = initialSnapshot.EnemyId;
+            CompletedBehaviorId = initialSnapshot.CurrentBehaviorId;
+            NextBehaviorId = nextBehaviorId;
+            RandomStateAfter = randomStateAfter;
+            StartingOrder = settlement.Order;
+        }
+
+        /// <summary>记录唯一校验结果；失败计划也不能再次校验。</summary>
+        internal void MarkValidated(bool succeeded)
+        {
+            if (ValidationAttempted)
+                throw new InvalidOperationException("下一意图计划已经执行过校验。");
+
+            ValidationAttempted = true;
+            IsValidated = succeeded;
+        }
+
+        /// <summary>在无普通失败提交前消费唯一计划。</summary>
+        internal void MarkCommitted()
+        {
+            if (!ValidationAttempted || !IsValidated)
+                throw new InvalidOperationException("下一意图计划尚未通过首次写入前校验。");
+            if (IsCommitted)
+                throw new InvalidOperationException("下一意图计划已经提交。");
+
+            IsCommitted = true;
+        }
+    }
+
+    /// <summary>下一意图预构建的成功计划或稳定 Queue fault。</summary>
+    internal readonly struct BattleEnemyIntentCompletionPreparationResult
+    {
+        /// <summary>预构建是否形成了完整零写入计划。</summary>
+        internal bool Succeeded => !FaultReason.HasValue && Plan != null;
+
+        /// <summary>预构建失败时的稳定 Queue fault。</summary>
+        internal BattleCommandQueueFaultReason? FaultReason { get; }
+
+        /// <summary>成功时的冻结下一意图计划。</summary>
+        internal BattlePreparedEnemyIntentCompletion Plan { get; }
+
+        /// <summary>冻结一次下一意图预构建结果。</summary>
+        internal BattleEnemyIntentCompletionPreparationResult(
+            BattleCommandQueueFaultReason? faultReason,
+            BattlePreparedEnemyIntentCompletion plan)
+        {
+            FaultReason = faultReason;
+            Plan = plan;
+        }
+    }
+
+    /// <summary>下一意图无普通失败提交返回的冻结结算。</summary>
+    internal sealed class BattleEnemyIntentCompletionResult
+    {
+        /// <summary>唯一意图推进记录。</summary>
+        internal IReadOnlyList<BattleSettlementRecord> Settlements { get; }
+
+        /// <summary>冻结一次意图推进提交结果。</summary>
+        internal BattleEnemyIntentCompletionResult(IEnumerable<BattleSettlementRecord> settlements)
+        {
+            if (settlements == null)
+                throw new ArgumentNullException(nameof(settlements));
+
+            Settlements = new ReadOnlyCollection<BattleSettlementRecord>(
+                new List<BattleSettlementRecord>(settlements));
+        }
+    }
+
     /// <summary>
     /// 单场战斗内每名敌人的当前行为模板快照。
     /// 快照发布后不可变，观察者不会读到只更新了一部分的敌人意图。
@@ -30,6 +166,83 @@ namespace TinySpire.Battle
         public bool TryGetBehaviorId(CombatantId enemyId, out int behaviorId)
         {
             return BehaviorIdsByEnemy.TryGetValue(enemyId, out behaviorId);
+        }
+    }
+
+    /// <summary>单名敌人选择下一意图所依赖的完整不可变历史快照。</summary>
+    internal sealed class BattleEnemyIntentHistorySnapshot
+    {
+        /// <summary>最近一次已完成的行为模板标识；零表示尚未完成过行为。</summary>
+        internal int LastCompletedBehaviorId { get; }
+
+        /// <summary>最近行为已经连续完成的次数。</summary>
+        internal int ConsecutiveCompletedCount { get; }
+
+        /// <summary>行为模板标识到尚未消费选择次数的只读映射。</summary>
+        internal IReadOnlyDictionary<int, int> CooldownsByBehaviorId { get; }
+
+        /// <summary>复制并冻结一次敌人行为历史。</summary>
+        internal BattleEnemyIntentHistorySnapshot(
+            int lastCompletedBehaviorId,
+            int consecutiveCompletedCount,
+            IDictionary<int, int> cooldownsByBehaviorId)
+        {
+            if (cooldownsByBehaviorId == null)
+                throw new ArgumentNullException(nameof(cooldownsByBehaviorId));
+
+            LastCompletedBehaviorId = lastCompletedBehaviorId;
+            ConsecutiveCompletedCount = consecutiveCompletedCount;
+            CooldownsByBehaviorId = new ReadOnlyDictionary<int, int>(
+                new Dictionary<int, int>(cooldownsByBehaviorId));
+        }
+    }
+
+    /// <summary>
+    /// 一次敌人行动预构建所读取的完整意图权威快照。
+    /// 同时冻结已发布 Layout、目标敌人的真实选择历史与全局敌人意图随机流。
+    /// </summary>
+    internal sealed class BattleEnemyIntentAuthoritySnapshot
+    {
+        /// <summary>创建此快照的唯一敌人意图聚合。</summary>
+        internal BattleEnemyIntentsData Owner { get; }
+
+        /// <summary>预构建时已经发布且本身不可变的完整意图布局。</summary>
+        internal EnemyIntentLayoutData Layout { get; }
+
+        /// <summary>本次行动敌人的运行时标识。</summary>
+        internal CombatantId EnemyId { get; }
+
+        /// <summary>该敌人在预构建时的当前行为模板标识。</summary>
+        internal int CurrentBehaviorId { get; }
+
+        /// <summary>该敌人在预构建时的完整选择历史。</summary>
+        internal BattleEnemyIntentHistorySnapshot History { get; }
+
+        /// <summary>预构建时敌人意图专属随机流状态。</summary>
+        internal uint RandomState { get; }
+
+        /// <summary>冻结一次完整敌人意图权威读取。</summary>
+        internal BattleEnemyIntentAuthoritySnapshot(
+            BattleEnemyIntentsData owner,
+            EnemyIntentLayoutData layout,
+            CombatantId enemyId,
+            int currentBehaviorId,
+            BattleEnemyIntentHistorySnapshot history,
+            uint randomState)
+        {
+            Owner = owner ?? throw new ArgumentNullException(nameof(owner));
+            Layout = layout ?? throw new ArgumentNullException(nameof(layout));
+            History = history ?? throw new ArgumentNullException(nameof(history));
+
+            EnemyId = enemyId;
+            CurrentBehaviorId = currentBehaviorId;
+            RandomState = randomState;
+        }
+
+        /// <summary>委托所属意图聚合判断全部权威事实是否仍等于本快照。</summary>
+        internal bool Matches(BattleEnemyIntentsData intents)
+        {
+            return intents != null && intents.MatchesAuthoritySnapshot(this);
         }
     }
 
@@ -80,7 +293,7 @@ namespace TinySpire.Battle
             {
                 cfg.battle.Enemy enemy = ValidateEnemyAndBehaviorGroup(enemyId);
                 var history = new EnemyBehaviorHistory();
-                int behaviorId = SelectNextBehavior(enemy.BehaviorGroupId, history);
+                int behaviorId = SelectNextBehavior(enemy.BehaviorGroupId, history, _random);
                 if (!initialBehaviorIds.TryAdd(enemyId, behaviorId))
                     throw new InvalidOperationException($"Enemy {enemyId} appears more than once in encounter order.");
 
@@ -96,46 +309,202 @@ namespace TinySpire.Battle
         /// 记录指定敌人已完成当前行为，并原子选择、发布其下一意图。
         /// 配置无合法候选时抛出异常，且不会修改意图、历史或随机状态。
         /// </summary>
-        public void CompleteAndSelectNext(CombatantId enemyId)
+        internal void CompleteAndSelectNext(CombatantId enemyId)
         {
-            if (!_combatants.TryGet(enemyId, out CombatantData combatant) ||
+            BattleEnemyIntentCompletionPreparationResult preparation =
+                PrepareCompletion(enemyId, startingOrder: 0);
+            if (!preparation.Succeeded)
+            {
+                if (preparation.FaultReason == BattleCommandQueueFaultReason.NoLegalNextIntent)
+                {
+                    throw new BattleNoLegalNextIntentException(
+                        $"Enemy {enemyId} has no legal candidate.");
+                }
+
+                throw new InvalidOperationException(
+                    $"Enemy {enemyId} intent completion failed: {preparation.FaultReason}.");
+            }
+
+            if (!ValidatePreparedCompletion(preparation.Plan))
+                throw new InvalidOperationException("下一意图计划在首次写入前发生权威事实漂移。");
+
+            CommitPreparedCompletion(preparation.Plan);
+        }
+
+        /// <summary>从当前权威意图快照零写入预构建下一历史、随机、布局与记录。</summary>
+        internal BattleEnemyIntentCompletionPreparationResult PrepareCompletion(
+            CombatantId enemyId,
+            int startingOrder)
+        {
+            if (startingOrder < 0)
+                throw new ArgumentOutOfRangeException(nameof(startingOrder));
+
+            BattleEnemyIntentAuthoritySnapshot snapshot;
+            try
+            {
+                snapshot = CaptureAuthoritySnapshot(enemyId);
+            }
+            catch (InvalidOperationException)
+            {
+                return FailedCompletion(BattleCommandQueueFaultReason.MissingEnemyBehavior);
+            }
+
+            return PrepareCompletion(snapshot, startingOrder);
+        }
+
+        /// <summary>使用联合事务已经冻结的同一意图快照预构建完成计划，不再另抓权威事实。</summary>
+        internal BattleEnemyIntentCompletionPreparationResult PrepareCompletion(
+            BattleEnemyIntentAuthoritySnapshot snapshot,
+            int startingOrder)
+        {
+            if (snapshot == null)
+                throw new ArgumentNullException(nameof(snapshot));
+            if (startingOrder < 0)
+                throw new ArgumentOutOfRangeException(nameof(startingOrder));
+            if (!ReferenceEquals(snapshot.Owner, this))
+                return FailedCompletion(BattleCommandQueueFaultReason.PreparedInvariantViolation);
+            if (!_combatants.TryGet(snapshot.EnemyId, out CombatantData combatant) ||
                 combatant is not EnemyCombatantData ||
-                !_historyByEnemy.TryGetValue(enemyId, out EnemyBehaviorHistory history) ||
-                !Layout.CurrentValue.TryGetBehaviorId(enemyId, out int completedBehaviorId))
+                !combatant.IsAlive)
+            {
+                return FailedCompletion(BattleCommandQueueFaultReason.UnsupportedConfiguration);
+            }
+
+            cfg.battle.Enemy enemy = _tables.TbEnemy.GetOrDefault(combatant.TemplateId);
+            cfg.battle.EnemyBehavior completedBehavior =
+                _tables.TbEnemyBehavior.GetOrDefault(snapshot.CurrentBehaviorId);
+            if (enemy == null || completedBehavior == null)
+                return FailedCompletion(BattleCommandQueueFaultReason.MissingEnemyBehavior);
+
+            var nextHistory = new EnemyBehaviorHistory(
+                snapshot.History.LastCompletedBehaviorId,
+                snapshot.History.ConsecutiveCompletedCount,
+                new Dictionary<int, int>(snapshot.History.CooldownsByBehaviorId));
+            nextHistory.RecordCompletion(completedBehavior);
+            // GameRandom 构造函数接收的是种子而非可直接恢复的流状态；显式复位后再做本地预演。
+            var preparedRandom = new GameRandom(snapshot.RandomState)
+            {
+                State = snapshot.RandomState,
+            };
+
+            try
+            {
+                int nextBehaviorId = SelectNextBehavior(
+                    enemy.BehaviorGroupId,
+                    nextHistory,
+                    preparedRandom);
+                var nextBehaviorIds = new Dictionary<CombatantId, int>(
+                    snapshot.Layout.BehaviorIdsByEnemy)
+                {
+                    [snapshot.EnemyId] = nextBehaviorId
+                };
+                if (snapshot.CurrentBehaviorId <= 0 || nextBehaviorId <= 0)
+                {
+                    return FailedCompletion(
+                        BattleCommandQueueFaultReason.UnsupportedConfiguration);
+                }
+
+                var settlement = new BattleEnemyIntentAdvancedSettlement(
+                    startingOrder,
+                    snapshot.EnemyId,
+                    snapshot.CurrentBehaviorId,
+                    nextBehaviorId);
+                return new BattleEnemyIntentCompletionPreparationResult(
+                    faultReason: null,
+                    new BattlePreparedEnemyIntentCompletion(
+                        this,
+                        snapshot,
+                        nextHistory,
+                        nextBehaviorId,
+                        preparedRandom.State,
+                        new EnemyIntentLayoutData(nextBehaviorIds),
+                        settlement));
+            }
+            catch (BattleNoLegalNextIntentException)
+            {
+                return FailedCompletion(BattleCommandQueueFaultReason.NoLegalNextIntent);
+            }
+            catch (OverflowException)
+            {
+                return FailedCompletion(BattleCommandQueueFaultReason.UnsupportedConfiguration);
+            }
+            catch (InvalidOperationException)
+            {
+                return FailedCompletion(BattleCommandQueueFaultReason.MissingEnemyBehavior);
+            }
+            catch (ArgumentException)
+            {
+                return FailedCompletion(BattleCommandQueueFaultReason.UnsupportedConfiguration);
+            }
+        }
+
+        /// <summary>首次写入前只校验一次计划归属以及 Layout、历史与随机权威快照。</summary>
+        internal bool ValidatePreparedCompletion(BattlePreparedEnemyIntentCompletion plan)
+        {
+            if (plan == null)
+                throw new ArgumentNullException(nameof(plan));
+            if (!ReferenceEquals(plan.Owner, this))
+                throw new InvalidOperationException("不能校验其他意图聚合创建的计划。");
+
+            bool succeeded = !plan.IsCommitted && plan.InitialSnapshot.Matches(this);
+            plan.MarkValidated(succeeded);
+            return succeeded;
+        }
+
+        /// <summary>提交已验证的下一意图计划一次；不复验、不再随机且不返回普通失败。</summary>
+        internal BattleEnemyIntentCompletionResult CommitPreparedCompletion(
+            BattlePreparedEnemyIntentCompletion plan)
+        {
+            if (plan == null)
+                throw new ArgumentNullException(nameof(plan));
+            if (!ReferenceEquals(plan.Owner, this))
+                throw new InvalidOperationException("不能提交其他意图聚合创建的计划。");
+
+            plan.MarkCommitted();
+            _historyByEnemy[plan.EnemyId] = plan.NextHistory;
+            _random.State = plan.RandomStateAfter;
+            _layout.Value = plan.NextLayout;
+            return new BattleEnemyIntentCompletionResult(
+                new BattleSettlementRecord[]
+                {
+                    plan.Settlement,
+                });
+        }
+
+        /// <summary>零写入捕获当前 Layout、指定敌人完整历史与随机状态。</summary>
+        internal BattleEnemyIntentAuthoritySnapshot CaptureAuthoritySnapshot(CombatantId enemyId)
+        {
+            EnemyIntentLayoutData layout = Layout.CurrentValue;
+            if (!_historyByEnemy.TryGetValue(enemyId, out EnemyBehaviorHistory history) ||
+                !layout.TryGetBehaviorId(enemyId, out int behaviorId))
             {
                 throw new InvalidOperationException($"Enemy {enemyId} does not have an authoritative intent.");
             }
 
-            if (!combatant.IsAlive)
-                throw new InvalidOperationException($"Enemy {enemyId} is not alive.");
+            return new BattleEnemyIntentAuthoritySnapshot(
+                this,
+                layout,
+                enemyId,
+                behaviorId,
+                history.CaptureSnapshot(),
+                _random.State);
+        }
 
-            cfg.battle.Enemy enemy = _tables.TbEnemy.GetOrDefault(combatant.TemplateId)
-                ?? throw new InvalidOperationException($"Enemy template {combatant.TemplateId} does not exist.");
-            cfg.battle.EnemyBehavior completedBehavior = _tables.TbEnemyBehavior.GetOrDefault(completedBehaviorId)
-                ?? throw new InvalidOperationException($"Enemy behavior {completedBehaviorId} does not exist.");
-
-            uint randomStateBeforeSelection = _random.State;
-            EnemyBehaviorHistory nextHistory = history.Clone();
-            nextHistory.RecordCompletion(completedBehavior);
-
-            int nextBehaviorId;
-            try
+        /// <summary>比较一次意图权威快照的归属、Layout、完整历史与随机状态。</summary>
+        internal bool MatchesAuthoritySnapshot(BattleEnemyIntentAuthoritySnapshot snapshot)
+        {
+            if (snapshot == null ||
+                !ReferenceEquals(snapshot.Owner, this) ||
+                !ReferenceEquals(snapshot.Layout, Layout.CurrentValue) ||
+                snapshot.RandomState != _random.State ||
+                !_historyByEnemy.TryGetValue(snapshot.EnemyId, out EnemyBehaviorHistory history) ||
+                !Layout.CurrentValue.TryGetBehaviorId(snapshot.EnemyId, out int behaviorId) ||
+                behaviorId != snapshot.CurrentBehaviorId)
             {
-                nextBehaviorId = SelectNextBehavior(enemy.BehaviorGroupId, nextHistory);
+                return false;
             }
-            catch
-            {
-                _random.State = randomStateBeforeSelection;
-                throw;
-            }
 
-            var nextBehaviorIds = new Dictionary<CombatantId, int>(
-                Layout.CurrentValue.BehaviorIdsByEnemy)
-            {
-                [enemyId] = nextBehaviorId
-            };
-            _historyByEnemy[enemyId] = nextHistory;
-            _layout.Value = new EnemyIntentLayoutData(nextBehaviorIds);
+            return history.Matches(snapshot.History);
         }
 
         /// <summary>释放意图快照持有的响应式资源。</summary>
@@ -211,8 +580,14 @@ namespace TinySpire.Battle
         }
 
         /// <summary>按行为组稳定顺序过滤候选，并以一次整数权重抽样选择下一行为。</summary>
-        private int SelectNextBehavior(int behaviorGroupId, EnemyBehaviorHistory history)
+        private int SelectNextBehavior(
+            int behaviorGroupId,
+            EnemyBehaviorHistory history,
+            GameRandom random)
         {
+            if (random == null)
+                throw new ArgumentNullException(nameof(random));
+
             cfg.battle.EnemyBehaviorGroup group = _tables.TbEnemyBehaviorGroup.GetOrDefault(behaviorGroupId)
                 ?? throw new InvalidOperationException($"Enemy behavior group {behaviorGroupId} does not exist.");
             var candidates = new List<cfg.battle.EnemyBehavior>(group.BehaviorIds.Length);
@@ -229,7 +604,10 @@ namespace TinySpire.Battle
             }
 
             if (candidates.Count == 0)
-                throw new InvalidOperationException($"Enemy behavior group {behaviorGroupId} has no legal candidate.");
+            {
+                throw new BattleNoLegalNextIntentException(
+                    $"Enemy behavior group {behaviorGroupId} has no legal candidate.");
+            }
 
             int selectedBehaviorId;
             if (candidates.Count == 1)
@@ -238,7 +616,7 @@ namespace TinySpire.Battle
             }
             else
             {
-                int roll = _random.NextInt(totalWeight);
+                int roll = random.NextInt(totalWeight);
                 selectedBehaviorId = candidates[candidates.Count - 1].Id;
                 foreach (cfg.battle.EnemyBehavior candidate in candidates)
                 {
@@ -256,8 +634,15 @@ namespace TinySpire.Battle
             return selectedBehaviorId;
         }
 
+        /// <summary>创建不携带计划、不会写入任何意图事实的稳定预构建 fault。</summary>
+        private static BattleEnemyIntentCompletionPreparationResult FailedCompletion(
+            BattleCommandQueueFaultReason faultReason)
+        {
+            return new BattleEnemyIntentCompletionPreparationResult(faultReason, plan: null);
+        }
+
         /// <summary>保存单名敌人为冷却和最大连续次数所需的最小已完成历史。</summary>
-        private sealed class EnemyBehaviorHistory
+        internal sealed class EnemyBehaviorHistory
         {
             private readonly Dictionary<int, int> _cooldownsByBehaviorId;
 
@@ -274,7 +659,7 @@ namespace TinySpire.Battle
             }
 
             /// <summary>复制完整历史，供原子尝试下一次选择。</summary>
-            private EnemyBehaviorHistory(
+            internal EnemyBehaviorHistory(
                 int lastCompletedBehaviorId,
                 int consecutiveCompletedCount,
                 Dictionary<int, int> cooldownsByBehaviorId)
@@ -291,6 +676,38 @@ namespace TinySpire.Battle
                     LastCompletedBehaviorId,
                     ConsecutiveCompletedCount,
                     new Dictionary<int, int>(_cooldownsByBehaviorId));
+            }
+
+            /// <summary>复制最近完成事实与全部冷却，形成不可变权威快照。</summary>
+            internal BattleEnemyIntentHistorySnapshot CaptureSnapshot()
+            {
+                return new BattleEnemyIntentHistorySnapshot(
+                    LastCompletedBehaviorId,
+                    ConsecutiveCompletedCount,
+                    _cooldownsByBehaviorId);
+            }
+
+            /// <summary>比较当前完整历史是否仍等于给定不可变快照。</summary>
+            internal bool Matches(BattleEnemyIntentHistorySnapshot snapshot)
+            {
+                if (snapshot == null ||
+                    LastCompletedBehaviorId != snapshot.LastCompletedBehaviorId ||
+                    ConsecutiveCompletedCount != snapshot.ConsecutiveCompletedCount ||
+                    _cooldownsByBehaviorId.Count != snapshot.CooldownsByBehaviorId.Count)
+                {
+                    return false;
+                }
+
+                foreach (KeyValuePair<int, int> pair in _cooldownsByBehaviorId)
+                {
+                    if (!snapshot.CooldownsByBehaviorId.TryGetValue(pair.Key, out int remainingSelections) ||
+                        remainingSelections != pair.Value)
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
             }
 
             /// <summary>记录刚完成的行为，并开始其后续选择冷却。</summary>
