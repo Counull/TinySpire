@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using R3;
 using TinySpire.Battle;
 using UnityEngine;
@@ -37,19 +38,27 @@ namespace TinySpire.UI.Battle
         /// <summary>执行失败原因；非失败反馈时为 None。</summary>
         public BattleCommandExecutionFailureReason FailureReason { get; }
 
+        /// <summary>权威执行结果携带的冻结结算记录；排队阶段为空。</summary>
+        public IReadOnlyList<BattleSettlementRecord> Settlements { get; }
+
         /// <summary>创建一条不可变的命令展示反馈。</summary>
         private BattleCommandFeedback(
             long authoritySequence,
             BattleCommandType commandType,
             CombatantId? submitterId,
             BattleCommandFeedbackStage stage,
-            BattleCommandExecutionFailureReason failureReason)
+            BattleCommandExecutionFailureReason failureReason,
+            IReadOnlyList<BattleSettlementRecord> settlements)
         {
+            if (settlements == null)
+                throw new ArgumentNullException(nameof(settlements));
+
             AuthoritySequence = authoritySequence;
             CommandType = commandType;
             SubmitterId = submitterId;
             Stage = stage;
             FailureReason = failureReason;
+            Settlements = settlements;
         }
 
         /// <summary>从已经接受的提交创建“已排队”反馈。</summary>
@@ -62,7 +71,8 @@ namespace TinySpire.UI.Battle
                 command.Type,
                 command.SubmitterId,
                 BattleCommandFeedbackStage.Queued,
-                BattleCommandExecutionFailureReason.None);
+                BattleCommandExecutionFailureReason.None,
+                Array.Empty<BattleSettlementRecord>());
         }
 
         /// <summary>从权威执行结果创建“执行失败”或“执行完成”反馈。</summary>
@@ -75,7 +85,8 @@ namespace TinySpire.UI.Battle
                 result.Succeeded
                     ? BattleCommandFeedbackStage.ExecutionCompleted
                     : BattleCommandFeedbackStage.ExecutionFailed,
-                result.FailureReason);
+                result.FailureReason,
+                result.Settlements);
         }
     }
 

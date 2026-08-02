@@ -203,7 +203,7 @@ en:    Deal {damage} damage. Apply {vulnerable} {keywordVulnerable}.
 
 ### M3 · BattleScene 主 HUD 与参与者视图
 
-当前将 M3 拆为按事实依赖推进的切片：M3A 参与者世界视图与生命 HUD；M3B 抽牌/弃牌计数；M3C 能量与结束回合；M3D 敌人意图；M3E 格挡、状态、死亡、回合提示与胜败覆盖层。M3A～M3D 已分别随 M1/M2、M4 与 M5 落地；M3E 继续等待 M7～M9 的真实结算与战斗结束事实。参与者设计见 `plans/2026-07-30-battlescene-participant-views.md`，敌人意图设计见 `plans/2026-08-01-m5-enemy-intents-deterministic-behavior.md`。
+当前将 M3 拆为按事实依赖推进的切片：M3A 参与者世界视图与生命 HUD；M3B 抽牌/弃牌计数；M3C 能量与结束回合；M3D 敌人意图；M3E 格挡、状态、死亡、回合提示与胜败覆盖层。M3A～M3D 已分别随 M1/M2、M4 与 M5 落地；M7 已提供格挡、状态与结算事实，M3E 继续等待 M8～M9 的状态时机、死亡/战斗结束和表现接入。参与者设计见 `plans/2026-07-30-battlescene-participant-views.md`，敌人意图设计见 `plans/2026-08-01-m5-enemy-intents-deterministic-behavior.md`。
 
 主界面至少包含：
 
@@ -219,7 +219,7 @@ en:    Deal {damage} damage. Apply {vulnerable} {keywordVulnerable}.
 - 卡牌 View 不直接拼接说明文本，统一消费 `CardTextFormatter` 的结果；语言切换与状态变化均重新派生。
 - 敌人 View 由遭遇生成结果创建，不能依赖场景中手摆固定数量的敌人。
 - `LivingEnemies` 每次从 `BattleCombatantsData.All.Values` 派生，不保存镜像列表。
-- 状态聚合已使用 R3 `Observable<Unit>` 通知；仍不把派生展示数据或可直接读取的领域事实镜像为 `ReactiveProperty`。
+- 生命、力量、格挡与易伤等标量事实由状态聚合以只读 R3 属性公开；UI 不再维护可写镜像，派生展示按这些事实即时计算。
 
 生成与布局边界：
 
@@ -235,7 +235,7 @@ en:    Deal {damage} damage. Apply {vulnerable} {keywordVulnerable}.
 
 - 聚合变化通知只表示“事实可能变化”，不携带另一份生命/格挡副本。
 - View 收到通知后按自己的 `CombatantId` 重查当前事实。
-- 伤害数字、受击抖动等一次性反馈不从最终生命差值猜测；M7 起消费明确的结算记录。
+- 伤害数字、受击抖动等一次性反馈不从最终生命差值猜测；M7 已产出明确结算记录，M9 再负责消费并播放表现。
 
 验收：遭遇表从 1 名敌人改为 2 名时，不改场景层级即可生成两个独立 View；位置稳定，各自生命显示对应运行时状态，死亡一个敌人不会让另一个 View 绑定错位。
 
@@ -268,7 +268,7 @@ NotStarted
 
 规则：
 
-- 玩家、系统阶段与未来敌人/Effect 都通过同一个 `BattleCommandQueue.Submit` interface 提交命令；UI 不直接调用阶段或卡区写入口。
+- 玩家输入和系统/敌人阶段推进经同一个 `BattleCommandQueue.Submit` interface 建立权威命令顺序；Effect 以及阶段内抽牌、弃手、重洗是当前命令内部的有序操作并进入同一执行结果，不单独伪造系统命令。UI 不直接调用阶段或卡区写入口。
 - 命令提交不等待其他玩家输入或当前效果展示；已确认命令按权威序号一次执行和展示一条，共享状态不并行修改。
 - 提交接受不等于执行成功；最终合法性以命令到达队首时的权威状态为准。
 - 玩家命令只属于提交时的轮次；跨轮后即使新一轮事实重新满足条件也返回 `PlayerActionWindowExpired`，且不写能量、卡区或阶段。
@@ -302,7 +302,7 @@ M5 复用 Encounter 既有敌人生成和 M4 权威顺序，只增加行为模�
 5. 合法完成当前敌人行动时，先原子选择并发布该敌人的下一意图，再保证推进既有 Encounter 顺序。
 6. 错误、重复、死亡跳过或无候选不得部分推进；配置错误显式失败，不随机回退或静默跳过。
 
-第一版默认 Encounter 包含一个固定攻击敌人与一个攻击/防御加权随机敌人。意图 HUD 使用正式五类图标，并与卡牌文本共用 `BattleEffectValueCalculator` 解释当前可计算数值。M5 不执行真实 Effect、伤害、格挡、状态或胜败；这些仍由 M7/M8 承接，`DEP-009` 保持 open。
+第一版默认 Encounter 包含一个固定攻击敌人与一个攻击/防御加权随机敌人。意图 HUD 使用正式五类图标，并与卡牌文本共用 `BattleEffectValueCalculator` 解释当前可计算数值。M7 已建立玩家卡牌与未来敌人共用的 Effect/公式/结算 seam；敌人真实执行、状态时机与死亡中止仍由 M8 承接，`DEP-009` 保持 open。
 
 ### M6 · 出牌命令、合法性与目标选择
 
@@ -324,7 +324,7 @@ PlayCardCommand
 - 目标规则是否满足。
 - 目标是否存在且存活。
 
-验证成功后仍只沿用 M4 的临时闭环：扣能量并把指定实例移入弃牌堆，不执行真实 Effect；失败不改变任何权威状态，UI 回弹并展示原因。`CanPlayCard`、目标高亮与费用颜色是上述事实的派生预览，最终仍以命令到达队首时的事实为准。
+M6 的独立停止点只验证合法后扣能量并归堆；该临时闭环现已由 M7 的“完整预构建 → 支付能量 → 按绑定顺序执行 Effect → 当前卡牌归堆”事务替代。失败仍不改变任何权威状态，UI 回弹并展示原因；`CanPlayCard`、目标高亮与费用颜色继续只是派生预览，最终以命令到达队首时的事实为准。
 
 目标交互建议：
 
@@ -335,18 +335,20 @@ PlayCardCommand
 
 M6A～M6D 已串行完成：显式 Self/Enemy 目标、UI/队首共享规则、目标失效零写入、功能性箭头/高亮/命中、费用不足视觉拖动，以及定向/全量 EditMode、Addressables、Bootstrap、真实 Game View 与双轴复审均有证据；详见 `06_testing/2026-08-02-m6d-full-validation-review.md`。`DEP-001` resolved，`DEP-002` 已由 M4D 解决。目标选择发生在 Submit 前，不解决命令执行中途等待局部输入的 `DEP-010`。
 
-### M7 · Effect 执行器（本轮明确不实施）
+### M7 · Effect 执行器（已完成）
+
+M7A～M7E 已按唯一实施计划 `plans/2026-08-02-m7-effect-executor.md` 串行完成；最终自动验证、Bootstrap、真实 Game View、范围审计与双轴复审见 `06_testing/2026-08-02-m7e-full-validation-review.md`。当前动态状态仍只查 `SESSION_LOG.md`。
 
 效果器是纯计算/状态写入边界，不负责动画、拖拽或查找场景对象。
 
-建议执行顺序：
+已落实的事务顺序：
 
-1. `PlayCardCommand` 已通过验证。
-2. 由卡牌模板按顺序读取 `effect_bindings`。
-3. 目标解析器根据卡牌目标规则得到稳定 `CombatantId` 集合。
+1. `PlayCardCommand` 通过 M6 同一规则完成队首重校验。
+2. 在首次写入前按卡牌模板顺序完整预校验 `effect_bindings`。
+3. 复用 M6 Self/Enemy 目标得到稳定的单个显式 `CombatantId`。
 4. 每个效果转换为明确的运行时操作。
 5. 操作依次写入权威状态，并产生只读结算记录供表现层消费。
-6. 卡牌完成后进入弃牌堆或消耗区。
+6. 当前正式卡牌完成后进入弃牌堆；配置尚无 Exhaust 归宿字段，见 `DEP-012`。
 
 MVP 效果类型：
 
@@ -357,12 +359,12 @@ MVP 效果类型：
 
 必须先定义时机和公式：
 
-- 伤害 = 卡牌基础伤害 + 力量，再处理虚弱/易伤等倍率和取整。
+- M7 伤害 = `max(0, 卡牌基础伤害 + 力量)`；目标易伤时乘 `3/2` 并向下取整，M7 不实现虚弱。
 - 格挡先吸收伤害，剩余才扣生命。
-- 易伤按回合或行动时机衰减，不能只存一个 UI 数字。
+- 格挡与易伤先成为权威事实；清理/衰减和状态触发时机由 M8 完成，不能只存 UI 数字。
 - 多效果卡严格按表中 `effect_bindings` 顺序执行。
 
-测试以纯 C# 为主：Strike、Defend、Bash、致死、格挡溢出、易伤倍率、无效目标、多效果顺序。表现层只读取结算记录播放数字、抖动和状态图标。
+测试以纯 C# 为主：Strength、Strike、Defend、Bash、致死、格挡溢出、易伤倍率、无效目标、失败零写入、多效果顺序和阶段卡区记录。表现层只读取结算记录；数字、抖动和状态图标仍属于 M3E/M9。
 
 ### M8 · 敌人行动与完整循环
 

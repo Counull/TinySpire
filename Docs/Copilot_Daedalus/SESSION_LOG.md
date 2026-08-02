@@ -3,6 +3,53 @@ created: 2026-07-06
 updated: 2026-08-02
 ---
 
+## 2026-08-02 · M7E 全量验证、真实 Game View、双轴复审与 M7 收口（已完成）
+
+- M7A～M7E 已按唯一计划串行完成：`BattleCardPlayRules` 队首重校验 → 全量 Effect 预构建/快照校验 → 支付能量 → 按 `effect_bindings` 原序写入 → 当前卡牌进入 DiscardPile → 发布 Turn。失败命令保持能量、卡区、参与者、回合零写入且结算记录为空；阶段抽牌、弃手与重洗仍属于既有命令调用栈。
+- 最终 M7 定向 **60/60**（任务 `4670704375fa4beb98b6206fce56c521`）、M2～M6 相关回归 **139/139**（任务 `873fd4ba9e844cf3a44b0b34529e691c`）、最终既有队列 **25/25**（任务 `713fd756cd5c46299f3e9bf212fbf8e2`）、最终全量 EditMode **180/180**（任务 `1ed0fbab97e74fe68c912b082129fda9`）均通过；串行 solution build 0 error、12 条既有依赖 warning，`git diff --check` 与未跟踪 C#/Markdown 空白审计通过。
+- 唯一 Unity Editor 从 Bootstrap 生产链进入 BattleScene，干净实跑 Console 的 Error、InvalidKey、VContainer、Effect 四类筛选均为 0。真实系统指针依次证明 Bash `20 → 12` 且 Vulnerable `0 → 2`、易伤 Strike `12 → 3`、Defend Block `0 → 5`、致死 `3 → 0`、死亡目标与费用不足释放零写入回弹；无遮挡运行期 Strength 夹具仍经真实 UI/Submit/生产 executor，使 Strength `0 → 3`、能量不变、卡牌归弃牌堆，并在 Game View 直接显示“力量 +3”。
+- Standards 首轮的文档状态硬 finding 已在本次收口修正，public executor 误报经生产所有权复核后撤销；两条判断性重复按 AC-002 保留显式小分支。最终收口复核为 **Standards 0 finding / Spec 0 finding**，两轴均无 Hard 或 Judgement finding。固定点为 `e76a654846fa735c92f51ad293dfa823e6724b44`，用户独立 Targeting 提交与 `BattleTurnHud.prefab` 调整均排除并保护。
+- M7 未修改配置、生成内容、Localization、Addressables 内容、Scene/Prefab、高影响设置、Run/网络或 DI，无需 Luban/Addressables 重建。决策维持 CD-039～042；DEP-004/009 只回填 M7 已完成部分并保持 open，DEP-012/013 保持 open。最终证据见 `06_testing/2026-08-02-m7e-full-validation-review.md`；下一阶段为 M8。
+
+## 2026-08-02 · M7D 出牌事务与卡区结算记录（已完成）
+
+- `BattleTurnController.TryPlayCard` 现在继续先用 M6 同一 `BattleCardPlayRules` 重校验，再由 M7C executor 完成全量预构建与快照校验；成功后固定按 Energy → `effect_bindings` 原序 Effect → 当前卡牌进入 DiscardPile → 一次 Turn 发布执行。队列只透传内部操作结果，不解析 EffectType，Submit、权威序号、轮次栅栏与 presentation 屏障保持不变。
+- `BattleCardZonesData` 的 Draw、DiscardHand、DiscardFromHand/ExhaustFromHand 现在返回冻结的 `BattleCardZoneOperationResult`。记录明确包含残余抽牌、弃牌按原序移回抽牌堆、重洗后完整顺序、继续抽牌与弃手；StartBattle、EndPlayerAction 和最终敌人完成只在既有状态机调用栈中把这些记录并入当前命令，没有新增系统命令或全局变化日志。
+- 公开队列测试证明 Strength、Strike、Defend、Bash 的能量、公式、格挡吸收、易伤、绑定顺序、致死 skipped 与最后归堆；费用不足、卡牌离手、目标排队后死亡、模板/Effect 缺失和跨轮旧出牌均为空记录且不新增写入。最终 M7D 定向及 M2～M6 回归 **139/139** 通过（任务 `873fd4ba9e844cf3a44b0b34529e691c`），旧队列回归 **25/25** 通过。
+- 串行 solution build 为 0 error、12 条既有依赖 warning，`git diff --check` 通过。BootstrapScene 生产链进入 BattleScene，Console Error、InvalidKey、VContainer、Effect 过滤均为 0。未修改配置、可寻址内容、Scene/Prefab、高影响设置或 M9 美术，无需 Luban/Addressables 重建。
+- 决策见 CD-042，验收见 `06_testing/2026-08-02-m7d-card-effect-transaction.md`。本切片只形成自动 Bootstrap 证据，没有冒充真实鼠标验收；M7D 独立停止点完成，下一步严格进入 M7E。
+
+## 2026-08-02 · M7C 有序 Effect 执行 module（已完成）
+
+- 新增 concrete `BattleEffectExecutor` 与冻结 request/result；公共 `Execute` 接收来源、单个显式目标和有序绑定，内部 `Prepare` 在首次写入前校验全部 Binding、Effect 表项、类型、属性、数值范围及初始参与者事实，并用四项标量顺序模拟完整操作链。任一失败均返回明确原因与空记录，Health/Strength/Block/Vulnerable 的只读对象和值保持不变。
+- 预构建成功后只经 M7B internal 状态操作写入：Strength、Strike、Defend、Bash 均按 `effect_bindings` 原顺序产生不可变记录；重复 Bash 会读取最新易伤而把第二次 8 点基础伤害结算为 12。前序致死后的后续已验证操作产生 `OperationSkipped(TargetNotAlive)`，但后续缺失/非法配置仍会在首次写入前令整链失败。
+- TDD 最终 executor **15/15** 通过（任务 `090eb2a78ff6455fa7b22ab638b39d55`）；M7B 测试夹具全部迁到公共 executor，临时 `InternalsVisibleTo` 与 Meta 已删除，最终相关回归 **95/95** 通过（任务 `aa249726f6c9464396471ee74f864a40`）。串行 build 0 error、12 条既有 warning，`git diff --check` 通过，Unity Console Error 0。
+- M7C 尚未接 `TryPlayCard`，因此生产 M6 出牌仍不执行 Effect；未修改配置、可寻址内容、Scene/Prefab、高影响设置或 M9 美术，无需 Luban/Addressables 重建。决策见 CD-041，验收见 `06_testing/2026-08-02-m7c-ordered-effect-executor.md`；下一步严格进入 M7D。
+
+## 2026-08-02 · M7B 参与者权威状态与伤害操作（已完成）
+
+- `CombatantData` 现在唯一持有 Health、Strength、Block、Vulnerable 四项 R3 事实，Block/Vulnerable 初值为 0，并提供对应只读事实、同步读取与完整 Dispose 生命周期；未新增存活、状态或派生列表镜像。
+- 新增 internal concrete `BattleCombatantEffectOperations`，集中 GainBlock、ModifyStrength、ApplyVulnerable 与 ApplyDamage。Damage 只调用一次 M7A 共享公式，再由一个内部写入口在同一同步调用内写入 Block/Health，并返回完整不可变 damage outcome；重复攻击死亡目标明确返回 `TargetNotAlive` 且不再写入。
+- 删除旧 `BattleCombatantsData.ApplyDamage → CombatantData.ApplyDamage(int)` 双层直通，13 个既有测试调用全部迁到新 Effect 状态路径。最终状态/公式核心 **24/24** 通过（任务 `8cc24387d2664e5cba1b17d27ad29973`），连同规则、队列、Session、目标和敌人意图/HUD 的定向回归 **72/72** 通过（任务 `de864c324234402b86e4d9b2e2c79220`）；串行 build 0 error、12 条既有 warning，`git diff --check` 通过。
+- M7B 没有读取 Card.EffectBindings、创建正式 executor 或接入出牌事务；临时 Editor friend 只用于当前切片直接验证 internal 状态操作，M7C 公共 executor seam 落地后必须迁移测试并删除。未修改配置、可寻址内容、Scene/Prefab、高影响设置或 M9 美术，无需 Luban/Addressables 重建。决策见 CD-040，验收见 `06_testing/2026-08-02-m7b-combatant-effect-operations.md`；下一步严格进入 M7C。
+
+## 2026-08-02 · M7A 结算记录与公式契约（已完成）
+
+- 新增强类型 `BattleEffectId`、最小 Effect/结算枚举、不可变 `BattleSettlementRecord` 体系和冻结列表；`BattleCommandExecutionResult` 与 production presentation adapter 均携带同一列表。既有成功命令和尚未进入 M7 写链的失败命令都返回非 null 空记录，未建立全局结算日志。
+- 新增纯 `BattleEffectFormula.Calculate(context)`：伤害先取 `max(0, configured + Strength)`，目标易伤时按 `* 3 / 2` 向下取整；GainBlock/ApplyVulnerable 钳制非负，ModifyAttribute 保留有符号值。`BattleEffectValueCalculator` 保持公开签名并只做 Luban/来源事实到无目标公式投影的适配，卡牌文本与敌人意图继续共享结果。
+- TDD 依次确认缺失结算契约、八种记录类型、缺失公式 module、易伤/非负行为和旧显示分叉的红灯。最终 M7A 定向 EditMode **83/83** 通过（任务 `c62162836bd5451487ac273793d461a3`），0 failed、0 skipped；串行 solution build 0 error，保留 12 条既有依赖 warning；`git diff --check` 通过，新增 Meta 均由当前唯一 Unity Editor 生成。
+- M7A 没有修改参与者权威状态或出牌事务，没有执行正式 Effect；`Submit`、只读 `Queue` / `Turn`、序号、展示屏障与轮次栅栏保持不变。未修改 DataTables、生成配置、Localization、Addressables、Scene/Prefab、高影响设置、Run/网络、DI 或 M9 美术，无需 Luban/Addressables 重建。决策见 CD-039，验收见 `06_testing/2026-08-02-m7a-settlement-formula-contract.md`；下一步严格进入 M7B。
+
+## 2026-08-02 · M7 Effect 执行器总计划与 Goal 边界（待实施）
+
+- 新增 `plans/2026-08-02-m7-effect-executor.md` 作为 M7 唯一实施计划，按 M7A 结算/公式契约、M7B 参与者状态操作、M7C 有序 Effect executor、M7D 出牌事务与卡区记录、M7E 全量验证/真实 Game View/双轴复审串行推进。每个切片有独立停止点，计划内附可直接复制到新对话的总 Goal 文案。
+- M7 计划锁定当前 MVP 公式：伤害先取 `max(0, base + Strength)`，目标 Vulnerable 大于 0 时乘 `3/2` 并向下取整，Block 先吸收、剩余才扣 Health；GainBlock 不含 Dexterity，ModifyAttribute 只支持 Strength，ApplyVulnerable 累加。Block 清理、Vulnerable 衰减和状态触发时机仍由 M8，登记 `DEP-013`。
+- 结算记录先于状态写入接口落地：`BattleCommandExecutionResult` 将携带不可变有序记录，失败命令记录为空；阶段内抽牌、弃手牌和重洗继续发生在现有命令调用栈，但由卡区 module 返回明确操作结果并并入该命令记录，不在 M7 新增系统命令或重写队列调度。
+- Effect 管线采用具体纯 C# 深 module，不为单一实现新增 `I*` adapter；运行时 Effect ID 在新管线内强类型化，公式 module 同时支撑无目标展示投影与目标结算。全部 Binding/目标/操作在首次写入前预构建，错误必须保持能量、卡区、参与者、回合和记录零变化。
+- 当前 Card 配置没有 Discard/Exhaust 归宿字段，M7 四张现有卡一律在效果完成后进入弃牌堆，不按模板 ID、卡名或 EffectType 硬编码；新增 `DEP-012` 等待未来首张消耗牌的正式数据来源。`DEP-004` 仍等待 M9 消费结算记录播放过渡，`DEP-009` 仍需 M7 seam 与 M8 敌人接线共同完成。
+- 明确排除 M8 敌人 Effect/状态时机/队列与 pending 重构，M3E/M9 HUD、数字、抖动、死亡/胜负/最终动画和 LXX-6 美术接线，以及 G1/M10 复盘债务。本计划不修改 DataTables、生成配置、Localization、Addressables 内容、Scene/Prefab、ProjectSettings、asmdef、HybridCLR、Run/网络或 DI。
+- 本次只创建和同步计划文档、计划索引、ROADMAP、DEPENDENCIES 与状态源；没有修改 C#、测试、配置、资源或 Unity 资产，没有运行 Unity、Luban、Addressables、测试或构建，也未 commit、未 push。工作区既有 `TinySpire/Assets/Arts/Runtime/UI/Battle/Targeting/` 及目录 Meta 保持未跟踪且未触碰。下一步由用户在新对话启动总 Goal。
+
 ## 2026-08-02 · M6D 全量验证、双轴复审与 M6 收口（已完成）
 
 - M6A～M6D 已按唯一计划串行完成：`PlayCardCommand` 显式携带 Self/Enemy 目标；UI 预览与队首执行共用同一 `BattleCardPlayRules`；目标排队后死亡会以 `TargetNotAlive` 零写入失败；生产 UI 只通过既有 `BattleCommandQueue.Submit` 提交，并提供功能性费用颜色、箭头、高亮、屏幕命中和回弹。

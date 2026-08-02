@@ -15,6 +15,11 @@ updated: 2026-08-02
 
 ## 验证记录
 
+- [2026-08-02 M7E 全量验证、真实 Game View 与双轴复审](2026-08-02-m7e-full-validation-review.md)
+- [2026-08-02 M7D 出牌事务与卡区结算记录](2026-08-02-m7d-card-effect-transaction.md)
+- [2026-08-02 M7C 有序 Effect 执行 module](2026-08-02-m7c-ordered-effect-executor.md)
+- [2026-08-02 M7B 参与者权威状态与伤害操作](2026-08-02-m7b-combatant-effect-operations.md)
+- [2026-08-02 M7A 结算记录与公式契约](2026-08-02-m7a-settlement-formula-contract.md)
 - [2026-08-02 M6D 全量验证、双轴复审与文档收口](2026-08-02-m6d-full-validation-review.md)
 - [2026-08-01 M6C Self / Enemy 目标选择 UI](2026-08-01-m6c-self-enemy-target-selection.md)
 - [2026-08-01 M6B 队首目标重校验与权威写链](2026-08-01-m6b-queue-head-target-revalidation.md)

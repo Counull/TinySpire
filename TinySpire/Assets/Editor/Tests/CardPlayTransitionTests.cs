@@ -11,7 +11,7 @@ public sealed class CardPlayTransitionTests
         CardInstanceId discardedId = zones.Hand[0];
         CardInstanceId remainingId = zones.Hand[1];
 
-        bool discarded = zones.DiscardFromHand(discardedId);
+        bool discarded = zones.DiscardFromHand(discardedId).Succeeded;
 
         Assert.That(discarded, Is.True);
         Assert.That(zones.Hand, Is.EqualTo(new[] { remainingId }));

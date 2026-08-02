@@ -45,17 +45,6 @@ namespace TinySpire.Battle
         }
 
         /// <summary>
-        /// 对指定参与者应用正数伤害；目标不存在或已经死亡时返回 false。
-        /// </summary>
-        public bool ApplyDamage(CombatantId targetId, int damage)
-        {
-            if (!TryGet(targetId, out CombatantData target))
-                return false;
-
-            return target.ApplyDamage(damage);
-        }
-
-        /// <summary>
         /// 释放全部参与者的响应式资源。
         /// </summary>
         public void Dispose()

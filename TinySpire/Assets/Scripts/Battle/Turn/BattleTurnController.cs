@@ -6,6 +6,46 @@ using TinySpire.Core;
 
 namespace TinySpire.Battle
 {
+    /// <summary>回合内部操作交给权威队列的不可变失败原因与有序结算。</summary>
+    internal sealed class BattleTurnOperationResult
+    {
+        /// <summary>操作失败原因；成功时为 None。</summary>
+        internal BattleCommandExecutionFailureReason FailureReason { get; }
+
+        /// <summary>本次同步操作按发生顺序冻结的记录。</summary>
+        internal IReadOnlyList<BattleSettlementRecord> Settlements { get; }
+
+        /// <summary>复制并冻结回合内部操作结果，失败时强制记录为空。</summary>
+        internal BattleTurnOperationResult(
+            BattleCommandExecutionFailureReason failureReason,
+            IEnumerable<BattleSettlementRecord> settlements)
+        {
+            if (settlements == null)
+                throw new ArgumentNullException(nameof(settlements));
+
+            var frozen = new List<BattleSettlementRecord>(settlements);
+            if (failureReason != BattleCommandExecutionFailureReason.None && frozen.Count > 0)
+            {
+                throw new ArgumentException("失败的回合操作不能携带结算记录。", nameof(settlements));
+            }
+
+            FailureReason = failureReason;
+            Settlements = frozen.AsReadOnly();
+        }
+
+        /// <summary>创建不含任何写入和记录的明确失败结果。</summary>
+        internal static BattleTurnOperationResult Failed(
+            BattleCommandExecutionFailureReason failureReason)
+        {
+            if (failureReason == BattleCommandExecutionFailureReason.None)
+                throw new ArgumentOutOfRangeException(nameof(failureReason));
+
+            return new BattleTurnOperationResult(
+                failureReason,
+                Array.Empty<BattleSettlementRecord>());
+        }
+    }
+
     /// <summary>
     /// 命令队列内部持有的回合事实模块。
     /// </summary>
@@ -23,11 +63,13 @@ namespace TinySpire.Battle
         private readonly IReadOnlyList<CombatantId> _enemyCombatantIdsInEncounterOrder;
         private readonly Tables _tables;
         private readonly BattleCardPlayRules _cardPlayRules;
+        private readonly BattleEffectExecutor _effectExecutor;
         private readonly int _energyPerRound;
         private readonly int _initialHandCount;
         private readonly Dictionary<CombatantId, PlayerTurnData> _players;
         private readonly ReactiveProperty<BattleTurnData> _turn;
         private readonly StateMachine<BattleTurnEvent> _stateMachine;
+        private List<BattleSettlementRecord> _activeSettlements;
 
         /// <summary>回合事实的只读响应式视图。</summary>
         internal ReadOnlyReactiveProperty<BattleTurnData> Turn { get; }
@@ -58,6 +100,7 @@ namespace TinySpire.Battle
                 _playerCardZones,
                 _enemyCombatantIdsInEncounterOrder,
                 _tables);
+            _effectExecutor = new BattleEffectExecutor(_tables, _combatants);
 
             _players = new Dictionary<CombatantId, PlayerTurnData>();
             foreach (CombatantData combatant in _combatants.All.Values)
@@ -78,18 +121,23 @@ namespace TinySpire.Battle
         }
 
         /// <summary>仅在未开始阶段执行一次战斗初始化，并自动进入玩家行动阶段。</summary>
-        internal bool TryStartBattle()
+        internal BattleTurnOperationResult TryStartBattle()
         {
             if (Turn.CurrentValue.Phase != BattleTurnPhase.NotStarted)
-                return false;
+            {
+                return BattleTurnOperationResult.Failed(
+                    BattleCommandExecutionFailureReason.BattleAlreadyStarted);
+            }
 
-            _stateMachine.Dispatch(BattleTurnEvent.StartBattle);
-            _stateMachine.Tick(TimeSpan.Zero);
-            return true;
+            return CollectSuccessfulOperation(() =>
+            {
+                _stateMachine.Dispatch(BattleTurnEvent.StartBattle);
+                _stateMachine.Tick(TimeSpan.Zero);
+            });
         }
 
-        /// <summary>按队首到达时的权威事实校验出牌，成功后移动卡牌并扣除该玩家能量。</summary>
-        internal BattleCommandExecutionFailureReason TryPlayCard(PlayCardCommand command)
+        /// <summary>按队首事实预构建全部 Effect，再依次支付、执行和把当前卡牌移入弃牌堆。</summary>
+        internal BattleTurnOperationResult TryPlayCard(PlayCardCommand command)
         {
             if (command == null)
                 throw new ArgumentNullException(nameof(command));
@@ -98,58 +146,113 @@ namespace TinySpire.Battle
                 Turn.CurrentValue,
                 command);
             if (!evaluation.Succeeded)
-                return evaluation.FailureReason;
+                return BattleTurnOperationResult.Failed(evaluation.FailureReason);
 
             PlayerTurnData playerTurn = _players[command.ActorId];
             BattleCardZonesData cardZones = _playerCardZones[command.ActorId];
             CardInstanceData card = cardZones.Cards[command.CardId];
             cfg.battle.Card cardTemplate = _tables.TbCard.GetOrDefault(card.TemplateId);
-            if (!cardZones.DiscardFromHand(command.CardId))
-                return BattleCommandExecutionFailureReason.CardNotInHand;
+            var effectRequest = new BattleEffectExecutionRequest(
+                command.ActorId,
+                command.TargetId.Value,
+                cardTemplate.EffectBindings);
+            BattleEffectPreparationResult preparation = _effectExecutor.Prepare(effectRequest);
+            if (!preparation.Succeeded)
+                return BattleTurnOperationResult.Failed(preparation.FailureReason);
+
+            if (preparation.Plan.Operations.Count > int.MaxValue - 2)
+            {
+                throw new InvalidOperationException("出牌结算记录数量超出 Int32 可表达范围。");
+            }
+
+            _effectExecutor.ValidatePreparedExecution(
+                preparation.Plan,
+                startingOrder: 1);
+
+            var settlements = new List<BattleSettlementRecord>(
+                preparation.Plan.Operations.Count + 2);
+            int energyAfter = playerTurn.Energy - cardTemplate.Cost;
+            settlements.Add(new BattleEnergySpentSettlement(
+                0,
+                command.ActorId,
+                playerTurn.Energy,
+                energyAfter));
 
             _players[command.ActorId] = new PlayerTurnData(
-                playerTurn.Energy - cardTemplate.Cost,
+                energyAfter,
                 playerTurn.HasEndedAction);
+
+            BattleEffectExecutionResult effectResult = _effectExecutor.ExecutePrepared(
+                preparation.Plan,
+                startingOrder: settlements.Count);
+            settlements.AddRange(effectResult.Settlements);
+
+            BattleCardZoneOperationResult discardResult = cardZones.DiscardFromHand(
+                command.CardId,
+                startingOrder: settlements.Count);
+            if (!discardResult.Succeeded)
+            {
+                throw new InvalidOperationException(
+                    "Effect 执行完成后当前卡牌意外离开手牌。");
+            }
+
+            settlements.AddRange(discardResult.Settlements);
             PublishCurrentPhase();
-            return BattleCommandExecutionFailureReason.None;
+            return new BattleTurnOperationResult(
+                BattleCommandExecutionFailureReason.None,
+                settlements);
         }
 
         /// <summary>在玩家行动阶段结束指定存活玩家的行动，并把其剩余手牌全部移入弃牌堆。</summary>
-        internal BattleCommandExecutionFailureReason TryEndPlayerAction(EndPlayerActionCommand command)
+        internal BattleTurnOperationResult TryEndPlayerAction(EndPlayerActionCommand command)
         {
             if (command == null)
                 throw new ArgumentNullException(nameof(command));
             if (Turn.CurrentValue.Phase != BattleTurnPhase.PlayerAction)
-                return BattleCommandExecutionFailureReason.InvalidTurnPhase;
+            {
+                return BattleTurnOperationResult.Failed(
+                    BattleCommandExecutionFailureReason.InvalidTurnPhase);
+            }
             if (!_players.TryGetValue(command.ActorId, out PlayerTurnData playerTurn) ||
                 !_combatants.TryGet(command.ActorId, out CombatantData combatant) ||
                 !(combatant is PlayerCombatantData))
             {
-                return BattleCommandExecutionFailureReason.InvalidPlayer;
+                return BattleTurnOperationResult.Failed(
+                    BattleCommandExecutionFailureReason.InvalidPlayer);
             }
             if (!combatant.IsAlive)
-                return BattleCommandExecutionFailureReason.PlayerNotAlive;
+            {
+                return BattleTurnOperationResult.Failed(
+                    BattleCommandExecutionFailureReason.PlayerNotAlive);
+            }
             if (playerTurn.HasEndedAction)
-                return BattleCommandExecutionFailureReason.PlayerActionAlreadyEnded;
+            {
+                return BattleTurnOperationResult.Failed(
+                    BattleCommandExecutionFailureReason.PlayerActionAlreadyEnded);
+            }
             if (!_playerCardZones.TryGetValue(command.ActorId, out BattleCardZonesData cardZones) ||
                 cardZones == null)
             {
-                return BattleCommandExecutionFailureReason.PlayerCardZonesNotFound;
+                return BattleTurnOperationResult.Failed(
+                    BattleCommandExecutionFailureReason.PlayerCardZonesNotFound);
             }
 
-            cardZones.DiscardHand();
-            _players[command.ActorId] = new PlayerTurnData(playerTurn.Energy, hasEndedAction: true);
-            if (HaveAllLivingPlayersEndedAction())
+            return CollectSuccessfulOperation(() =>
             {
-                _stateMachine.Dispatch(BattleTurnEvent.CompletePlayerRound);
-                _stateMachine.Tick(TimeSpan.Zero);
-            }
-            else
-            {
-                PublishCurrentPhase();
-            }
-
-            return BattleCommandExecutionFailureReason.None;
+                AppendCardZoneResult(cardZones.DiscardHand(CurrentSettlementOrder));
+                _players[command.ActorId] = new PlayerTurnData(
+                    playerTurn.Energy,
+                    hasEndedAction: true);
+                if (HaveAllLivingPlayersEndedAction())
+                {
+                    _stateMachine.Dispatch(BattleTurnEvent.CompletePlayerRound);
+                    _stateMachine.Tick(TimeSpan.Zero);
+                }
+                else
+                {
+                    PublishCurrentPhase();
+                }
+            });
         }
 
         /// <summary>只读取权威阶段与身份，校验敌人完成命令是否可以进入写入链。</summary>
@@ -176,10 +279,13 @@ namespace TinySpire.Battle
         }
 
         /// <summary>在队列已完成校验和下一意图选择后，推进 Encounter 中的敌人顺序。</summary>
-        internal void AdvanceAfterValidatedEnemyAction()
+        internal BattleTurnOperationResult AdvanceAfterValidatedEnemyAction()
         {
-            _stateMachine.Dispatch(BattleTurnEvent.CompleteEnemyAction);
-            _stateMachine.Tick(TimeSpan.Zero);
+            return CollectSuccessfulOperation(() =>
+            {
+                _stateMachine.Dispatch(BattleTurnEvent.CompleteEnemyAction);
+                _stateMachine.Tick(TimeSpan.Zero);
+            });
         }
 
         /// <summary>释放回合事实持有的响应式资源。</summary>
@@ -207,6 +313,7 @@ namespace TinySpire.Battle
         private void ResetPlayersForRound()
         {
             var playerIds = new List<CombatantId>(_players.Keys);
+            playerIds.Sort((left, right) => left.Value.CompareTo(right.Value));
             foreach (CombatantId playerId in playerIds)
             {
                 _players[playerId] = new PlayerTurnData(_energyPerRound, hasEndedAction: false);
@@ -225,7 +332,80 @@ namespace TinySpire.Battle
 
             int drawCount = Math.Max(0, _initialHandCount - cardZones.Hand.Count);
             if (drawCount > 0)
-                cardZones.Draw(drawCount);
+            {
+                AppendCardZoneResult(cardZones.Draw(
+                    drawCount,
+                    CurrentSettlementOrder));
+            }
+        }
+
+        /// <summary>返回当前命令下一条结算记录的连续顺序；仅允许在同步收集作用域内读取。</summary>
+        private int CurrentSettlementOrder
+        {
+            get
+            {
+                if (_activeSettlements == null)
+                {
+                    throw new InvalidOperationException(
+                        "当前没有可接收阶段卡区变化的命令结算作用域。");
+                }
+
+                return _activeSettlements.Count;
+            }
+        }
+
+        /// <summary>在一次同步命令内收集阶段推进产生的全部卡区记录，并在返回前冻结结果。</summary>
+        private BattleTurnOperationResult CollectSuccessfulOperation(Action operation)
+        {
+            if (operation == null)
+                throw new ArgumentNullException(nameof(operation));
+            if (_activeSettlements != null)
+            {
+                throw new InvalidOperationException(
+                    "回合命令结算作用域不能嵌套。");
+            }
+
+            var settlements = new List<BattleSettlementRecord>();
+            _activeSettlements = settlements;
+            try
+            {
+                operation();
+                return new BattleTurnOperationResult(
+                    BattleCommandExecutionFailureReason.None,
+                    settlements);
+            }
+            finally
+            {
+                _activeSettlements = null;
+            }
+        }
+
+        /// <summary>校验卡区操作成功且顺序连续后，将其记录追加到当前命令。</summary>
+        private void AppendCardZoneResult(BattleCardZoneOperationResult result)
+        {
+            if (result == null)
+                throw new ArgumentNullException(nameof(result));
+            if (_activeSettlements == null)
+            {
+                throw new InvalidOperationException(
+                    "当前没有可追加卡区记录的命令结算作用域。");
+            }
+            if (!result.Succeeded)
+            {
+                throw new InvalidOperationException(
+                    "已完成前置校验的阶段卡区操作意外失败。");
+            }
+
+            foreach (BattleSettlementRecord settlement in result.Settlements)
+            {
+                if (settlement.Order != _activeSettlements.Count)
+                {
+                    throw new InvalidOperationException(
+                        "卡区结算记录必须与当前命令保持连续顺序。");
+                }
+
+                _activeSettlements.Add(settlement);
+            }
         }
 
         /// <summary>保持阶段和轮次不变，发布包含最新玩家事实的一次完整快照。</summary>

@@ -23,6 +23,7 @@ updated: 2026-08-02
 
 ## 已替代 / 历史计划
 
+- [2026-08-02 M7 Effect 执行器](2026-08-02-m7-effect-executor.md) — M7A～M7E 已串行完成；最终自动验证、Bootstrap、真实 Game View 与双轴复审见 `../06_testing/2026-08-02-m7e-full-validation-review.md`。
 - [2026-08-01 M6 出牌命令、合法性与目标选择](2026-08-01-m6-card-play-legality-target-selection.md) — M6A～M6D 已串行完成，含目标失效零写入、真实 Game View、Addressables、Bootstrap 与双轴复审。
 - [2026-08-01 M5 敌人意图与确定性行为选择](2026-08-01-m5-enemy-intents-deterministic-behavior.md) — M5A～M5D 已完成，含确定性复现、Game View 与双轴复审。
 - [2026-07-31 M4 回合调度、权威命令队列与每玩家能量](2026-07-31-m4-turn-scheduling-energy.md) — M4A～M4E 已完成并通过全量验收。

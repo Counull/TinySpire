@@ -73,7 +73,7 @@ public sealed class BattleCardPlayRulesTests
         EnemyCombatantData firstEnemy = combatants.AddEnemy(templateId: 201, maxHealth: 20, strength: 0);
         EnemyCombatantData secondEnemy = combatants.AddEnemy(templateId: 202, maxHealth: 22, strength: 0);
         EnemyCombatantData deadEnemy = combatants.AddEnemy(templateId: 203, maxHealth: 24, strength: 0);
-        combatants.ApplyDamage(deadEnemy.Id, deadEnemy.MaxHealth);
+        BattleEffectStateTestDriver.Kill(combatants, player.Id, deadEnemy.Id);
         var enemyIds = new[] { secondEnemy.Id, deadEnemy.Id, firstEnemy.Id };
         var zones = new BattleCardZonesData(new[] { 3001 }, shuffleSeed: 1234);
         zones.Draw(1);
@@ -138,7 +138,10 @@ public sealed class BattleCardPlayRulesTests
     {
         using (var scenario = new RuleScenario(cfg.battle.TargetRule.Enemy))
         {
-            scenario.Combatants.ApplyDamage(scenario.SecondEnemy.Id, scenario.SecondEnemy.MaxHealth);
+            BattleEffectStateTestDriver.Kill(
+                scenario.Combatants,
+                scenario.Player.Id,
+                scenario.SecondEnemy.Id);
             CombatantId unknownTargetId = CreateUnknownCombatantId();
             BattleTurnData turnBeforeEvaluation = scenario.Queue.Turn.CurrentValue;
             CardZoneLayoutData layoutBeforeEvaluation = scenario.Zones.Layout.CurrentValue;
@@ -238,8 +241,14 @@ public sealed class BattleCardPlayRulesTests
     {
         using (var scenario = new RuleScenario(cfg.battle.TargetRule.Self))
         {
-            scenario.Combatants.ApplyDamage(scenario.FirstEnemy.Id, scenario.FirstEnemy.MaxHealth);
-            scenario.Combatants.ApplyDamage(scenario.SecondEnemy.Id, scenario.SecondEnemy.MaxHealth);
+            BattleEffectStateTestDriver.Kill(
+                scenario.Combatants,
+                scenario.Player.Id,
+                scenario.FirstEnemy.Id);
+            BattleEffectStateTestDriver.Kill(
+                scenario.Combatants,
+                scenario.Player.Id,
+                scenario.SecondEnemy.Id);
             BattleTurnData turnBeforeEvaluation = scenario.Queue.Turn.CurrentValue;
             CardZoneLayoutData layoutBeforeEvaluation = scenario.Zones.Layout.CurrentValue;
 

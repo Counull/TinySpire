@@ -17,11 +17,32 @@ namespace TinySpire.Battle
             if (effect == null)
                 throw new ArgumentNullException(nameof(effect));
 
-            if (effect.EffectType != cfg.battle.EffectType.DealDamage)
-                return effect.Value;
-
             int sourceStrength = source?.Strength.CurrentValue ?? 0;
-            return Math.Max(0, effect.Value + sourceStrength);
+            var context = new BattleEffectFormulaContext(
+                ToOperationType(effect.EffectType),
+                effect.Value,
+                sourceStrength,
+                target: null);
+            return BattleEffectFormula.Calculate(context).Value;
+        }
+
+        /// <summary>把 Luban Effect 类型在展示适配边界映射为领域公式操作。</summary>
+        private static BattleEffectOperationType ToOperationType(
+            cfg.battle.EffectType effectType)
+        {
+            switch (effectType)
+            {
+                case cfg.battle.EffectType.ModifyAttribute:
+                    return BattleEffectOperationType.ModifyAttribute;
+                case cfg.battle.EffectType.DealDamage:
+                    return BattleEffectOperationType.DealDamage;
+                case cfg.battle.EffectType.GainBlock:
+                    return BattleEffectOperationType.GainBlock;
+                case cfg.battle.EffectType.ApplyVulnerable:
+                    return BattleEffectOperationType.ApplyVulnerable;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(effectType));
+            }
         }
     }
 }

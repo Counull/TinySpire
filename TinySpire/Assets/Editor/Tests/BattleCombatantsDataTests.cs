@@ -38,9 +38,8 @@ public sealed class BattleCombatantsDataTests
         PlayerCombatantData player = combatants.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
         EnemyCombatantData enemy = combatants.AddEnemy(templateId: 201, maxHealth: 20, strength: 0);
 
-        bool damaged = combatants.ApplyDamage(enemy.Id, 20);
+        BattleEffectStateTestDriver.Kill(combatants, player.Id, enemy.Id);
 
-        Assert.That(damaged, Is.True);
         Assert.That(enemy.IsAlive, Is.False);
         Assert.That(player.CurrentHealth, Is.EqualTo(30));
         Assert.That(combatants.All.Count, Is.EqualTo(2));
@@ -57,7 +56,11 @@ public sealed class BattleCombatantsDataTests
 
         using (player.Health.Skip(1).Subscribe(value => observedHealth = value))
         {
-            Assert.That(combatants.ApplyDamage(player.Id, 5), Is.True);
+            BattleEffectStateTestDriver.ApplyDamage(
+                combatants,
+                player.Id,
+                player.Id,
+                configuredValue: 5);
         }
 
         Assert.That(player.Health.CurrentValue, Is.EqualTo(25));

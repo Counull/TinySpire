@@ -32,6 +32,28 @@ public sealed class BattleEffectValueCalculatorTests
         combatants.Dispose();
     }
 
+    /// <summary>验证展示适配也使用共享公式的非负格挡与易伤口径。</summary>
+    [TestCase(cfg.battle.EffectType.GainBlock)]
+    [TestCase(cfg.battle.EffectType.ApplyVulnerable)]
+    public void Calculate_NonnegativeEffect_ClampsNegativeConfiguredValue(
+        cfg.battle.EffectType effectType)
+    {
+        cfg.battle.CardEffect effect = CreateEffect(effectType, value: -3);
+
+        Assert.That(BattleEffectValueCalculator.Calculate(effect, source: null), Is.Zero);
+    }
+
+    /// <summary>验证力量修改展示保留配置中的负数变化。</summary>
+    [Test]
+    public void Calculate_ModifyAttribute_PreservesNegativeConfiguredValue()
+    {
+        cfg.battle.CardEffect effect = CreateEffect(
+            cfg.battle.EffectType.ModifyAttribute,
+            value: -3);
+
+        Assert.That(BattleEffectValueCalculator.Calculate(effect, source: null), Is.EqualTo(-3));
+    }
+
     /// <summary>验证负力量不会让派生伤害低于零。</summary>
     [Test]
     public void Calculate_DealDamage_ClampsNegativeDerivedDamageToZero()

@@ -49,6 +49,8 @@ public sealed class BattleCommandPresentationAdapterTests
                     BattleCommandFeedbackStage.Queued,
                     BattleCommandFeedbackStage.ExecutionCompleted
                 }));
+                Assert.That(feedback[^1].Settlements, Is.Not.Null);
+                Assert.That(feedback[^1].Settlements, Is.Empty);
                 Assert.That(queue.Queue.CurrentValue.CurrentAuthoritySequence, Is.Null);
             }
         }

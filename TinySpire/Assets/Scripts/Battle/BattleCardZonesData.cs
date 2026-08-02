@@ -186,21 +186,49 @@ namespace TinySpire.Battle
 
         /// <summary>
         /// 抽取至多 count 张卡；抽牌堆为空时将弃牌堆洗回抽牌堆。
-        /// 返回实际抽到的数量。
+        /// 返回全部移动与重洗顺序，调用方可指定其在当前命令中的起始记录序号。
         /// </summary>
-        public int Draw(int count)
+        public BattleCardZoneOperationResult Draw(int count, int startingOrder = 0)
         {
             if (count < 0)
                 throw new ArgumentOutOfRangeException(nameof(count));
+            if (startingOrder < 0)
+                throw new ArgumentOutOfRangeException(nameof(startingOrder));
 
             var drawPile = new List<CardInstanceId>(DrawPile);
             var hand = new List<CardInstanceId>(Hand);
             var discardPile = new List<CardInstanceId>(DiscardPile);
+            int drawableCount = Math.Min(count, drawPile.Count + discardPile.Count);
+            bool willReshuffle = count > drawPile.Count && discardPile.Count > 0;
+            long settlementCount = drawableCount;
+            if (willReshuffle)
+                settlementCount += discardPile.Count + 1L;
+            ValidateSettlementOrderRange(startingOrder, settlementCount);
+
+            var settlements = new List<BattleSettlementRecord>((int)settlementCount);
             int drawnCount = 0;
             while (drawnCount < count)
             {
                 if (drawPile.Count == 0)
+                {
+                    foreach (CardInstanceId discardedCardId in discardPile)
+                    {
+                        settlements.Add(new BattleCardMovedSettlement(
+                            startingOrder + settlements.Count,
+                            discardedCardId,
+                            BattleCardZone.DiscardPile,
+                            BattleCardZone.DrawPile));
+                    }
+
                     ReshuffleDiscardPile(drawPile, discardPile);
+                    if (drawPile.Count > 0)
+                    {
+                        settlements.Add(new BattleCardsReshuffledSettlement(
+                            startingOrder + settlements.Count,
+                            drawPile));
+                    }
+                }
+
                 if (drawPile.Count == 0)
                     break;
 
@@ -208,44 +236,75 @@ namespace TinySpire.Battle
                 CardInstanceId cardId = drawPile[topIndex];
                 drawPile.RemoveAt(topIndex);
                 hand.Add(cardId);
+                settlements.Add(new BattleCardMovedSettlement(
+                    startingOrder + settlements.Count,
+                    cardId,
+                    BattleCardZone.DrawPile,
+                    BattleCardZone.Hand));
                 drawnCount++;
             }
 
             if (drawnCount > 0)
                 Publish(drawPile, hand, discardPile, ExhaustPile);
 
-            return drawnCount;
+            return new BattleCardZoneOperationResult(succeeded: true, settlements);
         }
 
         /// <summary>
-        /// 将指定手牌移入弃牌堆；该牌不在手牌中时返回 false。
+        /// 将指定手牌移入弃牌堆；该牌不在手牌中时返回失败且不携带记录。
         /// </summary>
-        public bool DiscardFromHand(CardInstanceId cardId)
+        public BattleCardZoneOperationResult DiscardFromHand(
+            CardInstanceId cardId,
+            int startingOrder = 0)
         {
-            return MoveFromHand(cardId, toExhaustPile: false);
+            return MoveFromHand(
+                cardId,
+                toExhaustPile: false,
+                startingOrder: startingOrder);
         }
 
         /// <summary>
-        /// 将指定手牌移入消耗区；该牌不在手牌中时返回 false。
+        /// 将指定手牌移入消耗区；该牌不在手牌中时返回失败且不携带记录。
         /// </summary>
-        public bool ExhaustFromHand(CardInstanceId cardId)
+        public BattleCardZoneOperationResult ExhaustFromHand(
+            CardInstanceId cardId,
+            int startingOrder = 0)
         {
-            return MoveFromHand(cardId, toExhaustPile: true);
+            return MoveFromHand(
+                cardId,
+                toExhaustPile: true,
+                startingOrder: startingOrder);
         }
 
         /// <summary>
-        /// 将全部手牌移入弃牌堆，并返回实际弃掉的数量。
+        /// 将全部手牌按权威手牌顺序移入弃牌堆，并返回每张牌的明确移动记录。
         /// </summary>
-        public int DiscardHand()
+        public BattleCardZoneOperationResult DiscardHand(int startingOrder = 0)
         {
+            if (startingOrder < 0)
+                throw new ArgumentOutOfRangeException(nameof(startingOrder));
+            ValidateSettlementOrderRange(startingOrder, Hand.Count);
             if (Hand.Count == 0)
-                return 0;
+            {
+                return new BattleCardZoneOperationResult(
+                    succeeded: true,
+                    Array.Empty<BattleSettlementRecord>());
+            }
 
             var discardPile = new List<CardInstanceId>(DiscardPile);
             discardPile.AddRange(Hand);
-            int discardedCount = Hand.Count;
+            var settlements = new List<BattleSettlementRecord>(Hand.Count);
+            foreach (CardInstanceId cardId in Hand)
+            {
+                settlements.Add(new BattleCardMovedSettlement(
+                    startingOrder + settlements.Count,
+                    cardId,
+                    BattleCardZone.Hand,
+                    BattleCardZone.DiscardPile));
+            }
+
             Publish(DrawPile, Array.Empty<CardInstanceId>(), discardPile, ExhaustPile);
-            return discardedCount;
+            return new BattleCardZoneOperationResult(succeeded: true, settlements);
         }
 
         /// <summary>
@@ -258,12 +317,24 @@ namespace TinySpire.Battle
         }
 
         /// <summary>在本地副本完成手牌移出后，一次性发布新的完整布局。</summary>
-        private bool MoveFromHand(CardInstanceId cardId, bool toExhaustPile)
+        private BattleCardZoneOperationResult MoveFromHand(
+            CardInstanceId cardId,
+            bool toExhaustPile,
+            int startingOrder)
         {
+            if (startingOrder < 0)
+                throw new ArgumentOutOfRangeException(nameof(startingOrder));
+
             var hand = new List<CardInstanceId>(Hand);
             int cardIndex = hand.IndexOf(cardId);
             if (cardIndex < 0)
-                return false;
+            {
+                return new BattleCardZoneOperationResult(
+                    succeeded: false,
+                    Array.Empty<BattleSettlementRecord>());
+            }
+
+            ValidateSettlementOrderRange(startingOrder, settlementCount: 1);
 
             hand.RemoveAt(cardIndex);
             var discardPile = new List<CardInstanceId>(DiscardPile);
@@ -274,7 +345,19 @@ namespace TinySpire.Battle
                 discardPile.Add(cardId);
 
             Publish(DrawPile, hand, discardPile, exhaustPile);
-            return true;
+            BattleCardZone toZone = toExhaustPile
+                ? BattleCardZone.ExhaustPile
+                : BattleCardZone.DiscardPile;
+            return new BattleCardZoneOperationResult(
+                succeeded: true,
+                new BattleSettlementRecord[]
+                {
+                    new BattleCardMovedSettlement(
+                        startingOrder,
+                        cardId,
+                        BattleCardZone.Hand,
+                        toZone),
+                });
         }
 
         /// <summary>将弃牌堆移入抽牌堆并使用本场专属随机流洗牌。</summary>
@@ -286,6 +369,22 @@ namespace TinySpire.Battle
             drawPile.AddRange(discardPile);
             discardPile.Clear();
             _shuffleRandom.Shuffle(drawPile);
+        }
+
+        /// <summary>在任何布局或随机写入前确认本次记录序号不会超出 Int32。</summary>
+        private static void ValidateSettlementOrderRange(
+            int startingOrder,
+            long settlementCount)
+        {
+            if (settlementCount < 0)
+                throw new ArgumentOutOfRangeException(nameof(settlementCount));
+            if (settlementCount > 0 &&
+                startingOrder + settlementCount - 1L > int.MaxValue)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(startingOrder),
+                    "卡区结算记录顺序超出 Int32 范围。");
+            }
         }
 
         /// <summary>以四个完整区域创建新快照并作为唯一布局事实发布。</summary>

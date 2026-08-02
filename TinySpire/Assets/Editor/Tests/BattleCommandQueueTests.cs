@@ -340,7 +340,7 @@ public sealed class BattleCommandQueueTests
             new Dictionary<CombatantId, BattleCardZonesData> { [player.Id] = zones },
             enemyCombatantIdsInEncounterOrder: new[] { enemy.Id });
         queue.Submit(new StartBattleCommand());
-        combatants.ApplyDamage(enemy.Id, 1);
+        BattleEffectStateTestDriver.Kill(combatants, player.Id, enemy.Id);
 
         queue.Submit(new EndPlayerActionCommand(player.Id));
         queue.Submit(new EndPlayerActionCommand(player.Id));
@@ -360,6 +360,7 @@ public sealed class BattleCommandQueueTests
         Assert.That(
             presentation.Results[2].FailureReason,
             Is.EqualTo(BattleCommandExecutionFailureReason.PlayerActionWindowExpired));
+        Assert.That(presentation.Results[2].Settlements, Is.Empty);
         Assert.That(queue.Turn.CurrentValue.RoundNumber, Is.EqualTo(2));
         Assert.That(queue.Turn.CurrentValue.Phase, Is.EqualTo(BattleTurnPhase.PlayerAction));
         Assert.That(queue.Turn.CurrentValue.Players[player.Id].Energy, Is.EqualTo(3));
@@ -388,7 +389,7 @@ public sealed class BattleCommandQueueTests
             initialHandCount: 1);
         queue.Submit(new StartBattleCommand());
         CardInstanceId queuedCardId = zones.Hand[0];
-        combatants.ApplyDamage(enemy.Id, 1);
+        BattleEffectStateTestDriver.Kill(combatants, player.Id, enemy.Id);
 
         queue.Submit(new EndPlayerActionCommand(player.Id));
         queue.Submit(new PlayCardCommand(player.Id, queuedCardId, player.Id));
@@ -404,6 +405,7 @@ public sealed class BattleCommandQueueTests
         Assert.That(
             presentation.Results[2].FailureReason,
             Is.EqualTo(BattleCommandExecutionFailureReason.PlayerActionWindowExpired));
+        Assert.That(presentation.Results[2].Settlements, Is.Empty);
         Assert.That(queue.Turn.CurrentValue.RoundNumber, Is.EqualTo(2));
         Assert.That(queue.Turn.CurrentValue.Players[player.Id].Energy, Is.EqualTo(3));
         Assert.That(zones.Hand, Is.EqualTo(new[] { queuedCardId }));
@@ -437,7 +439,7 @@ public sealed class BattleCommandQueueTests
             });
         queue.Submit(new StartBattleCommand());
         presentation.CompleteNext();
-        combatants.ApplyDamage(deadEnemy.Id, 1);
+        BattleEffectStateTestDriver.Kill(combatants, player.Id, deadEnemy.Id);
         queue.Submit(new EndPlayerActionCommand(player.Id));
         queue.Submit(new CompleteEnemyActionCommand(secondLivingEnemy.Id));
         queue.Submit(new CompleteEnemyActionCommand(firstLivingEnemy.Id));
@@ -701,6 +703,7 @@ public sealed class BattleCommandQueueTests
         Assert.That(
             presentation.Results[2].FailureReason,
             Is.EqualTo(BattleCommandExecutionFailureReason.InsufficientEnergy));
+        Assert.That(presentation.Results[2].Settlements, Is.Empty);
         Assert.That(queue.Turn.CurrentValue, Is.SameAs(turnAfterFirstCard));
         Assert.That(queue.Turn.CurrentValue.Players[player.Id].Energy, Is.EqualTo(1));
         Assert.That(zones.Layout.CurrentValue, Is.SameAs(layoutAfterFirstCard));
@@ -741,6 +744,7 @@ public sealed class BattleCommandQueueTests
         Assert.That(
             presentation.Results[1].FailureReason,
             Is.EqualTo(BattleCommandExecutionFailureReason.CardNotInHand));
+        Assert.That(presentation.Results[1].Settlements, Is.Empty);
         Assert.That(queue.Turn.CurrentValue, Is.SameAs(turnBeforeExecution));
         Assert.That(queue.Turn.CurrentValue.Players[player.Id].Energy, Is.EqualTo(3));
         Assert.That(zones.Layout.CurrentValue, Is.SameAs(layoutBeforeExecution));
@@ -778,7 +782,7 @@ public sealed class BattleCommandQueueTests
         queue.Submit(new StartBattleCommand());
         BattleCommandSubmissionResult playSubmission =
             queue.Submit(new PlayCardCommand(player.Id, cardId, enemy.Id));
-        combatants.ApplyDamage(enemy.Id, damage: 1);
+        BattleEffectStateTestDriver.Kill(combatants, player.Id, enemy.Id);
         BattleTurnData turnBeforeExecution = queue.Turn.CurrentValue;
         CardZoneLayoutData layoutBeforeExecution = zones.Layout.CurrentValue;
         var healthFactBeforeExecution = enemy.Health;
@@ -789,6 +793,7 @@ public sealed class BattleCommandQueueTests
         Assert.That(
             presentation.Results[1].FailureReason,
             Is.EqualTo(BattleCommandExecutionFailureReason.TargetNotAlive));
+        Assert.That(presentation.Results[1].Settlements, Is.Empty);
         Assert.That(presentation.Results[1].AuthoritySequence, Is.EqualTo(playSubmission.AuthoritySequence));
         Assert.That(queue.Turn.CurrentValue, Is.SameAs(turnBeforeExecution));
         Assert.That(queue.Turn.CurrentValue.Players[player.Id].Energy, Is.EqualTo(3));
@@ -912,7 +917,7 @@ public sealed class BattleCommandQueueTests
             cardCosts);
         queue.Submit(new StartBattleCommand());
         presentation.CompleteNext();
-        combatants.ApplyDamage(player.Id, 1);
+        BattleEffectStateTestDriver.Kill(combatants, player.Id, player.Id);
         BattleTurnData turnBeforeExecution = queue.Turn.CurrentValue;
         CardZoneLayoutData layoutBeforeExecution = zones.Layout.CurrentValue;
 
@@ -991,6 +996,7 @@ public sealed class BattleCommandQueueTests
         Assert.That(
             presentation.Results[1].FailureReason,
             Is.EqualTo(BattleCommandExecutionFailureReason.CardTemplateNotFound));
+        Assert.That(presentation.Results[1].Settlements, Is.Empty);
         Assert.That(queue.Turn.CurrentValue, Is.SameAs(turnBeforeExecution));
         Assert.That(zones.Layout.CurrentValue, Is.SameAs(layoutBeforeExecution));
 

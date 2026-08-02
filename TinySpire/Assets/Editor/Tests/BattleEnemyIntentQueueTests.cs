@@ -108,7 +108,10 @@ public sealed class BattleEnemyIntentQueueTests
         EnemyIntentLayoutData initialLayout = context.Intents.Layout.CurrentValue;
 
         context.Queue.Submit(new StartBattleCommand());
-        context.Combatants.ApplyDamage(deadEnemyId, context.Combatants.All[deadEnemyId].MaxHealth);
+        BattleEffectStateTestDriver.Kill(
+            context.Combatants,
+            context.Player.Id,
+            deadEnemyId);
         context.Queue.Submit(new EndPlayerActionCommand(context.Player.Id));
 
         Assert.That(context.Queue.Turn.CurrentValue.CurrentActingEnemyId, Is.EqualTo(livingEnemyId));

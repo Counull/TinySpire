@@ -434,3 +434,43 @@ updated: 2026-08-02
 **理由**：拿起/拖动是可逆的视觉可供性，不等于组成合法命令。把例外限制在 UI 边界后，费用不足卡可以跟手并回弹，同时不会生成箭头、高亮、目标、pending 或权威序号，也不需要复制能量或目标事实。规则 module 和队首权威写链无需为手感需求分叉。
 
 **影响**：公开 transition、交互模式与 resolver seam 测试覆盖 `CardZones → Turn → 被拖牌自身离手`、三种交互模式及“费用不足不能产生释放目标”，CardView 合约测试覆盖红色时仍接收 Raycast；两轮独立审计补齐 `Playable → VisualOnly` 与真实发布顺序后，M6 定向 EditMode 53/53、串行 solution build 0 error。真实 Game View 已确认费用不足卡的跟手、无瞄准和回弹，M6C 完成；最终聚焦/弃牌动画与 Effect 继续属于 M9/M7。
+
+## CD-039：结算是一次执行结果，Effect 数值由无状态公式 module 统一解释
+
+**问题**：M7 需要让生产命令向表现层交付足以审计和编排的结算变化，同时卡牌文本、敌人意图与未来真实执行不能各自维护伤害公式。若记录保存为全局可变日志，会与参与者和卡区事实形成第二份状态；若公式直接读取 Luban、R3 或 `CombatantData`，则展示投影和目标结算难以在同一纯 seam 下验证。
+
+**选择**：`BattleCommandExecutionResult` 持有按命令内顺序复制冻结的 `IReadOnlyList<BattleSettlementRecord>`；记录以 sealed 类型表达 Energy、Damage、Block、Attribute、Status、CardMoved、CardsReshuffled 与 OperationSkipped，并可关联强类型 `BattleEffectId?`、来源和目标。失败结果列表非 null 且为空，production presentation adapter 只转交当前结果，不保存或回写。`BattleEffectFormula.Calculate(context)` 只消费领域操作、配置值、来源 Strength 与可选 Health/Block/Vulnerable 标量快照，返回有效值及可选伤害推演；它不读取 Tables、R3、场景对象或结算元数据。
+
+**理由**：一次性冻结记录让未来 M9 能按权威顺序表现，而各聚合的只读事实仍是当前状态唯一来源。纯公式既能提供无目标展示投影，也能在 M7B/M7C 接入目标状态，不需要复制公式或伪造目标对象；Luban 类型只在适配边界映射，裸 Effect ID 不穿过新管线。
+
+**影响**：M7A 只增加契约和纯计算，尚未新增 Block/Vulnerable 事实、执行正式 Effect 或改变 M6 出牌事务。后续 M7B 负责唯一参与者状态写入口，M7C 负责预校验与有序执行，M7D 才把记录接入能量、Effect 与卡区事务；表现动画仍属于 M9。验证见 `06_testing/2026-08-02-m7a-settlement-formula-contract.md`。
+
+## CD-040：参与者四项标量由同一实例持有，伤害只经 Effect 内部操作写入
+
+**问题**：原 M3 参与者模型只有 Health/Strength，且 `BattleCombatantsData.ApplyDamage → CombatantData.ApplyDamage(int)` 暴露一条没有格挡、易伤或结算结果的 public 直通。M7 若在旁边增加新伤害 executor，会形成两条生产写链；若在外层先扣 Block、内层再扣 Health，又无法保证公式、状态和记录来自同一次计算。
+
+**选择**：`CombatantData` 同时私有持有 Health、Strength、Block、Vulnerable 四个 R3 标量，对外只暴露只读事实和同步值；存活继续只由 Health 派生。internal concrete `BattleCombatantEffectOperations` 绑定本场唯一 `BattleCombatantsData`，独占 GainBlock、ModifyStrength、ApplyVulnerable、ApplyDamage 调用；Damage 以当前 source/target 标量调用一次共享公式，并把得到的 Block/Health before/after 在一个 `ApplyDamageOutcome` 同步调用内写回。旧聚合 public ApplyDamage 与旧生命直扣方法删除。
+
+**理由**：四项事实的所有权、响应式生命周期和同步读取仍集中在单个参与者，不需要状态镜像。单次 damage outcome 同时驱动写入和后续结算记录，避免格挡与生命各算一次；目标已经死亡时内部操作明确返回 `TargetNotAlive`，为 M7C 的成功命令内 skipped 记录提供输入。
+
+**影响**：M7B 只建立内部状态能力，尚未读取绑定或改变 M6 出牌；既有死亡测试夹具临时经该路径建立事实。M7C 的 `BattleEffectExecutor.Execute` 将成为生产与测试共同 seam，并收回 M7B 临时 Editor friend access；Block 清理、Vulnerable 衰减、HUD 与敌人真实执行仍分别属于 M8/M3E/M9。验证见 `06_testing/2026-08-02-m7b-combatant-effect-operations.md`。
+
+## CD-041：Effect executor 先冻结完整顺序计划，再独占内部状态写入口
+
+**问题**：M7C 必须按 `effect_bindings` 顺序执行 Strength、Damage、Block 与 Vulnerable，同时保证任一缺表、未知类型/属性或数值溢出都发生在首次写入前。若边解析边写入，后序错误会留下前序状态；若测试继续直连 M7B internal 操作，又会把临时 friend access 固化为第二个生产可见 seam。
+
+**选择**：concrete `BattleEffectExecutor` 构造时绑定静态 `Tables` 与本场唯一 `BattleCombatantsData`。公共 `Execute(request)` 复制冻结来源、单个显式目标和有序 Binding；internal `Prepare` 先验证来源/目标存在且初始存活，再完整解析每个 Binding、Effect 表项、类型、属性与数值，并按顺序在 Health/Strength/Block/Vulnerable 标量快照上模拟结果。非属性 Effect 必须配置 `Attribute.None`，ModifyAttribute 只接受 Strength；所有 checked 溢出在首次写入前返回明确失败。前序模拟致死不会停止后序配置校验，合法后序操作被预标记为 TargetNotAlive skip。成功计划绑定创建它的 executor 与起始参与者快照，`ExecutePrepared` 先验证计划归属、事实未漂移和记录顺序容量，再只经 internal `BattleCombatantEffectOperations` 按原顺序写入并生成记录。
+
+**理由**：完整计划把普通可预见失败全部推到写入前，既能让 M7D 在支付能量前复用预构建，又不用给每种 Effect 增加 public handler/adapter。顺序模拟让后序操作读取前序事实，Bash、易伤伤害和同目标 Strength 链不需要重排或第二份状态。测试只通过公共 executor 观察事实与记录，因此可以删除临时 `InternalsVisibleTo`，内部状态能力仍由一个生产 module 独占。
+
+**影响**：M7C 已通过公共 seam 覆盖正式四卡、重复执行、致死跳过和全部预构建失败原子性；生产 `TryPlayCard` 尚未接入 executor，M6 出牌行为仍不变。M7D 只允许使用同一 internal `Prepare -> ExecutePrepared` 组合完成“预构建 -> 支付 -> Effect -> 归堆”，不得在队列层复制 Effect 分发。验证见 `06_testing/2026-08-02-m7c-ordered-effect-executor.md`。
+
+## CD-042：出牌与阶段卡区变化都归属于当前权威命令的有序结算
+
+**问题**：M6 出牌在规则通过后先弃牌再扣能量，尚未执行 Effect；抽牌、弃手与重洗虽然由同一回合状态机触发，却只发布最终 Layout。M7 若让队列按 EffectType 写状态，或让未来表现层比较前后布局猜变化，会复制执行规则、丢失重洗顺序，并把展示屏障之外的卡区变化变成第二条隐式命令路径。
+
+**选择**：`BattleTurnController.TryPlayCard` 保留 M6 同一规则重校验，并在首次写入前调用 M7C `Prepare` 与 prepared-plan 快照校验；成功事务严格为 EnergySpent → `ExecutePrepared` 原绑定记录 → 当前 CardInstance Hand 到 DiscardPile → 一次当前阶段 Turn 发布。内部 `BattleTurnOperationResult` 把失败原因和冻结记录交给队列，`BattleCommandQueue.Execute` 只协调现有命令，不解析 Effect。`BattleCardZonesData` 的写方法返回冻结 `BattleCardZoneOperationResult`；Draw 记录每次跨区移动及重洗后完整抽牌堆顺序，回合控制器在 StartBattle、EndPlayerAction 和最后敌人完成的同一同步调用作用域中按连续序号收集它们。
+
+**理由**：能失败的规则、Binding、Effect 表项、类型/属性、数值与 prepared 快照都在 Energy 首写前完成，普通失败自然得到零写入和空记录。卡区深 module 仍独占随机、抽顶、重洗和单次 Layout 发布，返回明确结果比外层差分更深，也让未来 M9 可以按真实发生顺序表现。阶段状态机、Submit、权威序号、轮次栅栏与 completion 屏障不需要重写。
+
+**影响**：四张当前卡成功后统一进入 DiscardPile，因为配置尚无归宿字段；不按模板 ID 硬编码 Exhaust，`DEP-012` 保持 open。M7D 已经由公开队列 seam 覆盖四卡、致死 skipped、全部关键失败与阶段卡区记录；敌人真实 Effect、Block/Vulnerable 时机、队列事件化和 pending 协作者仍留 M8，最终动画与状态 HUD 仍留 M3E/M9。验证见 `06_testing/2026-08-02-m7d-card-effect-transaction.md`。

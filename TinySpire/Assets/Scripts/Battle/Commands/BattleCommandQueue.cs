@@ -110,46 +110,52 @@ namespace TinySpire.Battle
         /// <summary>仅由队首命令调用回合模块并形成执行结果。</summary>
         private BattleCommandExecutionResult Execute(QueuedBattleCommand queuedCommand)
         {
-            BattleCommandExecutionFailureReason failureReason;
+            BattleTurnOperationResult operationResult;
             if (queuedCommand.Command is StartBattleCommand)
             {
-                failureReason = _turnController.TryStartBattle()
-                    ? BattleCommandExecutionFailureReason.None
-                    : BattleCommandExecutionFailureReason.BattleAlreadyStarted;
+                operationResult = _turnController.TryStartBattle();
             }
             else if ((queuedCommand.Command is PlayCardCommand ||
                       queuedCommand.Command is EndPlayerActionCommand) &&
                      queuedCommand.SubmittedRoundNumber != Turn.CurrentValue.RoundNumber)
             {
-                failureReason = BattleCommandExecutionFailureReason.PlayerActionWindowExpired;
+                operationResult = BattleTurnOperationResult.Failed(
+                    BattleCommandExecutionFailureReason.PlayerActionWindowExpired);
             }
             else if (queuedCommand.Command is PlayCardCommand playCardCommand)
             {
-                failureReason = _turnController.TryPlayCard(playCardCommand);
+                operationResult = _turnController.TryPlayCard(playCardCommand);
             }
             else if (queuedCommand.Command is EndPlayerActionCommand endPlayerActionCommand)
             {
-                failureReason = _turnController.TryEndPlayerAction(endPlayerActionCommand);
+                operationResult = _turnController.TryEndPlayerAction(endPlayerActionCommand);
             }
             else if (queuedCommand.Command is CompleteEnemyActionCommand completeEnemyActionCommand)
             {
-                failureReason = _turnController.ValidateCompleteEnemyAction(completeEnemyActionCommand);
+                BattleCommandExecutionFailureReason failureReason =
+                    _turnController.ValidateCompleteEnemyAction(completeEnemyActionCommand);
                 if (failureReason == BattleCommandExecutionFailureReason.None)
                 {
                     _enemyIntents.CompleteAndSelectNext(completeEnemyActionCommand.EnemyId);
-                    _turnController.AdvanceAfterValidatedEnemyAction();
+                    operationResult = _turnController.AdvanceAfterValidatedEnemyAction();
+                }
+                else
+                {
+                    operationResult = BattleTurnOperationResult.Failed(failureReason);
                 }
             }
             else
             {
-                failureReason = BattleCommandExecutionFailureReason.UnsupportedCommand;
+                operationResult = BattleTurnOperationResult.Failed(
+                    BattleCommandExecutionFailureReason.UnsupportedCommand);
             }
 
             return new BattleCommandExecutionResult(
                 queuedCommand.AuthoritySequence,
                 queuedCommand.Command.Type,
                 queuedCommand.Command.SubmitterId,
-                failureReason);
+                operationResult.FailureReason,
+                operationResult.Settlements);
         }
 
         /// <summary>根据当前命令和待执行数量发布完整队列事实。</summary>

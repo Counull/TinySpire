@@ -1,3 +1,7 @@
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+
 namespace TinySpire.Battle
 {
     /// <summary>
@@ -71,7 +75,14 @@ namespace TinySpire.Battle
         TargetNotFound,
         TargetNotAlive,
         TargetRuleMismatch,
-        UnsupportedTargetRule
+        UnsupportedTargetRule,
+        EffectSourceNotFound,
+        EffectSourceNotAlive,
+        InvalidEffectBinding,
+        EffectTemplateNotFound,
+        UnsupportedEffectType,
+        UnsupportedEffectAttribute,
+        EffectValueOverflow
     }
 
     /// <summary>
@@ -94,17 +105,26 @@ namespace TinySpire.Battle
         /// <summary>执行失败原因；成功时为 None。</summary>
         public BattleCommandExecutionFailureReason FailureReason { get; }
 
+        /// <summary>本次命令按发生顺序冻结的只读结算记录。</summary>
+        public IReadOnlyList<BattleSettlementRecord> Settlements { get; }
+
         /// <summary>创建一份不可变的权威执行结果。</summary>
         internal BattleCommandExecutionResult(
             long authoritySequence,
             BattleCommandType commandType,
             CombatantId? submitterId,
-            BattleCommandExecutionFailureReason failureReason)
+            BattleCommandExecutionFailureReason failureReason,
+            IEnumerable<BattleSettlementRecord> settlements)
         {
+            if (settlements == null)
+                throw new ArgumentNullException(nameof(settlements));
+
             AuthoritySequence = authoritySequence;
             CommandType = commandType;
             SubmitterId = submitterId;
             FailureReason = failureReason;
+            Settlements = new ReadOnlyCollection<BattleSettlementRecord>(
+                new List<BattleSettlementRecord>(settlements));
         }
     }
 }

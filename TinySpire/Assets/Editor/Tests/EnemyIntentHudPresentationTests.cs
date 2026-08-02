@@ -76,7 +76,7 @@ public sealed class EnemyIntentHudPresentationTests
         Assert.That(ParticipantHudPresentation.ShouldShowIntent(player), Is.False);
         Assert.That(ParticipantHudPresentation.ShouldShowIntent(enemy), Is.True);
 
-        combatants.ApplyDamage(enemy.Id, enemy.MaxHealth);
+        BattleEffectStateTestDriver.Kill(combatants, player.Id, enemy.Id);
 
         Assert.That(ParticipantHudPresentation.ShouldShowIntent(enemy), Is.False);
         combatants.Dispose();

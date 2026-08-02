@@ -1,0 +1,42 @@
+namespace TinySpire.Battle
+{
+    /// <summary>一次命令结算中的记录类别。</summary>
+    public enum BattleSettlementRecordType
+    {
+        EnergySpent,
+        DamageApplied,
+        BlockGained,
+        AttributeModified,
+        StatusApplied,
+        CardMoved,
+        CardsReshuffled,
+        OperationSkipped,
+    }
+
+    /// <summary>M7 可被 Effect 修改的参与者属性。</summary>
+    public enum BattleAttributeType
+    {
+        Strength,
+    }
+
+    /// <summary>M7 可被 Effect 施加的参与者状态。</summary>
+    public enum BattleStatusType
+    {
+        Vulnerable,
+    }
+
+    /// <summary>卡牌移动记录使用的权威卡区名称。</summary>
+    public enum BattleCardZone
+    {
+        DrawPile,
+        Hand,
+        DiscardPile,
+        ExhaustPile,
+    }
+
+    /// <summary>合法命令中跳过单个操作的明确原因。</summary>
+    public enum BattleOperationSkipReason
+    {
+        TargetNotAlive,
+    }
+}
