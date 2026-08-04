@@ -161,9 +161,9 @@ public sealed class ParticipantHudPrefabContractTests
         Assert.That(intentBottom, Is.GreaterThan(nameTop));
     }
 
-    /// <summary>验证目标候选高亮使用正式左右 Sprite，合法与悬停互斥切换且全部非交互。</summary>
+    /// <summary>验证目标候选高亮使用四个独立角件围住角色，合法与悬停互斥切换且全部非交互。</summary>
     [Test]
-    public void ParticipantHudPrefab_TargetHighlightUsesOfficialHalvesAndSwitchesWithoutRaycast()
+    public void ParticipantHudPrefab_TargetHighlightUsesOfficialFourCornersAndSwitchesWithoutRaycast()
     {
         GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
         ParticipantHudView view = prefab.GetComponent<ParticipantHudView>();
@@ -172,26 +172,22 @@ public sealed class ParticipantHudPrefabContractTests
         var highlightAnchor =
             serializedView.FindProperty("_targetHighlightAnchor").objectReferenceValue as RectTransform;
         SerializedProperty legalRootProperty = serializedView.FindProperty("_legalTargetHighlightRoot");
-        SerializedProperty legalLeftProperty = serializedView.FindProperty("_legalTargetHighlightLeftImage");
-        SerializedProperty legalRightProperty = serializedView.FindProperty("_legalTargetHighlightRightImage");
+        SerializedProperty legalCornersProperty =
+            serializedView.FindProperty("_legalTargetHighlightCornerImages");
         SerializedProperty hoveredRootProperty = serializedView.FindProperty("_hoveredTargetHighlightRoot");
-        SerializedProperty hoveredLeftProperty = serializedView.FindProperty("_hoveredTargetHighlightLeftImage");
-        SerializedProperty hoveredRightProperty = serializedView.FindProperty("_hoveredTargetHighlightRightImage");
+        SerializedProperty hoveredCornersProperty =
+            serializedView.FindProperty("_hoveredTargetHighlightCornerImages");
 
         Assert.That(highlightAnchor, Is.Not.Null);
         Assert.That(legalRootProperty, Is.Not.Null);
-        Assert.That(legalLeftProperty, Is.Not.Null);
-        Assert.That(legalRightProperty, Is.Not.Null);
+        Assert.That(legalCornersProperty, Is.Not.Null);
         Assert.That(hoveredRootProperty, Is.Not.Null);
-        Assert.That(hoveredLeftProperty, Is.Not.Null);
-        Assert.That(hoveredRightProperty, Is.Not.Null);
+        Assert.That(hoveredCornersProperty, Is.Not.Null);
 
         var legalRoot = legalRootProperty.objectReferenceValue as GameObject;
-        var legalLeft = legalLeftProperty.objectReferenceValue as Image;
-        var legalRight = legalRightProperty.objectReferenceValue as Image;
         var hoveredRoot = hoveredRootProperty.objectReferenceValue as GameObject;
-        var hoveredLeft = hoveredLeftProperty.objectReferenceValue as Image;
-        var hoveredRight = hoveredRightProperty.objectReferenceValue as Image;
+        Image[] legalCorners = GetCornerImages(legalCornersProperty);
+        Image[] hoveredCorners = GetCornerImages(hoveredCornersProperty);
         Assert.That(highlightAnchor.name, Is.EqualTo("TargetHighlightAnchor"));
         Assert.That(legalRoot, Is.Not.Null);
         Assert.That(hoveredRoot, Is.Not.Null);
@@ -199,45 +195,20 @@ public sealed class ParticipantHudPrefabContractTests
         Assert.That(hoveredRoot.transform.parent, Is.EqualTo(highlightAnchor));
         Assert.That(legalRoot.activeSelf, Is.False);
         Assert.That(hoveredRoot.activeSelf, Is.False);
-        Assert.That(highlightAnchor.GetComponentsInChildren<Image>(includeInactive: true), Has.Length.EqualTo(4));
+        Assert.That(highlightAnchor.GetComponentsInChildren<Image>(includeInactive: true), Has.Length.EqualTo(8));
         Assert.That(highlightAnchor.Find("TargetHighlightVisual"), Is.Null);
         Assert.That(legalRoot.layer, Is.EqualTo(highlightAnchor.gameObject.layer));
         Assert.That(hoveredRoot.layer, Is.EqualTo(highlightAnchor.gameObject.layer));
-        Assert.That(legalLeft.gameObject.layer, Is.EqualTo(highlightAnchor.gameObject.layer));
-        Assert.That(legalRight.gameObject.layer, Is.EqualTo(highlightAnchor.gameObject.layer));
-        Assert.That(hoveredLeft.gameObject.layer, Is.EqualTo(highlightAnchor.gameObject.layer));
-        Assert.That(hoveredRight.gameObject.layer, Is.EqualTo(highlightAnchor.gameObject.layer));
-
-        AssertOfficialHighlightHalf(
-            legalLeft,
+        AssertTargetHighlightCorners(
+            legalCorners,
+            highlightAnchor.gameObject.layer,
             "Assets/Arts/Runtime/UI/Battle/Targeting/ui_battle_target_legal_highlight.png",
-            "ui_battle_target_legal_highlight_0");
-        AssertOfficialHighlightHalf(
-            legalRight,
-            "Assets/Arts/Runtime/UI/Battle/Targeting/ui_battle_target_legal_highlight.png",
-            "ui_battle_target_legal_highlight_1");
-        AssertOfficialHighlightHalf(
-            hoveredLeft,
+            "ui_battle_target_legal_highlight");
+        AssertTargetHighlightCorners(
+            hoveredCorners,
+            highlightAnchor.gameObject.layer,
             "Assets/Arts/Runtime/UI/Battle/Targeting/ui_battle_target_hover_highlight.png",
-            "ui_battle_target_hover_highlight_0");
-        AssertOfficialHighlightHalf(
-            hoveredRight,
-            "Assets/Arts/Runtime/UI/Battle/Targeting/ui_battle_target_hover_highlight.png",
-            "ui_battle_target_hover_highlight_1");
-        Assert.That(legalLeft.rectTransform.sizeDelta, Is.EqualTo(legalRight.rectTransform.sizeDelta));
-        Assert.That(hoveredLeft.rectTransform.sizeDelta, Is.EqualTo(hoveredRight.rectTransform.sizeDelta));
-        Assert.That(
-            legalLeft.rectTransform.anchoredPosition.x,
-            Is.EqualTo(-legalRight.rectTransform.anchoredPosition.x).Within(0.01f));
-        Assert.That(
-            hoveredLeft.rectTransform.anchoredPosition.x,
-            Is.EqualTo(-hoveredRight.rectTransform.anchoredPosition.x).Within(0.01f));
-        Assert.That(
-            legalLeft.rectTransform.anchoredPosition.y,
-            Is.EqualTo(legalRight.rectTransform.anchoredPosition.y).Within(0.01f));
-        Assert.That(
-            hoveredLeft.rectTransform.anchoredPosition.y,
-            Is.EqualTo(hoveredRight.rectTransform.anchoredPosition.y).Within(0.01f));
+            "ui_battle_target_hover_highlight");
 
         view.SetTargetHighlight(isLegalCandidate: true, isHovered: false);
         Assert.That(legalRoot.activeSelf, Is.True);
@@ -386,19 +357,53 @@ public sealed class ParticipantHudPrefabContractTests
             Is.EqualTo(1));
     }
 
-    /// <summary>验证一个目标半框引用精确正式子图，并保持白色、等比和非 Raycast。</summary>
-    private static void AssertOfficialHighlightHalf(
-        Image image,
-        string expectedPath,
-        string expectedSpriteName)
+    /// <summary>从序列化数组读取四个锁定框角件，避免测试依赖运行时查找。</summary>
+    private static Image[] GetCornerImages(SerializedProperty cornerImagesProperty)
     {
-        Assert.That(image, Is.Not.Null, expectedSpriteName);
-        Assert.That(image.sprite, Is.Not.Null, expectedSpriteName);
-        Assert.That(AssetDatabase.GetAssetPath(image.sprite), Is.EqualTo(expectedPath));
-        Assert.That(image.sprite.name, Is.EqualTo(expectedSpriteName));
-        Assert.That(image.color, Is.EqualTo(Color.white));
-        Assert.That(image.preserveAspect, Is.True);
-        Assert.That(image.raycastTarget, Is.False);
+        Assert.That(cornerImagesProperty.isArray, Is.True);
+        Assert.That(cornerImagesProperty.arraySize, Is.EqualTo(4));
+        var images = new Image[cornerImagesProperty.arraySize];
+        for (int index = 0; index < images.Length; index++)
+        {
+            images[index] = cornerImagesProperty.GetArrayElementAtIndex(index)
+                .objectReferenceValue as Image;
+        }
+
+        return images;
+    }
+
+    /// <summary>验证四角分别锚定于外框四角，并以裁切后的正式左右半图构成独立角件。</summary>
+    private static void AssertTargetHighlightCorners(
+        Image[] cornerImages,
+        int expectedLayer,
+        string expectedPath,
+        string expectedSpritePrefix)
+    {
+        Assert.That(cornerImages, Has.Length.EqualTo(4));
+        for (int index = 0; index < cornerImages.Length; index++)
+        {
+            Image image = cornerImages[index];
+            Assert.That(image, Is.Not.Null, $"corner {index}");
+            Assert.That(image.gameObject.layer, Is.EqualTo(expectedLayer));
+            Assert.That(image.sprite, Is.Not.Null);
+            Assert.That(AssetDatabase.GetAssetPath(image.sprite), Is.EqualTo(expectedPath));
+            Assert.That(image.sprite.name, Is.EqualTo($"{expectedSpritePrefix}_{index % 2}"));
+            Assert.That(image.color, Is.EqualTo(Color.white));
+            Assert.That(image.preserveAspect, Is.True);
+            Assert.That(image.raycastTarget, Is.False);
+            Assert.That(image.type, Is.EqualTo(Image.Type.Filled));
+            Assert.That(image.fillMethod, Is.EqualTo(Image.FillMethod.Vertical));
+            Assert.That(image.fillAmount, Is.EqualTo(0.5f).Within(0.01f));
+        }
+
+        Assert.That(cornerImages[0].rectTransform.anchorMin, Is.EqualTo(new Vector2(0f, 1f)));
+        Assert.That(cornerImages[1].rectTransform.anchorMin, Is.EqualTo(new Vector2(1f, 1f)));
+        Assert.That(cornerImages[2].rectTransform.anchorMin, Is.EqualTo(new Vector2(0f, 0f)));
+        Assert.That(cornerImages[3].rectTransform.anchorMin, Is.EqualTo(new Vector2(1f, 0f)));
+        Assert.That(cornerImages[0].rectTransform.pivot, Is.EqualTo(new Vector2(0f, 1f)));
+        Assert.That(cornerImages[1].rectTransform.pivot, Is.EqualTo(new Vector2(1f, 1f)));
+        Assert.That(cornerImages[2].rectTransform.pivot, Is.EqualTo(new Vector2(0f, 0f)));
+        Assert.That(cornerImages[3].rectTransform.pivot, Is.EqualTo(new Vector2(1f, 0f)));
     }
 
     /// <summary>验证序列化 Sprite 来自精确正式路径，并保持单子图、无 mipmap 的当前导入契约。</summary>

@@ -15,6 +15,8 @@ updated: 2026-08-05
 
 ## 验证记录
 
+- [2026-08-05 M9 目标箭头与锁定框视觉反馈验收](2026-08-05-m9-targeting-visual-feedback.md) — 分段切线箭身、四角锁定框与相关 Prefab 契约；Unity 定向类集 26/26 通过
+- [2026-08-05 M9 出牌不飞向怪物验收](2026-08-05-play-card-no-target-flight.md) — Prelude 仅持有 transient，卡牌只飞向弃牌堆；Unity 定向类集 26/26 通过
 - [2026-08-05 M9 验收后 BUG 分诊与结构审查关联](2026-08-05-m9-post-validation-bug-triage.md) — 两项 Hand motion 由精确红灯、426/426 EditMode 覆盖；生命 HUD 临时投影到角色头顶，并在五种真实 BattleScene 尺寸复测为 0 相交对
 - [2026-08-02 M9G 全量验证、真实交互、Player 退出与双轴复审](2026-08-02-m9g-full-validation-review.md)
 - [2026-08-02 M9F 阶段横幅、胜负面板、重开与退出](2026-08-02-m9f-turn-terminal-restart-exit.md)

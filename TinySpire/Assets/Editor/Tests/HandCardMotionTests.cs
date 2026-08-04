@@ -77,9 +77,9 @@ public sealed class HandCardMotionTests
         }
     }
 
-    /// <summary>验证出牌前奏与原 Order 的离手步骤复用同一 transient，并在单一 runner 收口时只清理一次。</summary>
+    /// <summary>验证出牌前奏只持有 transient，卡牌只在原 Order 的弃牌步骤运动并在 runner 收口时清理一次。</summary>
     [Test]
-    public void PlayCardPreludeAndCardMoved_ReuseOneTransientThenCleanExactlyOnce()
+    public void PlayCardPreludeHoldsTransient_CardMovesOnlyToDiscardThenCleansExactlyOnce()
     {
         GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(CardPrefabPath);
         GameObject containerObject = new GameObject("HandCardMotionPlaybackContainer");
@@ -115,7 +115,6 @@ public sealed class HandCardMotionTests
             Assert.That(rebuildCards, Is.Not.Null);
             rebuildCards.Invoke(container, new object[] { false });
             Vector2 originalScreenPosition = visual.GetScreenCenter();
-            Vector2 targetScreenPosition = originalScreenPosition + new Vector2(120f, 180f);
             Vector2 discardScreenPosition = originalScreenPosition + new Vector2(360f, 80f);
             var energySpent = new BattleEnergySpentSettlement(
                 order: 0,
@@ -145,13 +144,16 @@ public sealed class HandCardMotionTests
                 new BattleSettlementRecord[] { energySpent, damage, moved });
             BattleCommandPresentationPlan plan = BattleCommandPresentationPlan.Create(result);
             var cardMotionFactory = new BattleCardMotionTweenFactory(cue =>
-                container.CreateTransientCardMotionTween(
+            {
+                if (cue.Kind == BattleCardMotionCueKind.PlayCardTransientHold)
+                    return container.CreateTransientCardHoldTween(cue);
+
+                return container.CreateTransientCardMotionTween(
                     cue,
-                    cue.Kind == BattleCardMotionCueKind.PlayCardToTarget
-                        ? targetScreenPosition
-                        : discardScreenPosition,
+                    discardScreenPosition,
                     duration: 0.2f,
-                    ease: Ease.Linear));
+                    ease: Ease.Linear);
+            });
             using var runner = new BattleCommandPresentationRunner(
                 prelude => cardMotionFactory.TryCreate(
                     prelude,
@@ -170,10 +172,13 @@ public sealed class HandCardMotionTests
                 .Subscribe(_ => unexpectedLayoutPublicationCount++);
 
             runner.Play(plan, () => completionCount++);
-            runner.Tick(0.2f);
+            runner.Tick(0.1f);
 
-            Assert.That(visual.GetScreenCenter().x, Is.EqualTo(targetScreenPosition.x).Within(0.01f));
-            Assert.That(visual.GetScreenCenter().y, Is.EqualTo(targetScreenPosition.y).Within(0.01f));
+            Vector2 midpoint = visual.GetScreenCenter();
+            Assert.That(midpoint.x, Is.GreaterThan(originalScreenPosition.x));
+            Assert.That(midpoint.x, Is.LessThan(discardScreenPosition.x));
+            Assert.That(midpoint.y, Is.GreaterThan(originalScreenPosition.y));
+            Assert.That(midpoint.y, Is.LessThan(discardScreenPosition.y));
             Assert.That(completionCount, Is.Zero);
 
             runner.CompleteImmediately();
@@ -201,9 +206,9 @@ public sealed class HandCardMotionTests
         }
     }
 
-    /// <summary>验证后续 settlement cue 同步构造失败时，已创建的出牌前奏仍释放离手 transient。</summary>
+    /// <summary>验证后续 settlement cue 同步构造失败时，无位移的出牌前奏仍释放离手 transient。</summary>
     [Test]
-    public void PlayCardPrelude_LaterCueBuildThrows_ReleasesDetachedTransient()
+    public void PlayCardPreludeHold_LaterCueBuildThrows_ReleasesDetachedTransient()
     {
         GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(CardPrefabPath);
         GameObject containerObject = new GameObject("HandCardMotionBuildFaultContainer");
@@ -238,7 +243,6 @@ public sealed class HandCardMotionTests
                 BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.That(rebuildCards, Is.Not.Null);
             rebuildCards.Invoke(container, new object[] { false });
-            Vector2 targetScreenPosition = visual.GetScreenCenter() + new Vector2(120f, 180f);
             var damage = new BattleDamageAppliedSettlement(
                 order: 0,
                 new BattleEffectId(4001),
@@ -261,12 +265,8 @@ public sealed class HandCardMotionTests
                 BattleCommandExecutionFailureReason.None,
                 new BattleSettlementRecord[] { damage, moved });
             BattleCommandPresentationPlan plan = BattleCommandPresentationPlan.Create(result);
-            var cardMotionFactory = new BattleCardMotionTweenFactory(cue =>
-                container.CreateTransientCardMotionTween(
-                    cue,
-                    targetScreenPosition,
-                    duration: 0.2f,
-                    ease: Ease.Linear));
+            var cardMotionFactory = new BattleCardMotionTweenFactory(
+                container.CreateTransientCardHoldTween);
             using var runner = new BattleCommandPresentationRunner(
                 prelude => cardMotionFactory.TryCreate(
                     prelude,
@@ -333,7 +333,6 @@ public sealed class HandCardMotionTests
             var cue = new BattleCardMotionCue(
                 BattleCardMotionCueKind.DrawToHand,
                 cardId,
-                targetId: null,
                 settlementOrder: 5);
             int fastForwardRequestCount = 0;
             int unexpectedLayoutPublicationCount = 0;
@@ -415,7 +414,6 @@ public sealed class HandCardMotionTests
             var cue = new BattleCardMotionCue(
                 BattleCardMotionCueKind.DrawToHand,
                 cardId,
-                targetId: null,
                 settlementOrder: 0);
             int activeTweenCountBefore = DOTween.TotalActiveTweens();
             BattleCommandPresentationTween lease = container.CreateIncomingCardMotionTween(
@@ -524,7 +522,6 @@ public sealed class HandCardMotionTests
             var cue = new BattleCardMotionCue(
                 BattleCardMotionCueKind.HandToDiscard,
                 cardId,
-                targetId: null,
                 settlementOrder: 0);
             int activeTweenCountBefore = DOTween.TotalActiveTweens();
             BattleCommandPresentationTween lease = container.CreateTransientCardMotionTween(

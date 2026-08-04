@@ -814,7 +814,6 @@ public sealed class BattleParticipantFeedbackRoutingTests
             var cue = new BattleCardMotionCue(
                 BattleCardMotionCueKind.DrawToHand,
                 incomingCard.CardId,
-                targetId: null,
                 settlementOrder: 4);
             incomingLease = container.CreateIncomingCardMotionTween(
                 cue,

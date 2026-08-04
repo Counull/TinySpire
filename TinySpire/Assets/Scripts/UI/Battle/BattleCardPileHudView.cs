@@ -108,7 +108,6 @@ namespace TinySpire.UI.Battle
                 throw new ArgumentNullException(nameof(cue));
             if (cue.Kind != BattleCardMotionCueKind.CardsReshuffled ||
                 cue.CardId.HasValue ||
-                cue.TargetId.HasValue ||
                 !cue.SettlementOrder.HasValue)
             {
                 throw new InvalidOperationException(

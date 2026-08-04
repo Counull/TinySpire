@@ -13,6 +13,8 @@ updated: 2026-08-05
 
 ## 现有计划
 
+- [2026-08-05 M9 目标箭头与锁定框视觉反馈](2026-08-05-m9-targeting-visual-feedback.md) — 已实施并通过 Unity 定向验收；保留后续 UI 调参入口
+- [2026-08-05 M9 出牌不飞向怪物](2026-08-05-play-card-no-target-flight.md)
 - [2026-07-30 BattleScene M3A 参与者视图与生命 HUD](2026-07-30-battlescene-participant-views.md)
 - [2026-07-30 卡牌区域与确定性洗牌](2026-07-30-card-zones-deterministic-random.md)
 - [2026-07-30 YooAsset 到 Addressables 迁移](2026-07-30-addressables-migration.md)
@@ -20,6 +22,10 @@ updated: 2026-08-05
 - [2026-07-30 战斗静态配置表](2026-07-30-battle-static-config-tables.md)
 - [2026-07-30 BattleState 运行时参与者模型](2026-07-30-battle-runtime-state.md)
 - [2026-07-12 BattleScene 基础手牌 UI](2026-07-12-battlescene-card-ui.md)
+
+## 辅助审查（非实施计划）
+
+- [2026-08-05 M9 代码结构与实现质量审查](2026-08-05-m9-code-structure-review.md) — 只读建议来源；当前 BUG 分诊与采纳边界见 `../06_testing/2026-08-05-m9-post-validation-bug-triage.md`
 
 ## 已替代 / 历史计划
 

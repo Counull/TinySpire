@@ -107,7 +107,6 @@ public sealed class BattleCardPileMotionTests
             var cue = new BattleCardMotionCue(
                 BattleCardMotionCueKind.CardsReshuffled,
                 cardId: null,
-                targetId: null,
                 settlementOrder: 6,
                 newDrawPileOrder);
 
@@ -182,7 +181,6 @@ public sealed class BattleCardPileMotionTests
             var cue = new BattleCardMotionCue(
                 BattleCardMotionCueKind.CardsReshuffled,
                 cardId: null,
-                targetId: null,
                 settlementOrder: 0,
                 new[] { new CardInstanceId(11), new CardInstanceId(12) });
             int activeTweenCountBefore = DOTween.TotalActiveTweens();

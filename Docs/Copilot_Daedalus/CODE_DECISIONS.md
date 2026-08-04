@@ -556,3 +556,23 @@ updated: 2026-08-05
 **理由**：这是一项可替换的止血改动，避开当前手牌主要覆盖的下方区域，且不把临时可读性要求扩大为 Canvas 层级、场景布局或完整 HUD 架构选择。HUD 仍只读取当前 `SpriteRenderer` bounds 与当前 Combatant 事实，不复制生命、意图或回合状态。
 
 **影响**：只影响 `ParticipantHudView.cs`、`ParticipantHudView.prefab` 与其 Editor 投影测试；不修改 `BattleScene.unity`、Queue、Turn、settlement、目标、终局、DI、DataTables、Addressables 配置或 Candidates。未来 Battle UI 重设计应整体替换该临时投影，不把其偏移量视为最终视觉规范。验证见 `06_testing/2026-08-05-m9-post-validation-bug-triage.md`。
+
+## CD-051：PlayCard 前奏持有离手卡，不飞向目标
+
+**问题**：M9 原实现把 `PlayCard` Prelude 的冻结目标身份路由为 `Hand → Target` 卡牌运动。用户反馈该轨迹不符合当前出牌表现；但直接删除 Prelude 又会破坏它先于 Order 0 的既有编排契约，并可能让已离手的 transient 在后续 cue 同步构造异常时失去 runner 的清理所有权。
+
+**选择**：`BattleCardMotionCue` 不再承载目标身份，移除 `PlayCardToTarget`。`PlayCard` Prelude 仍由同一 `BattleCardMotionTweenFactory` 消费，但只形成零时长、无位移的 `PlayCardTransientHold` lease；它不读取 participant 屏幕锚点，且与后续 `Hand → DiscardPile` cue 共享幂等 transient 清理边界。卡牌真正移动时只消费冻结的 `CardMoved(Hand → DiscardPile)` settlement，并严格位于其原始 `Order`。
+
+**理由**：保留 Prelude 可以维持 M9 单一 runner、一次 completion、异常/取消清理与 settlement 顺序；撤销目标锚点与目标身份则使卡牌运动接口无法再表示“飞向怪物”。该变化只修正可见表现，不重排或改写权威战斗事实。
+
+**影响**：本决定取代 CD-049 中“PlayCard 前奏表现离手到目标”的可见轨迹部分，保留其余冻结结果、顺序与生命周期边界。未修改 Queue、Turn、Effect、CardZones、目标合法性、目标箭头、Scene、Prefab、DataTables、Addressables 或 Candidates。验证见 `06_testing/2026-08-05-play-card-no-target-flight.md`。
+
+## CD-052：目标箭头在视图内部组合曲线片段，锁定框按参与者边界定位
+
+**问题**：攻击箭头以单根拉伸图片表示时，曲线方向与箭身朝向不自然；目标锁定高亮由左右两片拼接且使用固定大小，容易像垫在怪物身后而不是明确框住怪物。
+
+**选择**：保持 `BattleTargetingArrowView.Show / UpdateArrow / Hide` 的外部接口不变，在视图内部将箭头拆成终点 head 与可复用 fragment 池。曲线使用局部三次贝塞尔采样，每段 fragment 和 head 的旋转都取该采样点切线。`ParticipantHudView` 对合法与悬停状态各持有四个角件，运行时根据 `SpriteRenderer.bounds` 投影得到的 Canvas 边界加可调留白来定位。
+
+**理由**：调用者仍然只传入起点与终点，不需要知道曲线、池或片段数量；箭身的局部切线使曲线可读。锁定框直接从参与者实际渲染边界派生，避免维护固定尺寸副本，并为后续整体 UI 改版保留 padding、fragment 长度、间距与弯曲幅度等局部参数。
+
+**影响**：`TinySpire/Assets/Scripts/UI/Battle/Targeting/BattleTargetingArrowView.cs`、`TinySpire/Assets/Scripts/UI/Battle/ParticipantHudView.cs` 及其两个 Prefab 和契约测试。继续复用已有正式 Targeting 精灵，不修改源图片或 Meta；不改目标合法性、`BattleCommandQueue`、`Turn`、结算或场景结构。

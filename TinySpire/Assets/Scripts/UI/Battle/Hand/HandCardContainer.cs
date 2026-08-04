@@ -836,10 +836,34 @@ public sealed class HandCardContainer : MonoBehaviour
         _transientCards[cardId] = card;
     }
 
-    /// <summary>为同一离手 transient 创建前奏或原 Order 的弃牌轨迹，并让任一已建 lease 都能幂等收口。</summary>
+    /// <summary>创建无位移的 PlayCard 前奏 lease，使离手 transient 在完整时间线结束前保持可清理。</summary>
+    internal BattleCommandPresentationTween CreateTransientCardHoldTween(BattleCardMotionCue cue)
+    {
+        if (cue == null)
+            throw new ArgumentNullException(nameof(cue));
+        if (cue.Kind != BattleCardMotionCueKind.PlayCardTransientHold || !cue.CardId.HasValue)
+        {
+            throw new InvalidOperationException(
+                "Transient hold requires a frozen PlayCard CardId.");
+        }
+
+        CardInstanceId cardId = cue.CardId.Value;
+        if (!_transientCards.TryGetValue(cardId, out HandCardVisual transientCard)
+            || transientCard == null)
+        {
+            throw new InvalidOperationException(
+                $"Card hold cannot find detached transient {cardId}.");
+        }
+
+        Tween tween = DOTween.Sequence().AppendCallback(() => { });
+        Action cleanup = () => ReleaseTransientCard(cardId, transientCard);
+        return new BattleCommandPresentationTween(tween, cleanup);
+    }
+
+    /// <summary>为同一离手 transient 创建原 Order 的弃牌轨迹，并让任一已建 lease 都能幂等收口。</summary>
     internal BattleCommandPresentationTween CreateTransientCardMotionTween(
         BattleCardMotionCue cue,
-        Vector2 targetScreenPosition,
+        Vector2 discardScreenPosition,
         float duration,
         Ease ease)
     {
@@ -849,8 +873,7 @@ public sealed class HandCardContainer : MonoBehaviour
             throw new InvalidOperationException("Transient card motion requires a frozen CardId.");
         if (duration < 0f)
             throw new ArgumentOutOfRangeException(nameof(duration));
-        if (cue.Kind != BattleCardMotionCueKind.PlayCardToTarget &&
-            cue.Kind != BattleCardMotionCueKind.HandToDiscard)
+        if (cue.Kind != BattleCardMotionCueKind.HandToDiscard)
         {
             throw new InvalidOperationException(
                 $"Transient card motion cannot consume {cue.Kind}.");
@@ -865,7 +888,7 @@ public sealed class HandCardContainer : MonoBehaviour
         }
 
         Tween tween = transientCard.CreateTransientScreenMotionTween(
-            targetScreenPosition,
+            discardScreenPosition,
             duration,
             ease);
         Action cleanup = () => ReleaseTransientCard(cardId, transientCard);

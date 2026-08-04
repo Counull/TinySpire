@@ -3,6 +3,27 @@ created: 2026-07-06
 updated: 2026-08-05
 ---
 
+## 2026-08-05 M9 出牌、目标箭头与锁定框反馈（已实施，定向验收通过）
+
+> 本条是今日较早“收集反馈中 / Unity 回归待执行”两条记录的当前状态来源。
+
+- 用户授权直接实施三项反馈：`PlayCard` Prelude 不再把牌飞向怪物；攻击箭头改为独立 head 加多段 fragment，fragment 与 head 按曲线切线朝向；怪物锁定框改为四个角围住实际怪物边界。
+- `BattleTargetingArrowView` 的外部 `Show / UpdateArrow / Hide` seam 未扩大；内部用曲线采样和 fragment 池实现分段箭身。`ParticipantHudView` 对合法与悬停状态均使用四角件，按投影后的 `SpriteRenderer.bounds` 加 16 像素可调留白定位。
+- `PlayCardTransientHold` 继续只管理 transient 生命周期；唯一可见卡牌位移仍是结算时的 `CardMoved(Hand -> DiscardPile)`。
+- 验证：`dotnet build TinySpire/TinySpire.sln --no-restore -m:1` 为 0 error、12 条既有程序集版本冲突 warning；相关 Unity EditMode 类集为 26/26 通过、0 失败、0 跳过。详细结果见 `06_testing/2026-08-05-play-card-no-target-flight.md` 与 `06_testing/2026-08-05-m9-targeting-visual-feedback.md`。
+- 未改 Targeting 源图片/Meta、Candidates 资源、DataTables、Addressables 配置、Scene、`BattleCommandQueue`、`Turn` 或结算契约；未暂存、提交或推送本次新增改动。
+
+## 2026-08-05 · M9 目标箭头与锁定框视觉反馈（收集反馈中，未实施）
+
+- 新增 `plans/2026-08-05-m9-targeting-visual-feedback.md` 作为连续反馈的唯一记录：攻击箭头拆分为独立箭头与多段箭身 fragment，fragment 和箭头均按路径局部切线朝向；怪物锁定框改为放在怪物视觉后方的四个角件包围，不使用完整矩形底图。
+- 用户说明仍会继续反馈修改项，因此本轮只写入需求草案和索引；未修改 C#、Prefab、Scene、正式 Targeting 美术/Meta、Candidates 或任何运行时行为，未运行 Unity 验证、未暂存、未 commit/push。
+
+## 2026-08-05 · M9 出牌不飞向怪物（实现完成，Unity 回归待 Editor 空闲）
+
+- 用户反馈“出牌后牌会移动到怪物身上，这个不要”已记录为 `plans/2026-08-05-play-card-no-target-flight.md`。实现移除 `PlayCardToTarget` 与卡牌运动 cue 的 `TargetId`；`PlayCard` Prelude 现在只创建零时长、无位移的 `PlayCardTransientHold`，不再读取角色/怪物屏幕锚点。卡牌仍只在冻结的 `CardMoved(Hand → DiscardPile)` 自身 `Order` 飞向弃牌堆。
+- 保留 M9 单一 runner、Prelude 先于 Order 0、一次 completion 与 transient 异常/取消清理。无位移 hold 和后续弃牌 cue 共享幂等 release，故后续 cue 同步构造失败仍不会遗留离手卡；未修改 Queue、Turn、settlement、CardZones、Effect、目标规则/箭头、Scene、Prefab、DataTables、Addressables 或 Candidates。
+- 串行 `dotnet build TinySpire/TinySpire.sln --no-restore -m:1` 已为 **0 error、12 条既有程序集版本冲突 warning**。检查时既有 Unity Editor 正在 `BattleScene` Play Mode 转换中，未启动第二个 Editor、未驱动用户 Game View 或运行 Test Runner；定向与全量 EditMode 验证待 Editor 空闲后执行，详见 `06_testing/2026-08-05-play-card-no-target-flight.md`。
+
 ## 2026-08-05 · M9 验收后 Hand motion 双 BUG 与临时生命 HUD 修复（已完成）
 
 - `BUG-MOTION-001` 与 `BUG-MOTION-002` 已按 `06_testing/2026-08-05-m9-post-validation-bug-triage.md` 修复。`HandCardContainer` 继续只从当前 `CardZones.Layout` 收敛 View 与 base pose，但未被 `Draw→Hand` cue 展示过的 View 会保持隐藏；`HandCardVisual` 只在该冻结 cue 进入 runner 时显示并开始 incoming motion。普通 Layout 不再拥有可见入场运动，现有 Queue、Turn、settlement、一次 completion、取消/销毁边界保持不变。

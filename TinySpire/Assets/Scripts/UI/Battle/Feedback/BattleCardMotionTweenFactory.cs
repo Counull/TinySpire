@@ -8,7 +8,7 @@ namespace TinySpire.UI.Battle
     /// <summary>M9E 当前已接线的冻结卡牌运动提示类别。</summary>
     internal enum BattleCardMotionCueKind
     {
-        PlayCardToTarget,
+        PlayCardTransientHold,
         HandToDiscard,
         DrawToHand,
         CardsReshuffled,
@@ -23,9 +23,6 @@ namespace TinySpire.UI.Battle
         /// <summary>应移动的精确运行时卡牌实例。</summary>
         public CardInstanceId? CardId { get; }
 
-        /// <summary>出牌前奏的首个可见 Effect 目标；非目标运动为空。</summary>
-        public CombatantId? TargetId { get; }
-
         /// <summary>settlement 派生运动的原始 Order；命令级前奏为空。</summary>
         public int? SettlementOrder { get; }
 
@@ -36,20 +33,18 @@ namespace TinySpire.UI.Battle
         internal BattleCardMotionCue(
             BattleCardMotionCueKind kind,
             CardInstanceId? cardId,
-            CombatantId? targetId,
             int? settlementOrder,
             IEnumerable<CardInstanceId> newDrawPileOrder = null)
         {
             Kind = kind;
             CardId = cardId;
-            TargetId = targetId;
             SettlementOrder = settlementOrder;
             NewDrawPileOrder = new ReadOnlyCollection<CardInstanceId>(
                 new List<CardInstanceId>(newDrawPileOrder ?? Array.Empty<CardInstanceId>()));
         }
     }
 
-    /// <summary>把 M9E 的命令前奏与冻结卡区步骤路由到同一 presentation runner。</summary>
+    /// <summary>把 M9E 的 transient 持有与冻结卡区步骤路由到同一 presentation runner。</summary>
     internal sealed class BattleCardMotionTweenFactory
     {
         private readonly Func<BattleCardMotionCue, BattleCommandPresentationTween> _createTween;
@@ -61,7 +56,7 @@ namespace TinySpire.UI.Battle
             _createTween = createTween ?? throw new ArgumentNullException(nameof(createTween));
         }
 
-        /// <summary>只消费带有冻结卡牌与目标身份的 PlayCard 命令级前奏。</summary>
+        /// <summary>只消费带冻结卡牌身份的 PlayCard 前奏，持有离手 transient 但不移动到目标。</summary>
         internal bool TryCreate(
             BattleCommandPrelude prelude,
             out BattleCommandPresentationTween tween)
@@ -72,16 +67,15 @@ namespace TinySpire.UI.Battle
             tween = null;
             if (prelude.Kind != BattleCommandPreludeKind.PlayCard)
                 return false;
-            if (!prelude.CardId.HasValue || !prelude.TargetId.HasValue)
+            if (!prelude.CardId.HasValue)
             {
                 throw new InvalidOperationException(
-                    "PlayCard motion prelude requires frozen card and target identities.");
+                    "PlayCard transient hold prelude requires a frozen card identity.");
             }
 
             var cue = new BattleCardMotionCue(
-                BattleCardMotionCueKind.PlayCardToTarget,
+                BattleCardMotionCueKind.PlayCardTransientHold,
                 prelude.CardId.Value,
-                prelude.TargetId.Value,
                 settlementOrder: null);
             tween = CreateTween(cue);
             return true;
@@ -119,7 +113,6 @@ namespace TinySpire.UI.Battle
                 var movedCue = new BattleCardMotionCue(
                     kind.Value,
                     moved.CardId,
-                    targetId: null,
                     settlementOrder: step.SettlementOrder);
                 tween = CreateTween(movedCue);
                 return true;
@@ -133,7 +126,6 @@ namespace TinySpire.UI.Battle
                 var reshuffleCue = new BattleCardMotionCue(
                     BattleCardMotionCueKind.CardsReshuffled,
                     cardId: null,
-                    targetId: null,
                     settlementOrder: step.SettlementOrder,
                     newDrawPileOrder: reshuffled.NewDrawPileOrder);
                 tween = CreateTween(reshuffleCue);

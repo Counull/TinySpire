@@ -12,7 +12,6 @@ namespace TinySpire.UI.Battle
     /// </summary>
     public sealed class BattleCommandPresentationAdapter : IBattleCommandPresentation, ITickable, IDisposable
     {
-        private const float PlayCardPreludeDurationSeconds = 0.18f;
         private const float CardZoneMotionDurationSeconds = 0.22f;
         private const float ReshuffleMotionDurationSeconds = 0.32f;
 
@@ -368,21 +367,8 @@ namespace TinySpire.UI.Battle
         {
             switch (cue.Kind)
             {
-                case BattleCardMotionCueKind.PlayCardToTarget:
-                    if (!cue.TargetId.HasValue ||
-                        !_participantPresenter.TryGetPresentationScreenAnchor(
-                            cue.TargetId.Value,
-                            out Vector2 targetScreenPosition))
-                    {
-                        throw new InvalidOperationException(
-                            $"PlayCard target {cue.TargetId} has no current presentation anchor.");
-                    }
-
-                    return ResolveHandCardContainer().CreateTransientCardMotionTween(
-                        cue,
-                        targetScreenPosition,
-                        PlayCardPreludeDurationSeconds,
-                        Ease.OutCubic);
+                case BattleCardMotionCueKind.PlayCardTransientHold:
+                    return ResolveHandCardContainer().CreateTransientCardHoldTween(cue);
 
                 case BattleCardMotionCueKind.HandToDiscard:
                     if (!_cardPileHudView.TryGetPileScreenAnchor(

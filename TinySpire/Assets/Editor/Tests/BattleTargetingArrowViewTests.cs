@@ -37,14 +37,18 @@ public sealed class BattleTargetingArrowViewTests
         }
     }
 
-    /// <summary>验证功能性箭头按屏幕端点显示和隐藏，且全部 Graphic 始终不接收射线。</summary>
+    /// <summary>验证功能性箭头按弧线生成多段箭身，片段与箭头各自使用局部切线且全程不接收射线。</summary>
     [Test]
-    public void Arrow_ShowUpdateHide_UsesScreenEndpointsAndRemainsNonRaycast()
+    public void Arrow_ShowUpdateHide_UsesCurvedTangentFragmentsAndRemainsNonRaycast()
     {
         var canvasObject = new GameObject("TargetingCanvas", typeof(RectTransform), typeof(Canvas));
         var arrowObject = new GameObject("TargetingArrow", typeof(RectTransform));
         var visualObject = new GameObject("VisualRoot", typeof(RectTransform));
-        var lineObject = new GameObject("Line", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        var fragmentTemplateObject = new GameObject(
+            "FragmentTemplate",
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(Image));
         var headObject = new GameObject("Head", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         try
         {
@@ -52,48 +56,65 @@ public sealed class BattleTargetingArrowViewTests
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             arrowObject.transform.SetParent(canvasObject.transform, false);
             visualObject.transform.SetParent(arrowObject.transform, false);
-            lineObject.transform.SetParent(visualObject.transform, false);
+            fragmentTemplateObject.transform.SetParent(visualObject.transform, false);
             headObject.transform.SetParent(visualObject.transform, false);
             var coordinateSpace = (RectTransform)arrowObject.transform;
             coordinateSpace.sizeDelta = new Vector2(1920f, 1080f);
-            var lineRect = (RectTransform)lineObject.transform;
-            lineRect.pivot = new Vector2(0f, 0.5f);
+            var fragmentTemplateRect = (RectTransform)fragmentTemplateObject.transform;
+            fragmentTemplateRect.pivot = new Vector2(0.5f, 0.5f);
             var headRect = (RectTransform)headObject.transform;
-            Image lineImage = lineObject.GetComponent<Image>();
+            Image fragmentTemplate = fragmentTemplateObject.GetComponent<Image>();
             Image headImage = headObject.GetComponent<Image>();
             BattleTargetingArrowView view = arrowObject.AddComponent<BattleTargetingArrowView>();
             var serializedView = new SerializedObject(view);
             serializedView.FindProperty("_coordinateSpace").objectReferenceValue = coordinateSpace;
             serializedView.FindProperty("_visualRoot").objectReferenceValue = visualObject;
-            serializedView.FindProperty("_lineRect").objectReferenceValue = lineRect;
+            serializedView.FindProperty("_fragmentTemplate").objectReferenceValue = fragmentTemplate;
             serializedView.FindProperty("_headRect").objectReferenceValue = headRect;
-            serializedView.FindProperty("_lineImage").objectReferenceValue = lineImage;
             serializedView.FindProperty("_headImage").objectReferenceValue = headImage;
             serializedView.ApplyModifiedPropertiesWithoutUndo();
 
-            view.Show(new Vector2(100f, 100f), new Vector2(300f, 100f));
+            view.Show(new Vector2(100f, 100f), new Vector2(900f, 100f));
 
             Assert.That(view.IsVisible, Is.True);
-            Assert.That(lineRect.sizeDelta.x, Is.EqualTo(200f).Within(0.01f));
-            Assert.That(lineImage.raycastTarget, Is.False);
+            Image[] activeFragments = visualObject.GetComponentsInChildren<Image>(includeInactive: true);
+            activeFragments = System.Array.FindAll(
+                activeFragments,
+                image => image != headImage && image.gameObject.activeSelf);
+            Assert.That(activeFragments, Has.Length.GreaterThan(1));
+            Assert.That(fragmentTemplate.gameObject.activeSelf, Is.False);
+            Assert.That(activeFragments, Has.All.Property(nameof(Graphic.raycastTarget)).False);
             Assert.That(headImage.raycastTarget, Is.False);
             Assert.That(
-                Mathf.DeltaAngle(headRect.localEulerAngles.z, lineRect.localEulerAngles.z),
-                Is.Zero.Within(0.01f));
+                Mathf.Abs(Mathf.DeltaAngle(headRect.localEulerAngles.z, 0f)),
+                Is.GreaterThan(0.1f),
+                "水平端点的箭头仍应按曲线终点切线旋转。");
+            Assert.That(
+                Mathf.Abs(Mathf.DeltaAngle(
+                    activeFragments[0].rectTransform.localEulerAngles.z,
+                    activeFragments[activeFragments.Length - 1].rectTransform.localEulerAngles.z)),
+                Is.GreaterThan(0.1f),
+                "箭身片段应分别跟随所在位置的局部切线。");
 
-            Vector2 originBeforeUpdate = lineRect.anchoredPosition;
+            Vector2 originBeforeUpdate = activeFragments[0].rectTransform.anchoredPosition;
             Vector2 endpointBeforeUpdate = headRect.anchoredPosition;
             view.UpdateArrow(new Vector2(200f, 200f), new Vector2(200f, 500f));
 
-            Assert.That(lineRect.anchoredPosition, Is.Not.EqualTo(originBeforeUpdate));
+            Image updatedFragment = System.Array.Find(
+                visualObject.GetComponentsInChildren<Image>(includeInactive: true),
+                image => image != headImage && image.gameObject.activeSelf);
+            Assert.That(updatedFragment, Is.Not.Null);
+            Assert.That(updatedFragment.rectTransform.anchoredPosition, Is.Not.EqualTo(originBeforeUpdate));
             Assert.That(headRect.anchoredPosition, Is.Not.EqualTo(endpointBeforeUpdate));
-            Assert.That(
-                Mathf.DeltaAngle(headRect.localEulerAngles.z, lineRect.localEulerAngles.z),
-                Is.Zero.Within(0.01f));
 
             view.Hide();
 
             Assert.That(view.IsVisible, Is.False);
+            Assert.That(
+                System.Array.Exists(
+                    visualObject.GetComponentsInChildren<Image>(includeInactive: true),
+                    image => image != headImage && image.gameObject.activeSelf),
+                Is.False);
         }
         finally
         {

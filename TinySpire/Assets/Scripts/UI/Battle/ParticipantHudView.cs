@@ -32,11 +32,9 @@ namespace TinySpire.UI.Battle
         [SerializeField] private Text _intentValueText;
         [SerializeField] private RectTransform _targetHighlightAnchor;
         [SerializeField] private GameObject _legalTargetHighlightRoot;
-        [SerializeField] private Image _legalTargetHighlightLeftImage;
-        [SerializeField] private Image _legalTargetHighlightRightImage;
+        [SerializeField] private Image[] _legalTargetHighlightCornerImages;
         [SerializeField] private GameObject _hoveredTargetHighlightRoot;
-        [SerializeField] private Image _hoveredTargetHighlightLeftImage;
-        [SerializeField] private Image _hoveredTargetHighlightRightImage;
+        [SerializeField] private Image[] _hoveredTargetHighlightCornerImages;
         [SerializeField] private RectTransform _feedbackAnchor;
         [SerializeField] private BattleFloatingNumberView _floatingNumberPrefab;
         [SerializeField] private Sprite _attackIntentSprite;
@@ -46,6 +44,7 @@ namespace TinySpire.UI.Battle
         [SerializeField] private Sprite _specialIntentSprite;
         [SerializeField, Min(0f)] private float _headOffset = 0.2f;
         [SerializeField, Min(0f)] private float _nameAboveVitalsOffset = 0.5f;
+        [SerializeField, Min(0f)] private float _targetHighlightPadding = 16f;
         [SerializeField, Min(0.01f)] private float _hitShakeDurationSeconds = 0.28f;
         [SerializeField, Min(0f)] private float _hitShakeStrength = 0.12f;
         [SerializeField, Min(0.02f)] private float _hudPulseDurationSeconds = 0.24f;
@@ -214,7 +213,7 @@ namespace TinySpire.UI.Battle
                 return;
 
             Bounds bounds = _spriteRenderer.bounds;
-            PositionAtWorldPoint(_targetHighlightAnchor, bounds.center);
+            PositionTargetHighlightAtBounds(bounds);
             PositionAtWorldPoint(_feedbackAnchor, bounds.center);
             var vitalsWorldPoint = new Vector3(
                 bounds.center.x,
@@ -548,6 +547,45 @@ namespace TinySpire.UI.Battle
             hudElement.anchoredPosition = localPoint;
         }
 
+        /// <summary>将四角锁定框投影为当前角色 Sprite 边界外的屏幕矩形，使角件围住目标而不覆盖其主体。</summary>
+        private void PositionTargetHighlightAtBounds(Bounds bounds)
+        {
+            Camera camera = _canvas.worldCamera != null ? _canvas.worldCamera : Camera.main;
+            if (camera == null)
+                throw new InvalidOperationException("ParticipantHudView requires a Canvas camera or a tagged Main Camera.");
+
+            RectTransform canvasRect = (RectTransform)_canvas.transform;
+            Vector2 minLocal = new Vector2(float.PositiveInfinity, float.PositiveInfinity);
+            Vector2 maxLocal = new Vector2(float.NegativeInfinity, float.NegativeInfinity);
+            for (int x = 0; x <= 1; x++)
+            for (int y = 0; y <= 1; y++)
+            for (int z = 0; z <= 1; z++)
+            {
+                Vector3 worldPoint = new Vector3(
+                    x == 0 ? bounds.min.x : bounds.max.x,
+                    y == 0 ? bounds.min.y : bounds.max.y,
+                    z == 0 ? bounds.min.z : bounds.max.z);
+                Vector3 screenPoint = camera.WorldToScreenPoint(worldPoint);
+                if (screenPoint.z <= 0f || !RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                        canvasRect,
+                        screenPoint,
+                        _canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : camera,
+                        out Vector2 localPoint))
+                {
+                    _targetHighlightAnchor.gameObject.SetActive(false);
+                    return;
+                }
+
+                minLocal = Vector2.Min(minLocal, localPoint);
+                maxLocal = Vector2.Max(maxLocal, localPoint);
+            }
+
+            _targetHighlightAnchor.gameObject.SetActive(true);
+            _targetHighlightAnchor.anchoredPosition = (minLocal + maxLocal) * 0.5f;
+            _targetHighlightAnchor.sizeDelta = maxLocal - minLocal
+                                               + Vector2.one * (_targetHighlightPadding * 2f);
+        }
+
         /// <summary>确认 Prefab 已配置所有必需的展示节点。</summary>
         private void ValidateReferences()
         {
@@ -568,11 +606,9 @@ namespace TinySpire.UI.Battle
                 || _intentValueText == null
                 || _targetHighlightAnchor == null
                 || _legalTargetHighlightRoot == null
-                || _legalTargetHighlightLeftImage == null
-                || _legalTargetHighlightRightImage == null
+                || !HasFourTargetHighlightCorners(_legalTargetHighlightCornerImages)
                 || _hoveredTargetHighlightRoot == null
-                || _hoveredTargetHighlightLeftImage == null
-                || _hoveredTargetHighlightRightImage == null
+                || !HasFourTargetHighlightCorners(_hoveredTargetHighlightCornerImages)
                 || _feedbackAnchor == null
                 || _floatingNumberPrefab == null
                 || _attackIntentSprite == null
@@ -584,6 +620,21 @@ namespace TinySpire.UI.Battle
                 throw new InvalidOperationException(
                     "ParticipantHudView is missing one or more serialized HUD references.");
             }
+        }
+
+        /// <summary>确认每一种锁定状态均有四个独立且序列化的角件，不依赖运行时查找或临时创建。</summary>
+        private static bool HasFourTargetHighlightCorners(Image[] cornerImages)
+        {
+            if (cornerImages == null || cornerImages.Length != 4)
+                return false;
+
+            foreach (Image cornerImage in cornerImages)
+            {
+                if (cornerImage == null)
+                    return false;
+            }
+
+            return true;
         }
     }
 }

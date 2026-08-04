@@ -42,14 +42,14 @@ public sealed class BattleTargetingPrefabContractTests
         Assert.That(graphics, Has.All.Property(nameof(Graphic.raycastTarget)).False);
     }
 
-    /// <summary>验证箭身与箭头 Image 精确引用 Runtime/Targeting 的正式 Sprite 子资源。</summary>
+    /// <summary>验证箭身片段模板与箭头 Image 精确引用 Runtime/Targeting 的正式 Sprite 子资源。</summary>
     [Test]
     public void TargetingArrowPrefab_UsesOfficialBodyAndHeadSprites()
     {
         GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(ArrowPrefabPath);
         BattleTargetingArrowView arrow = prefab.GetComponent<BattleTargetingArrowView>();
         var serializedArrow = new SerializedObject(arrow);
-        Image body = serializedArrow.FindProperty("_lineImage").objectReferenceValue as Image;
+        Image body = serializedArrow.FindProperty("_fragmentTemplate").objectReferenceValue as Image;
         Image head = serializedArrow.FindProperty("_headImage").objectReferenceValue as Image;
 
         Assert.That(body, Is.Not.Null);
@@ -70,6 +70,11 @@ public sealed class BattleTargetingPrefabContractTests
         Assert.That(head.preserveAspect, Is.True);
         Assert.That(body.raycastTarget, Is.False);
         Assert.That(head.raycastTarget, Is.False);
+        Assert.That(body.gameObject.activeSelf, Is.False);
+        Assert.That(
+            serializedArrow.FindProperty("_maxFragmentCount").intValue,
+            Is.GreaterThan(1),
+            "箭身必须可以生成多个片段。");
 
         string[] dependencies = AssetDatabase.GetDependencies(ArrowPrefabPath, recursive: true);
         Assert.That(

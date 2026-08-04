@@ -15,9 +15,9 @@ public sealed class BattleCardMotionTweenFactoryTests
         DOTween.Kill(_testTweenId, complete: false);
     }
 
-    /// <summary>验证出牌轨迹与后续卡区轨迹共用同一 runner，并保持 Prelude 先于原 settlement Order。</summary>
+    /// <summary>验证出牌前奏只持有 transient，且后续弃牌轨迹仍共用同一 runner 与原 settlement Order。</summary>
     [Test]
-    public void Play_PlayCardPreludeRunsBeforeOrderZeroAndCardMovedAtItsOwnOrder()
+    public void Play_PlayCardPreludeHoldsTransientWithoutTargetFlightAndCardMovedAtItsOwnOrder()
     {
         var playerId = new CombatantId(1001);
         var enemyId = new CombatantId(2001);
@@ -78,20 +78,18 @@ public sealed class BattleCardMotionTweenFactoryTests
             playbackOrder,
             Is.EqualTo(new[]
             {
-                "PlayCardToTarget:Prelude",
+                "PlayCardTransientHold:Prelude",
                 "HealthLossNumber:1",
                 "HitShake:1",
                 "HandToDiscard:2",
                 "Completion",
             }));
         Assert.That(capturedCues, Has.Count.EqualTo(2));
-        Assert.That(capturedCues[0].Kind, Is.EqualTo(BattleCardMotionCueKind.PlayCardToTarget));
+        Assert.That(capturedCues[0].Kind, Is.EqualTo(BattleCardMotionCueKind.PlayCardTransientHold));
         Assert.That(capturedCues[0].CardId, Is.EqualTo(cardId));
-        Assert.That(capturedCues[0].TargetId, Is.EqualTo(enemyId));
         Assert.That(capturedCues[0].SettlementOrder, Is.Null);
         Assert.That(capturedCues[1].Kind, Is.EqualTo(BattleCardMotionCueKind.HandToDiscard));
         Assert.That(capturedCues[1].CardId, Is.EqualTo(cardId));
-        Assert.That(capturedCues[1].TargetId, Is.Null);
         Assert.That(capturedCues[1].SettlementOrder, Is.EqualTo(2));
         Assert.That(plan.SettlementEntries[0].Settlement, Is.SameAs(energySpent));
         Assert.That(plan.SettlementEntries[1].Settlement, Is.SameAs(damage));
@@ -204,7 +202,6 @@ public sealed class BattleCardMotionTweenFactoryTests
         Assert.That(captured, Is.Not.Null);
         Assert.That(captured.Kind, Is.EqualTo(BattleCardMotionCueKind.CardsReshuffled));
         Assert.That(captured.CardId, Is.Null);
-        Assert.That(captured.TargetId, Is.Null);
         Assert.That(captured.SettlementOrder, Is.EqualTo(4));
         Assert.That(captured.NewDrawPileOrder, Is.EqualTo(new[] { secondCardId, firstCardId }));
     }
