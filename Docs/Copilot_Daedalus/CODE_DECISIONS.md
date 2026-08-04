@@ -545,4 +545,14 @@ updated: 2026-08-05
 
 **理由**：Plan 把“派生什么”与 concrete View 的“如何补间”分开，而 runner 仍只有一个父顺序和一个 Queue completion；因此表现可以深化而不改变 Queue、Turn、settlement、公式、目标或终局契约。常驻事实即时投影、一次性反馈冻结读取，使加速、取消、重建和 locale 切换都不会反向写入战斗状态或留下第二份事实。
 
-**影响**：本决策取代 CD-030 的固定 0.35 秒占位时长，但保留其“其他合法输入不全局锁定、pending 按权威身份对账”的边界。M9 只深化 `TinySpire/Assets/Scripts/UI/Battle/**` 与列明的 concrete Prefab/Localization 资源，没有新增 settlement 事件总线、每记录 presenter interface、第二动画队列、public terminal API、RunState、MainMenu 或 DI seam。最终验证与双轴复审见 `06_testing/2026-08-02-m9g-full-validation-review.md`。
+**影响**：本决策取代 CD-030 的固定 0.35 秒占位时长，但保留其“其他合法输入不全局锁定、pending 按权威身份对账”的边界。M9 只深化 `TinySpire/Assets/Scripts/UI/Battle/**` 与列明的 concrete Prefab/Localization 资源，没有新增 settlement 事件总线、每记录 presenter interface、第二动画队列、public terminal API、RunState、MainMenu 或 DI seam。2026-08-05 的后验修正进一步锁定：`HandCardContainer` 只能把未展示的当前 Hand View 准备到 base pose；其可见性由对应冻结 `Draw→Hand` cue 开始时取得，局部 View lifecycle 不能成为 Hand/Turn/settlement 的第二事实。验证见 `06_testing/2026-08-05-m9-post-validation-bug-triage.md`。
+
+## CD-050：UI 大改前，Participant HUD 临时投影到角色头顶
+
+**问题**：`BUG-UI-001` 已在五种 M9 宽高比中确认生命 HUD 与 Overlay 手牌发生屏幕相交；现有 HUD 又位于 Camera Canvas，故相交时会被手牌遮挡。用户已明确后续 Battle UI 将整体重做，但当前仍需要让生命信息可读。
+
+**选择**：保持现有 Canvas、Scene、排序和参与者事实不变。`ParticipantHudView` 将 `VitalsAnchor` 从角色脚下改投影至精灵 bounds 顶部外侧，并把 `NameAnchor` 固定置于生命 HUD 上方；唯一新增的 Prefab 序列化参数是两者的垂直间距，便于后续 UI 替换或微调。
+
+**理由**：这是一项可替换的止血改动，避开当前手牌主要覆盖的下方区域，且不把临时可读性要求扩大为 Canvas 层级、场景布局或完整 HUD 架构选择。HUD 仍只读取当前 `SpriteRenderer` bounds 与当前 Combatant 事实，不复制生命、意图或回合状态。
+
+**影响**：只影响 `ParticipantHudView.cs`、`ParticipantHudView.prefab` 与其 Editor 投影测试；不修改 `BattleScene.unity`、Queue、Turn、settlement、目标、终局、DI、DataTables、Addressables 配置或 Candidates。未来 Battle UI 重设计应整体替换该临时投影，不把其偏移量视为最终视觉规范。验证见 `06_testing/2026-08-05-m9-post-validation-bug-triage.md`。

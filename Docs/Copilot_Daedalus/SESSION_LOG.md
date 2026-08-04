@@ -3,6 +3,24 @@ created: 2026-07-06
 updated: 2026-08-05
 ---
 
+## 2026-08-05 · M9 验收后 Hand motion 双 BUG 与临时生命 HUD 修复（已完成）
+
+- `BUG-MOTION-001` 与 `BUG-MOTION-002` 已按 `06_testing/2026-08-05-m9-post-validation-bug-triage.md` 修复。`HandCardContainer` 继续只从当前 `CardZones.Layout` 收敛 View 与 base pose，但未被 `Draw→Hand` cue 展示过的 View 会保持隐藏；`HandCardVisual` 只在该冻结 cue 进入 runner 时显示并开始 incoming motion。普通 Layout 不再拥有可见入场运动，现有 Queue、Turn、settlement、一次 completion、取消/销毁边界保持不变。
+- 两条真实 `CardZones.Layout` + container + visual + runner 的精确测试先在任务 `a63b7dfd32a74427ac0bc28f5b925bcb` 得到 **0/2 passed，2/2 failed**，修复后任务 `c7e59c0df1424678a38ba5ecebad0b25` 为 **2/2 passed**。相关 Hand/card-motion/adapter/runner 回归 `d925456056364adf9c6f10fa87cd3c2f` 为 **46/46 passed**，全量 EditMode `d40a8c5543194fa79db5ac18d5e561cb` 为 **425/425 passed**；串行 `dotnet build TinySpire/TinySpire.sln --no-restore -m:1` 为 0 error、12 条既有版本冲突 warning。全量测试后的 Console 仅有 PerformanceTesting 的 IPrebuild/IPostBuild 提示与 TestResults 写入记录，不把它们冒充本次代码问题或 0 warning。
+- 用户明确后续 Battle UI 将整体重做后，`BUG-UI-001` 采用临时、可替换的头顶投影：`ParticipantHudView` 把生命/状态锚点投影到角色精灵 bounds 顶部外侧，名称再向上错开；`ParticipantHudView.prefab` 只新增名称与生命 HUD 的可调垂直间距。现有 Canvas、Scene、排序和参与者事实均未改变，后续 UI 重做可整体替换这段布局逻辑。
+- 已由既有 Unity Editor 导入本次改动且 Console Error 为 0。定向 `LateUpdate_ProjectsVitalsAboveHeadAndNameAboveVitals` 为 **1/1 passed**；全量 EditMode 任务 `d50762b82f0147df82921b0e6c388c00` 为 **426/426 passed**。修改后的 `dotnet build TinySpire/TinySpire.sln --no-restore -m:1` 为 0 error、12 条既有版本冲突 warning。
+- 在同一个 Editor 的真实 BattleScene 复测 `M9D final` 五种尺寸：`1600×700`、`1600×900`、`1600×1000`、`1600×1100`、`1600×1400` 各有 3 条实际 `HealthBar` 与 5 张 `CardContent`，每种均为 **0 个矩形相交对**。测试后已恢复 Game View 的 `1600×1100` 预设并退出本次启动的 Play Mode；没有保存 Scene 或修改 Canvas/排序。
+- 已在既有 Editor 的 `1600×1100`（`16:11`）`Round 1 / PlayerAction` 静态 Game View 帧观察一次：玩家生命徽章与两名敌人上方数值/意图元素均可见，未复现 `BUG-UI-001`。该临时截图已清理，不能替代连续帧、五种宽高比或最小遮挡复现。
+- `BUG-UI-001` 的五种宽高比测量仍是修复前证据：每种尺寸有 5～8 个生命条与手牌 `CardContent` 相交对。生命 HUD 位于 `BattleScene` 的 `ScreenSpaceCamera` Canvas（order `0`），手牌位于 `ScreenSpaceOverlay` Canvas（order `0`～`4`），故相交时手牌会在 HUD 之上渲染；本次不以调整 Canvas 覆盖该根因，而以移动临时 HUD 位置避开当前覆盖区域。
+- 先前未保存的 Overlay/order `200` 实验仅保留为诊断证据，未写入任何资产，也不构成本次修复方案。Queue、Turn、settlement、公式、目标、终局、DI、DataTables、Localization、Addressables 配置、Candidates 或受保护的 Hermes 美术路径均不在本 BUG 的修改范围；未暂存、未 commit、未 push。
+
+## 2026-08-05 · M9 验收后 BUG 分诊与结构审查关联（已记录，未修复）
+
+- 新增 `06_testing/2026-08-05-m9-post-validation-bug-triage.md`，固定三个不冲突的编号：`BUG-UI-001`（生命 HUD 遮挡）、`BUG-MOTION-001`（初始手牌提前出现并重复发牌）、`BUG-MOTION-002`（受击反馈未结束时下一轮手牌抢跑）。三项均保持 reported / 未修复；用户实机报告、代码已观察、高置信推断和已验证证据分层记录，没有把静态诊断冒充 Agent 独立复现。
+- 两个卡牌运动问题保留独立验收，但共同诊断为权威 Hand 唯一、可见 Hand motion 却由普通 Layout/base-pose Tween 与 M9 正式 cue 双重拥有；当前证据不支持修改 Queue 或增加栅栏。精确红灯、最小 concrete UI 范围、禁止全局输入锁/第二队列/事实镜像及契约扩张停止点均已写明。
+- 用户确认此前 Claude 类似审查是 `07_retrospective/2026-08-01-m5-architecture-roast.md`：它是 M6 阶段产出的 M0～M5 历史架构审查。新分诊把其 §2.4/§2.7/§2.8 风险预警、M6D 的谨慎分流，与现有 `plans/2026-08-05-m9-code-structure-review.md` 的 A2/C1 建议并列关联；两份原文均未被改写，完整 Container 拆分仍是独立架构工作。
+- 支持性 EditMode 任务 `4abbc7e83d2b4a58882570f0e94554b9` 为 **3/3 passed**，只证明 runner 顺序、敌人结算和重洗/抽牌事实，不覆盖真实 Layout subscription 与反馈 cue 的并行可见时间线。当前只改文档索引与日志，未改代码、Prefab、Scene、配置或资源，未运行修复后回归，也未 commit/push；`packages-lock.json`、`.codex_work` 与 Hermes/Candidates 用户改动持续排除。
+
 ## 2026-08-05 · M9G 全量验证与双轴收口（已完成）
 
 - Standards 首轮发现 PlayCard Prelude 已脱离手牌后若后续 cue factory 同步抛错，transient lease 可能没有被 runner 接管；新增精确红灯任务 `1c2d50ad7851429c8703704859b79771` 后，让 Prelude 与 Hand→Discard 共享幂等释放边界。单项 **1/1**、相关 **24/24**、M9 定向 **160/160**、M2～M8 回归 **262/262**、全量 EditMode **423/423** 均通过；串行 solution build 0 error、12 条既有依赖 warning。

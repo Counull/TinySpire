@@ -45,7 +45,7 @@ namespace TinySpire.UI.Battle
         [SerializeField] private Sprite _debuffIntentSprite;
         [SerializeField] private Sprite _specialIntentSprite;
         [SerializeField, Min(0f)] private float _headOffset = 0.2f;
-        [SerializeField, Min(0f)] private float _feetOffset = 0.2f;
+        [SerializeField, Min(0f)] private float _nameAboveVitalsOffset = 0.5f;
         [SerializeField, Min(0.01f)] private float _hitShakeDurationSeconds = 0.28f;
         [SerializeField, Min(0f)] private float _hitShakeStrength = 0.12f;
         [SerializeField, Min(0.02f)] private float _hudPulseDurationSeconds = 0.24f;
@@ -207,7 +207,7 @@ namespace TinySpire.UI.Battle
             SetTargetHighlight(isLegalCandidate: false, isHovered: false);
         }
 
-        /// <summary>在布局结束后将名称和生命 HUD 投影到角色的头顶与脚下。</summary>
+        /// <summary>在布局结束后将生命与状态投影到头顶，并把名称稳定置于生命 HUD 上方。</summary>
         private void LateUpdate()
         {
             if (_spriteRenderer == null || _canvas == null)
@@ -216,8 +216,14 @@ namespace TinySpire.UI.Battle
             Bounds bounds = _spriteRenderer.bounds;
             PositionAtWorldPoint(_targetHighlightAnchor, bounds.center);
             PositionAtWorldPoint(_feedbackAnchor, bounds.center);
-            PositionAtWorldPoint(_nameAnchor, new Vector3(bounds.center.x, bounds.max.y + _headOffset, bounds.center.z));
-            PositionAtWorldPoint(_vitalsAnchor, new Vector3(bounds.center.x, bounds.min.y - _feetOffset, bounds.center.z));
+            var vitalsWorldPoint = new Vector3(
+                bounds.center.x,
+                bounds.max.y + _headOffset,
+                bounds.center.z);
+            PositionAtWorldPoint(_vitalsAnchor, vitalsWorldPoint);
+            PositionAtWorldPoint(
+                _nameAnchor,
+                vitalsWorldPoint + Vector3.up * _nameAboveVitalsOffset);
         }
 
         /// <summary>按参与者当前生命事实刷新生命条与数值。</summary>

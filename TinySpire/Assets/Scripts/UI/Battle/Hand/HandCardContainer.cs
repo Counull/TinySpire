@@ -56,6 +56,7 @@ public sealed class HandCardContainer : MonoBehaviour
 
     private readonly List<HandCardVisual> _cards = new();
     private readonly Dictionary<CardInstanceId, HandCardVisual> _transientCards = new();
+    private readonly HashSet<CardInstanceId> _visibleHandCards = new();
     private readonly Dictionary<int, AsyncOperationHandle<Sprite>> _illustrationHandles = new();
     private readonly Dictionary<BattleCommandHandle, CardInstanceId> _pendingPlayCards = new();
     private HandCardVisual _draggingCard;
@@ -459,6 +460,7 @@ public sealed class HandCardContainer : MonoBehaviour
             if (ContainsCardId(hand, card.CardId))
                 continue;
 
+            _visibleHandCards.Remove(card.CardId);
             DetachTransientCard(card);
             _cards.RemoveAt(index);
         }
@@ -470,11 +472,11 @@ public sealed class HandCardContainer : MonoBehaviour
             HandCardVisual card = FindCardById(cardState.Id);
             if (card == null)
                 card = CreateCard(cardState);
-            else
-                BindCardPresentation(card, cardState);
 
             if (card != null)
             {
+                if (!_visibleHandCards.Contains(cardId))
+                    card.PrepareForIncomingCardMotion();
                 if (TryGetPendingPlayHandle(cardId, out BattleCommandHandle pendingHandle))
                     card.SetCommandPending(pendingHandle);
                 orderedCards.Add(card);
@@ -685,7 +687,7 @@ public sealed class HandCardContainer : MonoBehaviour
                 fanPose.RotationDegrees,
                 IndexOf(card));
 
-            if (card.IsIncomingCardMotionActive)
+            if (card.IsIncomingCardMotionPending || card.IsIncomingCardMotionActive)
                 card.SetBasePose(pose);
             else if (immediate)
                 card.SetBasePoseImmediately(pose);
@@ -897,6 +899,7 @@ public sealed class HandCardContainer : MonoBehaviour
                 $"Draw motion cannot find authoritative Hand View {cue.CardId.Value}.");
         }
 
+        _visibleHandCards.Add(cue.CardId.Value);
         Tween tween = card.CreateIncomingScreenMotionTween(
             drawScreenPosition,
             duration,

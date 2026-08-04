@@ -15,6 +15,7 @@ updated: 2026-08-05
 
 ## 验证记录
 
+- [2026-08-05 M9 验收后 BUG 分诊与结构审查关联](2026-08-05-m9-post-validation-bug-triage.md) — 两项 Hand motion 由精确红灯、426/426 EditMode 覆盖；生命 HUD 临时投影到角色头顶，并在五种真实 BattleScene 尺寸复测为 0 相交对
 - [2026-08-02 M9G 全量验证、真实交互、Player 退出与双轴复审](2026-08-02-m9g-full-validation-review.md)
 - [2026-08-02 M9F 阶段横幅、胜负面板、重开与退出](2026-08-02-m9f-turn-terminal-restart-exit.md)
 - [2026-08-02 M9E 出牌、弃牌、抽牌与重洗运动](2026-08-02-m9e-card-zone-motion.md)

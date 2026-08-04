@@ -586,6 +586,217 @@ public sealed class HandCardMotionTests
         }
     }
 
+    /// <summary>验证 StartBattle 覆盖层播放期间，Layout 订阅只准备权威 Hand View，不得提前显示或补间 opening draw。</summary>
+    [Test]
+    public void StartBattle_OverlayBeforeOpeningDraw_DoesNotExposeHandBeforeCardMovedCue()
+    {
+        GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(CardPrefabPath);
+        GameObject containerObject = new GameObject("OpeningDrawMotionContainer");
+        GameObject cardObject = Object.Instantiate(prefab);
+        using var zones = new BattleCardZonesData(new[] { 3001 }, shuffleSeed: 5012);
+        try
+        {
+            CardInstanceId cardId = zones.DrawPile[0];
+            HandCardVisual visual = cardObject.GetComponent<HandCardVisual>();
+            CanvasGroup canvasGroup = visual.CardContent.gameObject.AddComponent<CanvasGroup>();
+            visual.Initialize(Vector3.one * 0.36f, cardId, canvasGroup);
+            visual.SetBasePoseImmediately(new HandCardPose(new Vector2(80f, -300f), 7f, 0));
+            Vector2 drawScreenPosition = visual.GetScreenCenter() + new Vector2(-320f, -120f);
+            Canvas cardCanvas = cardObject.GetComponent<Canvas>();
+            HandCardContainer container = containerObject.AddComponent<HandCardContainer>();
+            typeof(HandCardContainer).GetField(
+                    "_cardZones",
+                    BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.SetValue(container, zones);
+            var interactiveCards = typeof(HandCardContainer).GetField(
+                    "_cards",
+                    BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.GetValue(container) as List<HandCardVisual>;
+            Assert.That(interactiveCards, Is.Not.Null);
+            MethodInfo rebuildCards = typeof(HandCardContainer).GetMethod(
+                "RebuildCards",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(rebuildCards, Is.Not.Null);
+            rebuildCards.Invoke(container, new object[] { true });
+            interactiveCards.Add(visual);
+            var layoutRebuildCount = 0;
+            using IDisposable layoutSubscription = zones.Layout
+                .Select(layout => layout.Hand)
+                .Skip(1)
+                .Subscribe(_ =>
+                {
+                    layoutRebuildCount++;
+                    rebuildCards.Invoke(container, new object[] { false });
+                });
+
+            zones.Draw(1);
+
+            Assert.That(layoutRebuildCount, Is.EqualTo(1));
+            Assert.That(visual.IsIncomingCardMotionPending, Is.True);
+            Assert.That(
+                cardCanvas.enabled,
+                Is.False,
+                "StartBattle 覆盖层完成前，Layout 不得让 opening Hand View 可见。");
+
+            var result = new BattleCommandExecutionResult(
+                authoritySequence: 1,
+                BattleCommandType.StartBattle,
+                submitterId: null,
+                BattleCommandExecutionFailureReason.None,
+                new BattleSettlementRecord[]
+                {
+                    new BattleCardMovedSettlement(
+                        order: 0,
+                        cardId,
+                        BattleCardZone.DrawPile,
+                        BattleCardZone.Hand),
+                });
+            BattleCommandPresentationPlan plan = BattleCommandPresentationPlan.Create(result);
+            var cardMotionFactory = new BattleCardMotionTweenFactory(cue =>
+                container.CreateIncomingCardMotionTween(
+                    cue,
+                    drawScreenPosition,
+                    duration: 0.2f,
+                    ease: Ease.Linear,
+                    requestFastForward: () => { }));
+            using var runner = new BattleCommandPresentationRunner(
+                _ => CreateDurationTween(0.2f),
+                step => cardMotionFactory.TryCreate(step, out BattleCommandPresentationTween tween)
+                    ? tween
+                    : CreateZeroDurationTween());
+
+            runner.Play(plan, () => { });
+            runner.Tick(0.1f);
+
+            Assert.That(cardCanvas.enabled, Is.False);
+            Assert.That(visual.IsIncomingCardMotionActive, Is.False);
+
+            runner.Tick(0.11f);
+
+            Assert.That(cardCanvas.enabled, Is.True);
+            Assert.That(visual.IsIncomingCardMotionActive, Is.True);
+        }
+        finally
+        {
+            if (cardObject != null)
+                Object.DestroyImmediate(cardObject);
+            Object.DestroyImmediate(containerObject);
+        }
+    }
+
+    /// <summary>验证敌人伤害的数字与抖动均结束前，Layout 不得让下一轮 Draw→Hand 抢跑。</summary>
+    [Test]
+    public void EnemyAttackBeforeRoundDraw_DoesNotStartHandMotionUntilDamageFeedbackCompletes()
+    {
+        GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(CardPrefabPath);
+        GameObject containerObject = new GameObject("EnemyDamageRoundDrawMotionContainer");
+        GameObject cardObject = Object.Instantiate(prefab);
+        using var zones = new BattleCardZonesData(new[] { 3001 }, shuffleSeed: 5013);
+        try
+        {
+            CardInstanceId cardId = zones.DrawPile[0];
+            HandCardVisual visual = cardObject.GetComponent<HandCardVisual>();
+            CanvasGroup canvasGroup = visual.CardContent.gameObject.AddComponent<CanvasGroup>();
+            visual.Initialize(Vector3.one * 0.36f, cardId, canvasGroup);
+            visual.SetBasePoseImmediately(new HandCardPose(new Vector2(80f, -300f), 7f, 0));
+            Vector2 drawScreenPosition = visual.GetScreenCenter() + new Vector2(-320f, -120f);
+            Canvas cardCanvas = cardObject.GetComponent<Canvas>();
+            HandCardContainer container = containerObject.AddComponent<HandCardContainer>();
+            typeof(HandCardContainer).GetField(
+                    "_cardZones",
+                    BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.SetValue(container, zones);
+            var interactiveCards = typeof(HandCardContainer).GetField(
+                    "_cards",
+                    BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.GetValue(container) as List<HandCardVisual>;
+            Assert.That(interactiveCards, Is.Not.Null);
+            MethodInfo rebuildCards = typeof(HandCardContainer).GetMethod(
+                "RebuildCards",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(rebuildCards, Is.Not.Null);
+            rebuildCards.Invoke(container, new object[] { true });
+            interactiveCards.Add(visual);
+            var layoutRebuildCount = 0;
+            using IDisposable layoutSubscription = zones.Layout
+                .Select(layout => layout.Hand)
+                .Skip(1)
+                .Subscribe(_ =>
+                {
+                    layoutRebuildCount++;
+                    rebuildCards.Invoke(container, new object[] { false });
+                });
+
+            zones.Draw(1);
+
+            Assert.That(layoutRebuildCount, Is.EqualTo(1));
+            Assert.That(visual.IsIncomingCardMotionPending, Is.True);
+            Assert.That(cardCanvas.enabled, Is.False);
+
+            var result = new BattleCommandExecutionResult(
+                authoritySequence: 2,
+                BattleCommandType.CompleteEnemyAction,
+                submitterId: null,
+                BattleCommandExecutionFailureReason.None,
+                new BattleSettlementRecord[]
+                {
+                    new BattleDamageAppliedSettlement(
+                        order: 0,
+                        new BattleEffectId(4001),
+                        new CombatantId(2001),
+                        new CombatantId(1001),
+                        attackValue: 6,
+                        blockBefore: 0,
+                        blockAfter: 0,
+                        healthBefore: 20,
+                        healthAfter: 14),
+                    new BattleCardMovedSettlement(
+                        order: 1,
+                        cardId,
+                        BattleCardZone.DrawPile,
+                        BattleCardZone.Hand),
+                });
+            BattleCommandPresentationPlan plan = BattleCommandPresentationPlan.Create(result);
+            var cardMotionFactory = new BattleCardMotionTweenFactory(cue =>
+                container.CreateIncomingCardMotionTween(
+                    cue,
+                    drawScreenPosition,
+                    duration: 0.2f,
+                    ease: Ease.Linear,
+                    requestFastForward: () => { }));
+            using var runner = new BattleCommandPresentationRunner(
+                _ => CreateZeroDurationTween(),
+                step => cardMotionFactory.TryCreate(step, out BattleCommandPresentationTween tween)
+                    ? tween
+                    : CreateDurationTween(0.2f));
+
+            runner.Play(plan, () => { });
+            runner.Tick(0.25f);
+
+            Assert.That(cardCanvas.enabled, Is.False);
+            Assert.That(visual.IsIncomingCardMotionActive, Is.False);
+
+            runner.Tick(0.25f);
+
+            Assert.That(cardCanvas.enabled, Is.True);
+            Assert.That(visual.IsIncomingCardMotionActive, Is.True);
+        }
+        finally
+        {
+            if (cardObject != null)
+                Object.DestroyImmediate(cardObject);
+            Object.DestroyImmediate(containerObject);
+        }
+    }
+
+    /// <summary>创建由 runner 手动推进的固定时长测试 cue。</summary>
+    private static BattleCommandPresentationTween CreateDurationTween(float duration)
+    {
+        return new BattleCommandPresentationTween(
+            DOTween.Sequence().AppendInterval(duration),
+            cleanup: null);
+    }
+
     /// <summary>创建由 runner 统一拥有的零时长非卡牌测试 cue。</summary>
     private static BattleCommandPresentationTween CreateZeroDurationTween()
     {

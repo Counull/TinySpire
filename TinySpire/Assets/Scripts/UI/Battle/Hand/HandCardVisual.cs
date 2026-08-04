@@ -36,12 +36,14 @@ public sealed class HandCardVisual : MonoBehaviour
     private bool _hasNormalCostColor;
     private Action _requestIncomingCardFastForward;
     private bool _isIncomingCardMotionActive;
+    private bool _isIncomingCardMotionPending;
 
     public CardInstanceId CardId { get; private set; }
     public float CurrentAnchoredY => _cardContent.anchoredPosition.y;
     public RectTransform CardContent => _cardContent;
     public bool IsCommandPending => _pendingCommandHandle != null;
     internal bool IsIncomingCardMotionActive => _isIncomingCardMotionActive;
+    internal bool IsIncomingCardMotionPending => _isIncomingCardMotionPending;
 
     /// <summary>
     /// 初始化该 View 对应的卡牌实例及拖拽反馈依赖。
@@ -197,6 +199,8 @@ public sealed class HandCardVisual : MonoBehaviour
         _hasPlayFeedback = false;
         _requestIncomingCardFastForward = null;
         _isIncomingCardMotionActive = false;
+        _isIncomingCardMotionPending = false;
+        _canvas.enabled = true;
         _isPlayerInputEnabled = false;
         if (_dragFeedbackCanvasGroup != null)
             _dragFeedbackCanvasGroup.alpha = 1f;
@@ -281,6 +285,8 @@ public sealed class HandCardVisual : MonoBehaviour
                 CancelTargetFocus();
                 KillActiveTween();
                 KillFeedbackTween();
+                _canvas.enabled = true;
+                _isIncomingCardMotionPending = false;
                 ApplyBasePose();
                 float scaleFactor = _canvas.scaleFactor > 0f ? _canvas.scaleFactor : 1f;
                 Vector2 screenDelta = drawScreenPosition - GetScreenCenter();
@@ -324,8 +330,26 @@ public sealed class HandCardVisual : MonoBehaviour
     {
         _requestIncomingCardFastForward = null;
         _isIncomingCardMotionActive = false;
+        _isIncomingCardMotionPending = false;
+        if (this != null && _canvas != null)
+            _canvas.enabled = true;
         if (this != null && _cardContent != null)
             ApplyBasePose();
+    }
+
+    /// <summary>等待冻结的 Draw→Hand cue 前隐藏 View，并停止普通布局产生的可见补间。</summary>
+    internal void PrepareForIncomingCardMotion()
+    {
+        EnsureReferences();
+        if (_isIncomingCardMotionPending || _isIncomingCardMotionActive)
+            return;
+
+        CancelTargetFocus();
+        KillActiveTween();
+        KillFeedbackTween();
+        _requestIncomingCardFastForward = null;
+        _isIncomingCardMotionPending = true;
+        _canvas.enabled = false;
     }
 
     /// <summary>只取出一次当前入场 cue 的快进请求；没有活动 cue 时保持无操作。</summary>

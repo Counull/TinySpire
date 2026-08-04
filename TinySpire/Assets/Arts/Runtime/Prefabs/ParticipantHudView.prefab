@@ -82,7 +82,7 @@ MonoBehaviour:
   _debuffIntentSprite: {fileID: -2276756374806015241, guid: 567058b8e70b92c4c9afa75b5c1ed73a, type: 3}
   _specialIntentSprite: {fileID: 3595392398799389830, guid: 5480b810865f0934b97475b39fae6617, type: 3}
   _headOffset: 0.2
-  _feetOffset: 0.2
+  _nameAboveVitalsOffset: 0.5
   _hitShakeDurationSeconds: 0.28
   _hitShakeStrength: 0.12
   _hudPulseDurationSeconds: 0.24

@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using Cysharp.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
@@ -15,6 +16,94 @@ using UnityEngine.UI;
 public sealed class ParticipantHudViewTests
 {
     private const string PrefabPath = "Assets/Arts/Runtime/Prefabs/ParticipantHudView.prefab";
+
+    /// <summary>验证临时头顶布局将生命与状态置于角色头顶，并令名称与生命 HUD 保持明确纵向间距。</summary>
+    [Test]
+    public void LateUpdate_ProjectsVitalsAboveHeadAndNameAboveVitals()
+    {
+        GameObject canvasObject = null;
+        GameObject cameraObject = null;
+        GameObject worldView = null;
+        ParticipantHudView hudView = null;
+        Sprite sprite = null;
+        try
+        {
+            canvasObject = new GameObject(
+                "ParticipantHudHeadAnchorTestCanvas",
+                typeof(RectTransform),
+                typeof(Canvas));
+            Canvas canvas = canvasObject.GetComponent<Canvas>();
+            RectTransform canvasRect = canvasObject.GetComponent<RectTransform>();
+            canvasRect.sizeDelta = new Vector2(1920f, 1080f);
+            cameraObject = new GameObject("ParticipantHudHeadAnchorTestCamera", typeof(Camera));
+            Camera camera = cameraObject.GetComponent<Camera>();
+            camera.orthographic = true;
+            camera.orthographicSize = 5f;
+            camera.transform.position = new Vector3(0f, 0f, -10f);
+            canvas.renderMode = RenderMode.ScreenSpaceCamera;
+            canvas.worldCamera = camera;
+
+            worldView = new GameObject(
+                "ParticipantHudHeadAnchorTestWorld",
+                typeof(SpriteRenderer));
+            SpriteRenderer spriteRenderer = worldView.GetComponent<SpriteRenderer>();
+            sprite = Sprite.Create(
+                Texture2D.whiteTexture,
+                new Rect(0f, 0f, 1f, 1f),
+                new Vector2(0.5f, 0.5f),
+                pixelsPerUnit: 1f);
+            spriteRenderer.sprite = sprite;
+            worldView.transform.position = new Vector3(1f, 2f, 0f);
+
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
+            hudView = Object.Instantiate(prefab, canvas.transform).GetComponent<ParticipantHudView>();
+            SetPrivateField(hudView, "_spriteRenderer", spriteRenderer);
+            SetPrivateField(hudView, "_canvas", canvas);
+
+            typeof(ParticipantHudView)
+                .GetMethod("LateUpdate", BindingFlags.Instance | BindingFlags.NonPublic)
+                .Invoke(hudView, null);
+
+            var serializedView = new SerializedObject(hudView);
+            float headOffset = serializedView.FindProperty("_headOffset").floatValue;
+            float nameAboveVitalsOffset = serializedView
+                .FindProperty("_nameAboveVitalsOffset")
+                .floatValue;
+            Bounds bounds = spriteRenderer.bounds;
+            var vitalsWorldPoint = new Vector3(
+                bounds.center.x,
+                bounds.max.y + headOffset,
+                bounds.center.z);
+            var nameWorldPoint = vitalsWorldPoint + Vector3.up * nameAboveVitalsOffset;
+            RectTransform vitalsAnchor = hudView.transform.Find("VitalsAnchor") as RectTransform;
+            RectTransform nameAnchor = hudView.transform.Find("NameAnchor") as RectTransform;
+            RectTransform healthBar = vitalsAnchor.Find("HealthBar") as RectTransform;
+            RectTransform nameText = nameAnchor.Find("NameText") as RectTransform;
+
+            AssertAnchorMatchesWorldPoint(vitalsAnchor, canvas, vitalsWorldPoint);
+            AssertAnchorMatchesWorldPoint(nameAnchor, canvas, nameWorldPoint);
+            float healthTop = vitalsAnchor.anchoredPosition.y
+                + healthBar.anchoredPosition.y
+                + healthBar.rect.height * 0.5f;
+            float nameBottom = nameAnchor.anchoredPosition.y
+                + nameText.anchoredPosition.y
+                - nameText.rect.height * 0.5f;
+            Assert.That(nameBottom, Is.GreaterThan(healthTop));
+        }
+        finally
+        {
+            if (hudView != null)
+                Object.DestroyImmediate(hudView.gameObject);
+            if (worldView != null)
+                Object.DestroyImmediate(worldView);
+            if (cameraObject != null)
+                Object.DestroyImmediate(cameraObject);
+            if (canvasObject != null)
+                Object.DestroyImmediate(canvasObject);
+            if (sprite != null)
+                Object.DestroyImmediate(sprite);
+        }
+    }
 
     /// <summary>确认公开 Bind 响应当前状态事实，新发生死亡在 M9C 反馈完成前保留生命和世界 View。</summary>
     [UnityTest]
@@ -505,5 +594,36 @@ public sealed class ParticipantHudViewTests
         return view.transform
             .Find($"VitalsAnchor/StatusRow/{statusName}/{statusName}Text")
             .GetComponent<Text>();
+    }
+
+    /// <summary>为布局测试设置 View 的运行时私有依赖，不绕过生产绑定路径写入任何战斗事实。</summary>
+    private static void SetPrivateField(
+        ParticipantHudView view,
+        string fieldName,
+        object value)
+    {
+        FieldInfo field = typeof(ParticipantHudView).GetField(
+            fieldName,
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.That(field, Is.Not.Null, fieldName);
+        field.SetValue(view, value);
+    }
+
+    /// <summary>验证运行时锚点与给定世界点投影一致，避免只比较局部坐标而遗漏 Canvas 相机转换。</summary>
+    private static void AssertAnchorMatchesWorldPoint(
+        RectTransform anchor,
+        Canvas canvas,
+        Vector3 worldPoint)
+    {
+        Assert.That(anchor, Is.Not.Null);
+        Vector3 screenPoint = canvas.worldCamera.WorldToScreenPoint(worldPoint);
+        bool projected = RectTransformUtility.ScreenPointToLocalPointInRectangle(
+            (RectTransform)canvas.transform,
+            screenPoint,
+            canvas.worldCamera,
+            out Vector2 expected);
+        Assert.That(projected, Is.True);
+        Assert.That(anchor.anchoredPosition.x, Is.EqualTo(expected.x).Within(0.001f));
+        Assert.That(anchor.anchoredPosition.y, Is.EqualTo(expected.y).Within(0.001f));
     }
 }
