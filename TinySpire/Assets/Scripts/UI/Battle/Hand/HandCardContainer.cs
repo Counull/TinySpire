@@ -31,7 +31,13 @@ public sealed class HandCardContainer : MonoBehaviour
 
     [Header("Targeting")]
     [SerializeField] private BattleTargetingArrowView _targetingArrow;
+    [SerializeField] private RectTransform _targetFocusAnchor;
     [SerializeField] private Color _insufficientCostColor = new Color(0.95f, 0.2f, 0.2f, 1f);
+    [SerializeField, Min(0.01f)] private float _targetFocusDuration = 0.2f;
+    [SerializeField] private Ease _targetFocusEase = Ease.OutCubic;
+    [SerializeField, Range(1.01f, 1.2f)] private float _targetFocusScale = 1.08f;
+    [SerializeField, Range(1.001f, 1.08f)] private float _targetFocusBreathScale = 1.025f;
+    [SerializeField, Min(0.05f)] private float _targetFocusBreathDuration = 0.55f;
 
     [Header("Animation")]
     [SerializeField, Min(0f)] private float hoverLift = 100f;
@@ -49,17 +55,42 @@ public sealed class HandCardContainer : MonoBehaviour
     private BattleCardPlayRules _cardPlayRules;
 
     private readonly List<HandCardVisual> _cards = new();
+    private readonly Dictionary<CardInstanceId, HandCardVisual> _transientCards = new();
     private readonly Dictionary<int, AsyncOperationHandle<Sprite>> _illustrationHandles = new();
     private readonly Dictionary<BattleCommandHandle, CardInstanceId> _pendingPlayCards = new();
     private HandCardVisual _draggingCard;
     private BattleCardZonesData _cardZones;
     private PlayerCombatantData _player;
     private bool _isDestroyed;
+    private bool _lastParticipantPresentationReady;
     private HandCardDragPhase _dragPhase;
     private Vector2 _lastPointerScreenPosition;
     private bool _hasPointerScreenPosition;
+    private Action<GameObject> _destroyTransientCardForTesting;
 
     private int CurrentHandCount => _cardZones.Hand.Count;
+
+    /// <summary>只读确认真实 Hand View 已按当前权威顺序建好，可安全构造 Draw→Hand cue。</summary>
+    internal bool IsCardMotionReady
+    {
+        get
+        {
+            if (_isDestroyed || !isActiveAndEnabled || _cardZones == null ||
+                _cards.Count != _cardZones.Hand.Count)
+            {
+                return false;
+            }
+
+            for (int index = 0; index < _cards.Count; index++)
+            {
+                HandCardVisual card = _cards[index];
+                if (card == null || card.CardId != _cardZones.Hand[index])
+                    return false;
+            }
+
+            return true;
+        }
+    }
 
     /// <summary>
     /// 接收已初始化的战斗会话及文本依赖，并在 Start 中订阅所需的运行时事实。
@@ -83,6 +114,20 @@ public sealed class HandCardContainer : MonoBehaviour
         _participantPresenter = participantPresenter;
     }
 
+    /// <summary>仅供程序集内 Editor 测试替换 transient 销毁边界，不参与运行时 DI。</summary>
+    internal void ConfigureTransientCardDestroyForTesting(Action<GameObject> destroyTransientCard)
+    {
+        if (destroyTransientCard == null)
+            throw new ArgumentNullException(nameof(destroyTransientCard));
+        if (_transientCards.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "Transient card destroy boundary cannot change after detaching a card.");
+        }
+
+        _destroyTransientCardForTesting = destroyTransientCard;
+    }
+
     /// <summary>校验依赖、建立事实订阅并绘制初始手牌。</summary>
     private async void Start()
     {
@@ -97,10 +142,11 @@ public sealed class HandCardContainer : MonoBehaviour
             || _configs?.Tables == null
             || _cardTextFormatter == null
             || _localization == null
-            || _commandQueue == null
-            || _commandCoordinator == null
-            || _participantPresenter == null
-            || _targetingArrow == null)
+             || _commandQueue == null
+             || _commandCoordinator == null
+             || _participantPresenter == null
+             || _targetingArrow == null
+             || _targetFocusAnchor == null)
         {
             Debug.LogError("HandCardContainer did not receive the initialized battle session.", this);
             enabled = false;
@@ -118,6 +164,7 @@ public sealed class HandCardContainer : MonoBehaviour
             playerCardZones,
             _session.EnemyCombatantIdsInEncounterOrder,
             _configs.Tables);
+        _lastParticipantPresentationReady = IsParticipantPresentationReady();
         _targetingArrow.PrepareAsScreenOverlay();
         try
         {
@@ -162,6 +209,35 @@ public sealed class HandCardContainer : MonoBehaviour
         RebuildCards(immediate: true);
     }
 
+    /// <summary>只在 Presenter readiness 变化时刷新卡牌系统指针可用性，并清理失效的瞬时拖拽。</summary>
+    private void Update()
+    {
+        if (_cardPlayRules == null)
+            return;
+
+        bool presentationReady = IsParticipantPresentationReady();
+        if (presentationReady == _lastParticipantPresentationReady)
+            return;
+
+        _lastParticipantPresentationReady = presentationReady;
+        if (!presentationReady)
+            CancelActiveDrag(reflow: true);
+        RefreshCardPlayPresentation();
+    }
+
+    /// <summary>在 Enemy 聚焦补间期间逐帧用最后真实指针刷新箭头，避免静止指针时起点落后卡牌。</summary>
+    private void LateUpdate()
+    {
+        if (_dragPhase != HandCardDragPhase.EnemyTargeting
+            || _draggingCard == null
+            || !_hasPointerScreenPosition)
+        {
+            return;
+        }
+
+        UpdateEnemyTargeting(_draggingCard, _lastPointerScreenPosition);
+    }
+
     /// <summary>
     /// 处理手牌悬停进入，播放抬升反馈。
     /// </summary>
@@ -192,6 +268,11 @@ public sealed class HandCardContainer : MonoBehaviour
         if (!CanInteractWithCard(card) || _draggingCard != null)
             return;
 
+        // 只收口命中的入场牌；completion 可能继续 drain，随后必须以最新权威事实重验合法性。
+        card.TryFastForwardIncomingCardMotion();
+        if (!CanInteractWithCard(card) || _draggingCard != null)
+            return;
+
         _draggingCard = card;
         _dragPhase = HandCardDragPhase.Dragging;
         _hasPointerScreenPosition = false;
@@ -206,6 +287,12 @@ public sealed class HandCardContainer : MonoBehaviour
     {
         if (card == null || card != _draggingCard || eventData == null)
             return;
+        if (!IsParticipantPresentationReady())
+        {
+            CancelActiveDrag(reflow: true);
+            RefreshCardPlayPresentation();
+            return;
+        }
 
         _lastPointerScreenPosition = eventData.position;
         _hasPointerScreenPosition = true;
@@ -236,6 +323,12 @@ public sealed class HandCardContainer : MonoBehaviour
     {
         if (card == null || card != _draggingCard)
             return;
+        if (!IsParticipantPresentationReady())
+        {
+            CancelActiveDrag(reflow: true);
+            RefreshCardPlayPresentation();
+            return;
+        }
 
         BattleCardPlayEvaluation evaluation = EvaluateCard(card, targetId: null);
         CombatantId? hoveredTargetId = null;
@@ -259,6 +352,7 @@ public sealed class HandCardContainer : MonoBehaviour
             evaluation.LegalTargetIds);
 
         // Submit 可能同步发布 Turn 与 CardZones；必须先清空拖拽/瞄准瞬时表现，再进入权威队列。
+        card.CancelTargetFocus();
         _draggingCard = null;
         _dragPhase = HandCardDragPhase.Idle;
         _hasPointerScreenPosition = false;
@@ -314,6 +408,13 @@ public sealed class HandCardContainer : MonoBehaviour
     /// <summary>按精确句柄处理出牌终态；旧生命周期不能清除新的待定视觉。</summary>
     private void HandleCommandLifecycle(BattleCommandLifecycleEvent lifecycle)
     {
+        if (lifecycle.Stage == BattleCommandLifecycleStage.ExecutionFailed
+            || lifecycle.Stage == BattleCommandLifecycleStage.Faulted)
+        {
+            // 队首失败会使当前瞬时目标预览失去稳定前提，先回到既有拖拽安全恢复路径。
+            CancelActiveDrag(reflow: true);
+        }
+
         if (lifecycle.Stage == BattleCommandLifecycleStage.Queued ||
             !_pendingPlayCards.TryGetValue(lifecycle.Handle, out CardInstanceId cardId))
         {
@@ -358,9 +459,7 @@ public sealed class HandCardContainer : MonoBehaviour
             if (ContainsCardId(hand, card.CardId))
                 continue;
 
-            // TODO(DEP-004): Future card-effect types need distinct pre-destruction actions before this visual is destroyed.
-            card.SetPlayerInputEnabled(false);
-            Destroy(card.gameObject);
+            DetachTransientCard(card);
             _cards.RemoveAt(index);
         }
 
@@ -404,17 +503,18 @@ public sealed class HandCardContainer : MonoBehaviour
             return;
 
         bool queueAcceptsInput = !_commandQueue.Queue.CurrentValue.IsFaulted;
+        bool presentationReady = IsParticipantPresentationReady();
         foreach (HandCardVisual card in _cards)
         {
             BattleCardPlayEvaluation evaluation = EvaluateCard(card, targetId: null);
-            bool hasInsufficientEnergy =
-                evaluation.FailureReason == BattleCommandExecutionFailureReason.InsufficientEnergy;
-            card.SetCostPaymentFeedback(!hasInsufficientEnergy, _insufficientCostColor);
-            card.SetPlayerInputEnabled(
-                queueAcceptsInput &&
-                HandCardInteractionAvailability.CanBeginDrag(
+            HandCardInteractionMode interactionMode =
+                HandCardInteractionAvailability.ResolveMode(
                     evaluation.CanStartInteraction,
-                    evaluation.FailureReason));
+                    evaluation.FailureReason);
+            if (!queueAcceptsInput || !presentationReady)
+                interactionMode = HandCardInteractionMode.Disabled;
+
+            card.SetInteractionPresentation(interactionMode, _insufficientCostColor);
         }
     }
 
@@ -425,6 +525,13 @@ public sealed class HandCardContainer : MonoBehaviour
         Vector2 pointerScreenPosition)
     {
         _dragPhase = HandCardDragPhase.EnemyTargeting;
+        card.PlayTargetFocus(
+            GetTargetFocusScreenPosition(),
+            _targetFocusScale,
+            _targetFocusDuration,
+            _targetFocusEase,
+            _targetFocusBreathScale,
+            _targetFocusBreathDuration);
         _participantPresenter.BeginTargetSelection(evaluation.LegalTargetIds);
         _targetingArrow.Show(card.GetScreenCenter(), pointerScreenPosition);
         _participantPresenter.UpdateTargetSelection(pointerScreenPosition);
@@ -435,6 +542,17 @@ public sealed class HandCardContainer : MonoBehaviour
     {
         _targetingArrow.UpdateArrow(card.GetScreenCenter(), pointerScreenPosition);
         _participantPresenter.UpdateTargetSelection(pointerScreenPosition);
+    }
+
+    /// <summary>把手牌 Prefab 的序列化 focus anchor 中心投影为当前 Canvas 对应的屏幕坐标。</summary>
+    private Vector2 GetTargetFocusScreenPosition()
+    {
+        Canvas canvas = _targetFocusAnchor.GetComponentInParent<Canvas>();
+        Camera camera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
+            ? canvas.worldCamera
+            : null;
+        Vector3 worldCenter = _targetFocusAnchor.TransformPoint(_targetFocusAnchor.rect.center);
+        return RectTransformUtility.WorldToScreenPoint(camera, worldCenter);
     }
 
     /// <summary>Turn、卡区或生命变化时重派生当前拖拽，并返回实际应用的纯转换决策。</summary>
@@ -462,7 +580,11 @@ public sealed class HandCardContainer : MonoBehaviour
         if (transition.ClearPlayFeedback)
             _draggingCard.SetDragPlayFeedback(false);
         if (transition.ClearTargetingPresentation)
+        {
+            // 降级为普通拖拽时保留卡牌与指针意图，只退出聚焦并恢复基础缩放/旋转。
+            _draggingCard.BeginDrag(CurrentHandCount + 1);
             ClearTargetingPresentation();
+        }
         if (!transition.RebuildEnemyTargeting)
             return transition;
 
@@ -487,7 +609,10 @@ public sealed class HandCardContainer : MonoBehaviour
     private void CancelActiveDrag(bool reflow)
     {
         if (_draggingCard != null)
+        {
             _draggingCard.SetDragPlayFeedback(false);
+            _draggingCard.CancelTargetFocus();
+        }
 
         _draggingCard = null;
         _dragPhase = HandCardDragPhase.Idle;
@@ -560,7 +685,9 @@ public sealed class HandCardContainer : MonoBehaviour
                 fanPose.RotationDegrees,
                 IndexOf(card));
 
-            if (immediate)
+            if (card.IsIncomingCardMotionActive)
+                card.SetBasePose(pose);
+            else if (immediate)
                 card.SetBasePoseImmediately(pose);
             else
             {
@@ -689,6 +816,137 @@ public sealed class HandCardContainer : MonoBehaviour
         return null;
     }
 
+    /// <summary>让离手 View 立即退出交互集合，并按运行时实例身份保留为短生命周期 transient。</summary>
+    private void DetachTransientCard(HandCardVisual card)
+    {
+        if (card == null)
+            return;
+
+        CardInstanceId cardId = card.CardId;
+        if (_transientCards.TryGetValue(cardId, out HandCardVisual existing)
+            && existing != null
+            && existing != card)
+        {
+            DestroyTransientCardObject(existing.gameObject);
+        }
+
+        card.PrepareAsTransient();
+        _transientCards[cardId] = card;
+    }
+
+    /// <summary>为同一离手 transient 创建前奏或原 Order 的弃牌轨迹，并让任一已建 lease 都能幂等收口。</summary>
+    internal BattleCommandPresentationTween CreateTransientCardMotionTween(
+        BattleCardMotionCue cue,
+        Vector2 targetScreenPosition,
+        float duration,
+        Ease ease)
+    {
+        if (cue == null)
+            throw new ArgumentNullException(nameof(cue));
+        if (!cue.CardId.HasValue)
+            throw new InvalidOperationException("Transient card motion requires a frozen CardId.");
+        if (duration < 0f)
+            throw new ArgumentOutOfRangeException(nameof(duration));
+        if (cue.Kind != BattleCardMotionCueKind.PlayCardToTarget &&
+            cue.Kind != BattleCardMotionCueKind.HandToDiscard)
+        {
+            throw new InvalidOperationException(
+                $"Transient card motion cannot consume {cue.Kind}.");
+        }
+
+        CardInstanceId cardId = cue.CardId.Value;
+        if (!_transientCards.TryGetValue(cardId, out HandCardVisual transientCard)
+            || transientCard == null)
+        {
+            throw new InvalidOperationException(
+                $"Card motion cannot find detached transient {cardId}.");
+        }
+
+        Tween tween = transientCard.CreateTransientScreenMotionTween(
+            targetScreenPosition,
+            duration,
+            ease);
+        Action cleanup = () => ReleaseTransientCard(cardId, transientCard);
+        return new BattleCommandPresentationTween(tween, cleanup);
+    }
+
+    /// <summary>为当前权威 Hand 中的新牌创建 Draw→Hand 入场 cue，取消时恢复最新 base pose。</summary>
+    internal BattleCommandPresentationTween CreateIncomingCardMotionTween(
+        BattleCardMotionCue cue,
+        Vector2 drawScreenPosition,
+        float duration,
+        Ease ease,
+        Action requestFastForward)
+    {
+        if (cue == null)
+            throw new ArgumentNullException(nameof(cue));
+        if (cue.Kind != BattleCardMotionCueKind.DrawToHand || !cue.CardId.HasValue)
+        {
+            throw new InvalidOperationException(
+                "Incoming card motion requires a frozen DrawToHand CardId.");
+        }
+        if (duration < 0f)
+            throw new ArgumentOutOfRangeException(nameof(duration));
+        if (requestFastForward == null)
+            throw new ArgumentNullException(nameof(requestFastForward));
+
+        HandCardVisual card = FindCardById(cue.CardId.Value);
+        if (card == null)
+        {
+            throw new InvalidOperationException(
+                $"Draw motion cannot find authoritative Hand View {cue.CardId.Value}.");
+        }
+
+        Tween tween = card.CreateIncomingScreenMotionTween(
+            drawScreenPosition,
+            duration,
+            ease,
+            requestFastForward);
+        return new BattleCommandPresentationTween(
+            tween,
+            card.FinishIncomingCardMotion);
+    }
+
+    /// <summary>只在映射仍指向同一 View 时移除并销毁 transient，允许重复 cleanup 保持无操作。</summary>
+    private void ReleaseTransientCard(CardInstanceId cardId, HandCardVisual transientCard)
+    {
+        if (!_transientCards.TryGetValue(cardId, out HandCardVisual current)
+            || current != transientCard)
+        {
+            return;
+        }
+
+        _transientCards.Remove(cardId);
+        if (transientCard != null)
+            DestroyTransientCardObject(transientCard.gameObject);
+    }
+
+    /// <summary>经测试可替换边界销毁一个 transient 根 Canvas；生产路径继续使用场景生命周期 Destroy。</summary>
+    private void DestroyTransientCardObject(GameObject transientObject)
+    {
+        if (transientObject == null)
+            return;
+        if (_destroyTransientCardForTesting != null)
+        {
+            _destroyTransientCardForTesting.Invoke(transientObject);
+            return;
+        }
+
+        Destroy(transientObject);
+    }
+
+    /// <summary>销毁所有尚未由表现 lease 收口的离手 transient，避免旧 Scene 留下根 Canvas。</summary>
+    private void DestroyTransientCards()
+    {
+        foreach (HandCardVisual transientCard in _transientCards.Values)
+        {
+            if (transientCard != null)
+                DestroyTransientCardObject(transientCard.gameObject);
+        }
+
+        _transientCards.Clear();
+    }
+
     /// <summary>返回指定卡牌实例当前唯一待定的预注册句柄。</summary>
     private bool TryGetPendingPlayHandle(
         CardInstanceId cardId,
@@ -743,7 +1001,14 @@ public sealed class HandCardContainer : MonoBehaviour
         BattleCardPlayEvaluation evaluation = EvaluateCard(card, targetId: null);
         return HandCardInteractionAvailability.CanBeginDrag(
             evaluation.CanStartInteraction,
-            evaluation.FailureReason);
+            evaluation.FailureReason,
+            IsParticipantPresentationReady());
+    }
+
+    /// <summary>安全读取同场 Presenter 的非权威映射 readiness；对象销毁后保持关闭。</summary>
+    private bool IsParticipantPresentationReady()
+    {
+        return _participantPresenter != null && _participantPresenter.IsPresentationReady;
     }
 
     /// <summary>组件被禁用时立即清理拖拽、箭头和高亮，避免切换阶段或场景后残留。</summary>
@@ -757,6 +1022,7 @@ public sealed class HandCardContainer : MonoBehaviour
     {
         _isDestroyed = true;
         CancelActiveDrag(reflow: false);
+        DestroyTransientCards();
         ReleaseCardIllustrations();
         if (_targetingArrow != null && _targetingArrow.transform.parent == null)
             Destroy(_targetingArrow.gameObject);

@@ -44,4 +44,26 @@ public sealed class BattleTurnHudPresentationTests
                 hasPendingEndAction: false),
             Is.False);
     }
+
+    /// <summary>确认参与者表现映射尚未就绪时仅关闭系统指针的结束行动入口。</summary>
+    [Test]
+    public void EndActionAvailability_WhenParticipantPresentationIsNotReady_RejectsSystemPointer()
+    {
+        Assert.That(
+            BattleTurnHudPresentation.CanSubmitEndAction(
+                BattleTurnPhase.PlayerAction,
+                hasEndedAction: false,
+                hasPendingEndAction: false,
+                queueFaulted: false,
+                participantPresentationReady: false),
+            Is.False);
+        Assert.That(
+            BattleTurnHudPresentation.CanSubmitEndAction(
+                BattleTurnPhase.PlayerAction,
+                hasEndedAction: false,
+                hasPendingEndAction: false,
+                queueFaulted: false,
+                participantPresentationReady: true),
+            Is.True);
+    }
 }

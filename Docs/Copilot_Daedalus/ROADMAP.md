@@ -4,7 +4,7 @@ owner: Daedalus
 page_type: roadmap
 lifecycle: active
 created: 2026-07-29
-updated: 2026-08-02
+updated: 2026-08-05
 status_source: SESSION_LOG.md
 note: 本文件是 BattleScene 实现侧的阶段化路线图；项目级玩法口径仍以 Hermes_Pegasus 的设计事实源为准。
 ---
@@ -203,7 +203,7 @@ en:    Deal {damage} damage. Apply {vulnerable} {keywordVulnerable}.
 
 ### M3 · BattleScene 主 HUD 与参与者视图
 
-当前将 M3 拆为按事实依赖推进的切片：M3A 参与者世界视图与生命 HUD；M3B 抽牌/弃牌计数；M3C 能量与结束回合；M3D 敌人意图；M3E 格挡、状态、死亡、回合提示与胜败覆盖层。M3A～M3D 已分别随 M1/M2、M4 与 M5 落地；M7 已提供格挡、状态与结算事实，M8 已完成状态时机、死亡中止与规则层终局，M3E 继续等待 M9 的 HUD、死亡/胜负覆盖层和最终表现接入。参与者设计见 `plans/2026-07-30-battlescene-participant-views.md`，敌人意图设计见 `plans/2026-08-01-m5-enemy-intents-deterministic-behavior.md`。
+当前将 M3 拆为按事实依赖推进的切片：M3A 参与者世界视图与生命 HUD；M3B 抽牌/弃牌计数；M3C 能量与结束回合；M3D 敌人意图；M3E 格挡、状态、死亡、回合提示与胜败覆盖层。M3A～M3D 已分别随 M1/M2、M4 与 M5 落地；M7 已提供格挡、状态与结算事实，M8 已完成状态时机、死亡中止与规则层终局，M9 已完成 M3E 的常驻 HUD、死亡/胜负覆盖层与最终表现，最终验收见 `06_testing/2026-08-02-m9g-full-validation-review.md`。参与者设计见 `plans/2026-07-30-battlescene-participant-views.md`，敌人意图设计见 `plans/2026-08-01-m5-enemy-intents-deterministic-behavior.md`。
 
 主界面至少包含：
 
@@ -235,7 +235,7 @@ en:    Deal {damage} damage. Apply {vulnerable} {keywordVulnerable}.
 
 - 聚合变化通知只表示“事实可能变化”，不携带另一份生命/格挡副本。
 - View 收到通知后按自己的 `CombatantId` 重查当前事实。
-- 伤害数字、受击抖动等一次性反馈不从最终生命差值猜测；M7 已产出明确结算记录，M9 再负责消费并播放表现。
+- 伤害数字、受击抖动等一次性反馈不从最终生命差值猜测；M7 已产出明确结算记录，M9 已按冻结结果和原 Order 消费并播放表现。
 
 验收：遭遇表从 1 名敌人改为 2 名时，不改场景层级即可生成两个独立 View；位置稳定，各自生命显示对应运行时状态，死亡一个敌人不会让另一个 View 绑定错位。
 
@@ -383,9 +383,11 @@ MVP 效果类型：
 - 整个调度器等待表现层的必要动画屏障，但权威状态不由动画回调决定。
 - 已把 Hand/Turn HUD 各自维护的 `Submit → pending → PublishQueued → feedback` 协议收敛为统一 coordinator；权威序号只由 Queue 对账，View 不再承担调度身份。该改造已与 Queue 生命周期、按结算形成的表现屏障和唯一 `Queued` 协议裁决一并完成。
 
-验收已通过：当前双敌 Encounter 可用初始卡组完成多回合胜利或失败；抽牌、弃牌、能量、格挡、状态、意图、敌人行动、死亡、反馈屏障与规则层终局全部闭环。M9 只承接最终视觉反馈、胜负面板与重开。
+验收已通过：当前双敌 Encounter 可用初始卡组完成多回合胜利或失败；抽牌、弃牌、能量、格挡、状态、意图、敌人行动、死亡、反馈屏障与规则层终局全部闭环。最终视觉反馈、胜负面板与重开已由 M9 承接。
 
 ### M9 · STS 式反馈、胜负与重开
+
+归档计划：[`plans/2026-08-02-m9-sts-feedback-outcome-restart.md`](plans/2026-08-02-m9-sts-feedback-outcome-restart.md)。M9A～M9G 已串行完成；ordered settlement 表现、M3E HUD、目标聚焦、卡区运动、阶段横幅、终局面板、同种子重开与退出应用均已接入。M9G 自动/生产重跑、仓库外 Player 退出、范围审计与 Standards / Spec 零 finding 见 `06_testing/2026-08-02-m9g-full-validation-review.md`；M3E/M9 完成，动态状态只见 `SESSION_LOG.md`。
 
 表现层至少包含：
 

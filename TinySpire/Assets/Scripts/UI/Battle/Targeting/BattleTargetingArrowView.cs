@@ -102,7 +102,7 @@ namespace TinySpire.UI.Battle
             _lineRect.sizeDelta = new Vector2(direction.magnitude, _lineThickness);
             _lineRect.localEulerAngles = new Vector3(0f, 0f, angle);
             _headRect.anchoredPosition = targetLocal;
-            _headRect.localEulerAngles = new Vector3(0f, 0f, angle - 45f);
+            _headRect.localEulerAngles = new Vector3(0f, 0f, angle);
             return true;
         }
 

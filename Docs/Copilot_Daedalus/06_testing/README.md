@@ -2,7 +2,7 @@
 title: 06_testing · 测试记录
 page_type: testing
 lifecycle: active
-updated: 2026-08-02
+updated: 2026-08-05
 ---
 
 - [2026-07-30 BattleScene LifetimeScope](2026-07-30-battle-lifetime-scope.md)
@@ -15,6 +15,13 @@ updated: 2026-08-02
 
 ## 验证记录
 
+- [2026-08-02 M9G 全量验证、真实交互、Player 退出与双轴复审](2026-08-02-m9g-full-validation-review.md)
+- [2026-08-02 M9F 阶段横幅、胜负面板、重开与退出](2026-08-02-m9f-turn-terminal-restart-exit.md)
+- [2026-08-02 M9E 出牌、弃牌、抽牌与重洗运动](2026-08-02-m9e-card-zone-motion.md)
+- [2026-08-02 M9D 不可用样式、目标聚焦与正式目标素材](2026-08-02-m9d-card-focus-targeting-feedback.md)
+- [2026-08-02 M9C 结算反馈、受击与死亡过渡](2026-08-02-m9c-settlement-combat-feedback-death.md)
+- [2026-08-02 M9B 参与者状态、Block 与既有意图 HUD](2026-08-02-m9b-combatant-status-hud.md)
+- [2026-08-02 M9A 有序表现时间线、一次 completion 与取消](2026-08-02-m9a-ordered-presentation-timeline.md)
 - [2026-08-02 M8E 全量验证、真实 Game View 与双轴复审](2026-08-02-m8e-full-validation-review.md)
 - [2026-08-02 M8D 状态时机、死亡与完整战斗循环](2026-08-02-m8d-status-death-battle-loop.md)
 - [2026-08-02 M8C 敌人意图与 Effect 联合事务](2026-08-02-m8c-enemy-effect-transaction.md)

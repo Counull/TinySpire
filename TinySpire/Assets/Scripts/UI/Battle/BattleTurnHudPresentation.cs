@@ -55,14 +55,16 @@ namespace TinySpire.UI.Battle
             }
         }
 
-        /// <summary>仅在玩家行动阶段、尚未结束且没有待定结束命令时允许点击结束行动。</summary>
+        /// <summary>仅在参与者表现就绪、玩家行动阶段、尚未结束且没有待定结束命令时允许点击结束行动。</summary>
         public static bool CanSubmitEndAction(
             BattleTurnPhase phase,
             bool hasEndedAction,
             bool hasPendingEndAction,
-            bool queueFaulted = false)
+            bool queueFaulted = false,
+            bool participantPresentationReady = true)
         {
-            return phase == BattleTurnPhase.PlayerAction &&
+            return participantPresentationReady &&
+                   phase == BattleTurnPhase.PlayerAction &&
                    !hasEndedAction &&
                    !hasPendingEndAction &&
                    !queueFaulted;

@@ -1,6 +1,6 @@
 ---
 created: 2026-07-06
-updated: 2026-08-02
+updated: 2026-08-05
 ---
 
 # Daedalus · 代码决策记录
@@ -534,3 +534,15 @@ updated: 2026-08-02
 **理由**：友元只扩大测试程序集可见性，不扩大生产 public API；因此既能直接证明联合预构建、漂移、失败零写入和重复消费保护，也不产生 Queue 外的权威写入 seam。单 guard 删除锁步状态，避免两个布尔状态机未来漂移。
 
 **影响**：现有 M5 intent/session/HUD 测试继续通过友元调用兼容入口，生产代码没有该入口的消费者；M8E 最终双轴复审确认 public 旁路与重复 guard finding 均已关闭。若未来 internal 契约测试全部迁到同等强度的公开可观察 seam，可再删除 `InternalsVisibleTo`，但本轮不以降低测试证据为代价提前移除。验证见 `06_testing/2026-08-02-m8e-full-validation-review.md`。
+
+## CD-049：M9 以冻结命令结果驱动单一表现时间线，常驻 HUD 只重投影当前事实
+
+**问题**：M8 已让 Queue 独占权威顺序、continuation、一次屏障与 fault，但 M4D 的固定 0.35 秒 adapter 只能表达占位等待。若伤害、死亡、卡区运动、阶段横幅和终局各自订阅 settlement 或拥有独立动画队列，就会出现第二排序根、多个 completion 与场景销毁后的迟到回调；若 HUD 或终局面板缓存 Health、Intent、Hand、Turn 或 outcome，又会形成权威事实镜像。PlayCard 还需要在原始 Order 0 之前表现离手到目标，但不能伪造或重排 settlement。
+
+**选择**：保留唯一 Queue-facing `IBattleCommandPresentation.Present(result, completion)`，由 concrete `BattleCommandPresentationAdapter` 把当前冻结结果同步转换为不可变 `BattleCommandPresentationPlan`。每个命令至多派生一个互斥的 StartBattle 或 PlayCard `CommandPrelude`；PlayCard 仅由唯一 Hand→Discard 与首个可见 Effect 的冻结身份派生，Prelude 不属于 settlement。随后所有可见步骤继续按 settlement `Order` 与稳定子步骤顺序进入同一个 `BattleCommandPresentationRunner` 父时间线。runner 唯一持有 readiness、速度、精确 cue 快进、立即完成、一次 completion、Tween lease 与取消/构造异常清理；完成、重复完成、owner/Scene 销毁均幂等，旧 Scope 不得补发 completion。离手 transient 的 Prelude 与 Hand→Discard lease 共享同一个幂等释放边界，任一后续 cue 构造失败也能立即收口。
+
+**事实与输入边界**：Participant、Turn、Intent、Hand 与 pile HUD 始终从当前 Combatant、Intent Layout、CardZones Layout 和 Turn 重新投影，不保存玩法镜像；数字、抖动、脉冲、轨迹、死亡和横幅只消费当前冻结结果。`BattleEnded` 步骤只在同程序集内临时调用 internal `BattleTerminalRules`，立即映射本地化 key，不公开规则或保存 outcome。表现屏障期间仍允许既有合法玩家命令进入 Queue；只有离手 ghost、StartBattle 覆盖层、终局战斗输入与场景按钮使用局部指针锁。Restart 复用现有 SceneFlow 重载同一 BattleScene/Inspector seed，Exit 只调用应用退出薄 seam。
+
+**理由**：Plan 把“派生什么”与 concrete View 的“如何补间”分开，而 runner 仍只有一个父顺序和一个 Queue completion；因此表现可以深化而不改变 Queue、Turn、settlement、公式、目标或终局契约。常驻事实即时投影、一次性反馈冻结读取，使加速、取消、重建和 locale 切换都不会反向写入战斗状态或留下第二份事实。
+
+**影响**：本决策取代 CD-030 的固定 0.35 秒占位时长，但保留其“其他合法输入不全局锁定、pending 按权威身份对账”的边界。M9 只深化 `TinySpire/Assets/Scripts/UI/Battle/**` 与列明的 concrete Prefab/Localization 资源，没有新增 settlement 事件总线、每记录 presenter interface、第二动画队列、public terminal API、RunState、MainMenu 或 DI seam。最终验证与双轴复审见 `06_testing/2026-08-02-m9g-full-validation-review.md`。

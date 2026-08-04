@@ -83,6 +83,34 @@ MonoBehaviour:
     m_Localized: Exhaust Pile
     m_Metadata:
       m_Items: []
+  - m_Id: 1538908651941888
+    m_Localized: Battle Start
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1538908714856448
+    m_Localized: Player Turn
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1538908714856449
+    m_Localized: Enemy Turn
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1538908714856450
+    m_Localized: Victory
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1538908714856451
+    m_Localized: Defeat
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1538908714856452
+    m_Localized: Restart
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1538908714856453
+    m_Localized: Exit
+    m_Metadata:
+      m_Items: []
   references:
     version: 2
     RefIds:

@@ -29,6 +29,36 @@ namespace TinySpire.UI.Battle
         private ConfigService _configs;
         private LocalizationService _localization;
         private bool _isDestroyed;
+        private Func<string, Transform, UniTask<GameObject>> _instantiateViewAsyncForTesting;
+        private Action<GameObject> _releaseViewForTesting;
+        private Action<GameObject> _destroyHudForTesting;
+
+        /// <summary>从当前 Session 与 HUD 唯一映射即时判断全部参与者世界 View/HUD 是否可供表现。</summary>
+        internal bool IsPresentationReady
+        {
+            get
+            {
+                if (_isDestroyed || _session == null ||
+                    _views.Count != _session.Combatants.All.Count ||
+                    _hudViews.Count != _session.Combatants.All.Count)
+                {
+                    return false;
+                }
+
+                foreach (CombatantId combatantId in _session.Combatants.All.Keys)
+                {
+                    if (!_views.TryGetValue(combatantId, out GameObject view) ||
+                        view == null ||
+                        !_hudViews.TryGetValue(combatantId, out ParticipantHudView hudView) ||
+                        hudView == null)
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+        }
 
         /// <summary>接收 BattleScene 作用域准备完成的战斗事实、配置与本地化服务。</summary>
         [Inject]
@@ -37,6 +67,27 @@ namespace TinySpire.UI.Battle
             _session = session ?? throw new ArgumentNullException(nameof(session));
             _configs = configs ?? throw new ArgumentNullException(nameof(configs));
             _localization = localization ?? throw new ArgumentNullException(nameof(localization));
+        }
+
+        /// <summary>仅为程序集内 Editor 测试替换本 Presenter 的资源边界，不参与运行时 DI。</summary>
+        internal void ConfigureViewResourceBoundaryForTesting(
+            Func<string, Transform, UniTask<GameObject>> instantiateViewAsync,
+            Action<GameObject> releaseView,
+            Action<GameObject> destroyHud = null)
+        {
+            if (instantiateViewAsync == null)
+                throw new ArgumentNullException(nameof(instantiateViewAsync));
+            if (releaseView == null)
+                throw new ArgumentNullException(nameof(releaseView));
+            if (_views.Count > 0 || _hudViews.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    "Participant resource boundary cannot change after presentation creation starts.");
+            }
+
+            _instantiateViewAsyncForTesting = instantiateViewAsync;
+            _releaseViewForTesting = releaseView;
+            _destroyHudForTesting = destroyHud;
         }
 
         /// <summary>场景启动后校验依赖，并异步创建本场参与者的角色与 HUD。</summary>
@@ -55,23 +106,24 @@ namespace TinySpire.UI.Battle
         /// <summary>场景离开时释放角色 Addressables 实例与对应的普通 HUD 实例。</summary>
         private void OnDestroy()
         {
+            DisposePresentation();
+        }
+
+        /// <summary>仅供程序集内 Editor 测试触发与 OnDestroy 完全相同的场景收口。</summary>
+        internal void DisposePresentationForTesting()
+        {
+            DisposePresentation();
+        }
+
+        /// <summary>幂等标记旧 Presenter 失效，并释放它持有的全部非权威表现对象。</summary>
+        private void DisposePresentation()
+        {
+            if (_isDestroyed)
+                return;
+
             _isDestroyed = true;
             EndTargetSelection();
-
-            foreach (ParticipantHudView hudView in _hudViews.Values)
-            {
-                if (hudView != null)
-                    Destroy(hudView.gameObject);
-            }
-
-            _hudViews.Clear();
-            foreach (GameObject view in _views.Values)
-            {
-                if (view != null)
-                    Addressables.ReleaseInstance(view);
-            }
-
-            _views.Clear();
+            ReleaseCreatedViews();
         }
 
         /// <summary>按规则 module 给出的稳定合法候选开始一次纯表现目标选择。</summary>
@@ -125,6 +177,78 @@ namespace TinySpire.UI.Battle
                 if (hudView != null)
                     hudView.SetTargetHighlight(isLegalCandidate: false, isHovered: false);
             }
+        }
+
+        /// <summary>把已加载世界 View 加入 Presenter 的唯一参与者映射。</summary>
+        internal void RegisterParticipantView(CombatantId combatantId, GameObject view)
+        {
+            if (view == null)
+                throw new ArgumentNullException(nameof(view));
+            if (_views.ContainsKey(combatantId))
+            {
+                throw new InvalidOperationException(
+                    $"Participant world View mapping already contains {combatantId}.");
+            }
+
+            _views.Add(combatantId, view);
+        }
+
+        /// <summary>把已绑定 HUD 加入 Presenter 的唯一参与者映射。</summary>
+        internal void RegisterParticipantHud(
+            CombatantId combatantId,
+            ParticipantHudView hudView)
+        {
+            if (hudView == null)
+                throw new ArgumentNullException(nameof(hudView));
+            if (_hudViews.ContainsKey(combatantId))
+            {
+                throw new InvalidOperationException(
+                    $"Participant HUD mapping already contains {combatantId}.");
+            }
+
+            _hudViews.Add(combatantId, hudView);
+        }
+
+        /// <summary>只从现有唯一映射解析精确参与者并创建 concrete 战斗反馈 Tween。</summary>
+        internal BattleCommandPresentationTween CreateCombatFeedbackTween(
+            BattleCombatFeedbackCue cue)
+        {
+            if (cue == null)
+                throw new ArgumentNullException(nameof(cue));
+            if (!_hudViews.TryGetValue(cue.TargetId, out ParticipantHudView hudView)
+                || hudView == null)
+            {
+                throw new InvalidOperationException(
+                    $"Combat feedback target {cue.TargetId} has no registered Participant HUD.");
+            }
+
+            return hudView.CreateCombatFeedbackTween(cue);
+        }
+
+        /// <summary>从当前唯一世界 View 映射即时投影表现锚点，不因 fatal 结算后的存活状态过滤目标。</summary>
+        internal bool TryGetPresentationScreenAnchor(
+            CombatantId combatantId,
+            out Vector2 screenAnchor)
+        {
+            screenAnchor = default;
+            Camera camera = ResolveTargetCamera();
+            if (camera == null ||
+                !_views.TryGetValue(combatantId, out GameObject view) ||
+                view == null)
+            {
+                return false;
+            }
+
+            SpriteRenderer spriteRenderer = view.GetComponentInChildren<SpriteRenderer>();
+            if (spriteRenderer == null)
+                return false;
+
+            Vector3 projected = camera.WorldToScreenPoint(spriteRenderer.bounds.center);
+            if (projected.z <= 0f)
+                return false;
+
+            screenAnchor = projected;
+            return true;
         }
 
         /// <summary>把一个仍合法且已有 View 的参与者投影为加入 padding 的屏幕候选。</summary>
@@ -246,10 +370,27 @@ namespace TinySpire.UI.Battle
         }
 
         /// <summary>按当前会话先创建唯一玩家，再按 Encounter 顺序创建敌人。</summary>
-        private async UniTask CreateViewsAsync()
+        internal async UniTask CreateViewsAsync()
         {
-            await CreatePlayerViewAsync();
-            await CreateEnemyViewsAsync();
+            if (_isDestroyed)
+                return;
+
+            try
+            {
+                await CreatePlayerViewAsync();
+                if (_isDestroyed)
+                    return;
+
+                await CreateEnemyViewsAsync();
+            }
+            catch
+            {
+                ReleaseCreatedViews();
+                if (_isDestroyed)
+                    return;
+
+                throw;
+            }
         }
 
         /// <summary>从玩家运行时事实与 Hero 配置创建一个角色及其 HUD。</summary>
@@ -289,6 +430,9 @@ namespace TinySpire.UI.Battle
                 _enemySpacing);
             for (int index = 0; index < enemyIds.Count; index++)
             {
+                if (_isDestroyed)
+                    return;
+
                 CombatantId enemyId = enemyIds[index];
                 if (!_session.Combatants.TryGet(enemyId, out CombatantData combatant)
                     || !(combatant is EnemyCombatantData enemy))
@@ -306,6 +450,8 @@ namespace TinySpire.UI.Battle
                     template.ViewPrefabAddress,
                     _enemyAnchor,
                     positions[index]);
+                if (_isDestroyed)
+                    return;
             }
         }
 
@@ -317,6 +463,9 @@ namespace TinySpire.UI.Battle
             Transform anchor,
             Vector3 localPosition)
         {
+            if (_isDestroyed)
+                return;
+
             CombatantId combatantId = combatant.Id;
             int templateId = combatant.TemplateId;
             if (string.IsNullOrWhiteSpace(address))
@@ -330,11 +479,12 @@ namespace TinySpire.UI.Battle
                     $"Combatant {combatantId} template {templateId} has no name_i18n_key.");
             }
 
-            AsyncOperationHandle<GameObject> handle = Addressables.InstantiateAsync(address, anchor);
             GameObject view;
             try
             {
-                view = await handle.Task;
+                view = _instantiateViewAsyncForTesting != null
+                    ? await _instantiateViewAsyncForTesting(address, anchor)
+                    : await InstantiateAddressableViewAsync(address, anchor);
             }
             catch (Exception exception)
             {
@@ -343,28 +493,21 @@ namespace TinySpire.UI.Battle
                     exception);
             }
 
-            if (handle.Status != AsyncOperationStatus.Succeeded || view == null)
+            if (_isDestroyed)
             {
-                throw new InvalidOperationException(
-                    $"Failed to load view for Combatant {combatantId}, template {templateId}, address '{address}'.",
-                    handle.OperationException);
+                ReleaseParticipantView(view);
+                return;
             }
             if (view.GetComponentInChildren<SpriteRenderer>() == null)
             {
-                Addressables.ReleaseInstance(view);
+                ReleaseParticipantView(view);
                 throw new InvalidOperationException(
                     $"View for Combatant {combatantId}, template {templateId}, address '{address}' has no SpriteRenderer.");
             }
 
-            if (_isDestroyed)
-            {
-                Addressables.ReleaseInstance(view);
-                return;
-            }
-
             view.transform.localPosition = localPosition;
             view.transform.localRotation = Quaternion.identity;
-            _views.Add(combatantId, view);
+            RegisterParticipantView(combatantId, view);
             ParticipantHudView hudView = null;
             try
             {
@@ -378,16 +521,104 @@ namespace TinySpire.UI.Battle
                     _localization,
                     _configs.Tables,
                     _session.EnemyIntents);
-                _hudViews.Add(combatantId, hudView);
+                RegisterParticipantHud(combatantId, hudView);
             }
             catch
             {
                 if (hudView != null)
-                    Destroy(hudView.gameObject);
+                    DestroyParticipantHud(hudView.gameObject);
                 _views.Remove(combatantId);
-                Addressables.ReleaseInstance(view);
+                ReleaseParticipantView(view);
                 throw;
             }
+        }
+
+        /// <summary>用生产 Addressables 边界实例化一个参与者世界 View，并把句柄交给统一等待清理。</summary>
+        private static async UniTask<GameObject> InstantiateAddressableViewAsync(
+            string address,
+            Transform anchor)
+        {
+            AsyncOperationHandle<GameObject> handle = Addressables.InstantiateAsync(address, anchor);
+            return await AwaitAddressableViewAsync(handle);
+        }
+
+        /// <summary>等待生产实例句柄；失败或空结果先精确释放，再保留异常语义。</summary>
+        internal static async UniTask<GameObject> AwaitAddressableViewAsync(
+            AsyncOperationHandle<GameObject> handle)
+        {
+            GameObject view;
+            try
+            {
+                view = await handle.Task;
+            }
+            catch
+            {
+                ReleaseFailedViewHandle(handle);
+                throw;
+            }
+
+            if (handle.Status == AsyncOperationStatus.Succeeded && view != null)
+                return view;
+
+            Exception operationException = handle.OperationException;
+            ReleaseFailedViewHandle(handle);
+            throw new InvalidOperationException(
+                "Addressables participant view operation did not return a valid instance.",
+                operationException);
+        }
+
+        /// <summary>释放失败或空结果的参与者实例句柄；无效句柄保持幂等无操作。</summary>
+        internal static void ReleaseFailedViewHandle(AsyncOperationHandle<GameObject> handle)
+        {
+            if (handle.IsValid())
+                Addressables.ReleaseInstance(handle);
+        }
+
+        /// <summary>释放当前 Presenter 已创建的 HUD 与世界 View，供销毁和部分失败共用。</summary>
+        private void ReleaseCreatedViews()
+        {
+            foreach (ParticipantHudView hudView in _hudViews.Values)
+            {
+                if (hudView != null)
+                    DestroyParticipantHud(hudView.gameObject);
+            }
+
+            _hudViews.Clear();
+            foreach (GameObject view in _views.Values)
+            {
+                if (view != null)
+                    ReleaseParticipantView(view);
+            }
+
+            _views.Clear();
+        }
+
+        /// <summary>经当前 Presenter 唯一资源边界释放一个已创建世界 View。</summary>
+        private void ReleaseParticipantView(GameObject view)
+        {
+            if (view == null)
+                return;
+            if (_releaseViewForTesting != null)
+            {
+                _releaseViewForTesting(view);
+                return;
+            }
+
+            Addressables.ReleaseInstance(view);
+        }
+
+        /// <summary>经当前 Presenter 唯一资源边界销毁一个非权威 HUD 实例。</summary>
+        private void DestroyParticipantHud(GameObject hudObject)
+        {
+            if (hudObject == null)
+                return;
+            if (_destroyHudForTesting != null)
+            {
+                _destroyHudForTesting(hudObject);
+                return;
+            }
+
+            Destroy(hudObject);
         }
 
         /// <summary>确认 Presenter 的依赖、锚点和 HUD Prefab 在创建前均已配置。</summary>

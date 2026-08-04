@@ -1,7 +1,77 @@
 ---
 created: 2026-07-06
-updated: 2026-08-02
+updated: 2026-08-05
 ---
+
+## 2026-08-05 · M9G 全量验证与双轴收口（已完成）
+
+- Standards 首轮发现 PlayCard Prelude 已脱离手牌后若后续 cue factory 同步抛错，transient lease 可能没有被 runner 接管；新增精确红灯任务 `1c2d50ad7851429c8703704859b79771` 后，让 Prelude 与 Hand→Discard 共享幂等释放边界。单项 **1/1**、相关 **24/24**、M9 定向 **160/160**、M2～M8 回归 **262/262**、全量 EditMode **423/423** 均通过；串行 solution build 0 error、12 条既有依赖 warning。
+- 最终 Local Content 成功，`catalog.hash=0f333c04c6f20921aab45e7c6bf9e827`，BattleScene 保持完整稳定地址。唯一 Unity Editor 从 Bootstrap 进入 BattleScene 后停止回到 Bootstrap，Console Error/Warning **0/0**。真实系统指针、连续帧与只读事实覆盖五种宽高比、出牌/多轮卡区、胜利、失败、两次同 `1001:5001:5` 重开、旧终局输入、立即完成与场景销毁取消。
+- 用户授权后仅临时关闭当前 Editor 内存中的 HybridCLR 并恢复原值，以 Unity 内置 IL2CPP 构建仓库外 Development Player；任务 `build-5c4c9005fe` 0 error。PID `45720` 经真实 End Action 进入失败，再以同一可见 Exit 按钮自然结束：`ExitCode=0`、PID 消失、`ForceKillUsed=false`。首次 Windows Firewall 提示只点击“取消”，未授予策略；Player log 无加载/未处理异常，但有两行同一 Development JobTempAlloc 警告。
+- Standards 另一项首轮 finding 是缺少长期 M9 决策，已新增 CD-049；末轮 Standards 与 Spec 均为 **0 Hard / 0 Judgement**。最终验收见 `06_testing/2026-08-02-m9g-full-validation-review.md`；M9G、M3E 与 ROADMAP M9 已完成，唯一计划、Goal 与启动 Prompt 已归档。
+- Player 构建产生的四个 ProjectSettings/Settings 序列化噪声及两份 PerformanceTest 文件已按精确目标恢复，最终无相关 diff。`packages-lock.json` 与 Hermes/Candidates 用户改动持续排除，未暂存、未 commit、未 push。
+
+## 2026-08-04 · M9F 阶段横幅、胜负面板、重开与退出（已完成）
+
+- 新增 concrete `BattleFlowFeedbackTweenFactory` 并深化既有 adapter/Turn HUD：StartBattle 覆盖层作为唯一 Prelude 严格先于 settlement；玩家/敌人横幅只在 phase 真正变化时播放。BattleEnded 末端只临时调用同程序集 internal `BattleTerminalRules` 并立即映射文案，不公开/注册规则、不保存 outcome，也没有第二 completion、事件总线或动画队列。
+- 胜负面板只在数字、抖动、死亡与隐藏反馈全部结束后稳定显示；终局战斗输入、Restart/Exit 和 StartBattle 指针锁均为局部表现状态。连续重开两次均经 Loading 创建新 Session/Queue/HUD，authority/HP/Intent RNG/CardZones 重置且 Inspector `1001:5001:5` 不变，无旧订阅/Tween/HUD 残留；Editor Exit 经实际 InputSystemUIInputModule/EventSystem 按钮链命中一次，Editor no-op 未冒充 OS 退出。
+- `DataTables/Datas/i18n.xlsx` 只新增 Battle Start、Player/Enemy Turn、Victory/Defeat、Restart/Exit 七个正式 en/zh-CN key；Luban、Localization 同步与 `TinySpire/Build/Sync and Build All` 完成，生成范围只含对应 Localization/Addressables。聚焦 **7/7**、M9F 定向与相关回归 **111/111**、Localization **7/7** 均通过；串行 solution build 0 error、12 条既有依赖 warning。
+- 用户确认本次验收 Player 可不使用热更新。Editor 内存临时 `HybridCLRSettings.enable=false` 后使用 Unity 内置 IL2CPP 构建仓库外 Development Player，构建任务 `build-79a93a95b7` 为 0 error，磁盘 HybridCLRSettings SHA 保持 `22BD4714FC1BC8B093457FFFE2818D99AB733BF45374BCE1E81CBE8DC86F1FE8`，内存/环境已恢复；ignored stripped AOT cache 被包 preprocess 失效，未无快照猜测恢复或清理。
+- 外部 Player PID `43692` 在 `1600×900` 下经 Windows `SendInput` 三次实际 End Action 进入失败；同一可见 Exit 按钮的 Move/Down/Up 均返回 1。原生进程句柄确认 `WaitForSingleObject=0`、`GetExitCodeProcess=true`、`ExitCode=0`，PID 消失且无强杀路径。Player log 无 InvalidKey/VContainer/Addressables/未处理异常并正常 shutdown，但保留一条 Development JobTempAlloc 警告，未伪称零 warning。
+- M9F 未修改 Queue、Turn、settlement、公式、目标/状态/终局规则、BattleScene、BattleLifetimeScope、GameData 战斗 JSON、ProjectSettings、asmdef、HybridCLR 磁盘设置或启动/DI/Run/MainMenu；`packages-lock.json` 与 Hermes/Candidates 用户改动持续排除，未暂存、未 commit、未 push。验收见 `06_testing/2026-08-02-m9f-turn-terminal-restart-exit.md`；M9F 停止点完成，下一步只进入 M9G。
+
+## 2026-08-03 · M9E 出牌、弃牌、抽牌与重洗运动（已完成）
+
+- 新增 concrete `BattleCardMotionTweenFactory`，并让既有 adapter 把 PlayCard Prelude、`CardMoved` 与 `CardsReshuffled` 交给 M9A 同一 runner；Prelude 后 settlement 仍严格按 Order，未新增 completion、表现屏障、事件总线或动画队列，也未按卡名、模板 ID、EffectType 复制规则。
+- Hand 在权威 Layout 发布后先把离手卡移出可交互集合并关闭 raycast/pending/targeting，再复用为非交互 transient；Draw→Hand 只移动当前权威 Hand View，pile HUD 只显示一个非交互纯字符 `↻`。完成、立即完成、取消、owner/Scene 销毁均清除租约/Tween/ghost 并以最新 Layout/base pose 收口，无迟到 completion。
+- 用户授权的 InputSystem/EventSystem 跨帧输入链真实覆盖 Strike/Defend/Bash；默认牌组缺少 Strength，因此用仅存在于 Play Mode 的现有模板 3001 夹具加载正式 Addressable 牌面后完成第四张卡：Strength `0→3`、Energy `3→3`、Hand `5→4`、Discard `5→6`，释放帧 Queue waiting、transient 1，最终 idle/fault none/transient 0。夹具随 Session 销毁，未改配置或文件。
+- 真实 End Action、多牌 ghost、EnemyAction 无旧交互手牌、下一轮抽牌与重洗顺序均通过；ghost/`↻` 射线不命中且不能提交。incoming A 的真实 BeginDrag 只让目标 cue token `0→1` 并恢复最新 base pose，另一合法 B 在 A incoming 时仍可完整拖拽且 token `0→0`，权威 Hand/Energy/Queue 不变；证据 harness 的临时 `timeScale=0` 已恢复为 1。
+- 最新 M9E 聚焦 **88/88 passed**（任务 `cf327d4aeb0e4ff0b9614bc3d00aa236`），CardZones、Effect Queue、Hand/transition、Pile HUD 与 M7/M8 stage-record/Queue 相关回归 **166/166 passed**（任务 `01ae9015550d4e2b90be7bd991f14124`）；串行 solution build 0 error、12 条既有依赖 warning。最终 Local Content 构建成功、耗时 8.88s；干净 Bootstrap 为 PlayerAction/Queue idle/fault none、Hand=Views `[1,10,7,6,2]`、transient 0，Console Error/Warning 0/0。
+- M9E 未修改 Queue、Turn、settlement、公式、目标/终局规则、Scene、Prefab、DI、DataTables、Localization、GameData、ProjectSettings、asmdef 或 HybridCLR；`packages-lock.json` 与 Hermes/Candidates 用户改动持续排除，未暂存、未 commit、未 push。验收见 `06_testing/2026-08-02-m9e-card-zone-motion.md`；`DEP-004` 已 resolved，停止点完成，下一步只进入 M9F。
+
+## 2026-08-03 · M9D 不可用样式、目标聚焦与正式目标素材（已完成）
+
+- Hand 从现有规则、阶段、能量、pending/fault 与 readiness 即时派生 Disabled/VisualOnly/Playable；Enemy 首次越线后进入序列化 focus anchor，归零、缩放/呼吸，箭头起点逐帧跟随。四张既有 Runtime/Targeting 正式 Sprite 已接入箭身、箭头和左右 Legal/Hovered 高亮，文件本身无 diff，未使用 Candidates。
+- 16:7 首轮 tight bounds 与左敌世界 Sprite 约重叠 1.9 px，未判通过；只把 `BattleHandUI.prefab` anchor 从 `(0,-40)` 改为 `(-8,-40)`。最终 1600×700/900/1000/1100/1400 均取得三帧连续事实，箭头起点/卡中心与终点/指针事实 delta 均为 0，聚焦卡在屏内且与参与者 tight mesh / 活动 HUD Graphics 无交叠。
+- 用户授权的 InputSystem/EventSystem 跨帧注入完整经过当前 `InputSystemUIInputModule`、EventSystem raycast 与 BeginDrag/Drag/EndDrag，不是 OS 物理鼠标，也没有直接调用 listener/Container。Self、左右 Enemy、空白/玩家/死亡目标、VisualOnly、BattleEnded Disabled 与真实 End Action 均通过；表现屏障期间另一张合法卡仍可 raycast，未引入全局输入锁。
+- 队首普通失败/fault 清理由自动测试覆盖；对象/Scene 销毁实跑确认旧 card、arrow、高亮与 focus transition/breath 全部清理，随后可重建新 BattleScene。截图只作画面佐证，时序以连续 frame 与 Combatants/Energy/CardZones/Turn/Queue 只读快照为准；M9F outcome 面板尚未出现。
+- 最终 M9D 合并回归 **98/98 passed**（任务 `5de9234f03b24c629ea650747a6cf21b`），Canvas 缩放测试修正后单项 **1/1 passed**（任务 `dc4fc8ed05434fd0890bf21ca5fe076f`）；串行 solution build 0 error、12 条既有依赖 warning。Prefab 最终修订后重建 Local Content，catalog 时间 `2026-08-03 10:19:50 +08:00`；Bootstrap 生产链与 Console Error/Warning 0/0。
+- M9D 未修改 Queue、Turn、settlement、公式、目标/终局规则、Scene、DI、DataTables、Localization、GameData、ProjectSettings、asmdef 或 HybridCLR；`packages-lock.json` 与 Hermes/Candidates 用户改动持续排除，未暂存、未 commit、未 push。验收见 `06_testing/2026-08-02-m9d-card-focus-targeting-feedback.md`；`DEP-003` 已 resolved，停止点完成，下一步只进入 M9E。
+
+## 2026-08-03 · M9C 结算反馈、受击与死亡过渡（已完成）
+
+- 新增 concrete `BattleCombatFeedbackTweenFactory`、纯字符 `BattleFloatingNumberView` 与 Participant HUD `FeedbackAnchor`；冻结 Damage/Block/Attribute/Status/Intent 步骤按 M9A 顺序精确路由，完成 Block/Health/BlockGained 数字、Strength/Vulnerable/Intent 脉冲、实际生命损失抖动和 fatal 死亡过渡。用户确认不接伤害底板，未使用 Candidates。
+- fatal 完成前保留 0 HP world View/完整 HUD，完成后只隐藏对应表现对象；重新绑定死亡参与者直接恢复终态，权威 Combatant/Encounter/Intent/Turn/outcome 不变。M9C 不消费 CardMoved、横幅或 BattleOutcome，胜负面板仍未出现。
+- `BattleParticipantPresenter` 从当前 Session 与唯一 world View/HUD 映射即时派生 readiness；映射未齐时仅 Turn HUD 与 Hand 系统指针入口关闭，直接 Queue seam、排序与 completion 契约不变。失败、部分加载、对象/Scene 销毁和迟到完成均幂等清理，无事件总线、第二 completion 或事实镜像。
+- 复审补齐 DOTween 实际所有权：HandCardVisual 默认 AutoKill tween 以 `Complete(false)` 同帧回收；命令父 Sequence 使用播放级私有 ID，在自然结束、立即完成、构建异常与 Dispose 精确 Kill。红灯分别证明同帧 Hand 与 runner 各残留 1 个 Tween；最终 Runner 12/12，统一测试后 `active=0 / playing=0`。
+- 最终 M9C 聚焦 **96/96 passed**（任务 `1edb43696c294fd6aef3cddb7d9cd886`），M9A～M9C 与相关回归 **239/239 passed**（任务 `aea498d7fb544681ba3c5a810ca85656`），M8B Queue fault/lifecycle **11/11 passed**（任务 `2ae8e6a13a3d4094ba9ee552a9ca65c2`）；串行 solution build 0 error、12 条既有依赖 warning。
+- 最终 Local Content 已重建；Bootstrap 进入 BattleScene 后 `ready=True / views=3 / huds=3 / endAction=True / PlayerAction / Queue idle / fault=False / Tween=0`，Console Error/Warning 0/0，退出 Play 后恢复 BootstrapScene。用户授权的 InputSystem/EventSystem 跨帧注入及连续事实证明飘字、抖动、fatal 和 readiness 时序；未冒充 OS 物理鼠标。
+- M9C 未修改 Queue、Turn、settlement、公式、目标、终局、Scene、DI、DataTables、Localization 或生成战斗内容；受保护 Hermes/Candidates 持续排除，未 commit、未 push。验收见 `06_testing/2026-08-02-m9c-settlement-combat-feedback-death.md`；停止点完成，下一步只进入 M9D。
+
+## 2026-08-02 · M9B 参与者状态、Block 与既有意图 HUD（已完成）
+
+- `ParticipantHudView` 现从当前 Combatant 的 Health、Block、Strength、Vulnerable 与存活事实即时派生状态行；零值逐槽隐藏、全零/死亡整行隐藏。敌人意图继续由当前 BehaviorId、静态 Effect 与共享公式派生，没有 HUD / Intent / Combatant 镜像或随机推进。
+- 既有 `ParticipantHudView.prefab` 通过当前唯一 Unity MCP 静态接入正式 Block、Strength、Vulnerable 图标与层数；状态行默认隐藏、非交互，生命 HUD 保持独立。没有 Weak / Poison 节点或生产分支，也未接入 Candidates。
+- 公开 production `Bind` 测试证明玩家状态增减/清零/衰减、敌人死亡与死亡重建、Bind 后 locale 重投影，以及 0 HP Health HUD / 世界 View 保留；同一权威参与者、Intent Layout、BehaviorId 与 RNG 均未被删除或替换。三敌不同状态事实保持隔离。
+- 最终 Participant / Prefab / View / Intent HUD 为 **17/17 passed**（任务 `67f758d8702b40289fad2d27004dbb68`）；Combatants、StatusTiming、Effect、Intent、M8D terminal/enemy loop 与 targeting 相关回归为 **130/130 passed**（任务 `3df95152b461404c9ee8c5a450c7540c`），均为 0 failed、0 skipped。串行 solution build 0 error、12 条既有依赖 warning。
+- 最终 Prefab 修订后重建 Local Content，catalog 时间为 `2026-08-02 19:15:12`。Bootstrap 生产链进入 BattleScene，初始零状态行隐藏、两名敌人意图可见、玩家与敌人生命 HUD 正常；证据为 `TinySpire/Temp/CodexEvidence/m9b_final_initial_status.png`，Console Error / Warning 为 0/0。
+- M9B 未修改 Queue、Turn、settlement、Combatant/Intent/Effect/公式/状态时机、目标、终局、Scene、DI、配置、Localization 或生成战斗内容；死亡世界 View 的最终隐藏严格留给 M9C。受保护用户改动持续排除，未 commit、未 push。验收见 `06_testing/2026-08-02-m9b-combatant-status-hud.md`；M9B 停止点完成，下一步只进入 M9C。
+
+## 2026-08-02 · M9A 有序表现时间线、一次 completion 与取消（已完成）
+
+- 新增不可变 `BattleCommandPresentationPlan` 与 concrete `BattleCommandPresentationRunner`，并深化既有 `BattleCommandPresentationAdapter`；Queue-facing `IBattleCommandPresentation.Present(result, completion)`、Queue / Turn / settlement、continuation、屏障与 fault seam 均保持不变，没有新增第二 completion、事件总线或动画命令队列。
+- 当前 14 类 concrete settlement 均被显式映射为零到多个稳定步骤；StartBattle、Strike、Bash、唯一 Hand→Discard、首个可见 Effect target、BattleEnded 尾序、三层只读集合与后置记录不重排均有自动证据。每条命令至多一个互斥 Prelude，随后严格保留 settlement `Order`。
+- 零可见结果同步直通；正常、加速、立即完成与 completion 重入均精确完成一次。runner 显式拥有父 Sequence 与幂等 cue lease，证明自然结束、立即完成、构建异常和 owner 销毁的清理与无迟到 completion；表现期间仍允许既有合法命令提交并由 Queue 排序。
+- 最终 Plan / Runner / Adapter、settlement contract 与 M8B / M8D 聚焦为 **83/83 passed**（任务 `f3703ba76c4e4d8d9472f27215a32d81`）；完整 Queue / M8B / M8D / Effect Queue 回归为 **57/57 passed**（任务 `c64fce57df5c4d55812e2a7c3efce75e`），均为 0 failed、0 skipped。串行 solution build 为 0 error、12 条既有依赖 warning；`git diff --check` 通过，最终 Console Error / Warning 为 0/0。
+- M9A 未修改 Prefab、可寻址依赖、DataTables 或 Localization，因此 Local Content、Luban 与同步工具不适用且未运行；未提前声明 Bootstrap、真实 Game View 或物理动画时序通过。受保护用户改动持续排除，未 commit、未 push。验收见 `06_testing/2026-08-02-m9a-ordered-presentation-timeline.md`；M9A 停止点完成，下一步只进入 M9B。
+
+## 2026-08-02 · M9 总计划、Goal 与 Prompt 边界（待实施）
+
+- M8 已按用户授权仅暂存显式 M8 路径并本地提交为 `6545640963e3f184bcd7915706e87bea4a142afa`（`feat(Battle): 完成 M8 敌人行动与战斗循环`），未 push；Hermes/Candidates 用户美术未纳入提交、未修改或回退。
+- 新增 `plans/2026-08-02-m9-sts-feedback-outcome-restart.md` 作为 M9 唯一实施计划，按 M9A 有序表现时间线 → M9B Block/状态 HUD → M9C 数字/抖动/死亡 → M9D 聚焦/目标素材 → M9E 卡区运动 → M9F 战斗开始/回合横幅/终局/重开/退出 → M9G 全量验证与双轴复审串行推进；每个切片必须形成独立验收页并完成文档停止点后再继续。
+- 计划保持 Queue/Turn/settlement/公式/目标/终局不变，只深化既有 `IBattleCommandPresentation` 与 concrete adapter；每命令最多一个互斥 StartBattle/PlayCard `CommandPrelude`，之后 settlement 步骤严格按 Order。常驻 HUD 读取当前事实，一次性反馈读取冻结结果，transient card View 不成为假手牌，场景销毁不得留下迟到 Tween/completion；入场卡被合法拖拽时只快进目标卡的 cue。表现期间仍允许既有合法命令提交并由 Queue 排序。
+- M9 默认产品口径已锁定：重开同一 BattleScene 与 Inspector seed；退出应用而非新增 MainMenu，并以 Editor 接线加仓库外 Development Player 进程退出形成证据；胜负仅由同程序集表现 adapter 临时调用 internal `BattleTerminalRules` 派生，不公开 seam 或保存 outcome；战斗开始及玩家/敌人回合共使用七个正式 Unity Localization key；缺失 enemy banner/胜负装饰先用现有横幅 tint 与功能性 UGUI；Runtime/Targeting 正式素材只在 M9D 接入，当前 Hermes/Candidates 继续排除。
+- 配套新增独立 `plans/2026-08-02-m9-sts-feedback-outcome-restart.goal.md` 与 `.codex-prompt.md`，供新任务分别复制 `/goal` 和开工指令。本轮只写规划/交接文档并同步 ROADMAP、DEPENDENCIES、计划索引和状态源，没有实施 M9 代码、测试、Prefab、Localization 或 Addressables，也未 commit/push 这些 M9 文档。
 
 ## 2026-08-02 · M8E 全量验证、双轴复审与 M8 收口（已完成）
 
@@ -9,7 +79,7 @@ updated: 2026-08-02
 - 最终 M8 定向 **84/84**（任务 `3a5af905f4b1434ea4397c2f78a4555a`）、M2～M7 相关回归 **200/200**（任务 `6bc09fcecf4f48e89b93d6fba205dbf4`）、审查修正聚焦 **86/86**（任务 `4d51ecf7ceba4a9ebcb69e2d0cca3879`）与最终全量 EditMode **285/285**（任务 `63967ec19cf64333921c72ea27293f67`）均为 0 failed、0 skipped；串行 solution build 0 error、12 条既有依赖 warning。
 - Bootstrap 真实 Game View 已完成四轮物理胜利、Encounter 启动时跳过已死亡敌人、玩家死亡中止剩余敌人、一次性表现屏障暂停/恢复、状态时机、最后敌人死亡立即终局及终局后稳定失败；排队后 source 才死亡的 source-only skip 由专用自动测试证明。Standards 修正后又经生产 End listener 短 sanity 进入 Round 2，最终 Console Error/Warning 为 0/0。
 - Standards 首轮 **1 Hard / 2 Judgement** 已关闭：旧意图写入口与 enemy target/terminal helper 收窄为 internal，联合事务只保留一个 guard；最终复核 **0 Hard / 0 Judgement**。Spec 首轮唯一 Hard 是 M8E 文档尚未收口；生产规格与 scope finding 为 0，最终文档同步后复核 **0 Hard / 0 Judgement**。
-- M8 未修改配置、生成内容、Localization、Addressables、Scene/Prefab、ProjectSettings、asmdef、HybridCLR、启动或 DI 架构，也未实现 M3E/M9 表现与其他明确排除能力；无需 Luban/Addressables 重建。用户 Hermes/Candidates 美术持续排除并保护，未 commit、未 push。
+- M8 未修改配置、生成内容、Localization、Addressables、Scene/Prefab、ProjectSettings、asmdef、HybridCLR、启动或 DI 架构，也未实现 M3E/M9 表现与其他明确排除能力；无需 Luban/Addressables 重建。M8E 收口当时尚未 commit；随后已按用户授权以显式路径本地提交为 `6545640963e3f184bcd7915706e87bea4a142afa`，未 push，用户 Hermes/Candidates 美术持续排除并保护。
 - `DEP-009` 与 `DEP-013` 已 resolved；其余 M9、多人、网络、Exhaust 与 Run 依赖保持原状态。计划已归档，最终证据见 `06_testing/2026-08-02-m8e-full-validation-review.md`，下一阶段为 M9。
 
 ## 2026-08-02 · M8D 生产状态时机、死亡与完整战斗循环（已完成）

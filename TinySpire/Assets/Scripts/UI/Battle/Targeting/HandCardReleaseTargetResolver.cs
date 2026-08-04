@@ -128,12 +128,14 @@ namespace TinySpire.UI.Battle
                 : HandCardInteractionMode.Disabled;
         }
 
-        /// <summary>规则允许出牌或仅费用不足时可以拿起拖动；其他失败仍锁定输入。</summary>
+        /// <summary>参与者表现就绪且规则允许出牌或仅费用不足时可以拿起拖动；其他情况锁定输入。</summary>
         public static bool CanBeginDrag(
             bool canStartInteraction,
-            BattleCommandExecutionFailureReason failureReason)
+            BattleCommandExecutionFailureReason failureReason,
+            bool participantPresentationReady = true)
         {
-            return ResolveMode(canStartInteraction, failureReason) !=
+            return participantPresentationReady &&
+                   ResolveMode(canStartInteraction, failureReason) !=
                    HandCardInteractionMode.Disabled;
         }
 

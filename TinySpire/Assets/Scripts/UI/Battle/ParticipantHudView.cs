@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using cfg;
+using DG.Tweening;
 using R3;
 using TinySpire.Battle;
 using UnityEngine;
@@ -13,20 +15,30 @@ namespace TinySpire.UI.Battle
     [DisallowMultipleComponent]
     public sealed class ParticipantHudView : MonoBehaviour
     {
-        private const string StrengthNameKey = "battle.keyword.strength.name";
-
         [SerializeField] private RectTransform _nameAnchor;
         [SerializeField] private RectTransform _vitalsAnchor;
         [SerializeField] private Text _nameText;
         [SerializeField] private Image _healthFillImage;
         [SerializeField] private Text _healthText;
+        [SerializeField] private GameObject _statusRoot;
+        [SerializeField] private GameObject _blockRoot;
+        [SerializeField] private Text _blockText;
         [SerializeField] private GameObject _strengthRoot;
         [SerializeField] private Text _strengthText;
+        [SerializeField] private GameObject _vulnerableRoot;
+        [SerializeField] private Text _vulnerableText;
         [SerializeField] private GameObject _intentRoot;
         [SerializeField] private Image _intentIcon;
         [SerializeField] private Text _intentValueText;
         [SerializeField] private RectTransform _targetHighlightAnchor;
-        [SerializeField] private Image _targetHighlightImage;
+        [SerializeField] private GameObject _legalTargetHighlightRoot;
+        [SerializeField] private Image _legalTargetHighlightLeftImage;
+        [SerializeField] private Image _legalTargetHighlightRightImage;
+        [SerializeField] private GameObject _hoveredTargetHighlightRoot;
+        [SerializeField] private Image _hoveredTargetHighlightLeftImage;
+        [SerializeField] private Image _hoveredTargetHighlightRightImage;
+        [SerializeField] private RectTransform _feedbackAnchor;
+        [SerializeField] private BattleFloatingNumberView _floatingNumberPrefab;
         [SerializeField] private Sprite _attackIntentSprite;
         [SerializeField] private Sprite _defendIntentSprite;
         [SerializeField] private Sprite _buffIntentSprite;
@@ -34,8 +46,12 @@ namespace TinySpire.UI.Battle
         [SerializeField] private Sprite _specialIntentSprite;
         [SerializeField, Min(0f)] private float _headOffset = 0.2f;
         [SerializeField, Min(0f)] private float _feetOffset = 0.2f;
-        [SerializeField] private Color _legalTargetColor = new Color(0.3f, 0.85f, 1f, 0.18f);
-        [SerializeField] private Color _hoveredTargetColor = new Color(1f, 0.82f, 0.25f, 0.34f);
+        [SerializeField, Min(0.01f)] private float _hitShakeDurationSeconds = 0.28f;
+        [SerializeField, Min(0f)] private float _hitShakeStrength = 0.12f;
+        [SerializeField, Min(0.02f)] private float _hudPulseDurationSeconds = 0.24f;
+        [SerializeField, Min(1f)] private float _hudPulseScale = 1.18f;
+        [SerializeField, Min(0.01f)] private float _deathTransitionDurationSeconds = 0.38f;
+        [SerializeField, Range(0f, 1f)] private float _deathTransitionScale = 0.72f;
 
         private CombatantData _combatant;
         private Transform _worldView;
@@ -74,7 +90,7 @@ namespace TinySpire.UI.Battle
                 _enemyIntents = enemyIntents ?? throw new ArgumentNullException(nameof(enemyIntents));
             else
                 _intentRoot.SetActive(false);
-            _spriteRenderer = _worldView.GetComponentInChildren<SpriteRenderer>();
+            _spriteRenderer = _worldView.GetComponentInChildren<SpriteRenderer>(includeInactive: true);
             if (_spriteRenderer == null)
             {
                 throw new InvalidOperationException(
@@ -82,30 +98,113 @@ namespace TinySpire.UI.Battle
             }
 
             _combatant.Health.Subscribe(RefreshHealth).AddTo(this);
-            _combatant.Strength.Subscribe(RefreshStrength).AddTo(this);
+            _combatant.Block.Subscribe(_ => RefreshStatus()).AddTo(this);
+            _combatant.Strength.Subscribe(_ => RefreshStrengthAndIntent()).AddTo(this);
+            _combatant.Vulnerable.Subscribe(_ => RefreshStatus()).AddTo(this);
             _localization.LocaleChanged.Subscribe(_ => RefreshLocalizedText()).AddTo(this);
             if (_enemyCombatant != null)
                 _enemyIntents.Layout.Subscribe(RefreshIntent).AddTo(this);
             SetTargetHighlight(isLegalCandidate: false, isHovered: false);
             RefreshLocalizedText();
+            ApplyInitialLifeVisibility();
         }
 
         /// <summary>只切换当前 HUD 的功能性合法/命中高亮，不保存目标合法性玩法事实。</summary>
         public void SetTargetHighlight(bool isLegalCandidate, bool isHovered)
         {
-            if (_targetHighlightImage == null)
+            if (_legalTargetHighlightRoot == null || _hoveredTargetHighlightRoot == null)
                 return;
 
-            _targetHighlightImage.gameObject.SetActive(isLegalCandidate);
-            if (isLegalCandidate)
-                _targetHighlightImage.color = isHovered ? _hoveredTargetColor : _legalTargetColor;
+            bool showHovered = isLegalCandidate && isHovered;
+            _legalTargetHighlightRoot.SetActive(isLegalCandidate && !showHovered);
+            _hoveredTargetHighlightRoot.SetActive(showHovered);
+        }
+
+        /// <summary>从当前绑定参与者创建一个只消费冻结 cue 的 concrete Tween lease。</summary>
+        internal BattleCommandPresentationTween CreateCombatFeedbackTween(
+            BattleCombatFeedbackCue cue)
+        {
+            if (cue == null)
+                throw new ArgumentNullException(nameof(cue));
+            if (_combatant == null)
+                throw new InvalidOperationException("ParticipantHudView must be bound before feedback playback.");
+            if (cue.TargetId != _combatant.Id)
+            {
+                throw new InvalidOperationException(
+                    $"Combat feedback target {cue.TargetId} does not match bound participant {_combatant.Id}.");
+            }
+
+            switch (cue.Kind)
+            {
+                case BattleCommandPresentationStepKind.BlockAbsorbedNumber:
+                case BattleCommandPresentationStepKind.HealthLossNumber:
+                case BattleCommandPresentationStepKind.BlockGainedNumber:
+                {
+                    BattleFloatingNumberView floatingNumber = null;
+                    try
+                    {
+                        floatingNumber = Instantiate(
+                            _floatingNumberPrefab,
+                            _feedbackAnchor,
+                            worldPositionStays: false);
+                        floatingNumber.name = $"{cue.Kind}_{cue.Amount}";
+                        return new BattleCommandPresentationTween(
+                            floatingNumber.CreateTween(cue.Kind, cue.Amount),
+                            () => DestroyFloatingNumber(floatingNumber));
+                    }
+                    catch
+                    {
+                        DestroyFloatingNumber(floatingNumber, resetHidden: false);
+                        throw;
+                    }
+                }
+                case BattleCommandPresentationStepKind.HitShake:
+                    return CreateHitShakeTween();
+                case BattleCommandPresentationStepKind.StrengthIconPulse:
+                {
+                    int frozenValue = RequireFrozenValue(cue);
+                    return CreateHudPulseTween(
+                        _strengthRoot,
+                        () =>
+                        {
+                            _statusRoot.SetActive(true);
+                            _strengthText.text = ParticipantHudPresentation.FormatStatusValue(
+                                frozenValue);
+                        },
+                        RefreshStatus);
+                }
+                case BattleCommandPresentationStepKind.VulnerableIconPulse:
+                {
+                    int frozenValue = RequireFrozenValue(cue);
+                    return CreateHudPulseTween(
+                        _vulnerableRoot,
+                        () =>
+                        {
+                            _statusRoot.SetActive(true);
+                            _vulnerableText.text = ParticipantHudPresentation.FormatStatusValue(
+                                frozenValue);
+                        },
+                        RefreshStatus);
+                }
+                case BattleCommandPresentationStepKind.EnemyIntentPulse:
+                {
+                    int frozenBehaviorId = RequireFrozenValue(cue);
+                    return CreateHudPulseTween(
+                        _intentRoot,
+                        () => RefreshFrozenIntent(frozenBehaviorId),
+                        () => RefreshIntent(_enemyIntents.Layout.CurrentValue));
+                }
+                case BattleCommandPresentationStepKind.DeathTransition:
+                    return CreateDeathTransitionTween();
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(cue), cue.Kind, null);
+            }
         }
 
         /// <summary>HUD 暂停时隐藏纯表现目标高亮，避免对象重新启用前残留旧候选。</summary>
         private void OnDisable()
         {
-            if (_targetHighlightImage != null)
-                _targetHighlightImage.gameObject.SetActive(false);
+            SetTargetHighlight(isLegalCandidate: false, isHovered: false);
         }
 
         /// <summary>在布局结束后将名称和生命 HUD 投影到角色的头顶与脚下。</summary>
@@ -116,6 +215,7 @@ namespace TinySpire.UI.Battle
 
             Bounds bounds = _spriteRenderer.bounds;
             PositionAtWorldPoint(_targetHighlightAnchor, bounds.center);
+            PositionAtWorldPoint(_feedbackAnchor, bounds.center);
             PositionAtWorldPoint(_nameAnchor, new Vector3(bounds.center.x, bounds.max.y + _headOffset, bounds.center.z));
             PositionAtWorldPoint(_vitalsAnchor, new Vector3(bounds.center.x, bounds.min.y - _feetOffset, bounds.center.z));
         }
@@ -125,28 +225,253 @@ namespace TinySpire.UI.Battle
         {
             _healthFillImage.fillAmount = (float)currentHealth / _combatant.MaxHealth;
             _healthText.text = ParticipantHudPresentation.FormatHealth(currentHealth, _combatant.MaxHealth);
+            RefreshStatus();
             if (_enemyCombatant != null)
                 RefreshIntent(_enemyIntents.Layout.CurrentValue);
         }
 
-        /// <summary>按参与者当前力量事实刷新可见性与数值。</summary>
-        private void RefreshStrength(int strength)
+        /// <summary>按当前存活、Block、Strength 与 Vulnerable 事实重派生三个状态槽。</summary>
+        private void RefreshStatus()
         {
-            bool shouldShow = ParticipantHudPresentation.ShouldShowStrength(strength);
-            _strengthRoot.SetActive(shouldShow);
-            if (shouldShow)
-                _strengthText.text = ParticipantHudPresentation.FormatStrength(
-                    _localization.GetString(StrengthNameKey),
-                    strength);
+            ParticipantStatusPresentationData presentation =
+                ParticipantHudPresentation.DeriveStatus(_combatant);
+            _statusRoot.SetActive(presentation.IsVisible);
+            _blockRoot.SetActive(presentation.IsBlockVisible);
+            _strengthRoot.SetActive(presentation.IsStrengthVisible);
+            _vulnerableRoot.SetActive(presentation.IsVulnerableVisible);
+            if (presentation.IsBlockVisible)
+            {
+                _blockText.text = ParticipantHudPresentation.FormatStatusValue(
+                    presentation.Block);
+            }
+            if (presentation.IsStrengthVisible)
+            {
+                _strengthText.text = ParticipantHudPresentation.FormatStatusValue(
+                    presentation.Strength);
+            }
+            if (presentation.IsVulnerableVisible)
+            {
+                _vulnerableText.text = ParticipantHudPresentation.FormatStatusValue(
+                    presentation.Vulnerable);
+            }
+        }
+
+        /// <summary>力量变化同时刷新状态槽与依赖共享公式的敌人意图值。</summary>
+        private void RefreshStrengthAndIntent()
+        {
+            RefreshStatus();
             if (_enemyCombatant != null)
                 RefreshIntent(_enemyIntents.Layout.CurrentValue);
         }
 
-        /// <summary>语言改变时重派生名称和力量显示，不缓存翻译正文。</summary>
+        /// <summary>语言改变时只重派生本地化名称，并从当前事实重刷状态槽。</summary>
         private void RefreshLocalizedText()
         {
             _nameText.text = _localization.GetString(_nameI18nKey);
-            RefreshStrength(_combatant.Strength.CurrentValue);
+            RefreshStatus();
+        }
+
+        /// <summary>首次绑定已死亡参与者时直接恢复死亡隐藏终态，不参与新 fatal 的播放时序。</summary>
+        private void ApplyInitialLifeVisibility()
+        {
+            if (_combatant.IsAlive)
+                return;
+
+            _worldView.gameObject.SetActive(false);
+            gameObject.SetActive(false);
+        }
+
+        /// <summary>幂等隐藏并释放一个命令级纯字符 transient。</summary>
+        private static void DestroyFloatingNumber(
+            BattleFloatingNumberView floatingNumber,
+            bool resetHidden = true)
+        {
+            if (floatingNumber == null)
+                return;
+
+            if (resetHidden)
+                floatingNumber.ResetHidden();
+            if (Application.isPlaying)
+                Destroy(floatingNumber.gameObject);
+            else
+                DestroyImmediate(floatingNumber.gameObject);
+        }
+
+        /// <summary>读取状态或意图 cue 的冻结值，缺失时同步 fault 而不回查最终事实。</summary>
+        private static int RequireFrozenValue(BattleCombatFeedbackCue cue)
+        {
+            if (!cue.FrozenValue.HasValue)
+            {
+                throw new InvalidOperationException(
+                    $"Combat feedback {cue.Kind} requires a frozen settlement value.");
+            }
+
+            return cue.FrozenValue.Value;
+        }
+
+        /// <summary>创建只改变世界 View 局部位置并在清理时恢复 base pose 的受击抖动。</summary>
+        private BattleCommandPresentationTween CreateHitShakeTween()
+        {
+            Transform target = _worldView;
+            Vector3 basePosition = target.localPosition;
+            Sequence sequence = DOTween.Sequence()
+                .Pause()
+                .AppendCallback(() =>
+                {
+                    if (target != null)
+                        target.localPosition = basePosition;
+                })
+                .Append(
+                    target.DOShakePosition(
+                        _hitShakeDurationSeconds,
+                        _hitShakeStrength,
+                        vibrato: 12,
+                        randomness: 45f,
+                        snapping: false,
+                        fadeOut: true));
+            return new BattleCommandPresentationTween(
+                sequence,
+                () =>
+                {
+                    if (target != null)
+                        target.localPosition = basePosition;
+                });
+        }
+
+        /// <summary>创建只缩放既有 HUD 节点并在清理后重投影当前事实的短脉冲。</summary>
+        private BattleCommandPresentationTween CreateHudPulseTween(
+            GameObject pulseRoot,
+            Action prepareCurrentFact,
+            Action restoreCurrentFact)
+        {
+            if (pulseRoot == null)
+                throw new ArgumentNullException(nameof(pulseRoot));
+            if (prepareCurrentFact == null)
+                throw new ArgumentNullException(nameof(prepareCurrentFact));
+            if (restoreCurrentFact == null)
+                throw new ArgumentNullException(nameof(restoreCurrentFact));
+
+            Transform target = pulseRoot.transform;
+            Vector3 baseScale = target.localScale;
+            float halfDuration = _hudPulseDurationSeconds * 0.5f;
+            Sequence sequence = DOTween.Sequence()
+                .Pause()
+                .AppendCallback(() =>
+                {
+                    if (this == null || pulseRoot == null || target == null)
+                        return;
+
+                    target.localScale = baseScale;
+                    prepareCurrentFact.Invoke();
+                    pulseRoot.SetActive(true);
+                })
+                .Append(target.DOScale(baseScale * _hudPulseScale, halfDuration).SetEase(Ease.OutQuad))
+                .Append(target.DOScale(baseScale, halfDuration).SetEase(Ease.InQuad))
+                .AppendCallback(() => RestoreHudPulse(
+                    pulseRoot,
+                    target,
+                    baseScale,
+                    restoreCurrentFact));
+            return new BattleCommandPresentationTween(
+                sequence,
+                () => RestoreHudPulse(
+                    pulseRoot,
+                    target,
+                    baseScale,
+                    restoreCurrentFact));
+        }
+
+        /// <summary>在 cue 结束或 owner 取消时幂等恢复脉冲节点与当前权威 HUD 事实。</summary>
+        private void RestoreHudPulse(
+            GameObject pulseRoot,
+            Transform target,
+            Vector3 baseScale,
+            Action restoreCurrentFact)
+        {
+            if (this == null || pulseRoot == null || target == null)
+                return;
+
+            target.localScale = baseScale;
+            restoreCurrentFact.Invoke();
+        }
+
+        /// <summary>创建 fatal 末尾才隐藏世界 View 与完整 HUD 的死亡过渡。</summary>
+        private BattleCommandPresentationTween CreateDeathTransitionTween()
+        {
+            Transform worldTransform = _worldView;
+            Transform hudTransform = transform;
+            SpriteRenderer spriteRenderer = _spriteRenderer;
+            Vector3 baseWorldScale = worldTransform.localScale;
+            Vector3 baseHudScale = hudTransform.localScale;
+            Color baseWorldColor = spriteRenderer.color;
+            Sequence sequence = DOTween.Sequence()
+                .Pause()
+                .AppendCallback(() =>
+                {
+                    if (this == null ||
+                        worldTransform == null ||
+                        hudTransform == null ||
+                        spriteRenderer == null)
+                    {
+                        return;
+                    }
+
+                    worldTransform.gameObject.SetActive(true);
+                    gameObject.SetActive(true);
+                    worldTransform.localScale = baseWorldScale;
+                    hudTransform.localScale = baseHudScale;
+                    spriteRenderer.color = baseWorldColor;
+                })
+                .Append(
+                    worldTransform
+                        .DOScale(baseWorldScale * _deathTransitionScale, _deathTransitionDurationSeconds)
+                        .SetEase(Ease.InCubic))
+                .Join(
+                    hudTransform
+                        .DOScale(baseHudScale * _deathTransitionScale, _deathTransitionDurationSeconds)
+                        .SetEase(Ease.InCubic))
+                .Join(spriteRenderer.DOFade(0f, _deathTransitionDurationSeconds))
+                .AppendCallback(() =>
+                {
+                    if (this != null)
+                        ApplyCurrentLifeVisibility();
+                });
+            return new BattleCommandPresentationTween(
+                sequence,
+                () =>
+                {
+                    if (worldTransform != null)
+                        worldTransform.localScale = baseWorldScale;
+                    if (hudTransform != null)
+                        hudTransform.localScale = baseHudScale;
+                    if (spriteRenderer != null)
+                        spriteRenderer.color = baseWorldColor;
+                    if (this != null)
+                        ApplyCurrentLifeVisibility();
+                });
+        }
+
+        /// <summary>仅从当前权威存活事实恢复死亡过渡的最终可见性。</summary>
+        private void ApplyCurrentLifeVisibility()
+        {
+            if (this == null || _combatant == null)
+                return;
+
+            bool isVisible = _combatant.IsAlive;
+            if (_worldView != null)
+                _worldView.gameObject.SetActive(isVisible);
+            gameObject.SetActive(isVisible);
+        }
+
+        /// <summary>用该条意图 settlement 的冻结下一行为建立临时只读投影，并复用共享意图公式。</summary>
+        private void RefreshFrozenIntent(int behaviorId)
+        {
+            var layout = new EnemyIntentLayoutData(
+                new[]
+                {
+                    new KeyValuePair<CombatantId, int>(_combatant.Id, behaviorId),
+                });
+            RefreshIntent(layout);
         }
 
         /// <summary>从完整当前意图快照与参与者事实重派生图标、数值和死亡可见性。</summary>
@@ -225,13 +550,25 @@ namespace TinySpire.UI.Battle
                 || _nameText == null
                 || _healthFillImage == null
                 || _healthText == null
+                || _statusRoot == null
+                || _blockRoot == null
+                || _blockText == null
                 || _strengthRoot == null
                 || _strengthText == null
+                || _vulnerableRoot == null
+                || _vulnerableText == null
                 || _intentRoot == null
                 || _intentIcon == null
                 || _intentValueText == null
                 || _targetHighlightAnchor == null
-                || _targetHighlightImage == null
+                || _legalTargetHighlightRoot == null
+                || _legalTargetHighlightLeftImage == null
+                || _legalTargetHighlightRightImage == null
+                || _hoveredTargetHighlightRoot == null
+                || _hoveredTargetHighlightLeftImage == null
+                || _hoveredTargetHighlightRightImage == null
+                || _feedbackAnchor == null
+                || _floatingNumberPrefab == null
                 || _attackIntentSprite == null
                 || _defendIntentSprite == null
                 || _buffIntentSprite == null

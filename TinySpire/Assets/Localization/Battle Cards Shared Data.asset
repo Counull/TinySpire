@@ -75,6 +75,34 @@ MonoBehaviour:
     m_Key: battle.card_pile.exhaust.name
     m_Metadata:
       m_Items: []
+  - m_Id: 1538908651941888
+    m_Key: battle.ui.battle.start
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1538908714856448
+    m_Key: battle.ui.turn.player
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1538908714856449
+    m_Key: battle.ui.turn.enemy
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1538908714856450
+    m_Key: battle.ui.result.victory
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1538908714856451
+    m_Key: battle.ui.result.defeat
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1538908714856452
+    m_Key: battle.ui.action.restart
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1538908714856453
+    m_Key: battle.ui.action.exit
+    m_Metadata:
+      m_Items: []
   m_Metadata:
     m_Items: []
   m_KeyGenerator:

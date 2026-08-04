@@ -1,5 +1,40 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
+--- !u!1 &3935595566679609595
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 3078022330439594290}
+  m_Layer: 0
+  m_Name: TargetFocusAnchor
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &3078022330439594290
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3935595566679609595}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 7683694848613044077}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: -8, y: -40}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &6912113391914387252
 GameObject:
   m_ObjectHideFlags: 0
@@ -31,6 +66,7 @@ RectTransform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 7520049942702676164}
+  - {fileID: 3078022330439594290}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -83,7 +119,13 @@ MonoBehaviour:
   cardDisplayScale: 0.36
   playLineY: -100
   _targetingArrow: {fileID: 6868947372035951110}
+  _targetFocusAnchor: {fileID: 3078022330439594290}
   _insufficientCostColor: {r: 0.95, g: 0.2, b: 0.2, a: 1}
+  _targetFocusDuration: 0.2
+  _targetFocusEase: 9
+  _targetFocusScale: 1.08
+  _targetFocusBreathScale: 1.025
+  _targetFocusBreathDuration: 0.55
   hoverLift: 100
   hoverScale: 1.15
   hoverDuration: 0.15
@@ -194,7 +236,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6afda7378833c704fa382b4666fb5a90, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TinySpire.UI.Battle.BattleTargetingArrowView
 --- !u!224 &7520049942702676164 stripped
 RectTransform:

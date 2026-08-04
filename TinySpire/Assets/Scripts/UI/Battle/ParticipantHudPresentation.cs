@@ -5,6 +5,46 @@ using TinySpire.Battle;
 
 namespace TinySpire.UI.Battle
 {
+    /// <summary>由单个参与者当前事实即时派生、不会被 View 保存的状态 HUD 投影。</summary>
+    internal readonly struct ParticipantStatusPresentationData
+    {
+        /// <summary>当前权威格挡值。</summary>
+        public int Block { get; }
+
+        /// <summary>当前权威力量值。</summary>
+        public int Strength { get; }
+
+        /// <summary>当前权威易伤层数。</summary>
+        public int Vulnerable { get; }
+
+        /// <summary>至少一个存活状态需要显示时，状态行可见。</summary>
+        public bool IsVisible => IsBlockVisible || IsStrengthVisible || IsVulnerableVisible;
+
+        /// <summary>只有存活且格挡为正时显示格挡。</summary>
+        public bool IsBlockVisible { get; }
+
+        /// <summary>只有存活且力量非零时显示力量。</summary>
+        public bool IsStrengthVisible { get; }
+
+        /// <summary>只有存活且易伤为正时显示易伤。</summary>
+        public bool IsVulnerableVisible { get; }
+
+        /// <summary>冻结一次只读状态投影，不持有参与者或响应式属性。</summary>
+        internal ParticipantStatusPresentationData(
+            int block,
+            int strength,
+            int vulnerable,
+            bool isAlive)
+        {
+            Block = block;
+            Strength = strength;
+            Vulnerable = vulnerable;
+            IsBlockVisible = isAlive && block > 0;
+            IsStrengthVisible = isAlive && strength != 0;
+            IsVulnerableVisible = isAlive && vulnerable > 0;
+        }
+    }
+
     /// <summary>由权威当前行为、静态 Effect 和参与者事实即时派生的敌人意图展示。</summary>
     public readonly struct EnemyIntentPresentationData
     {
@@ -50,6 +90,25 @@ namespace TinySpire.UI.Battle
         public static string FormatStrength(string localizedStrengthName, int strength)
         {
             return $"{localizedStrengthName} {strength:+#;-#;0}";
+        }
+
+        /// <summary>从参与者当前 Health、Block、Strength 与 Vulnerable 即时派生状态行。</summary>
+        internal static ParticipantStatusPresentationData DeriveStatus(CombatantData combatant)
+        {
+            if (combatant == null)
+                throw new ArgumentNullException(nameof(combatant));
+
+            return new ParticipantStatusPresentationData(
+                combatant.CurrentBlock,
+                combatant.CurrentStrength,
+                combatant.CurrentVulnerable,
+                combatant.IsAlive);
+        }
+
+        /// <summary>以不受当前区域文化影响的十进制文本显示状态数值。</summary>
+        internal static string FormatStatusValue(int value)
+        {
+            return value.ToString(CultureInfo.InvariantCulture);
         }
 
         /// <summary>从同一当前意图快照、静态行为与敌人当前事实派生 HUD 投影。</summary>

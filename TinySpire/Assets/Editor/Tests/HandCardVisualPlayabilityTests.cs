@@ -1,5 +1,6 @@
 using NUnit.Framework;
 using TinySpire.Battle;
+using TinySpire.UI.Battle;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
@@ -35,6 +36,65 @@ public sealed class HandCardVisualPlayabilityTests
 
                 visual.SetCostPaymentFeedback(canPayCost: true, insufficientColor);
                 Assert.That(costText.color, Is.EqualTo(originalColor));
+            }
+            finally
+            {
+                Object.DestroyImmediate(instance);
+            }
+        }
+    }
+
+    /// <summary>验证同一交互模式投影能区分禁用灰化、费用不足可拖与正常可用三种表现。</summary>
+    [Test]
+    public void InteractionPresentation_DisabledVisualOnlyPlayable_UsesDistinctStyleAndPointerContract()
+    {
+        GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(CardPrefabPath);
+        GameObject instance = Object.Instantiate(prefab);
+        using (var zones = new BattleCardZonesData(new[] { 3001 }, shuffleSeed: 1))
+        {
+            try
+            {
+                zones.Draw(1);
+                HandCardVisual visual = instance.GetComponent<HandCardVisual>();
+                var serializedVisual = new SerializedObject(visual);
+                Text costText = serializedVisual.FindProperty("_costText").objectReferenceValue as Text;
+                Color originalCostColor = costText.color;
+                CanvasGroup canvasGroup = visual.CardContent.gameObject.AddComponent<CanvasGroup>();
+                visual.Initialize(Vector3.one, zones.Hand[0], canvasGroup);
+                var insufficientColor = new Color(0.95f, 0.2f, 0.2f, 1f);
+
+                visual.SetInteractionPresentation(
+                    HandCardInteractionMode.Disabled,
+                    insufficientColor);
+
+                Image disabledOverlay = visual.CardContent.Find("DisabledOverlay")?.GetComponent<Image>();
+                Assert.That(disabledOverlay, Is.Not.Null);
+                Assert.That(disabledOverlay.gameObject.activeSelf, Is.True);
+                Assert.That(disabledOverlay.color.r, Is.EqualTo(disabledOverlay.color.g).Within(0.001f));
+                Assert.That(disabledOverlay.color.g, Is.EqualTo(disabledOverlay.color.b).Within(0.001f));
+                Assert.That(disabledOverlay.color.a, Is.GreaterThan(0f));
+                Assert.That(disabledOverlay.raycastTarget, Is.False);
+                Assert.That(canvasGroup.interactable, Is.False);
+                Assert.That(canvasGroup.blocksRaycasts, Is.False);
+                Assert.That(costText.color, Is.EqualTo(originalCostColor));
+
+                visual.SetInteractionPresentation(
+                    HandCardInteractionMode.VisualOnly,
+                    insufficientColor);
+
+                Assert.That(disabledOverlay.gameObject.activeSelf, Is.False);
+                Assert.That(canvasGroup.interactable, Is.True);
+                Assert.That(canvasGroup.blocksRaycasts, Is.True);
+                Assert.That(costText.color, Is.EqualTo(insufficientColor));
+
+                visual.SetInteractionPresentation(
+                    HandCardInteractionMode.Playable,
+                    insufficientColor);
+
+                Assert.That(disabledOverlay.gameObject.activeSelf, Is.False);
+                Assert.That(canvasGroup.interactable, Is.True);
+                Assert.That(canvasGroup.blocksRaycasts, Is.True);
+                Assert.That(costText.color, Is.EqualTo(originalCostColor));
             }
             finally
             {

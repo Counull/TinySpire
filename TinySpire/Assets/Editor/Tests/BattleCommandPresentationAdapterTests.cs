@@ -1,11 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
+using DG.Tweening;
 using NUnit.Framework;
 using R3;
 using TinySpire.Battle;
 using TinySpire.UI.Battle;
+using UnityEditor;
 using UnityEngine;
+using UnityEngine.UI;
 
 public sealed class BattleCommandPresentationAdapterTests
 {
@@ -98,7 +102,7 @@ public sealed class BattleCommandPresentationAdapterTests
             initialHandCount: 2,
             coordinator: coordinator);
         queue.SubmitRegistered(new StartBattleCommand());
-        deltaTime = 1f;
+        deltaTime = 10f;
         adapter.Tick();
         lifecycles.Clear();
 
@@ -127,7 +131,7 @@ public sealed class BattleCommandPresentationAdapterTests
         Assert.That(zones.DiscardPile.Contains(secondCardId), Is.False);
         Assert.That(queue.Queue.CurrentValue.PendingCount, Is.EqualTo(1));
 
-        deltaTime = 1f;
+        deltaTime = 10f;
         adapter.Tick();
 
         Assert.That(
@@ -263,6 +267,781 @@ public sealed class BattleCommandPresentationAdapterTests
         Assert.That(queue.Queue.CurrentValue.CurrentAuthoritySequence, Is.Null);
     }
 
+    /// <summary>确认只有跳过记录的成功结果没有可见步骤，不再被固定时长占用表现屏障。</summary>
+    [Test]
+    public void NonVisibleSettlementResult_CompletesSynchronouslyWithoutFixedDelay()
+    {
+        using var adapter = new BattleCommandPresentationAdapter(1f, () => 0f);
+        var result = new BattleCommandExecutionResult(
+            authoritySequence: 1,
+            BattleCommandType.CompleteEnemyAction,
+            submitterId: null,
+            BattleCommandExecutionFailureReason.None,
+            new BattleSettlementRecord[]
+            {
+                new BattleEnemyActionSkippedSettlement(
+                    order: 0,
+                    new CombatantId(2001),
+                    BattleEnemyActionSkipReason.SourceNotAlive),
+            });
+        var completionCount = 0;
+
+        ((IBattleCommandPresentation)adapter).Present(result, () => completionCount++);
+
+        Assert.That(completionCount, Is.EqualTo(1));
+
+        adapter.Tick();
+
+        Assert.That(completionCount, Is.EqualTo(1));
+    }
+
+    /// <summary>确认单个 Effect 跳过记录同样不伪造反馈，也不会占用固定表现时长。</summary>
+    [Test]
+    public void NonVisibleOperationSkippedResult_CompletesSynchronouslyWithoutFixedDelay()
+    {
+        using var adapter = new BattleCommandPresentationAdapter(1f, () => 0f);
+        var result = new BattleCommandExecutionResult(
+            authoritySequence: 1,
+            BattleCommandType.PlayCard,
+            new CombatantId(1001),
+            BattleCommandExecutionFailureReason.None,
+            new BattleSettlementRecord[]
+            {
+                new BattleOperationSkippedSettlement(
+                    order: 0,
+                    new BattleEffectId(4001),
+                    new CombatantId(1001),
+                    new CombatantId(2001),
+                    BattleOperationSkipReason.TargetNotAlive),
+            });
+        var completionCount = 0;
+
+        ((IBattleCommandPresentation)adapter).Present(result, () => completionCount++);
+
+        Assert.That(completionCount, Is.EqualTo(1));
+
+        adapter.Tick();
+
+        Assert.That(completionCount, Is.EqualTo(1));
+    }
+
+    /// <summary>确认 adapter 的零可见性只来自完整 plan，而不是继续扩展 settlement 类型特判。</summary>
+    [Test]
+    public void NonVisibleMixedSettlementResult_CompletesSynchronouslyFromPlan()
+    {
+        var playerId = new CombatantId(1001);
+        using var adapter = new BattleCommandPresentationAdapter(1f, () => 0f);
+        var result = new BattleCommandExecutionResult(
+            authoritySequence: 2,
+            BattleCommandType.CompleteEnemyAction,
+            submitterId: null,
+            BattleCommandExecutionFailureReason.None,
+            new BattleSettlementRecord[]
+            {
+                new BattleEnergySpentSettlement(0, playerId, 3, 2),
+                new BattleEnergyRefilledSettlement(1, playerId, 2, 3),
+            });
+        var completionCount = 0;
+
+        ((IBattleCommandPresentation)adapter).Present(result, () => completionCount++);
+
+        Assert.That(completionCount, Is.EqualTo(1));
+
+        adapter.Tick();
+
+        Assert.That(completionCount, Is.EqualTo(1));
+    }
+
+    /// <summary>确认 concrete adapter 的立即完成沿 runner 同一门闩释放一次 completion。</summary>
+    [Test]
+    public void CompleteImmediately_VisibleResult_CompletesExactlyOnce()
+    {
+        using var adapter = new BattleCommandPresentationAdapter(1f, () => 0f);
+        var phaseChanged = new BattlePhaseChangedSettlement(
+            0,
+            BattleTurnPhase.BattleStart,
+            BattleTurnPhase.PlayerAction,
+            0,
+            1,
+            null,
+            null);
+        var result = new BattleCommandExecutionResult(
+            authoritySequence: 3,
+            BattleCommandType.StartBattle,
+            submitterId: null,
+            BattleCommandExecutionFailureReason.None,
+            new BattleSettlementRecord[] { phaseChanged });
+        var completionCount = 0;
+
+        ((IBattleCommandPresentation)adapter).Present(result, () => completionCount++);
+        adapter.CompleteImmediately();
+        adapter.CompleteImmediately();
+        adapter.Tick();
+
+        Assert.That(completionCount, Is.EqualTo(1));
+    }
+
+    /// <summary>确认 concrete adapter 把加速倍率转发给同一 runner，且不改变一次 completion 门闩。</summary>
+    [Test]
+    public void SetPresentationSpeed_VisibleResult_AcceleratesAndCompletesExactlyOnce()
+    {
+        using var adapter = new BattleCommandPresentationAdapter(1f, () => 1f);
+        var phaseChanged = new BattlePhaseChangedSettlement(
+            0,
+            BattleTurnPhase.BattleStart,
+            BattleTurnPhase.PlayerAction,
+            0,
+            1,
+            null,
+            null);
+        var result = new BattleCommandExecutionResult(
+            authoritySequence: 31,
+            BattleCommandType.StartBattle,
+            submitterId: null,
+            BattleCommandExecutionFailureReason.None,
+            new BattleSettlementRecord[] { phaseChanged });
+        var completionCount = 0;
+
+        adapter.SetPresentationSpeed(2f);
+        ((IBattleCommandPresentation)adapter).Present(result, () => completionCount++);
+
+        Assert.That(completionCount, Is.Zero);
+
+        adapter.Tick();
+        adapter.Tick();
+        adapter.CompleteImmediately();
+
+        Assert.That(completionCount, Is.EqualTo(1));
+    }
+
+    /// <summary>确认 concrete adapter 销毁时丢弃旧 completion，后续 Tick 或立即完成都不会迟到释放。</summary>
+    [Test]
+    public void Dispose_VisibleResult_DropsCompletionAndIgnoresLaterControlCalls()
+    {
+        var adapter = new BattleCommandPresentationAdapter(1f, () => 10f);
+        var phaseChanged = new BattlePhaseChangedSettlement(
+            0,
+            BattleTurnPhase.BattleStart,
+            BattleTurnPhase.PlayerAction,
+            0,
+            1,
+            null,
+            null);
+        var result = new BattleCommandExecutionResult(
+            authoritySequence: 4,
+            BattleCommandType.StartBattle,
+            submitterId: null,
+            BattleCommandExecutionFailureReason.None,
+            new BattleSettlementRecord[] { phaseChanged });
+        var completionCount = 0;
+
+        ((IBattleCommandPresentation)adapter).Present(result, () => completionCount++);
+        adapter.Dispose();
+        adapter.Dispose();
+        adapter.Tick();
+        adapter.CompleteImmediately();
+
+        Assert.That(completionCount, Is.Zero);
+    }
+
+    /// <summary>确认 concrete adapter 把重洗步骤路由到现有 Pile View，并仍由同一 runner 释放一次 completion。</summary>
+    [Test]
+    public void Present_CardsReshuffled_UsesConcretePileCueInSharedRunner()
+    {
+        GameObject canvasObject = new GameObject(
+            "AdapterCardMotionCanvas",
+            typeof(RectTransform),
+            typeof(Canvas));
+        var participantObject = new GameObject("AdapterCardMotionParticipant");
+        var handObject = new GameObject("AdapterCardMotionHand");
+        BattleCommandPresentationAdapter adapter = null;
+        try
+        {
+            Canvas canvas = canvasObject.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            RectTransform canvasRect = canvasObject.GetComponent<RectTransform>();
+            canvasRect.sizeDelta = new Vector2(1000f, 600f);
+            Text drawText = CreatePileText(canvasRect, "DrawPile", new Vector2(-360f, -210f));
+            Text discardText = CreatePileText(canvasRect, "DiscardPile", new Vector2(360f, -210f));
+            Text exhaustText = CreatePileText(canvasRect, "ExhaustPile", new Vector2(0f, -210f));
+            BattleCardPileHudView pileView = canvasObject.AddComponent<BattleCardPileHudView>();
+            SetPrivateField(pileView, "_drawPileText", drawText);
+            SetPrivateField(pileView, "_discardPileText", discardText);
+            SetPrivateField(pileView, "_exhaustPileText", exhaustText);
+            int transientDestroyCount = 0;
+            pileView.ConfigureReshuffleTransientDestroyForTesting(transient =>
+            {
+                transientDestroyCount++;
+                UnityEngine.Object.DestroyImmediate(transient);
+            });
+            Canvas.ForceUpdateCanvases();
+
+            BattleParticipantPresenter participantPresenter =
+                participantObject.AddComponent<BattleParticipantPresenter>();
+            HandCardContainer hand = handObject.AddComponent<HandCardContainer>();
+            adapter = new BattleCommandPresentationAdapter(
+                participantPresenter,
+                hand,
+                pileView,
+                () => 0.1f);
+            var result = new BattleCommandExecutionResult(
+                authoritySequence: 51,
+                BattleCommandType.EndPlayerAction,
+                new CombatantId(1001),
+                BattleCommandExecutionFailureReason.None,
+                new BattleSettlementRecord[]
+                {
+                    new BattleCardsReshuffledSettlement(
+                        order: 0,
+                        new[] { new CardInstanceId(11), new CardInstanceId(12) }),
+                });
+            int completionCount = 0;
+
+            ((IBattleCommandPresentation)adapter).Present(result, () => completionCount++);
+
+            Assert.That(canvasRect.Find("CardReshuffleTransient"), Is.Null);
+            Assert.That(completionCount, Is.Zero);
+
+            adapter.Tick();
+
+            Assert.That(canvasRect.Find("CardReshuffleTransient"), Is.Not.Null);
+            Assert.That(completionCount, Is.Zero);
+
+            adapter.CompleteImmediately();
+            adapter.CompleteImmediately();
+
+            Assert.That(canvasRect.Find("CardReshuffleTransient"), Is.Null);
+            Assert.That(transientDestroyCount, Is.EqualTo(1));
+            Assert.That(completionCount, Is.EqualTo(1));
+        }
+        finally
+        {
+            adapter?.Dispose();
+            UnityEngine.Object.DestroyImmediate(handObject);
+            UnityEngine.Object.DestroyImmediate(participantObject);
+            UnityEngine.Object.DestroyImmediate(canvasObject);
+        }
+    }
+
+    /// <summary>确认同一 concrete adapter 依次播放 Draw→Hand 与 Hand→Discard，并只快进当前入场 cue。</summary>
+    [Test]
+    public void Present_DrawThenDiscard_UsesAuthoritativeHandAndTransientInSharedRunner()
+    {
+        GameObject canvasObject = new GameObject(
+            "AdapterDrawDiscardCanvas",
+            typeof(RectTransform),
+            typeof(Canvas));
+        var participantObject = new GameObject("AdapterDrawDiscardParticipant");
+        var handObject = new GameObject("AdapterDrawDiscardHand");
+        GameObject cardObject = null;
+        BattleCommandPresentationAdapter adapter = null;
+        using var zones = new BattleCardZonesData(new[] { 3001 }, shuffleSeed: 7331);
+        try
+        {
+            zones.Draw(1);
+            CardInstanceId cardId = zones.Hand[0];
+            GameObject cardPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/Arts/Runtime/Card/Prefab/CardView.prefab");
+            cardObject = UnityEngine.Object.Instantiate(cardPrefab);
+            HandCardVisual visual = cardObject.GetComponent<HandCardVisual>();
+            CanvasGroup cardCanvasGroup = visual.CardContent.gameObject.AddComponent<CanvasGroup>();
+            visual.Initialize(Vector3.one * 0.36f, cardId, cardCanvasGroup);
+            visual.SetBasePoseImmediately(new HandCardPose(new Vector2(70f, -280f), 5f, 0));
+            Vector2 authoritativeBaseScreenPosition = visual.GetScreenCenter();
+
+            Canvas canvas = canvasObject.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            RectTransform canvasRect = canvasObject.GetComponent<RectTransform>();
+            canvasRect.sizeDelta = new Vector2(1000f, 600f);
+            Text drawText = CreatePileText(canvasRect, "DrawPile", new Vector2(-360f, -210f));
+            Text discardText = CreatePileText(canvasRect, "DiscardPile", new Vector2(360f, -210f));
+            Text exhaustText = CreatePileText(canvasRect, "ExhaustPile", new Vector2(0f, -210f));
+            BattleCardPileHudView pileView = canvasObject.AddComponent<BattleCardPileHudView>();
+            SetPrivateField(pileView, "_drawPileText", drawText);
+            SetPrivateField(pileView, "_discardPileText", discardText);
+            SetPrivateField(pileView, "_exhaustPileText", exhaustText);
+            Canvas.ForceUpdateCanvases();
+
+            BattleParticipantPresenter participantPresenter =
+                participantObject.AddComponent<BattleParticipantPresenter>();
+            HandCardContainer hand = handObject.AddComponent<HandCardContainer>();
+            int transientDestroyCount = 0;
+            hand.ConfigureTransientCardDestroyForTesting(_ => transientDestroyCount++);
+            SetPrivateField(hand, "_cardZones", zones);
+            GetPrivateField<List<HandCardVisual>>(hand, "_cards").Add(visual);
+            int handResolveCount = 0;
+            adapter = new BattleCommandPresentationAdapter(
+                participantPresenter,
+                () =>
+                {
+                    handResolveCount++;
+                    return hand;
+                },
+                pileView,
+                () => 0.1f);
+            Assert.That(handResolveCount, Is.Zero, "adapter 构造不得提前解析依赖 Queue 的 Hand。");
+            var drawResult = new BattleCommandExecutionResult(
+                authoritySequence: 61,
+                BattleCommandType.EndPlayerAction,
+                new CombatantId(1001),
+                BattleCommandExecutionFailureReason.None,
+                new BattleSettlementRecord[]
+                {
+                    new BattleCardMovedSettlement(
+                        order: 0,
+                        cardId,
+                        BattleCardZone.DrawPile,
+                        BattleCardZone.Hand),
+                });
+            int drawCompletionCount = 0;
+
+            ((IBattleCommandPresentation)adapter).Present(
+                drawResult,
+                () => drawCompletionCount++);
+            adapter.Tick();
+
+            Assert.That(handResolveCount, Is.EqualTo(1));
+            Assert.That(visual.IsIncomingCardMotionActive, Is.True);
+            Assert.That(visual.GetScreenCenter(), Is.Not.EqualTo(authoritativeBaseScreenPosition));
+            Assert.That(visual.TryFastForwardIncomingCardMotion(), Is.True);
+            Assert.That(visual.IsIncomingCardMotionActive, Is.False);
+            Assert.That(drawCompletionCount, Is.EqualTo(1));
+            Assert.That(visual.GetScreenCenter().x, Is.EqualTo(authoritativeBaseScreenPosition.x).Within(0.01f));
+            Assert.That(visual.GetScreenCenter().y, Is.EqualTo(authoritativeBaseScreenPosition.y).Within(0.01f));
+            Assert.That(zones.Hand, Is.EqualTo(new[] { cardId }));
+
+            zones.DiscardFromHand(cardId);
+            MethodInfo rebuildCards = typeof(HandCardContainer).GetMethod(
+                "RebuildCards",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(rebuildCards, Is.Not.Null);
+            rebuildCards.Invoke(hand, new object[] { false });
+            var discardResult = new BattleCommandExecutionResult(
+                authoritySequence: 62,
+                BattleCommandType.EndPlayerAction,
+                new CombatantId(1001),
+                BattleCommandExecutionFailureReason.None,
+                new BattleSettlementRecord[]
+                {
+                    new BattleCardMovedSettlement(
+                        order: 0,
+                        cardId,
+                        BattleCardZone.Hand,
+                        BattleCardZone.DiscardPile),
+                });
+            int discardCompletionCount = 0;
+
+            ((IBattleCommandPresentation)adapter).Present(
+                discardResult,
+                () => discardCompletionCount++);
+            adapter.Tick();
+            adapter.CompleteImmediately();
+            adapter.CompleteImmediately();
+
+            Assert.That(handResolveCount, Is.EqualTo(2));
+            Assert.That(drawCompletionCount, Is.EqualTo(1));
+            Assert.That(discardCompletionCount, Is.EqualTo(1));
+            Assert.That(transientDestroyCount, Is.EqualTo(1));
+            Assert.That(zones.Hand, Is.Empty);
+            Assert.That(zones.DiscardPile, Is.EqualTo(new[] { cardId }));
+        }
+        finally
+        {
+            adapter?.Dispose();
+            if (cardObject != null)
+                UnityEngine.Object.DestroyImmediate(cardObject);
+            UnityEngine.Object.DestroyImmediate(handObject);
+            UnityEngine.Object.DestroyImmediate(participantObject);
+            UnityEngine.Object.DestroyImmediate(canvasObject);
+        }
+    }
+
+    /// <summary>确认 EndAction 多张离手牌严格按 settlement Order 依次到达弃牌锚点并顺序清理。</summary>
+    [Test]
+    public void Present_EndActionMultipleCards_PreservesSettlementMotionAndCleanupOrder()
+    {
+        GameObject canvasObject = new GameObject(
+            "AdapterMultiDiscardCanvas",
+            typeof(RectTransform),
+            typeof(Canvas));
+        var participantObject = new GameObject("AdapterMultiDiscardParticipant");
+        var handObject = new GameObject("AdapterMultiDiscardHand");
+        var cardObjects = new List<GameObject>();
+        BattleCommandPresentationAdapter adapter = null;
+        using var zones = new BattleCardZonesData(new[] { 3001, 3001, 3001 }, shuffleSeed: 9881);
+        try
+        {
+            zones.Draw(3);
+            CardInstanceId[] orderedCardIds = zones.Hand.ToArray();
+            GameObject cardPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/Arts/Runtime/Card/Prefab/CardView.prefab");
+            var visuals = new List<HandCardVisual>();
+            var initialScreenPositions = new List<Vector2>();
+            for (int index = 0; index < orderedCardIds.Length; index++)
+            {
+                GameObject cardObject = UnityEngine.Object.Instantiate(cardPrefab);
+                cardObjects.Add(cardObject);
+                HandCardVisual visual = cardObject.GetComponent<HandCardVisual>();
+                CanvasGroup group = visual.CardContent.gameObject.AddComponent<CanvasGroup>();
+                visual.Initialize(Vector3.one * 0.36f, orderedCardIds[index], group);
+                visual.SetBasePoseImmediately(new HandCardPose(
+                    new Vector2(-160f + index * 160f, -280f),
+                    -6f + index * 6f,
+                    index));
+                visuals.Add(visual);
+                initialScreenPositions.Add(visual.GetScreenCenter());
+            }
+
+            Canvas canvas = canvasObject.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            RectTransform canvasRect = canvasObject.GetComponent<RectTransform>();
+            canvasRect.sizeDelta = new Vector2(1000f, 600f);
+            Text drawText = CreatePileText(canvasRect, "DrawPile", new Vector2(-360f, -210f));
+            Text discardText = CreatePileText(canvasRect, "DiscardPile", new Vector2(360f, -210f));
+            Text exhaustText = CreatePileText(canvasRect, "ExhaustPile", new Vector2(0f, -210f));
+            BattleCardPileHudView pileView = canvasObject.AddComponent<BattleCardPileHudView>();
+            SetPrivateField(pileView, "_drawPileText", drawText);
+            SetPrivateField(pileView, "_discardPileText", discardText);
+            SetPrivateField(pileView, "_exhaustPileText", exhaustText);
+            Canvas.ForceUpdateCanvases();
+            Assert.That(
+                pileView.TryGetPileScreenAnchor(
+                    BattleCardZone.DiscardPile,
+                    out Vector2 discardScreenPosition),
+                Is.True);
+
+            BattleParticipantPresenter participantPresenter =
+                participantObject.AddComponent<BattleParticipantPresenter>();
+            HandCardContainer hand = handObject.AddComponent<HandCardContainer>();
+            var transientDestroyOrder = new List<CardInstanceId>();
+            hand.ConfigureTransientCardDestroyForTesting(transient =>
+            {
+                transientDestroyOrder.Add(transient.GetComponent<HandCardVisual>().CardId);
+            });
+            SetPrivateField(hand, "_cardZones", zones);
+            GetPrivateField<List<HandCardVisual>>(hand, "_cards").AddRange(visuals);
+            foreach (CardInstanceId cardId in orderedCardIds)
+                zones.DiscardFromHand(cardId);
+            MethodInfo rebuildCards = typeof(HandCardContainer).GetMethod(
+                "RebuildCards",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(rebuildCards, Is.Not.Null);
+            rebuildCards.Invoke(hand, new object[] { false });
+
+            adapter = new BattleCommandPresentationAdapter(
+                participantPresenter,
+                hand,
+                pileView,
+                () => 0.23f);
+            var settlements = new BattleSettlementRecord[orderedCardIds.Length];
+            for (int index = 0; index < orderedCardIds.Length; index++)
+            {
+                settlements[index] = new BattleCardMovedSettlement(
+                    order: index,
+                    orderedCardIds[index],
+                    BattleCardZone.Hand,
+                    BattleCardZone.DiscardPile);
+            }
+            var result = new BattleCommandExecutionResult(
+                authoritySequence: 63,
+                BattleCommandType.EndPlayerAction,
+                new CombatantId(1001),
+                BattleCommandExecutionFailureReason.None,
+                settlements);
+            int completionCount = 0;
+
+            ((IBattleCommandPresentation)adapter).Present(result, () => completionCount++);
+            adapter.Tick();
+
+            Assert.That(visuals[0].GetScreenCenter().x, Is.EqualTo(discardScreenPosition.x).Within(0.01f));
+            Assert.That(visuals[0].GetScreenCenter().y, Is.EqualTo(discardScreenPosition.y).Within(0.01f));
+            Assert.That(visuals[2].GetScreenCenter().x, Is.EqualTo(initialScreenPositions[2].x).Within(0.01f));
+            Assert.That(visuals[2].GetScreenCenter().y, Is.EqualTo(initialScreenPositions[2].y).Within(0.01f));
+            Assert.That(completionCount, Is.Zero);
+
+            adapter.Tick();
+
+            Assert.That(visuals[1].GetScreenCenter().x, Is.EqualTo(discardScreenPosition.x).Within(0.01f));
+            Assert.That(visuals[1].GetScreenCenter().y, Is.EqualTo(discardScreenPosition.y).Within(0.01f));
+            Assert.That(completionCount, Is.Zero);
+
+            adapter.Tick();
+
+            Assert.That(completionCount, Is.EqualTo(1));
+            Assert.That(transientDestroyOrder, Is.EqualTo(orderedCardIds));
+            Assert.That(zones.Hand, Is.Empty);
+            Assert.That(zones.DiscardPile, Is.EqualTo(orderedCardIds));
+        }
+        finally
+        {
+            adapter?.Dispose();
+            foreach (GameObject cardObject in cardObjects)
+            {
+                if (cardObject != null)
+                    UnityEngine.Object.DestroyImmediate(cardObject);
+            }
+            UnityEngine.Object.DestroyImmediate(handObject);
+            UnityEngine.Object.DestroyImmediate(participantObject);
+            UnityEngine.Object.DestroyImmediate(canvasObject);
+        }
+    }
+
+    /// <summary>确认真实重洗记录先播放单个过渡，再按原 Order 逐张执行 Draw→Hand 入场。</summary>
+    [Test]
+    public void Present_ReshuffleThenDraw_PreservesFrozenSettlementOrderAndCurrentHand()
+    {
+        GameObject canvasObject = new GameObject(
+            "AdapterReshuffleDrawCanvas",
+            typeof(RectTransform),
+            typeof(Canvas));
+        var participantObject = new GameObject("AdapterReshuffleDrawParticipant");
+        var handObject = new GameObject("AdapterReshuffleDrawHand");
+        var cardObjects = new List<GameObject>();
+        BattleCommandPresentationAdapter adapter = null;
+        using var zones = new BattleCardZonesData(new[] { 3001, 3001 }, shuffleSeed: 4419);
+        try
+        {
+            zones.Draw(2);
+            zones.DiscardHand();
+            BattleCardZoneOperationResult drawOperation = zones.Draw(2);
+            CardInstanceId[] authoritativeHand = zones.Hand.ToArray();
+            Assert.That(authoritativeHand, Has.Length.EqualTo(2));
+
+            GameObject cardPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/Arts/Runtime/Card/Prefab/CardView.prefab");
+            var visualsById = new Dictionary<CardInstanceId, HandCardVisual>();
+            for (int index = 0; index < authoritativeHand.Length; index++)
+            {
+                GameObject cardObject = UnityEngine.Object.Instantiate(cardPrefab);
+                cardObjects.Add(cardObject);
+                HandCardVisual visual = cardObject.GetComponent<HandCardVisual>();
+                CanvasGroup group = visual.CardContent.gameObject.AddComponent<CanvasGroup>();
+                visual.Initialize(Vector3.one * 0.36f, authoritativeHand[index], group);
+                visual.SetBasePoseImmediately(new HandCardPose(
+                    new Vector2(-90f + index * 180f, -280f),
+                    -4f + index * 8f,
+                    index));
+                visualsById.Add(authoritativeHand[index], visual);
+            }
+
+            Canvas canvas = canvasObject.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            RectTransform canvasRect = canvasObject.GetComponent<RectTransform>();
+            canvasRect.sizeDelta = new Vector2(1000f, 600f);
+            Text drawText = CreatePileText(canvasRect, "DrawPile", new Vector2(-360f, -210f));
+            Text discardText = CreatePileText(canvasRect, "DiscardPile", new Vector2(360f, -210f));
+            Text exhaustText = CreatePileText(canvasRect, "ExhaustPile", new Vector2(0f, -210f));
+            BattleCardPileHudView pileView = canvasObject.AddComponent<BattleCardPileHudView>();
+            SetPrivateField(pileView, "_drawPileText", drawText);
+            SetPrivateField(pileView, "_discardPileText", discardText);
+            SetPrivateField(pileView, "_exhaustPileText", exhaustText);
+            int reshuffleDestroyCount = 0;
+            pileView.ConfigureReshuffleTransientDestroyForTesting(transient =>
+            {
+                reshuffleDestroyCount++;
+                UnityEngine.Object.DestroyImmediate(transient);
+            });
+            Canvas.ForceUpdateCanvases();
+
+            BattleParticipantPresenter participantPresenter =
+                participantObject.AddComponent<BattleParticipantPresenter>();
+            HandCardContainer hand = handObject.AddComponent<HandCardContainer>();
+            SetPrivateField(hand, "_cardZones", zones);
+            GetPrivateField<List<HandCardVisual>>(hand, "_cards")
+                .AddRange(authoritativeHand.Select(cardId => visualsById[cardId]));
+            adapter = new BattleCommandPresentationAdapter(
+                participantPresenter,
+                hand,
+                pileView,
+                () => 0.1f);
+            var result = new BattleCommandExecutionResult(
+                authoritySequence: 64,
+                BattleCommandType.CompleteEnemyAction,
+                submitterId: null,
+                BattleCommandExecutionFailureReason.None,
+                drawOperation.Settlements);
+            CardInstanceId[] drawCueOrder = drawOperation.Settlements
+                .OfType<BattleCardMovedSettlement>()
+                .Where(moved =>
+                    moved.FromZone == BattleCardZone.DrawPile &&
+                    moved.ToZone == BattleCardZone.Hand)
+                .Select(moved => moved.CardId)
+                .ToArray();
+            Assert.That(drawCueOrder, Is.EqualTo(authoritativeHand));
+            int completionCount = 0;
+
+            ((IBattleCommandPresentation)adapter).Present(result, () => completionCount++);
+            adapter.Tick();
+
+            Assert.That(canvasRect.Find("CardReshuffleTransient"), Is.Not.Null);
+            Assert.That(visualsById[drawCueOrder[0]].IsIncomingCardMotionActive, Is.False);
+            Assert.That(visualsById[drawCueOrder[1]].IsIncomingCardMotionActive, Is.False);
+            Assert.That(completionCount, Is.Zero);
+
+            adapter.Tick();
+            adapter.Tick();
+            adapter.Tick();
+
+            Assert.That(canvasRect.Find("CardReshuffleTransient"), Is.Null);
+            Assert.That(reshuffleDestroyCount, Is.EqualTo(1));
+            Assert.That(visualsById[drawCueOrder[0]].IsIncomingCardMotionActive, Is.True);
+            Assert.That(visualsById[drawCueOrder[1]].IsIncomingCardMotionActive, Is.False);
+
+            Assert.That(visualsById[drawCueOrder[0]].TryFastForwardIncomingCardMotion(), Is.True);
+            Assert.That(completionCount, Is.Zero);
+
+            adapter.Tick();
+
+            Assert.That(visualsById[drawCueOrder[1]].IsIncomingCardMotionActive, Is.True);
+            Assert.That(visualsById[drawCueOrder[1]].TryFastForwardIncomingCardMotion(), Is.True);
+            Assert.That(completionCount, Is.EqualTo(1));
+            Assert.That(zones.Hand, Is.EqualTo(authoritativeHand));
+            Assert.That(zones.DrawPile, Is.Empty);
+            Assert.That(zones.DiscardPile, Is.Empty);
+        }
+        finally
+        {
+            adapter?.Dispose();
+            foreach (GameObject cardObject in cardObjects)
+            {
+                if (cardObject != null)
+                    UnityEngine.Object.DestroyImmediate(cardObject);
+            }
+            UnityEngine.Object.DestroyImmediate(handObject);
+            UnityEngine.Object.DestroyImmediate(participantObject);
+            UnityEngine.Object.DestroyImmediate(canvasObject);
+        }
+    }
+
+    /// <summary>确认无效 settlement Order 在 Present 内同步抛出，且不会占用或调用 completion。</summary>
+    [Test]
+    public void Present_InvalidSettlementOrder_ThrowsBeforeCompletionOrOwnership()
+    {
+        using var adapter = new BattleCommandPresentationAdapter(1f, () => 0f);
+        var invalidResult = new BattleCommandExecutionResult(
+            authoritySequence: 5,
+            BattleCommandType.EndPlayerAction,
+            new CombatantId(1001),
+            BattleCommandExecutionFailureReason.None,
+            new BattleSettlementRecord[]
+            {
+                new BattleCardMovedSettlement(
+                    order: 1,
+                    new CardInstanceId(41),
+                    BattleCardZone.Hand,
+                    BattleCardZone.DiscardPile),
+            });
+        var completionCount = 0;
+
+        Assert.Throws<ArgumentException>(
+            () => ((IBattleCommandPresentation)adapter).Present(
+                invalidResult,
+                () => completionCount++));
+
+        Assert.That(completionCount, Is.Zero);
+    }
+
+    /// <summary>确认终局步骤在 adapter 构造后才即时读取最新阵营事实，并在胜负反馈后释放唯一 completion。</summary>
+    [TestCase(true, "battle.ui.result.victory")]
+    [TestCase(false, "battle.ui.result.defeat")]
+    public void BattleEnded_MapsCurrentTerminalOutcomeBeforeCompletion(
+        bool playerWon,
+        string expectedLocalizationKey)
+    {
+        using var combatants = new BattleCombatantsData();
+        BattleFlowFeedbackCue capturedCue = null;
+        var callbackOrder = new List<string>();
+        using var adapter = new BattleCommandPresentationAdapter(
+            combatants,
+            cue =>
+            {
+                capturedCue = cue;
+                Sequence sequence = DOTween.Sequence()
+                    .AppendCallback(() => callbackOrder.Add("BattleOutcome"));
+                return new BattleCommandPresentationTween(sequence, cleanup: null);
+            },
+            () => 0f);
+        if (playerWon)
+            combatants.AddPlayer(templateId: 1001, maxHealth: 30, strength: 0);
+        else
+            combatants.AddEnemy(templateId: 2001, maxHealth: 20, strength: 0);
+
+        var battleEnded = new BattlePhaseChangedSettlement(
+            order: 0,
+            BattleTurnPhase.EnemyAction,
+            BattleTurnPhase.BattleEnded,
+            roundNumberBefore: 3,
+            roundNumberAfter: 3,
+            currentActingEnemyIdBefore: new CombatantId(2001),
+            currentActingEnemyIdAfter: null);
+        var result = new BattleCommandExecutionResult(
+            authoritySequence: 65,
+            BattleCommandType.CompleteEnemyAction,
+            submitterId: null,
+            BattleCommandExecutionFailureReason.None,
+            new BattleSettlementRecord[] { battleEnded });
+
+        ((IBattleCommandPresentation)adapter).Present(
+            result,
+            () => callbackOrder.Add("Completion"));
+        adapter.CompleteImmediately();
+
+        Assert.That(capturedCue, Is.Not.Null);
+        Assert.That(capturedCue.Kind, Is.EqualTo(BattleFlowFeedbackCueKind.BattleOutcome));
+        Assert.That(capturedCue.LocalizationKey, Is.EqualTo(expectedLocalizationKey));
+        Assert.That(capturedCue.BlocksSystemPointer, Is.True);
+        Assert.That(callbackOrder, Is.EqualTo(new[] { "BattleOutcome", "Completion" }));
+    }
+
+    /// <summary>确认 BattleEnded 与 ongoing/空阵营事实矛盾时同步 fault，且不伪造终局 cue 或 completion。</summary>
+    [TestCase(true)]
+    [TestCase(false)]
+    public void BattleEnded_NonTerminalOrInvalidFacts_ThrowsWithoutCueOrCompletion(
+        bool keepBothSidesAlive)
+    {
+        using var combatants = new BattleCombatantsData();
+        if (keepBothSidesAlive)
+        {
+            combatants.AddPlayer(templateId: 1001, maxHealth: 30, strength: 0);
+            combatants.AddEnemy(templateId: 2001, maxHealth: 20, strength: 0);
+        }
+
+        int cueCount = 0;
+        using var adapter = new BattleCommandPresentationAdapter(
+            combatants,
+            cue =>
+            {
+                cueCount++;
+                return new BattleCommandPresentationTween(
+                    DOTween.Sequence().AppendCallback(() => { }),
+                    cleanup: null);
+            },
+            () => 0f);
+        var battleEnded = new BattlePhaseChangedSettlement(
+            order: 0,
+            BattleTurnPhase.EnemyAction,
+            BattleTurnPhase.BattleEnded,
+            roundNumberBefore: 3,
+            roundNumberAfter: 3,
+            currentActingEnemyIdBefore: new CombatantId(2001),
+            currentActingEnemyIdAfter: null);
+        var result = new BattleCommandExecutionResult(
+            authoritySequence: 67,
+            BattleCommandType.CompleteEnemyAction,
+            submitterId: null,
+            BattleCommandExecutionFailureReason.None,
+            new BattleSettlementRecord[] { battleEnded });
+        int completionCount = 0;
+
+        Assert.Throws<InvalidOperationException>(
+            () => ((IBattleCommandPresentation)adapter).Present(
+                result,
+                () => completionCount++));
+
+        Assert.That(cueCount, Is.Zero);
+        Assert.That(completionCount, Is.Zero);
+    }
+
     /// <summary>确认旧句柄的失败反馈不会清除同一视图后来绑定的新待定句柄。</summary>
     [Test]
     public void CardVisual_OlderFailureDoesNotClearNewerPendingHandle()
@@ -289,5 +1068,48 @@ public sealed class BattleCommandPresentationAdapterTests
         {
             UnityEngine.Object.DestroyImmediate(cardObject);
         }
+    }
+
+    /// <summary>创建 adapter 牌堆路由测试使用的当前 UI 锚点。</summary>
+    private static Text CreatePileText(
+        RectTransform parent,
+        string name,
+        Vector2 anchoredPosition)
+    {
+        var textObject = new GameObject(
+            name,
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(Text));
+        RectTransform rect = textObject.GetComponent<RectTransform>();
+        rect.SetParent(parent, worldPositionStays: false);
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.sizeDelta = new Vector2(180f, 60f);
+        rect.anchoredPosition = anchoredPosition;
+        Text text = textObject.GetComponent<Text>();
+        text.raycastTarget = false;
+        return text;
+    }
+
+    /// <summary>为 adapter 纯 View 测试设置现有序列化引用。</summary>
+    private static void SetPrivateField<T>(object target, string fieldName, T value)
+    {
+        FieldInfo field = target.GetType().GetField(
+            fieldName,
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.That(field, Is.Not.Null, $"Missing field {fieldName}.");
+        field.SetValue(target, value);
+    }
+
+    /// <summary>读取 adapter concrete View 测试所需的现有私有集合。</summary>
+    private static T GetPrivateField<T>(object target, string fieldName)
+    {
+        FieldInfo field = target.GetType().GetField(
+            fieldName,
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.That(field, Is.Not.Null, $"Missing field {fieldName}.");
+        return (T)field.GetValue(target);
     }
 }

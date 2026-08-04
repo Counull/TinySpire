@@ -2,7 +2,7 @@
 title: plans · 实现计划（03_design 角色）
 page_type: plan
 lifecycle: active
-updated: 2026-08-02
+updated: 2026-08-05
 ---
 
 # plans · 实现计划
@@ -23,6 +23,7 @@ updated: 2026-08-02
 
 ## 已替代 / 历史计划
 
+- [2026-08-02 M9 STS 式反馈、胜负与重开](2026-08-02-m9-sts-feedback-outcome-restart.md) — M9A～M9G 已串行完成；最终自动验证、Bootstrap、真实 Game View、仓库外 Development Player 退出、范围审计与双轴复审见 `../06_testing/2026-08-02-m9g-full-validation-review.md`。配套 [Goal](2026-08-02-m9-sts-feedback-outcome-restart.goal.md) 与[启动 Prompt](2026-08-02-m9-sts-feedback-outcome-restart.codex-prompt.md)仅作历史交接记录。
 - [2026-08-02 M8 敌人行动、状态时机与完整战斗循环](2026-08-02-m8-enemy-actions-status-timing-battle-loop.md) — M8A～M8E 已串行完成；最终自动验证、Bootstrap、真实 Game View 与双轴复审见 `../06_testing/2026-08-02-m8e-full-validation-review.md`。
 - [2026-08-02 M7 Effect 执行器](2026-08-02-m7-effect-executor.md) — M7A～M7E 已串行完成；最终自动验证、Bootstrap、真实 Game View 与双轴复审见 `../06_testing/2026-08-02-m7e-full-validation-review.md`。
 - [2026-08-01 M6 出牌命令、合法性与目标选择](2026-08-01-m6-card-play-legality-target-selection.md) — M6A～M6D 已串行完成，含目标失效零写入、真实 Game View、Addressables、Bootstrap 与双轴复审。

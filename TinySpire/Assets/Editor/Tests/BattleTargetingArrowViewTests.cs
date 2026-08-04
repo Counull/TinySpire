@@ -77,6 +77,19 @@ public sealed class BattleTargetingArrowViewTests
             Assert.That(lineRect.sizeDelta.x, Is.EqualTo(200f).Within(0.01f));
             Assert.That(lineImage.raycastTarget, Is.False);
             Assert.That(headImage.raycastTarget, Is.False);
+            Assert.That(
+                Mathf.DeltaAngle(headRect.localEulerAngles.z, lineRect.localEulerAngles.z),
+                Is.Zero.Within(0.01f));
+
+            Vector2 originBeforeUpdate = lineRect.anchoredPosition;
+            Vector2 endpointBeforeUpdate = headRect.anchoredPosition;
+            view.UpdateArrow(new Vector2(200f, 200f), new Vector2(200f, 500f));
+
+            Assert.That(lineRect.anchoredPosition, Is.Not.EqualTo(originBeforeUpdate));
+            Assert.That(headRect.anchoredPosition, Is.Not.EqualTo(endpointBeforeUpdate));
+            Assert.That(
+                Mathf.DeltaAngle(headRect.localEulerAngles.z, lineRect.localEulerAngles.z),
+                Is.Zero.Within(0.01f));
 
             view.Hide();
 
