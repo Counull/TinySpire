@@ -3,6 +3,16 @@ created: 2026-07-06
 updated: 2026-08-05
 ---
 
+## 2026-08-05 配置素材短键、构建期漂移校验与真实 AB 加载（已完成）
+
+- 全量审计 `DataTables/Datas/*.xlsx` 后确认：已迁移的 `battle.Card.illustration_key` 之外，只有 Hero/Enemy 的 `view_prefab_address` 仍保存完整角色 Prefab 路径。两个作者表已改为 `view_prefab_key`，值为 `pfb_char_player` / `pfb_char_enemy`；Luban 已成功重生成对应 C# 与 `Assets/GameData` JSON，工作簿公式/错误扫描和最终全表 `Assets/...` 复扫均为 0。
+- 精确红灯依次固定缺少 `CharacterViewAddress` 的五处 `CS0103`、生成 JSON 旧字段、角色 Group 完整路径地址、Presenter 直接转发短键和逻辑地址 `InvalidKey`。独立复核又以 `CS0117` 固定了构建期接受 inactive-only Renderer、运行时拒绝的契约漂移。最小实现后，Presenter 统一把短键转换为 `character-view/{key}` 并继续使用 `Addressables.InstantiateAsync` / `ReleaseInstance`；构建工具从 Hero/Enemy 生成表解析实际引用，拒绝短键重名、大小写漂移、缺失 Prefab 与缺少 active `SpriteRenderer`，并让 `TinySpire Characters` 与实际引用精确同步。
+- 当前唯一 Unity 6000.5.5f1 Editor 的 `TinySpire/Build/Sync and Build All` 成功。最新 BuildLayout 证明两个逻辑地址由 `AssetBundleProvider` 打入同一 PackTogether 物理 bundle；同一 Editor 临时切到 `Use Existing Build` 后，运行时只出现 `AssetBundleProvider` / `BundledAssetProvider`、物理 `IAssetBundleResource` 非空，正常 Bootstrap 实际进入包含玩家和两名敌人的 BattleScene，Console 0 Error / 0 Warning。退出后已恢复 Fast Mode，AddressableAssetSettings 哈希前后一致，未保存 ProjectSettings。
+- 当前完整工作区的全量 EditMode 任务 `e6c01375675b4aaabdefb289f802ca8b` 为 **459/459 passed、0 failed、0 skipped**；solution build 为 **0 error、12 条既有 warning**。该数量包含另行保留、未纳入本次素材短键提交的 M9/M10 测试改动，只作为当前交付工作区证据；本次素材边界自身的具名定向任务、相关回归和证据限制见 `06_testing/2026-08-05-config-asset-logical-keys.md`。当前规则见 CD-055、`CONTEXT.md` 与根 `AGENTS.md`。
+- 旧完整路径并非直接磁盘加载：它曾被 Editor 构建工具同时设为 Addressables catalog 地址；Packed/Player 经 `BundledAssetProvider` → `AssetBundleProvider`，Fast Mode 经 `AssetDatabaseProvider`。当前修正的是配置与工程路径耦合，不是更换资源系统。Scene/GameData 基础设施地址继续使用完整 `Assets/...`；Queue/Turn/settlement、公式、战斗规则、Scene/Prefab、ProjectSettings、asmdef、HybridCLR、DI/启动和受保护 Candidates/Targeting/Hermes 路径均未改。本次提交范围继续排除 M9/M10、Candidates/Targeting/Hermes、`packages-lock.json` 与其他无关改动；未推送。
+
+---
+
 ## 2026-08-05 M9 出牌、目标箭头与锁定框反馈（已实施，定向验收通过）
 
 > 本条是今日较早“收集反馈中 / Unity 回归待执行”两条记录的当前状态来源。

@@ -285,9 +285,9 @@ public sealed class BattleCardPlayRulesTests
         {
             ["battle_tbhero"] = new JArray(),
             ["battle_tbenemy"] = JArray.Parse(
-                "[{\"id\":201,\"name_i18n_key\":\"battle.enemy.test_201.name\",\"max_health\":20,\"base_strength\":0,\"view_prefab_address\":\"\",\"behavior_group_id\":6001}," +
-                "{\"id\":202,\"name_i18n_key\":\"battle.enemy.test_202.name\",\"max_health\":22,\"base_strength\":0,\"view_prefab_address\":\"\",\"behavior_group_id\":6001}," +
-                "{\"id\":203,\"name_i18n_key\":\"battle.enemy.test_203.name\",\"max_health\":24,\"base_strength\":0,\"view_prefab_address\":\"\",\"behavior_group_id\":6001}]"),
+                "[{\"id\":201,\"name_i18n_key\":\"battle.enemy.test_201.name\",\"max_health\":20,\"base_strength\":0,\"view_prefab_key\":\"\",\"behavior_group_id\":6001}," +
+                "{\"id\":202,\"name_i18n_key\":\"battle.enemy.test_202.name\",\"max_health\":22,\"base_strength\":0,\"view_prefab_key\":\"\",\"behavior_group_id\":6001}," +
+                "{\"id\":203,\"name_i18n_key\":\"battle.enemy.test_203.name\",\"max_health\":24,\"base_strength\":0,\"view_prefab_key\":\"\",\"behavior_group_id\":6001}]"),
             ["battle_tbdeck"] = new JArray(),
             ["battle_tbcard"] = new JArray
             {

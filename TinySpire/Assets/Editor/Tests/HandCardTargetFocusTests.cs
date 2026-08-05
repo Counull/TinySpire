@@ -843,11 +843,11 @@ public sealed class HandCardTargetFocusTests
         {
             ["battle_tbhero"] = JArray.Parse(
                 "[{\"id\":1001,\"name_i18n_key\":\"battle.hero.test.name\"," +
-                "\"view_prefab_address\":\"\",\"max_health\":30," +
+                "\"view_prefab_key\":\"\",\"max_health\":30," +
                 "\"base_strength\":0,\"initial_deck_id\":1001}]"),
             ["battle_tbenemy"] = JArray.Parse(
                 "[{\"id\":2001,\"name_i18n_key\":\"battle.enemy.test.name\"," +
-                "\"max_health\":20,\"base_strength\":0,\"view_prefab_address\":\"\"," +
+                "\"max_health\":20,\"base_strength\":0,\"view_prefab_key\":\"\"," +
                 "\"behavior_group_id\":6001}]"),
             ["battle_tbdeck"] = JArray.Parse(
                 "[{\"id\":1001,\"card_template_ids\":[3001]}]"),

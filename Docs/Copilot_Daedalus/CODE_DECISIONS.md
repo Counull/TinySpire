@@ -279,6 +279,8 @@ updated: 2026-08-05
 
 **影响**：M3A 只展示名称、生命和非零力量，支持一名玩家和一至三名按 Encounter 配置顺序从右向左布局的敌人。格挡、状态、意图、能量、回合、死亡表现和胜败覆盖层不在本决策实现，分别等待 M3B-M3E 的前置事实。详见 `plans/2026-07-30-battlescene-participant-views.md`。
 
+**2026-08-05 修订**：上述 `view_prefab_address` 与“配置保存完整角色 Prefab 地址”只保留为 M3A 历史事实；当前由 CD-055 的 `view_prefab_key` → `character-view/{key}` 规则取代。Presenter 仍通过 `Addressables.InstantiateAsync` / `ReleaseInstance` 管理实例，其他参与者事实与生命周期结论不变。
+
 ## CD-025：卡牌模板持有牌面稳定地址，手牌 View 管理加载生命周期（地址表示已由 CD-026 替代）
 
 **问题**：牌面 PNG 已进入项目，但卡牌模板没有资源地址。若按模板 ID 在 UI 中硬编码 Sprite、把所有图片直接序列化到场景，或让运行时卡牌实例保存资源对象，都会重复静态事实并使新增卡牌需要修改 UI 代码。
@@ -298,6 +300,8 @@ updated: 2026-08-05
 **理由**：配置表达业务身份，目录和扩展名属于资产组织细节，Addressables 地址属于发布细节。短键使素材在专用目录内移动或替换时不必改表；集中转换函数和构建期索引让运行时与构建工具共享同一地址规则，并把名字冲突或资源错误提前为构建失败。
 
 **影响**：CD-025 关于手牌预加载、句柄释放和 View 生命周期的选择继续有效，但其“配置保存完整地址”部分被本决策替代。角色 Prefab 等其他字段仍保留完整地址，本次不扩展为全项目通用资源键系统。
+
+**2026-08-05 修订**：“角色 Prefab 等其他字段仍保留完整地址”是当次牌面迁移的范围限制，现已由 CD-055 取代；当前所有 DataTables Unity 素材业务字段统一使用各素材域短键。
 
 ## CD-027：M4 以统一权威命令队列调度多人行动，当前只接入单玩家
 
@@ -576,3 +580,15 @@ updated: 2026-08-05
 **理由**：调用者仍然只传入起点与终点，不需要知道曲线、池或片段数量；箭身的局部切线使曲线可读。锁定框直接从参与者实际渲染边界派生，避免维护固定尺寸副本，并为后续整体 UI 改版保留 padding、fragment 长度、间距与弯曲幅度等局部参数。
 
 **影响**：`TinySpire/Assets/Scripts/UI/Battle/Targeting/BattleTargetingArrowView.cs`、`TinySpire/Assets/Scripts/UI/Battle/ParticipantHudView.cs` 及其两个 Prefab 和契约测试。继续复用已有正式 Targeting 精灵，不修改源图片或 Meta；不改目标合法性、`BattleCommandQueue`、`Turn`、结算或场景结构。
+
+## CD-055：配置表 Unity 素材统一保存短键，构建期解析为 Addressables 逻辑地址
+
+**问题**：牌面已按 CD-026 使用 `illustration_key`，但 Hero/Enemy 仍把完整 `Assets/...prefab` 写入 `view_prefab_address`。这迫使配置作者掌握 Unity 目录结构，也让移动素材、大小写漂移、同名素材或错误 Prefab 直到运行时才暴露。完整路径虽然看似磁盘路径，旧实现实际把它同时写成 Addressables catalog 地址并调用 `Addressables.InstantiateAsync`：Packed/Player 经 `BundledAssetProvider` → `AssetBundleProvider`，Fast Mode 则经 `AssetDatabaseProvider`。问题是配置和发布细节耦合，而不是运行时直接读取磁盘路径。
+
+**选择**：所有 `DataTables` Unity 素材业务字段统一保存无目录、无扩展名、大小写精确匹配文件名的 `*_key`。每个素材域拥有专用目录、唯一逻辑地址前缀、运行时转换函数和 Editor 构建期解析器：卡牌为 `illustration_key` → `card-art/{key}`，角色为 `view_prefab_key` → `character-view/{key}`。构建工具只从生成表读取实际引用，扫描专用目录并拒绝空键、路径/扩展名、忽略大小写后的重名、大小写漂移、缺失素材及素材域契约错误；角色 Prefab 必须含运行时可发现的 active `SpriteRenderer`。专用 Addressables Group 与实际引用集合精确同步。运行时继续只用 Addressables API 加载和释放。
+
+**边界**：配置短键不是 catalog 中全部地址的全局替代。`Assets/Scenes/*.unity`、`Assets/GameData/*.json` 等资源系统基础设施项继续使用完整 `Assets/...` 稳定地址；真实资产路径只允许由 Editor 构建工具用于索引、校验与生成 Addressables 条目，不得回写到业务配置或成为运行时文件系统加载入口。Fast Mode 的 `AssetDatabaseProvider` 只适合编辑迭代，不能证明 AB；地址或加载实现变化必须另外以 BuildLayout 和 Packed Play Mode/Player 证明 `AssetBundleProvider` 与物理 bundle。
+
+**理由**：短键表达策划所关心的素材身份，Editor 资产路径和 Addressables 打包方式留在发布边界。运行时与构建工具使用同一逻辑地址规则，既保留 Addressables/AssetBundle 生命周期，也把冲突、漂移、缺失和契约错误提前为同步构建失败。
+
+**影响**：`battle.Hero`、`battle.Enemy` 改用 `view_prefab_key`，`BattleParticipantPresenter` 经 `CharacterViewAddress` 生成逻辑地址；`AddressablesBuildTools` 从 Hero/Enemy 生成 JSON 精确同步 `TinySpire Characters`。CD-023 的完整角色地址与 CD-026 的“仅牌面短键”限制被本决策取代；Scene/GameData 地址、Queue/Turn/settlement、战斗规则、DI 与场景启动不变。验证见 `06_testing/2026-08-05-config-asset-logical-keys.md`。

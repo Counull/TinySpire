@@ -25,7 +25,7 @@ public sealed partial class Hero : Luban.BeanBase
         MaxHealth = (int)_obj.GetValue("max_health");
         BaseStrength = (int)_obj.GetValue("base_strength");
         InitialDeckId = (int)_obj.GetValue("initial_deck_id");
-        ViewPrefabAddress = (string)_obj.GetValue("view_prefab_address");
+        ViewPrefabKey = (string)_obj.GetValue("view_prefab_key");
     }
 
     public static Hero DeserializeHero(JToken _buf)
@@ -54,9 +54,9 @@ public sealed partial class Hero : Luban.BeanBase
     /// </summary>
     public readonly int InitialDeckId;
     /// <summary>
-    /// View Prefab Address
+    /// View Prefab Key
     /// </summary>
-    public readonly string ViewPrefabAddress;
+    public readonly string ViewPrefabKey;
 
 
     public const int __ID__ = -795877488;
@@ -74,7 +74,7 @@ public sealed partial class Hero : Luban.BeanBase
         + "maxHealth:" + MaxHealth + ","
         + "baseStrength:" + BaseStrength + ","
         + "initialDeckId:" + InitialDeckId + ","
-        + "viewPrefabAddress:" + ViewPrefabAddress + ","
+        + "viewPrefabKey:" + ViewPrefabKey + ","
         + "}";
     }
 }

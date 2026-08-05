@@ -1332,7 +1332,7 @@ internal static class BattleCommandQueueTestFactory
                 ["name_i18n_key"] = $"battle.enemy.test_{combatant.TemplateId}.name",
                 ["max_health"] = combatant.MaxHealth,
                 ["base_strength"] = combatant.Strength.CurrentValue,
-                ["view_prefab_address"] = string.Empty,
+                ["view_prefab_key"] = string.Empty,
                 ["behavior_group_id"] = 6001
             });
         }

@@ -1,13 +1,16 @@
 ---
 title: BattleScene M3A 参与者配置与 Prefab 工厂
 page_type: testing
-lifecycle: active
+lifecycle: archived
 date: 2026-07-30
+updated: 2026-08-05
 source: ../plans/2026-07-30-battlescene-participant-views.md
 status_source: ../SESSION_LOG.md
 ---
 
 # BattleScene M3A-1/4 参与者视图与生命 HUD 验证记录
+
+> 本页是 M3A 当时 `view_prefab_address` / 完整 catalog 地址的历史验收记录，不再定义当前字段或构建标准。当前角色短键、逻辑地址和真实 AssetBundle 证据见 `2026-08-05-config-asset-logical-keys.md` 与 CD-055。
 
 ## M3A-3/4 待人工验收
 

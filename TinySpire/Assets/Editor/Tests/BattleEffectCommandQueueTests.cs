@@ -744,7 +744,7 @@ public sealed class BattleEffectCommandQueueTests
                     ["name_i18n_key"] = "battle.enemy.test.name",
                     ["max_health"] = enemy.MaxHealth,
                     ["base_strength"] = enemy.CurrentStrength,
-                    ["view_prefab_address"] = string.Empty,
+                    ["view_prefab_key"] = string.Empty,
                     ["behavior_group_id"] = 6001,
                 }),
                 ["battle_tbdeck"] = new JArray(),

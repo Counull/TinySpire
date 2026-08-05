@@ -252,6 +252,7 @@ public sealed class BattleParticipantFeedbackRoutingTests
         BattleParticipantPresenter presenter =
             presenterObject.AddComponent<BattleParticipantPresenter>();
         var createdViews = new List<GameObject>();
+        var requestedAddresses = new List<string>();
         int expectedParticipantCount = session.Combatants.All.Count;
         var instantiateCount = 0;
         var releaseCount = 0;
@@ -271,6 +272,7 @@ public sealed class BattleParticipantFeedbackRoutingTests
             presenter.ConfigureViewResourceBoundaryForTesting(
                 (address, anchor) =>
                 {
+                    requestedAddresses.Add(address);
                     instantiateCount++;
                     var view = new GameObject(
                         $"BattleParticipantSuccessfulView_{instantiateCount}",
@@ -295,6 +297,13 @@ public sealed class BattleParticipantFeedbackRoutingTests
             yield return presenter.CreateViewsAsync().ToCoroutine();
 
             Assert.That(instantiateCount, Is.EqualTo(expectedParticipantCount));
+            Assert.That(
+                requestedAddresses,
+                Is.EqualTo(new[]
+                {
+                    "character-view/pfb_char_player",
+                    "character-view/pfb_char_enemy"
+                }));
             Assert.That(createdViews, Has.Count.EqualTo(expectedParticipantCount));
             Assert.That(canvasObject.transform.childCount, Is.EqualTo(expectedParticipantCount));
             Assert.That(presenter.IsPresentationReady, Is.True);
@@ -1921,10 +1930,10 @@ public sealed class BattleParticipantFeedbackRoutingTests
             ["battle_tbhero"] = new JArray(),
             ["battle_tbenemy"] = JArray.Parse(
                 "[{\"id\":2001,\"name_i18n_key\":\"battle.enemy.test_slime.name\"," +
-                "\"max_health\":20,\"base_strength\":0,\"view_prefab_address\":\"\"," +
+                "\"max_health\":20,\"base_strength\":0,\"view_prefab_key\":\"\"," +
                 "\"behavior_group_id\":6001}," +
                 "{\"id\":2002,\"name_i18n_key\":\"battle.enemy.test_slime.name\"," +
-                "\"max_health\":24,\"base_strength\":0,\"view_prefab_address\":\"\"," +
+                "\"max_health\":24,\"base_strength\":0,\"view_prefab_key\":\"\"," +
                 "\"behavior_group_id\":6001}]"),
             ["battle_tbdeck"] = new JArray(),
             ["battle_tbcard"] = new JArray(),
@@ -1948,11 +1957,11 @@ public sealed class BattleParticipantFeedbackRoutingTests
         {
             ["battle_tbhero"] = JArray.Parse(
                 "[{\"id\":1001,\"name_i18n_key\":\"battle.hero.test_warrior.name\"," +
-                "\"view_prefab_address\":\"player-view\",\"max_health\":30," +
+                "\"view_prefab_key\":\"pfb_char_player\",\"max_health\":30," +
                 "\"base_strength\":0,\"initial_deck_id\":1001}]"),
             ["battle_tbenemy"] = JArray.Parse(
                 "[{\"id\":2001,\"name_i18n_key\":\"battle.enemy.test_slime.name\"," +
-                "\"view_prefab_address\":\"enemy-view\",\"max_health\":20," +
+                "\"view_prefab_key\":\"pfb_char_enemy\",\"max_health\":20," +
                 "\"base_strength\":0,\"behavior_group_id\":6001}]"),
             ["battle_tbdeck"] = JArray.Parse(
                 "[{\"id\":1001,\"card_template_ids\":[3001]}]"),

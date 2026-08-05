@@ -556,7 +556,7 @@ public sealed class BattleEnemyIntentsDataTests
             ["name_i18n_key"] = $"battle.enemy.test_{enemyId}.name",
             ["max_health"] = 20,
             ["base_strength"] = 0,
-            ["view_prefab_address"] = "Assets/Arts/Runtime/Character/Prefabs/pfb_char_enemy.prefab",
+            ["view_prefab_key"] = "pfb_char_enemy",
             ["behavior_group_id"] = behaviorGroupId
         };
     }

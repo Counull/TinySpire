@@ -2,7 +2,7 @@
 title: TinySpire 战斗领域术语
 page_type: glossary
 lifecycle: active
-updated: 2026-07-31
+updated: 2026-08-05
 status_source: SESSION_LOG.md
 ---
 
@@ -17,7 +17,10 @@ status_source: SESSION_LOG.md
 - **卡区布局数据（`CardZoneLayoutData`）**：抽牌、手牌、弃牌、消耗四区的完整有序归属；一次移动发布一个新的完整布局，不存在半完成布局。
 - **战斗卡区数据（`BattleCardZonesData`）**：本局卡牌实例及其可观察卡区布局的所有者。
 - **参与者视觉（Combatant View）**：只保存一个 `CombatantId` 的场景角色或 HUD 表现对象；静态名称与 Prefab 由模板派生，生命和力量从 `CombatantData` 读取，不成为领域事实或可变镜像。
-- **参与者视图编排者（`BattleParticipantPresenter`）**：属于 BattleScene 生命周期的场景组件；负责按模板 Addressables 地址创建/释放角色和 HUD，不拥有第二份参与者集合或战斗数值。
+- **配置素材短键（Asset Key）**：配置表中的 Unity 素材身份，只保存大小写精确匹配文件名的无目录、无扩展名短键，例如 `pfb_char_player`；它不是 Unity 工程路径，也不是可直接加载的地址。
+- **Addressables 逻辑地址（Logical Address）**：由素材域转换函数从短键生成的运行时地址，例如 `character-view/pfb_char_player`、`card-art/card_art_strike`。运行时只消费逻辑地址并经 Addressables 加载。
+- **基础设施稳定地址（Infrastructure Address）**：Addressables 用来定位场景或生成配置文件的完整 `Assets/...` catalog 地址，例如 `Assets/Scenes/BattleScene.unity`、`Assets/GameData/battle_tbhero.json`；它不等同于配置表中的业务素材引用。
+- **参与者视图编排者（`BattleParticipantPresenter`）**：属于 BattleScene 生命周期的场景组件；负责把模板 `view_prefab_key` 转换为 `character-view/{key}`，经 Addressables 创建/释放角色和 HUD，不拥有第二份参与者集合或战斗数值。
 - **战斗命令队列（`BattleCommandQueue`）**：M4 的外部 seam。玩家、系统阶段和未来敌人/Effect 向同一个 interface 提交命令；提交可以并发发生，权威调度层为已确认命令建立唯一顺序，再一次执行和展示一条。
 - **战斗调度根（`BattleTurnController`）**：命令队列内部使用的阶段模块；只在队首命令执行期间推进阶段、校验玩家行动并写入每玩家能量与结束状态。UI 不直接调用其写入口。
 - **命令提交（Submission）**：玩家或系统表达行动意图并获得权威排序的过程。提交接受不表示执行成功，也不提前扣能量、移动卡牌或修改阶段。

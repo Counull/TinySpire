@@ -308,7 +308,7 @@ public sealed class BattleEnemyActionJointSnapshotTests
                 ["name_i18n_key"] = "battle.enemy.joint.name",
                 ["max_health"] = 20,
                 ["base_strength"] = 0,
-                ["view_prefab_address"] = "Assets/Arts/Runtime/Character/Prefabs/pfb_char_enemy.prefab",
+                ["view_prefab_key"] = "pfb_char_enemy",
                 ["behavior_group_id"] = 6001
             }),
             ["battle_tbdeck"] = new JArray(),

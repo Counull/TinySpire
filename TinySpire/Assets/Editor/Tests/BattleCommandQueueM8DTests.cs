@@ -1015,7 +1015,7 @@ public sealed class BattleCommandQueueM8DTests
                 ["name_i18n_key"] = $"battle.enemy.test_{templateId}.name",
                 ["max_health"] = 20,
                 ["base_strength"] = 0,
-                ["view_prefab_address"] = string.Empty,
+                ["view_prefab_key"] = string.Empty,
                 ["behavior_group_id"] = behaviorGroupId,
             };
         }

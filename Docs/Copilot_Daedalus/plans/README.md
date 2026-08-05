@@ -15,9 +15,7 @@ updated: 2026-08-05
 
 - [2026-08-05 M9 目标箭头与锁定框视觉反馈](2026-08-05-m9-targeting-visual-feedback.md) — 已实施并通过 Unity 定向验收；保留后续 UI 调参入口
 - [2026-08-05 M9 出牌不飞向怪物](2026-08-05-play-card-no-target-flight.md)
-- [2026-07-30 BattleScene M3A 参与者视图与生命 HUD](2026-07-30-battlescene-participant-views.md)
 - [2026-07-30 卡牌区域与确定性洗牌](2026-07-30-card-zones-deterministic-random.md)
-- [2026-07-30 YooAsset 到 Addressables 迁移](2026-07-30-addressables-migration.md)
 - [2026-07-30 卡牌本地化文本与动态参数设计](2026-07-30-card-localized-text-design.md)
 - [2026-07-30 战斗静态配置表](2026-07-30-battle-static-config-tables.md)
 - [2026-07-30 BattleState 运行时参与者模型](2026-07-30-battle-runtime-state.md)
@@ -29,6 +27,8 @@ updated: 2026-08-05
 
 ## 已替代 / 历史计划
 
+- [2026-07-30 BattleScene M3A 参与者视图与生命 HUD](2026-07-30-battlescene-participant-views.md) — M3A 历史方案已完成；其中 `view_prefab_address` / 完整角色 Prefab 地址已由 CD-055 的短键与逻辑地址标准取代
+- [2026-07-30 YooAsset 到 Addressables 迁移](2026-07-30-addressables-migration.md) — 迁移已完成；其中“配置表 Unity 素材保留完整地址”和旧分步构建入口已由 CD-055 与根 `AGENTS.md` 取代，场景及 GameData 基础设施地址仍保留完整 `Assets/...`
 - [2026-08-02 M9 STS 式反馈、胜负与重开](2026-08-02-m9-sts-feedback-outcome-restart.md) — M9A～M9G 已串行完成；最终自动验证、Bootstrap、真实 Game View、仓库外 Development Player 退出、范围审计与双轴复审见 `../06_testing/2026-08-02-m9g-full-validation-review.md`。配套 [Goal](2026-08-02-m9-sts-feedback-outcome-restart.goal.md) 与[启动 Prompt](2026-08-02-m9-sts-feedback-outcome-restart.codex-prompt.md)仅作历史交接记录。
 - [2026-08-02 M8 敌人行动、状态时机与完整战斗循环](2026-08-02-m8-enemy-actions-status-timing-battle-loop.md) — M8A～M8E 已串行完成；最终自动验证、Bootstrap、真实 Game View 与双轴复审见 `../06_testing/2026-08-02-m8e-full-validation-review.md`。
 - [2026-08-02 M7 Effect 执行器](2026-08-02-m7-effect-executor.md) — M7A～M7E 已串行完成；最终自动验证、Bootstrap、真实 Game View 与双轴复审见 `../06_testing/2026-08-02-m7e-full-validation-review.md`。

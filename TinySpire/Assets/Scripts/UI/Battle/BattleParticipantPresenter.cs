@@ -10,7 +10,7 @@ using VContainer;
 namespace TinySpire.UI.Battle
 {
     /// <summary>
-    /// Creates and releases BattleScene participant prefabs from static Addressables addresses.
+    /// 从配置短键生成 Addressables 逻辑地址，并创建和释放 BattleScene 参与者 Prefab。
     /// </summary>
     public sealed class BattleParticipantPresenter : MonoBehaviour
     {
@@ -416,7 +416,7 @@ namespace TinySpire.UI.Battle
             await CreateParticipantViewAsync(
                 player,
                 hero.NameI18nKey,
-                hero.ViewPrefabAddress,
+                hero.ViewPrefabKey,
                 _playerAnchor,
                 Vector3.zero);
         }
@@ -447,7 +447,7 @@ namespace TinySpire.UI.Battle
                 await CreateParticipantViewAsync(
                     enemy,
                     template.NameI18nKey,
-                    template.ViewPrefabAddress,
+                    template.ViewPrefabKey,
                     _enemyAnchor,
                     positions[index]);
                 if (_isDestroyed)
@@ -459,7 +459,7 @@ namespace TinySpire.UI.Battle
         private async UniTask CreateParticipantViewAsync(
             CombatantData combatant,
             string nameI18nKey,
-            string address,
+            string viewPrefabKey,
             Transform anchor,
             Vector3 localPosition)
         {
@@ -468,15 +468,27 @@ namespace TinySpire.UI.Battle
 
             CombatantId combatantId = combatant.Id;
             int templateId = combatant.TemplateId;
-            if (string.IsNullOrWhiteSpace(address))
+            if (string.IsNullOrWhiteSpace(viewPrefabKey))
             {
                 throw new InvalidOperationException(
-                    $"Combatant {combatantId} template {templateId} has no view_prefab_address.");
+                    $"Combatant {combatantId} template {templateId} has no view_prefab_key.");
             }
             if (string.IsNullOrWhiteSpace(nameI18nKey))
             {
                 throw new InvalidOperationException(
                     $"Combatant {combatantId} template {templateId} has no name_i18n_key.");
+            }
+
+            string address;
+            try
+            {
+                address = CharacterViewAddress.FromKey(viewPrefabKey);
+            }
+            catch (ArgumentException exception)
+            {
+                throw new InvalidOperationException(
+                    $"Combatant {combatantId} template {templateId} has invalid view_prefab_key '{viewPrefabKey}'.",
+                    exception);
             }
 
             GameObject view;

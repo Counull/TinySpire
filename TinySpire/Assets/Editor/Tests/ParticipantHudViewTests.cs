@@ -512,7 +512,7 @@ public sealed class ParticipantHudViewTests
             ["battle_tbhero"] = new JArray(),
             ["battle_tbenemy"] = JArray.Parse(
                 "[{\"id\":2001,\"name_i18n_key\":\"battle.enemy.test_slime.name\"," +
-                "\"max_health\":20,\"base_strength\":0,\"view_prefab_address\":\"\"," +
+                "\"max_health\":20,\"base_strength\":0,\"view_prefab_key\":\"\"," +
                 "\"behavior_group_id\":6001}]"),
             ["battle_tbdeck"] = new JArray(),
             ["battle_tbcard"] = new JArray(),

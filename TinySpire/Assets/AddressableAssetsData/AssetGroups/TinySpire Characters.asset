@@ -16,12 +16,12 @@ MonoBehaviour:
   m_GUID: 4b1ee90e183377545b02996a1eb34257
   m_SerializeEntries:
   - m_GUID: 42d875889080c7e40b280bb5bbe73247
-    m_Address: Assets/Arts/Runtime/Character/Prefabs/pfb_char_player.prefab
+    m_Address: character-view/pfb_char_player
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: c8a4c9a0941ae3f48bb472ed9994ff11
-    m_Address: Assets/Arts/Runtime/Character/Prefabs/pfb_char_enemy.prefab
+    m_Address: character-view/pfb_char_enemy
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0

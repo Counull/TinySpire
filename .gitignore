@@ -18,6 +18,7 @@
 .agents/
 .github/
 [Tt]iny[Ss]pire/.vscode/
+[Tt]iny[Ss]pire/.codex_work/
 
 # OS/editor noise
 .DS_Store

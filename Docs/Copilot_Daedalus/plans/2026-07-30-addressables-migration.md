@@ -1,14 +1,17 @@
 ---
 title: YooAsset 到 Addressables 迁移
 page_type: plan
-lifecycle: active
+lifecycle: superseded
 date: 2026-07-30
+updated: 2026-08-05
 scope: 启动、场景、GameData、Localization 与本地内容构建
 source: 用户确认弃用 YooAsset 并迁移到 Addressables
 status_source: ../SESSION_LOG.md
 ---
 
 # YooAsset 到 Addressables 迁移
+
+> 本计划记录 2026-07-30 已完成的 YooAsset 迁移，保留当时事实。其“配置表中的 Unity 素材使用完整地址”和旧的分步构建入口已由 CD-055 与当前根 `AGENTS.md` 取代；场景及 `Assets/GameData/*.json` 的基础设施稳定地址仍保持完整 `Assets/...`。
 
 ## 目标
 
@@ -41,10 +44,12 @@ status_source: ../SESSION_LOG.md
 
 ## 构建流程
 
+以下是迁移当时的历史流程。当前统一入口为 `TinySpire/Build/Sync and Build All`，它负责 Luban、配置清单校验、Localization 同步与本地 Addressables 构建；不得再把单独刷新或 Fast Mode 加载当成交付完成。
+
 1. 表格变化后运行 Luban，输出到 `TinySpire/Assets/GameData`。
-2. Localization 变化后执行 `TinySpire/Localization/Configure Battle Card Text`。
-3. 执行 `TinySpire/Addressables/Build Local Content`。
-4. 验证 Bootstrap → LoadingScene → BattleScene、GameData 加载与本地化表加载。
+2. 同步 Localization 与 Addressables 组。
+3. 构建本地 Addressables 内容。
+4. 验证 Bootstrap → LoadingScene → BattleScene、GameData 与本地化表加载；地址/加载实现变化时再以 Packed Play Mode 或 Player 证明实际 AssetBundle 加载。
 
 ## 验收
 

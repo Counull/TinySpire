@@ -15,6 +15,7 @@ updated: 2026-08-05
 
 ## 验证记录
 
+- [2026-08-05 配置素材短键与真实 AssetBundle 加载](2026-08-05-config-asset-logical-keys.md) — Hero/Enemy 表迁移为短键，构建期漂移校验、逻辑地址组、Luban/本地内容构建、Packed Play Mode 物理 bundle 与真实 Game View 证据
 - [2026-08-05 M9 目标箭头与锁定框视觉反馈验收](2026-08-05-m9-targeting-visual-feedback.md) — 分段切线箭身、四角锁定框与相关 Prefab 契约；Unity 定向类集 26/26 通过
 - [2026-08-05 M9 出牌不飞向怪物验收](2026-08-05-play-card-no-target-flight.md) — Prelude 仅持有 transient，卡牌只飞向弃牌堆；Unity 定向类集 26/26 通过
 - [2026-08-05 M9 验收后 BUG 分诊与结构审查关联](2026-08-05-m9-post-validation-bug-triage.md) — 两项 Hand motion 由精确红灯、426/426 EditMode 覆盖；生命 HUD 临时投影到角色头顶，并在五种真实 BattleScene 尺寸复测为 0 相交对

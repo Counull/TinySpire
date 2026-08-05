@@ -1,14 +1,17 @@
 ---
 title: BattleScene M3A 参与者视图与生命 HUD
 page_type: plan
-lifecycle: active
+lifecycle: superseded
 date: 2026-07-30
+updated: 2026-08-05
 scope: battle.Hero、battle.Enemy、i18n.xlsx、Addressables、BattleScene 参与者视图
 source: 用户确认的 M3 · BattleScene 主 HUD 与参与者视图 grilling
 status_source: ../SESSION_LOG.md
 ---
 
 # BattleScene M3A 参与者视图与生命 HUD
+
+> 本计划保留 M3A 当时采用 `view_prefab_address` 与完整 `Assets/...prefab` 的历史事实，已不再是当前实施口径。角色配置现使用 `view_prefab_key` → `character-view/{key}`，构建期与 Packed 验收规则见 CD-055、根 `AGENTS.md` 和 `../06_testing/2026-08-05-config-asset-logical-keys.md`。
 
 ## 当前结论
 

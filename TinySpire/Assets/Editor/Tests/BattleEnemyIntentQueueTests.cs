@@ -359,9 +359,9 @@ public sealed class BattleEnemyIntentQueueTests
                 ["battle_tbhero"] = new JArray(),
                 ["battle_tbenemy"] = noCandidate
                     ? JArray.Parse(
-                        "[{\"id\":201,\"name_i18n_key\":\"battle.enemy.test_201.name\",\"max_health\":20,\"base_strength\":0,\"view_prefab_address\":\"\",\"behavior_group_id\":6003}]")
+                        "[{\"id\":201,\"name_i18n_key\":\"battle.enemy.test_201.name\",\"max_health\":20,\"base_strength\":0,\"view_prefab_key\":\"\",\"behavior_group_id\":6003}]")
                     : JArray.Parse(
-                        "[{\"id\":201,\"name_i18n_key\":\"battle.enemy.test_201.name\",\"max_health\":20,\"base_strength\":0,\"view_prefab_address\":\"\",\"behavior_group_id\":6001},{\"id\":202,\"name_i18n_key\":\"battle.enemy.test_202.name\",\"max_health\":21,\"base_strength\":0,\"view_prefab_address\":\"\",\"behavior_group_id\":6002}]"),
+                        "[{\"id\":201,\"name_i18n_key\":\"battle.enemy.test_201.name\",\"max_health\":20,\"base_strength\":0,\"view_prefab_key\":\"\",\"behavior_group_id\":6001},{\"id\":202,\"name_i18n_key\":\"battle.enemy.test_202.name\",\"max_health\":21,\"base_strength\":0,\"view_prefab_key\":\"\",\"behavior_group_id\":6002}]"),
                 ["battle_tbdeck"] = new JArray(),
                 ["battle_tbcard"] = new JArray(),
                 ["battle_tbcardeffect"] = JArray.Parse(

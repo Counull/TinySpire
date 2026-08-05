@@ -17,6 +17,9 @@ public static class AddressablesBuildTools
     private const string CharactersGroupName = "TinySpire Characters";
     private const string CardArtGroupName = "TinySpire Card Art";
     private const string GameDataLabel = "GameData";
+    private const string HeroTableJsonPath = "Assets/GameData/battle_tbhero.json";
+    private const string EnemyTableJsonPath = "Assets/GameData/battle_tbenemy.json";
+    private const string CharacterPrefabRoot = "Assets/Arts/Runtime/Character/Prefabs";
     private const string CardTableJsonPath = "Assets/GameData/battle_tbcard.json";
     private const string CardIllustrationRoot = "Assets/Arts/Runtime/Card/Illustrations";
 
@@ -24,12 +27,6 @@ public static class AddressablesBuildTools
     {
         "Assets/Scenes/LoadingScene.unity",
         "Assets/Scenes/BattleScene.unity"
-    };
-
-    private static readonly string[] CharacterPrefabPaths =
-    {
-        "Assets/Arts/Runtime/Character/Prefabs/pfb_char_player.prefab",
-        "Assets/Arts/Runtime/Character/Prefabs/pfb_char_enemy.prefab"
     };
 
     /// <summary>按项目稳定地址配置场景、配置、角色与牌面本地资源组。</summary>
@@ -65,8 +62,7 @@ public static class AddressablesBuildTools
             settings,
             CharactersGroupName,
             BundledAssetGroupSchema.BundlePackingMode.PackTogether);
-        foreach (string prefabPath in CharacterPrefabPaths)
-            AddEntry(settings, characters, prefabPath, label: null);
+        SyncEntries(settings, characters, ReadCharacterViewEntries(), label: null);
 
         AddressableAssetGroup cardArt = EnsureLocalGroup(
             settings,
@@ -117,6 +113,138 @@ public static class AddressablesBuildTools
         schema.IncludeInBuild = true;
         EditorUtility.SetDirty(schema);
         return group;
+    }
+
+    /// <summary>从英雄与敌人生成表收集角色短键，并解析为资源路径与逻辑地址。</summary>
+    private static IReadOnlyDictionary<string, string> ReadCharacterViewEntries()
+    {
+        IReadOnlyDictionary<string, string> pathsByKey = IndexCharacterPrefabPaths();
+        JObject heroes = ReadRequiredCharacterTable(HeroTableJsonPath);
+        JObject enemies = ReadRequiredCharacterTable(EnemyTableJsonPath);
+        return ResolveCharacterViewEntries(pathsByKey, heroes, enemies);
+    }
+
+    /// <summary>读取一份必需的角色生成表，并在文件缺失或没有记录时立即失败。</summary>
+    private static JObject ReadRequiredCharacterTable(string tableJsonPath)
+    {
+        if (!File.Exists(tableJsonPath))
+            throw new InvalidOperationException($"Generated character table does not exist: {tableJsonPath}");
+
+        JObject table = JObject.Parse(File.ReadAllText(tableJsonPath));
+        if (table.Count == 0)
+            throw new InvalidOperationException($"Generated character table has no records: {tableJsonPath}");
+
+        return table;
+    }
+
+    /// <summary>索引角色 Prefab 专用目录，并拒绝忽略大小写后重名的文件短键。</summary>
+    private static IReadOnlyDictionary<string, string> IndexCharacterPrefabPaths()
+    {
+        var assetPaths = new List<string>();
+        foreach (string guid in AssetDatabase.FindAssets("t:GameObject", new[] { CharacterPrefabRoot }))
+        {
+            string assetPath = AssetDatabase.GUIDToAssetPath(guid);
+            if (Path.GetExtension(assetPath).Equals(".prefab", StringComparison.OrdinalIgnoreCase))
+                assetPaths.Add(assetPath);
+        }
+
+        return IndexCharacterPrefabPaths(assetPaths);
+    }
+
+    /// <summary>从给定路径构建角色 Prefab 短键索引，供生产扫描与漂移校验共用。</summary>
+    internal static IReadOnlyDictionary<string, string> IndexCharacterPrefabPaths(
+        IEnumerable<string> assetPaths)
+    {
+        if (assetPaths == null)
+            throw new ArgumentNullException(nameof(assetPaths));
+
+        var pathsByKey = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string assetPath in assetPaths)
+        {
+            string key = Path.GetFileNameWithoutExtension(assetPath);
+            CharacterViewAddress.FromKey(key);
+            if (pathsByKey.TryGetValue(key, out string existingPath))
+            {
+                throw new InvalidOperationException(
+                    $"Duplicate character view key '{key}': {existingPath}, {assetPath}");
+            }
+
+            pathsByKey.Add(key, assetPath);
+        }
+
+        if (pathsByKey.Count == 0)
+            throw new InvalidOperationException($"Character prefab folder is empty: {CharacterPrefabRoot}");
+
+        return pathsByKey;
+    }
+
+    /// <summary>把角色表短键解析成精确 Addressables 清单，并校验缺失、大小写与 Prefab 契约。</summary>
+    internal static IReadOnlyDictionary<string, string> ResolveCharacterViewEntries(
+        IReadOnlyDictionary<string, string> pathsByKey,
+        params JObject[] tables)
+    {
+        if (pathsByKey == null)
+            throw new ArgumentNullException(nameof(pathsByKey));
+        if (tables == null)
+            throw new ArgumentNullException(nameof(tables));
+
+        var entries = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (JObject table in tables)
+        {
+            if (table == null || table.Count == 0)
+                throw new InvalidOperationException("Generated character table has no records.");
+
+            foreach (JProperty record in table.Properties())
+            {
+                string key = (string)record.Value["view_prefab_key"];
+                if (string.IsNullOrWhiteSpace(key))
+                    throw new InvalidOperationException($"Character template {record.Name} has no view_prefab_key.");
+
+                CharacterViewAddress.FromKey(key);
+                if (!pathsByKey.TryGetValue(key, out string assetPath))
+                {
+                    throw new InvalidOperationException(
+                        $"Character template {record.Name} view prefab key does not exist: {key}");
+                }
+
+                string assetKey = Path.GetFileNameWithoutExtension(assetPath);
+                if (!string.Equals(key, assetKey, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"Character template {record.Name} view prefab key casing must match the asset filename: {key} != {assetKey}");
+                }
+
+                ValidateCharacterViewPrefab(assetPath, key);
+                entries[assetPath] = CharacterViewAddress.FromKey(key);
+            }
+        }
+
+        if (entries.Count == 0)
+            throw new InvalidOperationException("Generated character tables do not contain any view prefab keys.");
+
+        return entries;
+    }
+
+    /// <summary>确认角色短键指向可实例化且包含 SpriteRenderer 的 Prefab。</summary>
+    private static void ValidateCharacterViewPrefab(string assetPath, string key)
+    {
+        GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(assetPath);
+        ValidateCharacterViewPrefabContract(prefab, key, assetPath);
+    }
+
+    /// <summary>确认角色 Prefab 具有运行时可发现的启用 SpriteRenderer，供构建与测试共用。</summary>
+    internal static void ValidateCharacterViewPrefabContract(
+        GameObject prefab,
+        string key,
+        string assetPath)
+    {
+        if (prefab == null)
+            throw new InvalidOperationException($"Character view key '{key}' is not an importable Prefab: {assetPath}");
+        if (prefab.GetComponentInChildren<SpriteRenderer>(includeInactive: false) == null)
+        {
+            throw new InvalidOperationException(
+                $"Character view key '{key}' must reference a Prefab containing an active SpriteRenderer: {assetPath}");
+        }
     }
 
     /// <summary>从 Luban 生成的牌表读取短键，并解析为资源路径与逻辑地址。</summary>

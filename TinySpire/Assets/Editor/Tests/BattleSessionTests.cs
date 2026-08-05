@@ -147,9 +147,9 @@ public sealed class BattleSessionTests
         var data = new Dictionary<string, JArray>
         {
             ["battle_tbhero"] = JArray.Parse(
-                "[{\"id\":1001,\"name_i18n_key\":\"battle.hero.test_warrior.name\",\"view_prefab_address\":\"Assets/Arts/Runtime/Character/Prefabs/pfb_char_player.prefab\",\"max_health\":80,\"base_strength\":1,\"initial_deck_id\":1001}]"),
+                "[{\"id\":1001,\"name_i18n_key\":\"battle.hero.test_warrior.name\",\"view_prefab_key\":\"pfb_char_player\",\"max_health\":80,\"base_strength\":1,\"initial_deck_id\":1001}]"),
             ["battle_tbenemy"] = JArray.Parse(
-                "[{\"id\":2001,\"name_i18n_key\":\"battle.enemy.test_slime.name\",\"view_prefab_address\":\"Assets/Arts/Runtime/Character/Prefabs/pfb_char_enemy.prefab\",\"max_health\":20,\"base_strength\":0,\"behavior_group_id\":6001},{\"id\":2002,\"name_i18n_key\":\"battle.enemy.test_slime.name\",\"view_prefab_address\":\"Assets/Arts/Runtime/Character/Prefabs/pfb_char_enemy.prefab\",\"max_health\":20,\"base_strength\":0,\"behavior_group_id\":6002}]"),
+                "[{\"id\":2001,\"name_i18n_key\":\"battle.enemy.test_slime.name\",\"view_prefab_key\":\"pfb_char_enemy\",\"max_health\":20,\"base_strength\":0,\"behavior_group_id\":6001},{\"id\":2002,\"name_i18n_key\":\"battle.enemy.test_slime.name\",\"view_prefab_key\":\"pfb_char_enemy\",\"max_health\":20,\"base_strength\":0,\"behavior_group_id\":6002}]"),
             ["battle_tbdeck"] = JArray.Parse(
                 "[{\"id\":1001,\"card_template_ids\":[3002,3002,3002,3002,3002,3003,3003,3003,3003,3004]}]"),
             ["battle_tbcard"] = JArray.Parse(
