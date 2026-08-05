@@ -14,12 +14,12 @@
 | `art-style/characters/` | 游戏角色、敌人及姿势概念 | 7 张 PNG |
 | `art-style/covers/` | 封面、姿势与互动构图 | 7 张 PNG |
 | `art-style/loading-screens/` | Loading Screen 方案 | 4 张 PNG |
-| `art-style/scenes/` | 战斗背景与场景概念 | 1 张 PNG |
+| `art-style/scenes/` | 战斗背景与场景概念（含候选） | 4 张 PNG |
 | `art-style/title/` | 标题字形与标志方案 | 6 张 PNG |
 | `game-icons/` | 实际游戏图标与游戏内图标参考 | 2 张 PNG |
 | `cards/` | 卡牌成品及拆分素材 | 1 张 PNG、4 个 SVG |
 
-合计：**57 个文件（53 PNG、4 SVG）**。
+合计：**60 个文件（56 PNG、4 SVG）**。
 
 ## 1. 神话人物与 Agent 角色
 
@@ -120,6 +120,9 @@
 目录：`assets/art-style/scenes/`
 
 - `tinyspire-constructivist-battle-bg-concept.png` — 构成主义战斗背景概念。
+- `candidates/tinyspire-battle-background-extract-ref-v01.png` — 从 UI 场景图经图像编辑重建的干净战斗背景候选；仅供备用，不代表正式运行时背景决策。
+- `candidates/tinyspire-battle-background-tribunal-counterweights-ref-v01.png` — 配重审判庭战斗背景候选；仅供备用，不代表正式运行时背景决策。
+- `candidates/tinyspire-battle-background-red-archive-cistern-ref-v01.png` — 红档案蓄水库战斗背景候选；仅供备用，不代表正式运行时背景决策。
 
 ### 2.6 标题方案
 
@@ -178,3 +181,4 @@
 - 2026-07-14：首次建立索引。
 - 2026-07-31：按实际视觉内容重新分类；神话人物概念移出 `game-icons/`，并拆分 `art-style/characters/`、`anchors/`、`scenes/`。
 - 2026-08-01：新增蓝羽环钩邪教徒动态概念图及对应三视图。
+- 2026-08-02：保存三张战斗背景候选，供后续 UI 与场景迭代参考。

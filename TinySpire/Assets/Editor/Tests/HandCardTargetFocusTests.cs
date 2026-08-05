@@ -7,6 +7,7 @@ using TinySpire.Battle;
 using TinySpire.UI.Battle;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.UI;
 
 public sealed class HandCardTargetFocusTests
 {
@@ -179,17 +180,18 @@ public sealed class HandCardTargetFocusTests
                     breathScale: 1.025f,
                     breathDuration: 0.55f);
 
-                var serializedContainer = new SerializedObject(container);
-                BattleTargetingArrowView arrow = serializedContainer
-                    .FindProperty("_targetingArrow")
-                    .objectReferenceValue as BattleTargetingArrowView;
+                BattleTargetingArrowView arrow = handObject
+                    .GetComponentInChildren<BattleTargetingArrowView>(includeInactive: true);
                 Assert.That(arrow, Is.Not.Null);
-                var serializedArrow = new SerializedObject(arrow);
-                RectTransform lineRect = serializedArrow.FindProperty("_lineRect").objectReferenceValue as RectTransform;
-                RectTransform headRect = serializedArrow.FindProperty("_headRect").objectReferenceValue as RectTransform;
                 arrow.Show(visual.GetScreenCenter(), pointerScreenPosition);
-                Vector2 originBefore = lineRect.anchoredPosition;
-                Vector2 endpointBefore = headRect.anchoredPosition;
+                Image[] activeGraphics = arrow.GetComponentsInChildren<Image>(includeInactive: false);
+                Image originFragment = System.Array.Find(activeGraphics, image => !image.preserveAspect);
+                Image head = System.Array.Find(activeGraphics, image => image.preserveAspect);
+                Assert.That(arrow.IsVisible, Is.True);
+                Assert.That(originFragment, Is.Not.Null);
+                Assert.That(head, Is.Not.Null);
+                Vector2 originBefore = originFragment.rectTransform.anchoredPosition;
+                Vector2 endpointBefore = head.rectTransform.anchoredPosition;
 
                 typeof(HandCardContainer).GetField(
                     "_participantPresenter",
@@ -221,9 +223,18 @@ public sealed class HandCardTargetFocusTests
                 Assert.That(lateUpdate, Is.Not.Null);
                 lateUpdate.Invoke(container, null);
 
-                Assert.That(lineRect.anchoredPosition, Is.Not.EqualTo(originBefore));
-                Assert.That(headRect.anchoredPosition.x, Is.EqualTo(endpointBefore.x).Within(0.01f));
-                Assert.That(headRect.anchoredPosition.y, Is.EqualTo(endpointBefore.y).Within(0.01f));
+                Image updatedFragment = System.Array.Find(
+                    arrow.GetComponentsInChildren<Image>(includeInactive: false),
+                    image => !image.preserveAspect);
+                Image updatedHead = System.Array.Find(
+                    arrow.GetComponentsInChildren<Image>(includeInactive: false),
+                    image => image.preserveAspect);
+                Assert.That(arrow.IsVisible, Is.True);
+                Assert.That(updatedFragment, Is.Not.Null);
+                Assert.That(updatedHead, Is.Not.Null);
+                Assert.That(updatedFragment.rectTransform.anchoredPosition, Is.Not.EqualTo(originBefore));
+                Assert.That(updatedHead.rectTransform.anchoredPosition.x, Is.EqualTo(endpointBefore.x).Within(0.01f));
+                Assert.That(updatedHead.rectTransform.anchoredPosition.y, Is.EqualTo(endpointBefore.y).Within(0.01f));
             }
             finally
             {
