@@ -624,3 +624,5 @@ updated: 2026-08-05
 **理由**：免费运行时依赖留在仓库可保持可复现构建；把付费扩展限定为开发者本地安装，可避免再次公开分发或让本地 Pro 掩盖无 Pro 的依赖。精确忽略规则和无 Pro 干净检出验证共同锁定该边界。
 
 **影响**：修改 `.gitignore`、`THIRD-PARTY-NOTICES.md` 与 Git 历史；所有被重写提交 ID 改变，协作者需重新克隆或显式迁移。免费 `DOTween/` 与必要 `DemiLib/` 保留；不得新增 Pro-only API、组件或序列化依赖。Unity 场景、Prefab、业务代码与 LFS 存储不因本决策主动修改。验证见 `06_testing/2026-08-05-dotween-pro-repository-sanitization.md`。
+
+**2026-08-05 执行状态**：本地新历史与独立镜像已按本决策净化且验证一致；远端 force-push 被 GitHub `GH008` 拒绝，原因是另两个本地提交中的五个非 Pro LFS 对象尚未上传。用户禁止修改 LFS，故远端仍保留旧历史；该状态只能以验证页和 `SESSION_LOG.md` 为准，不得把本决策本身当作推送成功证据。

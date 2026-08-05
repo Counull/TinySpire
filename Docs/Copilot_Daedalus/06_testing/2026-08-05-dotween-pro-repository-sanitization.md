@@ -1,7 +1,7 @@
 ---
 title: DOTween Pro 仓库净化与免费版独立验证
 page_type: testing
-lifecycle: in_progress
+lifecycle: active
 updated: 2026-08-05
 ---
 
@@ -9,7 +9,7 @@ updated: 2026-08-05
 
 ## 范围与结论
 
-本次只处理 DOTween 的公开分发边界：免费 DOTween、必要 DemiLib 与官方 `DOTween/readme.txt` 继续跟踪；DOTween Pro 源码、DLL、示例、目录 Meta 与 Pro readme 从 Git 当前树及可达历史移除，并由精确忽略规则保持为持证开发者本地内容。没有修改业务代码、Scene、Prefab、ProjectSettings、asmdef、HybridCLR、DataTables、Localization、Addressables 配置或 `.gitattributes`，也没有清理 Git LFS 存储对象或处理既有 Fork/Clone。
+本次只处理 DOTween 的公开分发边界：免费 DOTween、必要 DemiLib 与官方 `DOTween/readme.txt` 继续跟踪；DOTween Pro 源码、DLL、示例、目录 Meta 与 Pro readme 已从当前树和本地准备的新 `main` 可达历史移除，并由精确忽略规则保持为持证开发者本地内容。GitHub 因五个非 Pro LFS 对象缺失而拒绝 force-push，故远端公开历史切换尚未完成；远端仍保持原 SHA。没有修改业务代码、Scene、Prefab、ProjectSettings、asmdef、HybridCLR、DataTables、Localization、Addressables 配置或 `.gitattributes`，也没有清理或上传 Git LFS 对象、处理既有 Fork/Clone。
 
 ## 可观察失败基线
 
@@ -38,7 +38,12 @@ updated: 2026-08-05
 
 ## 历史与远端验证
 
-本节必须在独立镜像完成历史改写并验证所有相关 ref 后填写；当前内容不把计划中的 force-push 当作已完成证据。
+- 清理提交旧 SHA `bec2f892c8f38f995046e8f11f088e0921b5c2e2` 经过滤后映射为 `3c831013046e9f5fb30097701533b66c80abeb0e`；改写前后 tip tree 均为 `f8003ddb36b14f79fc5c2e68ddfbd0f937043887`，证明历史过滤没有改变最终非 Pro 内容。
+- 过滤器先生成本地新 `main`，随后在 `TinySpire/.codex_work/dotweenpro-history-rewrite-20260805.git` 独立重放；两次都得到相同 HEAD 与 tree。镜像只有 `refs/heads/main`、无 Tag，共 81 个提交，`git fsck --full --no-reflogs` 通过。
+- `git rev-list --objects main` 对六个目标路径为 0，目标路径的 `git log` 为 0；免费 DOTween/DemiLib 当前树仍为 307 个跟踪项。旧远端提交 `3e7b8e5100015686a3c12260155e9b7076456a26` 映射为 `8798f1576374676690a35e3fb63e80a684acf490`。
+- 使用 `--force-with-lease=refs/heads/main:3e7b8e5100015686a3c12260155e9b7076456a26` 尝试只更新 `main` 时，GitHub 以 `GH008` 拒绝：新历史引用了远端尚无的五个 LFS 对象。回读确认远端仍为 `3e7b8e5100015686a3c12260155e9b7076456a26`，没有发生部分更新。
+- 五个对象均来自清理前本地领先远端的两个提交，且均非 Pro：`m10d-bootstrap-default.png`，三张 `Docs/Hermes_Pegasus/art/assets/art-style/scenes/candidates/` 场景候选图，以及 `TinySpire/Assets/Arts/Runtime/UI/Battle/Candidates/ui_battle_end_turn_button_ref_v01.png`。Pro 的 DLL、Editor DLL 与示例 logo 哈希均不在该缺失集合，也不在新历史中。
+- 用户明确要求不修改 LFS，因此没有执行 GitHub 建议的 `git lfs push --all`，没有上传上述五个对象。完成远端切换需要新的明确选择：允许只上传这五个既有非 Pro LFS 对象，或另行授权改写/排除包含它们的本地提交；在此之前不得声称远端历史已净化。
 
 ## 许可证与 NOTICE
 
@@ -49,5 +54,5 @@ updated: 2026-08-05
 ## 恢复与排除项
 
 - 历史改写前恢复点为本地 bundle；物理 Pro 文件另有逐文件哈希备份。恢复这些备份只能用于本地持证环境，不得再次推送到公开仓库。
-- 本次不删除 GitHub LFS 对象、不修改 `.gitattributes`、不召回既有 Clone/Fork、不联系 GitHub Support；这些排除项是用户明确边界。
+- 本次不删除或上传 GitHub LFS 对象、不修改 `.gitattributes`、不召回既有 Clone/Fork、不联系 GitHub Support；这些排除项是用户明确边界。
 - 历史改写会改变引入 Pro 之后的提交 ID。协作者不得把旧分支直接推回新历史；应重新 Clone，或显式迁移自己的提交。

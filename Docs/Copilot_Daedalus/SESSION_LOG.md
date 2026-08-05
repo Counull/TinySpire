@@ -3,6 +3,16 @@ created: 2026-07-06
 updated: 2026-08-05
 ---
 
+## 2026-08-05 DOTween Pro 仓库净化、NOTICE 补全与远端 LFS 阻塞（本地已完成，远端未更新）
+
+- 从索引移除 `DOTweenPro/`、`DOTweenPro Examples/`、对应目录 Meta 与 `readme_DOTweenPro.txt`/Meta 共 46 个跟踪项，并在 `TinySpire/.gitignore` 添加六条精确规则；免费 `DOTween/` 与 `DemiLib/` 继续跟踪 307 项。新增 CD-056，并修订 CD-003，明确 Pro 只允许持证开发者本地安装，不是 Clone、构建或运行前置条件。
+- `THIRD-PARTY-NOTICES.md` 已从错误的“全部 MIT”概括补为真实分类：免费 DOTween 自定义许可、Luban 及其 MIT/BSD/Apache/MPL 内含依赖、UPM/NuGet、Unity 专用许可、模板、子模块和本地专有工具；`Tools/Luban/NOTICE.md` 已指向根依赖清单。
+- 本地 Pro 临时移出后，唯一 Unity 6000.5.5f1 Editor 全量重编译成功，完整 EditMode `5b817700afff40f1a4928b2e78f01a25` 为 459/459，通过独立正常 Bootstrap 进入 BattleScene、唯一 `BattleLifetimeScope` 与 Console 0 Error / 0 Warning。恢复后 50 个物理文件与备份 SHA-256 全部一致，Editor 再次编译回到 idle、Console 0 Error / 0 Warning。
+- 清理提交旧 SHA `bec2f892c8f38f995046e8f11f088e0921b5c2e2` 已生成本地新历史 `3c831013046e9f5fb30097701533b66c80abeb0e`；独立镜像重放得到相同 HEAD，tip tree 与过滤前同为 `f8003ddb36b14f79fc5c2e68ddfbd0f937043887`。镜像 81 个提交中目标路径可达对象/路径提交均为 0、只有 `main`、无 Tag，`git fsck` 通过；本地完整 bundle 与逐文件备份保存在已忽略的 `.codex_work`。
+- 使用旧远端 SHA 的精确 `--force-with-lease` 推送被 GitHub `GH008` 拒绝，远端 `main` 仍为 `3e7b8e5100015686a3c12260155e9b7076456a26`。缺失对象精确为本地领先两个提交中的一张 M10D 证据图、三张 Hermes scene candidates 与一张 Battle Candidates 图，均非 Pro。遵守用户“不修改 LFS”边界，没有执行 `git lfs push --all` 或上传任何对象。继续远端净化需要用户明确允许只上传这五个 LFS 对象，或另行授权改写/排除相关本地提交；完整证据见 `06_testing/2026-08-05-dotween-pro-repository-sanitization.md`。
+
+---
+
 ## 2026-08-05 配置素材短键、构建期漂移校验与真实 AB 加载（已完成）
 
 - 全量审计 `DataTables/Datas/*.xlsx` 后确认：已迁移的 `battle.Card.illustration_key` 之外，只有 Hero/Enemy 的 `view_prefab_address` 仍保存完整角色 Prefab 路径。两个作者表已改为 `view_prefab_key`，值为 `pfb_char_player` / `pfb_char_enemy`；Luban 已成功重生成对应 C# 与 `Assets/GameData` JSON，工作簿公式/错误扫描和最终全表 `Assets/...` 复扫均为 0。
