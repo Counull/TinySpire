@@ -9,3 +9,7 @@ Modifications: none
 This directory contains the unmodified binary release of Luban,
 a configuration data pipeline tool (Excel/JSON/XML -> code + data)
 used by TinySpire to generate C# config classes and JSON data.
+
+Bundled runtime dependencies and their separate licenses are inventoried in
+`../../THIRD-PARTY-NOTICES.md`. Luban's MIT license does not replace those
+dependency licenses.

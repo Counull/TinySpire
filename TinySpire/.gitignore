@@ -118,3 +118,12 @@ InitTestScene*.unity*
 # Keep ProjectSettings/HybridCLRSettings.asset and Packages configuration under version control.
 /HybridCLRData/
 /HybridCLRGenerate/
+
+# Per-seat licensed Unity Asset Store content: keep local, never publish.
+# TinySpire builds and tests against the free DOTween edition only.
+/[Aa]ssets/Plugins/Demigiant/DOTweenPro/
+/[Aa]ssets/Plugins/Demigiant/DOTweenPro.meta
+/[Aa]ssets/Plugins/Demigiant/DOTweenPro Examples/
+/[Aa]ssets/Plugins/Demigiant/DOTweenPro Examples.meta
+/[Aa]ssets/Plugins/Demigiant/readme_DOTweenPro.txt
+/[Aa]ssets/Plugins/Demigiant/readme_DOTweenPro.txt.meta

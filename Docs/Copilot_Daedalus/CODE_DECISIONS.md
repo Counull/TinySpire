@@ -37,6 +37,8 @@ updated: 2026-08-05
 
 **影响**：`TinySpire/Assets/Scripts/UI/` 下新增的手牌交互脚本；不影响计算层、状态层。详见 `plans/2026-07-29-battlescene-hand-ui-sts-style.md`。
 
+**2026-08-05 修订**：本条“DOTween/DOTweenPro 已导入”仅记录当时本地环境；当前公开依赖边界由 CD-056 取代。项目只分发并依赖免费 DOTween，DOTween Pro 仅允许持证开发者本地安装，不得成为生产代码或仓库内容依赖。
+
 ## CD-004：手牌交互模型由单选 Toggle 替换为悬停/扇形/拖拽视觉
 
 **问题**：CD-002 的 `Toggle` + `ToggleGroup` 单选高亮与杀戮尖塔式的悬停抬起 + 拖拽跟手交互互斥，无法共存。
@@ -612,3 +614,13 @@ updated: 2026-08-05
 **理由**：短键表达策划所关心的素材身份，Editor 资产路径和 Addressables 打包方式留在发布边界。运行时与构建工具使用同一逻辑地址规则，既保留 Addressables/AssetBundle 生命周期，也把冲突、漂移、缺失和契约错误提前为同步构建失败。
 
 **影响**：`battle.Hero`、`battle.Enemy` 改用 `view_prefab_key`，`BattleParticipantPresenter` 经 `CharacterViewAddress` 生成逻辑地址；`AddressablesBuildTools` 从 Hero/Enemy 生成 JSON 精确同步 `TinySpire Characters`。CD-023 的完整角色地址与 CD-026 的“仅牌面短键”限制被本决策取代；Scene/GameData 地址、Queue/Turn/settlement、战斗规则、DI 与场景启动不变。验证见 `06_testing/2026-08-05-config-asset-logical-keys.md`。
+
+## CD-056：公开仓库只分发免费 DOTween，DOTween Pro 作为每席位本地依赖排除
+
+**问题**：DOTween Pro 属于按席位授权的付费 Editor Extension；把其源码、DLL、示例或说明文件保留在公开 Git 当前树或可达历史，会把本地持证工具误当成项目可再分发依赖。若直接删除全部 Demigiant 内容，又会让当前大量只依赖免费 DOTween API 的表现代码无法在干净 Clone 中编译。
+
+**选择**：公开仓库继续跟踪可再分发的免费 DOTween 与其必要 DemiLib/官方说明，只允许生产代码依赖免费 `DG.Tweening` API。`DOTweenPro/`、`DOTweenPro Examples/`、各自目录 Meta，以及 `readme_DOTweenPro.txt` 与其 Meta 从当前索引和所有可达 Git 历史移除，并由精确 `.gitignore` 规则永久排除；持有合法席位的开发者可在相同 Unity 路径本地安装并保留 Pro，但它不是 Clone、构建或运行 TinySpire 的前置条件。历史重写按用户授权强制更新远端相关分支/标签；不清理 GitHub LFS 存储对象，也不处理既有 Fork/Clone。
+
+**理由**：免费运行时依赖留在仓库可保持可复现构建；把付费扩展限定为开发者本地安装，可避免再次公开分发或让本地 Pro 掩盖无 Pro 的依赖。精确忽略规则和无 Pro 干净检出验证共同锁定该边界。
+
+**影响**：修改 `.gitignore`、`THIRD-PARTY-NOTICES.md` 与 Git 历史；所有被重写提交 ID 改变，协作者需重新克隆或显式迁移。免费 `DOTween/` 与必要 `DemiLib/` 保留；不得新增 Pro-only API、组件或序列化依赖。Unity 场景、Prefab、业务代码与 LFS 存储不因本决策主动修改。验证见 `06_testing/2026-08-05-dotween-pro-repository-sanitization.md`。
