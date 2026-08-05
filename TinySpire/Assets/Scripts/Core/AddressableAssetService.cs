@@ -8,7 +8,7 @@ using UnityEngine.ResourceManagement.AsyncOperations;
 /// Addressables 的最小运行时边界。
 /// 上层只取得已经复制出的文本，不持有 Addressables 句柄或资源生命周期状态。
 /// </summary>
-public sealed class AddressableAssetService
+public sealed class AddressableAssetService : IConfigTextLoader
 {
     private bool _initialized;
 

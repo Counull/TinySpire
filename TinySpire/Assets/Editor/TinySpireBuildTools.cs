@@ -26,6 +26,9 @@ public static class TinySpireBuildTools
             EditorUtility.DisplayProgressBar("TinySpire Build", "Refreshing generated assets...", 0.35f);
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
 
+            EditorUtility.DisplayProgressBar("TinySpire Build", "Validating configuration table manifest...", 0.45f);
+            ConfigTableManifestValidator.ValidateCurrentProject();
+
             EditorUtility.DisplayProgressBar("TinySpire Build", "Importing and validating localization...", 0.55f);
             LocalizationBuildTools.ImportBattleCardTextFromExcel();
 

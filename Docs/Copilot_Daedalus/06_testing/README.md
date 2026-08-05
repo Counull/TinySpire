@@ -16,6 +16,10 @@ updated: 2026-08-05
 ## 验证记录
 
 - [2026-08-05 配置素材短键与真实 AssetBundle 加载](2026-08-05-config-asset-logical-keys.md) — Hero/Enemy 表迁移为短键，构建期漂移校验、逻辑地址组、Luban/本地内容构建、Packed Play Mode 物理 bundle 与真实 Game View 证据
+- [2026-08-05 M10D 交付级验证与性能基线](2026-08-05-m10d-delivery-validation.md) — M10 定向 EditMode 25/25、默认 Game View/Console 和可重复微基线已取证；完整 451 项中的两项非 M10 UI/Targeting 异常保留为历史事实，不将其伪报为 M10 全量全绿
+- [2026-08-05 M10C 确定性、帧率无关与生命周期回归](2026-08-05-m10c-determinism-lifecycle.md) — Submit/只读事实轨迹在 30/60/120 FPS、加速和立即完成下相同；取消、重启、Scope/Scene 生命周期定向回归 3/3、相关聚合 53/53 与真实 Bootstrap Play Mode 证据
+- [2026-08-05 M10B Bootstrap 可见失败路由与默认内容黄金基线](2026-08-05-m10b-bootstrap-golden-baseline.md) — typed 配置失败停止路由、作者表/生成 JSON/Localization 三方黄金断言、运行时流程 key 门禁与正常 Bootstrap 实测；M10A+M10B 定向 EditMode 21/21 通过
+- [2026-08-05 M10A 配置原子性与表清单 fail-fast](2026-08-05-m10a-config-fail-fast.md) — 配置 typed failure、原子发布、重试与四份清单构建期校验；定向 EditMode 9/9 通过
 - [2026-08-05 M9 目标箭头与锁定框视觉反馈验收](2026-08-05-m9-targeting-visual-feedback.md) — 分段切线箭身、四角锁定框与相关 Prefab 契约；Unity 定向类集 26/26 通过
 - [2026-08-05 M9 出牌不飞向怪物验收](2026-08-05-play-card-no-target-flight.md) — Prelude 仅持有 transient，卡牌只飞向弃牌堆；Unity 定向类集 26/26 通过
 - [2026-08-05 M9 验收后 BUG 分诊与结构审查关联](2026-08-05-m9-post-validation-bug-triage.md) — 两项 Hand motion 由精确红灯、426/426 EditMode 覆盖；生命 HUD 临时投影到角色头顶，并在五种真实 BattleScene 尺寸复测为 0 相交对

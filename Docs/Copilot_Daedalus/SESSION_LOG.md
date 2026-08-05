@@ -13,6 +13,45 @@ updated: 2026-08-05
 
 ---
 
+## 2026-08-05 M10D 交付级验证与性能基线（已完成，非 M10 套件异常已记录）
+
+- 新增仅测试使用的 `Assets/Editor/Tests/BattleDeliveryM10DTests.cs`。先由 Unity 编译的 `CS0246`/`CS0103` 固定缺少 `M10DeliveryEvidence` 与 `M10DeliveryBaseline` 的精确红灯，再以最小非持久化夹具复用 M10C 的 `M10BattleReplayHarness.Replay(fps)`；夹具不改生产 Queue/Turn/settlement、规则、DI、Scene、Prefab 或第二份权威状态。M10D 定向 EditMode 1/1 与 M10A--M10D 聚合 25/25 均通过；`dotnet build TinySpire/TinySpire.sln --no-restore -m:1` 为 0 error、保留 12 条既有 warning。
+- 唯一 Unity 6000.5.5f1 Editor 的正常 Bootstrap 已进入默认 BattleScene：Game View 显示 3/3 能量、5 张默认手牌、英雄 30/30、两个敌人各 20/20，以及部分中文卡牌与参与者文案；画面中的战斗流程英文标签不作为 zh-CN 黄金基线证据，完整双语口径由 M10B 自动测试覆盖。运行中 `BattleLifetimeScope` 为 1，停止后 BootstrapScene 中为 0，Console 无产品 warning/error。记录了 30/60/120 FPS 的各两个 5 样本 Editor 微基线，以及启用 Profiler 后的 3 帧 Game View 观察值；用户未给出帧时间、GC 或设备预算，故这些仅是环境化基线与差异，不是性能通过。M10 未改 DataTables、Localization 或可寻址内容，故未运行 Luban、Sync and Build All 或 Local Content；静态组地址仍是 `Assets/Scenes/BattleScene.unity`。
+- 交付审计的完整 EditMode 共完成 451 项，其中两项失败且已独立复现：`BattleParticipantFeedbackRoutingTests.PlayCardPresentation_UsesPreludeThenEffectThenOriginalCardMovedOrder` 的第一轮 Tick 卡片中心未移动；`HandCardTargetFocusTests.TargetFocus_LateUpdate_TracksMovingCardWhilePointerStaysStill` 在读取已不存在的 `_lineRect` 测试契约时抛出 NullReferenceException。两项测试及 Targeting 源路径相对 `HEAD` 无差异；前者仅走 Localization/CardZones/Hand/Presenter/Adapter，未创建或初始化 `ConfigService`，后者无 M10 Core 依赖，M10 Core 文件亦不引用 Hand/Targeting。因此它们是如实保留的非 M10 UI/Targeting 套件异常，不伪报全绿，却不阻断 M10 的相关回归收口。M10D 已完成；完整证据、性能环境、实际/计划区分与后续单独授权边界见 `06_testing/2026-08-05-m10d-delivery-validation.md`。
+
+---
+
+## 2026-08-05 M10C 确定性、帧率无关与生命周期回归（已完成）
+
+- 先以精确红灯固定三个缺口：缺少 `M10BattleReplayTrace`/`M10BattleReplayHarness`（`CS0246`/`CS0103`）、缺少加速/立即完成入口（`CS0117`）、缺少取消和重启生命周期证据（`CS0246`/`CS0117`）。最小实现仅新增测试文件 `Assets/Editor/Tests/BattleConformanceM10CTests.cs`：它经 `BattleCommandQueue.Submit` 提交既有命令，在表现完成时仅读取 `Queue`、`Turn`、`BattleSession`、`CardZones` 和既有结算记录；测试用 tracing presentation 只冻结结果文本并委托既有 adapter，不保存第二份权威状态，也不改变生产写入口或契约。
+- Unity 定向任务依次为 `3d8e55f47eb04600a548996f885d80d9` **1/1 passed**、`8eef040130d048b28a37a3d12ca84c7c` **2/2 passed**、`4a6cef7ad5f64abd8403b1429a3e044f` **3/3 passed**；相关聚合任务 `ee9720d3161a473d950940fe80edc1f1` 为 **53/53 passed**。`dotnet build TinySpire/TinySpire.sln --no-restore -m:1` 为 **0 error**，保留既有 12 条程序集版本冲突 warning。此前 domain refresh 后两个 MCP 测试任务仅清除了卡住的任务记录，未以其为通过依据；以上具名绿色任务才是结论证据。
+- 当前唯一 Unity 6000.5.5f1 Editor 的真实正常 Bootstrap Play Mode 已从 BootstrapScene 进入 BattleScene：存在一个 `BattleLifetimeScope`，Console 只有 `game-config.json 已加载。`，无产品 Error/Warning；停止后回到 BootstrapScene，`BattleLifetimeScope` 数量为零。此切片未驱动真实 Game View 指针或 Restart 按钮，也未声称性能通过；这些交付级验证仅留给 M10D。
+- 没有修改 `BattleCommandQueue`、`BattleTurnController`、结算、公式、`BattleLifetimeScope`、Scene、Prefab、DI、DataTables、生成 GameData、Localization 或 Addressables；故未运行 Luban、Sync and Build All 或 Local Content。未触碰 Candidates/Targeting 和其他受保护路径，未暂存、提交或推送。M10C 的独立停止点已完成；M10D 必须从新的交付/性能红灯开始。完整证据见 `06_testing/2026-08-05-m10c-determinism-lifecycle.md`。
+
+## 2026-08-05 M10B Bootstrap 可见失败路由与默认内容黄金基线（已完成）
+
+- `GameLauncher` 现在只编排启动：它只捕获 `ConfigInitializationException` 并交给 `IBootstrapFailurePresenter`，随后停止，不继续初始化 Localization 或加载首场景；未知异常保持上抛。`Bootstrap` 在现有对象上按需创建 `BootstrapFailureView`，失败只显示稳定 `CFG-001`～`CFG-007`、资源地址和修复后重启指引，不增加重试、MainMenu、Run、第二场景流或新的权威写入口。
+- 新增精确红灯先暴露了缺失的 `GameLauncher.RunStartupAsync`（solution build `CS0117`）和 `LocalizationBuildTools` 缺少运行时战斗流程必需键（任务 `6e7fc222f4c94adc9bad8a534c1de2aa`）。最小实现后，`GameLauncherM10BTests` **10/10 passed**，覆盖七类 typed failure 停止、未知异常上抛、成功场景序列与失败 View 诊断文本；`BattleGoldenBaselineM10BTests` **2/2 passed**，从 DataTables 作者表、生成 GameData、i18n.xlsx 和 Unity String Table 锁定 5/3、5×Strike/4×Defend/1×Bash、6/5/8/2、30/20 和 en/zh-CN Smart String 基线。
+- M10A+M10B 聚合 EditMode 任务 `7190d4bdca904d5f89104b17c21716d3` 为 **21/21 passed**；`TinySpire/Localization/Validate Battle Card Text` 已通过；`dotnet build TinySpire/TinySpire.sln --no-restore -m:1` 为 **0 error**，保留既有 12 条程序集版本冲突 warning。当前唯一 Unity 6000.5.5f1 Editor 的正常 Play Mode 从 BootstrapScene 实际进入 BattleScene，Console 记录 `game-config.json 已加载。`，随后已退出。
+- 未修改 DataTables、生成 JSON、Localization 或可寻址内容，因此没有运行 Luban、Localization Import、Sync and Build All 或 Local Content；这避免产生无关内容输出，不代表跳过变更后的生成验收。也没有通过篡改资源制造真实 Game View 失败截图；七类自动 typed-failure 路由与失败 View 断言是失败路径证据，其边界已记录于 `06_testing/2026-08-05-m10b-bootstrap-golden-baseline.md`。
+- M10B 停止点完成；M10C 才可开始，并必须只通过 `BattleCommandQueue.Submit` 与既有只读 Queue/Turn/BattleSession/CardZones 建立确定性、帧率和生命周期红灯。未修改 Queue/Turn/settlement/公式、Scene/Prefab、战斗规则、Targeting/Candidates 或受保护路径；未暂存、提交或推送；DEP 状态不变。
+
+## 2026-08-05 M10A 配置原子性与表清单 fail-fast（已完成）
+
+- `ConfigService` 现在仅在八张必需表与 `game-config.json` 全部成功加载、解析并通过最小结构校验后，才一次性发布 `Tables` 和 `GameConfig`。加载失败、坏 JSON/根节点、坏表行、缺必需 game-config 字段均抛出携带稳定地址、可选表名与失败原因的 `ConfigInitializationException`；不再记录 warning 后用 `GameConfig` 默认值继续。
+- 通过内部 `IConfigTextLoader` 窄 seam 建立 fake loader。M10A 的精确红灯先暴露了缺失 seam、未校验的表清单验证器和重复表名被集合去重掩盖；最小修复后，`ConfigServiceTests` 为 **7/7 passed**，`ConfigTableManifestValidatorTests` 为 **2/2 passed**。真实项目的 Luban `__tables__.xlsx`、生成 `Tables.cs`、`Assets/GameData` JSON 与运行时清单比较为 `CONFIG_TABLE_MANIFEST_OK`。
+- `TinySpire/Build/Sync and Build All` 在 Luban 生成和同步 AssetDatabase 后、Localization/Local Content 前调用 `ConfigTableManifestValidator`，会阻断遗漏、额外或重复表名。未修改 `DataTables/Datas/`、`Assets/GameData/`、Localization 或可寻址内容，故本切片未运行 Luban 或 Local Content。
+- 验证：当前唯一 Unity 6000.5.5f1 Editor 的定向 EditMode 回归通过，`dotnet build TinySpire/TinySpire.sln --no-restore -m:1` 为 **0 error、12 条既有程序集版本冲突 warning**。完整证据见 `06_testing/2026-08-05-m10a-config-fail-fast.md`。
+- M10A 停止点完成；M10B 才可接入 Bootstrap 可见失败路径和默认内容黄金基线。没有修改 Bootstrap、Scene、Prefab、战斗规则、Queue/Turn/settlement、DataTables、生成 JSON、Localization、Addressables 配置、Candidates 或 Targeting；未暂存、提交或推送。DEP 状态不变。
+
+## 2026-08-05 M10 BattleScene MVP 对标计划与下一会话交接（计划就绪，未实施）
+
+- 新增唯一 M10 计划 `plans/2026-08-05-m10-battlescene-conformance.md`，把路线图的“数值对标、回归、性能与内容扩展入口”拆为 M10A 配置原子 fail-fast、M10B Bootstrap 失败路由与黄金内容、M10C 确定性/帧率/生命周期回归、M10D 交付级验证与性能基线四个串行停止点。
+- 计划基于当前代码观察到的 `ConfigService` 风险：八项手写 `TableNames` 未做漂移校验，`game-config.json` 失败时会回退 `GameConfig` 默认值；M10A 将先以精确测试收口，不提前改 BattleScene 或内容。
+- 当前默认内容只作为待验证黄金基线：5 手、3 能量、5×Strike/4×Defend/1×Bash、6/5/8/2、英雄 30、默认敌人 20，以及 en/zh-CN 文本。若产品目标值不同，M10B 必须在修改表格前记录新的明确来源；不能把计划当作已通过的运行时证据。
+- 配套 `plans/2026-08-05-m10-battlescene-conformance.codex-prompt.md` 提供可复制 `/goal` 与实施提示词。当前无 DEP 状态变化；DEP-007/008/010/011/012 继续是 M10 排除项。
+- 本轮只修改 M10 计划、计划索引、路线图和状态日志；未修改 C#、测试、表格、生成 JSON、Localization、Addressables、Scene、Prefab 或受保护艺术资源，未运行 Unity、Luban、Addressables、测试或构建，未暂存、未提交、未推送。
+
 ## 2026-08-05 M9 出牌、目标箭头与锁定框反馈（已实施，定向验收通过）
 
 > 本条是今日较早“收集反馈中 / Unity 回归待执行”两条记录的当前状态来源。

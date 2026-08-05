@@ -581,6 +581,26 @@ updated: 2026-08-05
 
 **影响**：`TinySpire/Assets/Scripts/UI/Battle/Targeting/BattleTargetingArrowView.cs`、`TinySpire/Assets/Scripts/UI/Battle/ParticipantHudView.cs` 及其两个 Prefab 和契约测试。继续复用已有正式 Targeting 精灵，不修改源图片或 Meta；不改目标合法性、`BattleCommandQueue`、`Turn`、结算或场景结构。
 
+## CD-053：配置服务仅发布完整快照，表清单在同步构建时做四源漂移校验
+
+**问题**：`ConfigService` 先发布 `Tables`、后读取 `game-config.json`，后者失败时会记录 warning 并构造代码默认值；这既允许半成品服务进入后续链路，也让资源损坏伪装成默认内容。运行时的手写 `TableNames` 又没有同 Luban 表定义、生成代码和 GameData 输出比较，新增/删除表时容易发生漂移。
+
+**选择**：保留 `AddressableAssetService` 作为唯一生产读取边界，但让它实现仅供 Core/Editor 使用的内部 `IConfigTextLoader`。`ConfigService` 先在局部加载、解析和构造全部表与 `GameConfig`，成功后才同时发布属性；所有配置失败统一为带地址、可选表名与稳定 reason 的 `ConfigInitializationException`。`TinySpire/Build/Sync and Build All` 在生成和强制导入后，比较 Luban `__tables__.xlsx` 的客户端 battle 表、生成 `Tables.cs` loader 名、`Assets/GameData` JSON 和运行时必需清单，并拒绝缺项、额外项或重复项。
+
+**理由**：测试 fake 只替换最窄的文本读取边界，不扩大 Bootstrap、DI 或战斗模块的 API。局部构造让失败具有零发布语义；四源校验把表漂移前置到既有同步构建，而不再维护第二份人工 manifest。这个决定不验证或呈现 Bootstrap 错误 UI，后者留给 M10B。
+
+**影响**：`ConfigService`、`AddressableAssetService`、最小 Core failure/seam 类型、Editor 清单验证器、既有同步构建入口和相应 Editor 测试。未修改 DataTables、生成 JSON、Localization、Addressables 配置、Bootstrap、Scene、Prefab、Queue、Turn、settlement 或任何战斗规则。验证见 `06_testing/2026-08-05-m10a-config-fail-fast.md`。
+
+## CD-054：Bootstrap 只转交已分类配置失败，并以无本地化依赖的最小 View 停止启动
+
+**问题**：配置可能在 Localization、UI 资源和首场景之前失败；只记录异常既不是可见失败体验，也会让后续启动逻辑误以为仍可进入 Loading/BattleScene。若 Bootstrap 直接吞掉所有异常、增加重试流或引入第二场景/DI 启动体系，则会扩大启动架构并掩盖未知故障。
+
+**选择**：`GameLauncher` 保持编排职责，只捕获 `ConfigInitializationException` 并交给 `IBootstrapFailurePresenter`，随后返回；任何其他异常仍原样上抛。`Bootstrap` 在自身现有 GameObject 上按需提供 `BootstrapFailureView`，其运行时覆盖层只显示稳定 `CFG-001`～`CFG-007`、资源地址和修复后重启指引，不依赖尚未初始化的 Localization，也不提供重试、MainMenu、Run、配置写入或场景切换。
+
+**理由**：M10A 已把失败收敛为带地址和原因的 typed failure，因此 M10B 只需在最窄启动边界转交它；无本地化依赖的最小 View 可以在内容加载失败时仍可用，且不会复制 `Tables`、`GameConfig` 或战斗事实。内部编排 seam 仅供 Editor 测试验证“失败不继续、成功仍加载首场景、未知异常不吞掉”，不扩展生产写入口。
+
+**影响**：影响 `Bootstrap`、`GameLauncher`、最小失败展示接口/View 与对应 Editor 测试；未改 Scene、Prefab、Addressables 内容、表格、生成 JSON、Localization 资产、Queue、Turn、settlement、战斗规则或 Targeting/Candidates。验证见 `06_testing/2026-08-05-m10b-bootstrap-golden-baseline.md`。
+
 ## CD-055：配置表 Unity 素材统一保存短键，构建期解析为 Addressables 逻辑地址
 
 **问题**：牌面已按 CD-026 使用 `illustration_key`，但 Hero/Enemy 仍把完整 `Assets/...prefab` 写入 `view_prefab_address`。这迫使配置作者掌握 Unity 目录结构，也让移动素材、大小写漂移、同名素材或错误 Prefab 直到运行时才暴露。完整路径虽然看似磁盘路径，旧实现实际把它同时写成 Addressables catalog 地址并调用 `Addressables.InstantiateAsync`：Packed/Player 经 `BundledAssetProvider` → `AssetBundleProvider`，Fast Mode 则经 `AssetDatabaseProvider`。问题是配置和发布细节耦合，而不是运行时直接读取磁盘路径。

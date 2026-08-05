@@ -51,6 +51,17 @@ public static class LocalizationBuildTools
         "battle.card_pile.exhaust.name"
     };
 
+    private static readonly string[] RequiredBattleFlowKeys =
+    {
+        "battle.ui.battle.start",
+        "battle.ui.turn.player",
+        "battle.ui.turn.enemy",
+        "battle.ui.result.victory",
+        "battle.ui.result.defeat",
+        "battle.ui.action.restart",
+        "battle.ui.action.exit"
+    };
+
     /// <summary>
     /// 将 Excel 翻译源表同步到 Battle Cards String Table，并立即校验结果。
     /// </summary>
@@ -98,6 +109,7 @@ public static class LocalizationBuildTools
         Dictionary<string, I18nExcelEntry> entriesByKey = IndexEntries(entries);
         var requiredKeys = new HashSet<string>(RequiredKeywordKeys, StringComparer.Ordinal);
         requiredKeys.UnionWith(RequiredBattleHudKeys);
+        requiredKeys.UnionWith(RequiredBattleFlowKeys);
         foreach (JProperty cardProperty in cards.Properties())
         {
             JObject card = (JObject)cardProperty.Value;
@@ -119,6 +131,8 @@ public static class LocalizationBuildTools
                 RequireEntry(table, keywordKey);
             foreach (string battleHudKey in RequiredBattleHudKeys)
                 RequireEntry(table, battleHudKey);
+            foreach (string battleFlowKey in RequiredBattleFlowKeys)
+                RequireEntry(table, battleFlowKey);
             ValidateParticipantNames(table, heroes, "Hero");
             ValidateParticipantNames(table, enemies, "Enemy");
 

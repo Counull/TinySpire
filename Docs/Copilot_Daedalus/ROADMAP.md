@@ -403,6 +403,15 @@ MVP 效果类型：
 
 ### M10 · 对标、回归与扩展入口
 
+唯一实施计划为 `plans/2026-08-05-m10-battlescene-conformance.md`，按以下切片串行执行：
+
+| 切片 | 独立交付物 | 依赖 | 不提前实施 |
+|---|---|---|---|
+| M10A | 配置原子性、表清单漂移校验与 typed fail-fast（已完成；证据见 `06_testing/2026-08-05-m10a-config-fail-fast.md`） | 已完成 M0～M9 | Bootstrap UI、表格/本地化内容、规则 |
+| M10B | Bootstrap 可见失败路由、数值/两语文本黄金基线与构建前内容校验（已完成；证据见 `06_testing/2026-08-05-m10b-bootstrap-golden-baseline.md`） | M10A | 新玩法、Run、主菜单 |
+| M10C | 30/60/120 FPS 确定性轨迹与 Session/订阅/Tween 生命周期回归（已完成；证据见 `06_testing/2026-08-05-m10c-determinism-lifecycle.md`） | M10B 的稳定启动基线 | Queue/Turn/结算契约重写、第二事实 |
+| M10D | 已完成交付级验证与可重复性能基线；完整 EditMode 的两项非 M10 UI/Targeting 套件异常已独立复现并记录（证据见 `06_testing/2026-08-05-m10d-delivery-validation.md`） | M10A～M10C | 未确认预算下的猜测性优化、G1+ 内容或未经授权的 UI/Targeting 修复 |
+
 最终统一核对：
 
 - 初始手牌 5、每回合 3 能量、回合抽牌与弃牌规则。

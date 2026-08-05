@@ -11,8 +11,12 @@ public sealed class Bootstrap : LifetimeScope
     [SerializeField] private string initialSceneName = "BattleScene";
     [SerializeField] private string loadingSceneName = "LoadingScene";
 
+    private BootstrapFailureView _failureView;
+
     protected override void Awake()
     {
+        _failureView = GetComponent<BootstrapFailureView>()
+            ?? gameObject.AddComponent<BootstrapFailureView>();
         DontDestroyOnLoad(gameObject);
         base.Awake();
     }
@@ -24,6 +28,7 @@ public sealed class Bootstrap : LifetimeScope
         builder.Register<ConfigService>(Lifetime.Singleton);
         builder.Register<LocalizationService>(Lifetime.Singleton);
         builder.Register<SceneFlowService>(Lifetime.Singleton);
+        builder.RegisterInstance<IBootstrapFailurePresenter>(_failureView);
         builder.RegisterEntryPoint<GameLauncher>();
     }
 }
