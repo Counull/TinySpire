@@ -3,13 +3,14 @@ created: 2026-07-06
 updated: 2026-08-05
 ---
 
-## 2026-08-05 DOTween Pro 仓库净化、NOTICE 补全与远端 LFS 阻塞（本地已完成，远端未更新）
+## 2026-08-05 DOTween Pro 仓库净化、NOTICE 补全与远端历史更新（已完成）
 
 - 从索引移除 `DOTweenPro/`、`DOTweenPro Examples/`、对应目录 Meta 与 `readme_DOTweenPro.txt`/Meta 共 46 个跟踪项，并在 `TinySpire/.gitignore` 添加六条精确规则；免费 `DOTween/` 与 `DemiLib/` 继续跟踪 307 项。新增 CD-056，并修订 CD-003，明确 Pro 只允许持证开发者本地安装，不是 Clone、构建或运行前置条件。
 - `THIRD-PARTY-NOTICES.md` 已从错误的“全部 MIT”概括补为真实分类：免费 DOTween 自定义许可、Luban 及其 MIT/BSD/Apache/MPL 内含依赖、UPM/NuGet、Unity 专用许可、模板、子模块和本地专有工具；`Tools/Luban/NOTICE.md` 已指向根依赖清单。
 - 本地 Pro 临时移出后，唯一 Unity 6000.5.5f1 Editor 全量重编译成功，完整 EditMode `5b817700afff40f1a4928b2e78f01a25` 为 459/459，通过独立正常 Bootstrap 进入 BattleScene、唯一 `BattleLifetimeScope` 与 Console 0 Error / 0 Warning。恢复后 50 个物理文件与备份 SHA-256 全部一致，Editor 再次编译回到 idle、Console 0 Error / 0 Warning。
 - 清理提交旧 SHA `bec2f892c8f38f995046e8f11f088e0921b5c2e2` 已生成本地新历史 `3c831013046e9f5fb30097701533b66c80abeb0e`；独立镜像重放得到相同 HEAD，tip tree 与过滤前同为 `f8003ddb36b14f79fc5c2e68ddfbd0f937043887`。镜像 81 个提交中目标路径可达对象/路径提交均为 0、只有 `main`、无 Tag，`git fsck` 通过；本地完整 bundle 与逐文件备份保存在已忽略的 `.codex_work`。
-- 使用旧远端 SHA 的精确 `--force-with-lease` 推送被 GitHub `GH008` 拒绝，远端 `main` 仍为 `3e7b8e5100015686a3c12260155e9b7076456a26`。缺失对象精确为本地领先两个提交中的一张 M10D 证据图、三张 Hermes scene candidates 与一张 Battle Candidates 图，均非 Pro。遵守用户“不修改 LFS”边界，没有执行 `git lfs push --all` 或上传任何对象。继续远端净化需要用户明确允许只上传这五个 LFS 对象，或另行授权改写/排除相关本地提交；完整证据见 `06_testing/2026-08-05-dotween-pro-repository-sanitization.md`。
+- 首次使用旧远端 SHA 的精确 `--force-with-lease` 推送被 GitHub `GH008` 原子拒绝；缺失对象精确为一张 M10D 证据图、三张 Hermes scene candidates 与一张 Battle Candidates 图，均非 Pro。用户随后明确授权只上传这五个已核验对象，同时继续禁止 Pro、`--all`、`.gitattributes` 变更与 LFS 清理；精确 `--object-id` 上传完成 5/5、12 MB。
+- 再次确认远端仍为旧 SHA 后，只将 `refs/heads/main` 从 `3e7b8e5100015686a3c12260155e9b7076456a26` 精确 lease 强制更新到净化后的 `c391f37036f6eda60a49adb725e5418868743693`。回读时 `HEAD`、`origin/main` 与 `ls-remote` 完全一致，六个 Pro 目标路径的远端可达对象/路径提交均为 0；免费 DOTween/DemiLib 仍为 307 项，本地 Pro 50 个文件与备份哈希仍全部一致。完整证据见 `06_testing/2026-08-05-dotween-pro-repository-sanitization.md`。
 
 ---
 

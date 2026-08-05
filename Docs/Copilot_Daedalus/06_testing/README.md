@@ -15,7 +15,7 @@ updated: 2026-08-05
 
 ## 验证记录
 
-- [2026-08-05 DOTween Pro 仓库净化与免费版独立验证](2026-08-05-dotween-pro-repository-sanitization.md) — 当前树/本地新历史已移除 Pro，免费版无 Pro 编译、459/459 EditMode 与真实 Bootstrap 通过；GitHub force-push 因五个非 Pro LFS 对象缺失被拒，远端保持旧 SHA
+- [2026-08-05 DOTween Pro 仓库净化与免费版独立验证](2026-08-05-dotween-pro-repository-sanitization.md) — 当前树与 GitHub `main` 可达历史已移除 Pro；免费版无 Pro 编译、459/459 EditMode、真实 Bootstrap、精确非 Pro LFS 补传与远端回读审计均通过
 - [2026-08-05 配置素材短键与真实 AssetBundle 加载](2026-08-05-config-asset-logical-keys.md) — Hero/Enemy 表迁移为短键，构建期漂移校验、逻辑地址组、Luban/本地内容构建、Packed Play Mode 物理 bundle 与真实 Game View 证据
 - [2026-08-05 M10D 交付级验证与性能基线](2026-08-05-m10d-delivery-validation.md) — M10 定向 EditMode 25/25、默认 Game View/Console 和可重复微基线已取证；完整 451 项中的两项非 M10 UI/Targeting 异常保留为历史事实，不将其伪报为 M10 全量全绿
 - [2026-08-05 M10C 确定性、帧率无关与生命周期回归](2026-08-05-m10c-determinism-lifecycle.md) — Submit/只读事实轨迹在 30/60/120 FPS、加速和立即完成下相同；取消、重启、Scope/Scene 生命周期定向回归 3/3、相关聚合 53/53 与真实 Bootstrap Play Mode 证据
