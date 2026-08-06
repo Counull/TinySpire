@@ -1,6 +1,6 @@
 ---
 created: 2026-07-06
-updated: 2026-08-05
+updated: 2026-08-06
 ---
 
 # Daedalus · 代码决策记录
@@ -626,3 +626,49 @@ updated: 2026-08-05
 **影响**：修改 `.gitignore`、`THIRD-PARTY-NOTICES.md` 与 Git 历史；所有被重写提交 ID 改变，协作者需重新克隆或显式迁移。免费 `DOTween/` 与必要 `DemiLib/` 保留；不得新增 Pro-only API、组件或序列化依赖。Unity 场景、Prefab 与业务代码不因本决策修改；为满足净化后 `main` 的完整性，另经用户单独明确授权只上传五个非 Pro LFS 对象，未修改 `.gitattributes` 或清理既有 LFS 存储。验证见 `06_testing/2026-08-05-dotween-pro-repository-sanitization.md`。
 
 **2026-08-05 执行状态**：本地新历史与独立镜像已按本决策净化且验证一致。首次远端 force-push 因五个非 Pro LFS 对象缺失被 GitHub `GH008` 原子拒绝；用户随后明确授权只上传这五个对象，禁止 Pro、`--all`、`.gitattributes` 变更与 LFS 清理。精确对象上传完成后，`main` 已用旧 SHA 的精确 lease 成功更新；远端回读的 Pro 可达对象与路径提交均为 0，免费 DOTween/DemiLib 仍为 307 个跟踪项。
+
+## CD-057：卡牌目录身份与可玩实现状态显式分离，未实现卡在规则入口零写入失败
+
+**问题**：STS2 v0.107.1 Ironclad 单人快照包含 85 张卡，但当前 TinySpire 只能忠实执行其中少数机制。若把其余目录行直接写入 `battle.Card`，现有空 `effect_bindings` 路径仍会成功扣除能量并把手牌移入弃牌堆，使“已录入”伪装成“可玩”，并产生半次权威出牌。
+
+**选择**：`battle.Card` 增加必填枚举 `implementation_status = Implemented | CatalogOnly`，作者表、生成 JSON 与测试夹具均必须显式填写。`BattleCardPlayRules.Evaluate` 在费用、目标与 Effect 之前只接受 `Implemented`；其他状态统一返回 `BattleCommandExecutionFailureReason.CardNotImplemented`。该结果属于普通命令执行失败：不发布 settlement、不令 Queue fault，也不修改 Energy、CardZones、Combatant 或 Turn。Queue 仍只调用既有规则与执行链，不增加第二入口或权威状态。
+
+**理由**：实现状态是卡牌目录本身的发布事实，不应由“Effect 列表是否为空”或 UI 文案隐式推断。把门禁放在既有纯规则入口，可让所有 Queue 调用者得到一致 typed failure，并在首次权威写入前结束；后续机制切片只需在完整回归通过后把对应卡从 `CatalogOnly` 翻为 `Implemented`。
+
+**影响**：影响 `battle.card.xlsx`、Luban 生成的 `CardImplementationStatus` / `Card` / `battle_tbcard.json`、`BattleCardPlayRules`、命令失败原因与相关测试夹具。当前四张生产卡保持 `Implemented`，没有行为变化；I1 不修改 Queue、Turn、settlement、公式、Deck、Localization、Scene、Prefab 或 Addressables 地址。Deck 不得引用 `CatalogOnly`、`Implemented` 必须有有效程序和牌面键的构建期约束留给 I2，不能把本决策误读为这些校验已经交付。验证见 `06_testing/2026-08-06-sts2-ironclad-i1-catalog-runtime-gate.md`。
+
+## CD-058：卡牌目录发布门禁在 Localization 前复用唯一真实素材解析规则
+
+**问题**：I1 只保证 `CatalogOnly` 在运行时 Queue seam 零写入失败，不能阻止作者把目录卡放进生产 Deck、把 `Implemented` 留成空程序，或用不存在/伪路径牌面进入发布链。若等 Localization 或 Addressables 阶段才检查，失败前可能已经写入本地化资产；若另写一套牌面扫描器或 Effect 执行矩阵，又会产生与现有 Addressables/Executor 漂移的第二份规则。生成 JSON 顶层键与记录内 `id` 若不一致，也会使构建校验和运行时按不同身份解析记录。
+
+**选择**：新增独立 Editor `BattleCardCatalogBuildValidator`，唯一接入顺序为 Luban → AssetDatabase Refresh → 四源表清单 → 卡牌目录门禁 → Localization → Addressables。门禁先要求 Deck/Card/Effect 的 JSON 顶层键与内嵌整数 `id` 精确一致，再检查 Deck 只引用存在的 `Implemented` 卡；`Implemented` 必须有非空 bindings、非空且卡内唯一的参数键和存在的 Effect 引用；`CatalogOnly` 可无程序，但只能声明构建器锁定的唯一占位短键。I2 测试阶段预留名为 `card_art_catalog_placeholder`，I3 在第一张生产目录卡进入表前按 CD-059 最终锁定为项目既有 `art_placeholder`。所有卡的短键语法、实际文件、大小写和 Sprite 导入契约都复用 `AddressablesBuildTools` 的同一解析 seam。
+
+**边界**：I2 的“有效程序”是发布结构有效，不复制 `BattleEffectExecutor` 的 EffectType/Attribute/公式规则。某卡从 `CatalogOnly` 翻为 `Implemented` 时，相关机制切片仍必须通过公开 Queue、只读事实与 settlement 回归证明语义可执行。字段 shape 由同次成功 Luban 生成保证；损坏 JSON 仍会在 Localization 前失败，但 I2 不建立第二个通用 JSON schema 解析器或统一所有 Newtonsoft 错误。
+
+**理由**：单一前置门禁让目录错误在任何可寻址/本地化写入前失败，并带 Deck/Card/Effect 身份；复用现有牌面解析器避免短键、文件大小写和导入规则分叉。记录键/id 一致性又使 Editor gate 与运行时 Luban 表 DataMap 使用同一身份口径。
+
+**影响**：只影响 Editor validator、同步构建顺序、牌面解析器的 internal 复用 seam 与对应测试；运行时仍只通过 Addressables `card-art/{key}` 加载，且 `BattleCommandQueue`、Turn、settlement、公式、BattleSession、CardZones、Deck 内容和当前四张卡行为均不变。第一张 I3 `CatalogOnly` 行进入表前必须添加真实的 TinySpire 占位 Sprite。验证见 `06_testing/2026-08-06-sts2-ironclad-i2-build-isolation.md`。
+
+## CD-059：冻结卡牌目录元数据，缺图复用既有占位并只维护交付清单
+
+**问题**：I3 需要把冻结版本的全部单人战士卡录入 Card 表，但“录入目录”不能被误解为“规则已经可玩”，也不能为了补齐牌面而让 Agent 生成、下载或复制官方素材。目录还需要稳定表达版本身份、费用、目标、归宿与升级事实，并保证新增目标枚举不会意外放宽敌人行为配置。
+
+**选择**：以 `sts2-v0.107.1-23811903-59260271` 为唯一目录快照，录入 85 张单人卡并排除多人专用 `DEMONIC_SHIELD`、`TANK`。Card 增加 `external_key`、`catalog_snapshot_key`、升级说明 key、类型、稀有度、Fixed/X 费用、升级费用、基础/升级归宿与 `has_upgrade`；`TargetRule` 增加 AllEnemies/RandomEnemy 只用于目录表达，敌人行为初始化仍显式只接受 Self/Enemy 并 fail-fast。3 张现有 STS2 卡保持 `Implemented`，其余 82 张保持 `CatalogOnly`。
+
+缺图卡统一复用项目既有 `Assets/Arts/Runtime/Card/Texture/art_placeholder.png`，配置只写短键 `art_placeholder`，运行时地址固定为 `card-art/art_placeholder`，并只通过 Addressables/AssetBundle 加载。Agent 不得自行生成、下载或引用官方卡图；没有用户提供或明确授权的素材时继续使用占位图，并维护 `10_communication/2026-08-06-sts2-ironclad-card-art-checklist.md`。用户后续提供原创或已获授权素材时，才按清单短键替换，并执行 Luban、同步构建和真实 AB 加载验证。
+
+**理由**：冻结的结构化目录让后续机制切片可以逐卡翻转状态而不反复重建身份；`CatalogOnly` 的运行时与构建期双门禁继续阻止空程序产生权威写入。复用既有占位图避免制造无授权素材，也避免增加第二套资源寻址规则；逐卡清单把美术缺口交给用户可见、可追踪的交付面。
+
+**影响**：生产 Card 表共 86 行，其中冻结 STS2 单人卡 85 行，加项目自有 Strength 1 行；总计 4 张 `Implemented`、82 张 `CatalogOnly`。Card 文本需要 en/zh-CN 的名称、说明和升级说明 key；本地 Addressables 的 Card Art 组增加 `card-art/art_placeholder`。I3 不修改 Queue、Turn、settlement、公式、BattleSession、CardZones、Scene、Prefab、ProjectSettings、asmdef 或 HybridCLR。I4 将首次修改 `BattleTurnController` 的成功归宿，必须另行确认。验证见 `06_testing/2026-08-06-sts2-ironclad-i3-card-catalog.md`。
+
+## CD-060：成功出牌归宿在首次写入前由 Card 配置冻结
+
+**问题**：Card 目录已经能声明 Discard / Exhaust / Power，但 `BattleTurnController` 在全部 Effect 后固定调用 `DiscardFromHand`。真实 Exhaust 卡即使配置正确，也会落入弃牌堆；若归宿直到支付能量或提交 Effect 后才校验，非法配置还会留下半成品权威状态。
+
+**选择**：`TryPlayCard` 在规则通过后、任何 Energy/Combatant/CardZones 写入前读取基础 `PlayDestination`，把 Discard / Exhaust 冻结为本次命令的内部选择；未知值与 Power 在首次写入前 fail-fast。成功路径继续保持 EnergySpent → 全部 Effect settlement → CardMoved，并分别复用既有 `DiscardFromHand` / `ExhaustFromHand`。不新增公开写入口、第二份归宿事实、settlement 类型或卡牌 ID 分支；升级实例归宿留给 I9，Power 留给 I11。
+
+Tremble 作为 I4 的真实生产代表：1 费、Enemy、`ApplyVulnerable 3`、Exhaust，翻为 `Implemented` 但不进入默认 Deck。构建门禁同时锁定 STS2 可玩身份为 BASH / DEFEND_IRONCLAD / STRIKE_IRONCLAD / TREMBLE，状态拆分为 4 / 81，避免只改数量时把错误卡翻为可玩。
+
+**理由**：归宿是一次成功出牌事务的末端路由，不是新的权威状态；在首写前冻结可以保持现有原子顺序，并让 Queue 与通用 CardMoved settlement 无需感知具体卡牌。用真实 Tremble 覆盖 Effect 后 Exhaust，能同时验证配置、命令顺序和 CardZones 事实。
+
+**影响**：只修改 Turn 内部成功路径、I4 构建门禁、Tremble 作者表/生成数据/双语内容与测试。Hand→Exhaust 会更新 ExhaustPile 事实和 HUD 计数，但既有表现计划仍不创建飞行动画；I4 按用户边界明确不包含该动画。Queue、settlement、CardZones 公共契约、默认 Deck、Scene、Prefab、ProjectSettings、asmdef、HybridCLR、DI 与启动流程不变。验证见 `06_testing/2026-08-06-sts2-ironclad-i4-success-destination.md`。

@@ -294,10 +294,23 @@ public sealed class BattleCardPlayRulesTests
                 new JObject
                 {
                     ["id"] = 3001,
+                    ["external_key"] = "TEST_CARD_PLAY_RULES_3001",
+                    ["catalog_snapshot_key"] = "test-fixture",
                     ["name_i18n_key"] = "battle.card.test.name",
                     ["description_i18n_key"] = "battle.card.test.description",
+                    ["upgraded_description_i18n_key"] = "battle.card.test.description",
+                    ["card_type"] = (int)(targetRule == cfg.battle.TargetRule.Enemy
+                        ? cfg.battle.CardType.Attack
+                        : cfg.battle.CardType.Skill),
+                    ["rarity"] = (int)cfg.battle.CardRarity.Basic,
                     ["cost"] = cardCost,
+                    ["cost_kind"] = (int)cfg.battle.CardCostKind.Fixed,
+                    ["upgraded_cost"] = cardCost,
                     ["target_rule"] = (int)targetRule,
+                    ["play_destination"] = (int)cfg.battle.CardPlayDestination.DiscardPile,
+                    ["upgraded_play_destination"] = (int)cfg.battle.CardPlayDestination.DiscardPile,
+                    ["has_upgrade"] = false,
+                    ["implementation_status"] = (int)cfg.battle.CardImplementationStatus.Implemented,
                     ["effect_bindings"] = new JArray(),
                     ["illustration_key"] = string.Empty
                 }

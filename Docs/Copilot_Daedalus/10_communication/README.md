@@ -2,7 +2,7 @@
 title: 10_communication · 跨 Agent 沟通
 page_type: communication
 lifecycle: active
-updated: 2026-08-02
+updated: 2026-08-06
 ---
 
 # 10_communication · 跨 Agent 沟通
@@ -13,5 +13,6 @@ updated: 2026-08-02
 
 ## 可外发素材说明
 
+- [STS2 战士卡牌缺图清单](2026-08-06-sts2-ironclad-card-art-checklist.md)：I3 冻结快照中 82 张缺图卡的中英名、建议短键与文件名；Agent 不生成或下载卡图，未交付素材时继续使用 `art_placeholder`。
 - [BattleScene UI 美术素材需求说明](2026-07-30-battle-ui-art-brief.md)：供图像生成模型或美术协作者使用的缺失 UI 素材清单、用途、规格与提示词。
 - [BattleScene 出牌聚焦与弃牌过渡需求说明](2026-08-02-battle-card-motion-feedback-brief.md)：M6C 人工审阅提出的目标选择聚焦、可选素材与结束行动弃牌过渡；限定在 M9，不改变 M6 权威规则。

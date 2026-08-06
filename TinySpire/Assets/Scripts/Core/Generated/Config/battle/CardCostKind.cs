@@ -12,26 +12,18 @@
 namespace cfg.battle
 { 
     /// <summary>
-    /// Card target rule
+    /// Card energy cost kind
     /// </summary>
-    public enum TargetRule
+    public enum CardCostKind
     {
         /// <summary>
-        /// Self target only
+        /// Fixed integer cost
         /// </summary>
-        Self = 0,
+        Fixed = 0,
         /// <summary>
-        /// Modify an attribute
+        /// Variable X cost
         /// </summary>
-        Enemy = 1,
-        /// <summary>
-        /// All enemies
-        /// </summary>
-        AllEnemies = 2,
-        /// <summary>
-        /// One deterministic random enemy
-        /// </summary>
-        RandomEnemy = 3,
+        X = 1,
     }
 
 } 

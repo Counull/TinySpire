@@ -247,6 +247,69 @@ public sealed class BattleEffectCommandQueueTests
         }
     }
 
+    /// <summary>验证 Tremble 严格按能量、易伤、消耗归宿顺序完成唯一队列事务。</summary>
+    [Test]
+    public void Submit_TrembleConfiguredExhaust_RecordsEnergyThenVulnerableThenExhaust()
+    {
+        JObject tremble = CreateCard(
+            3118,
+            cost: 1,
+            cfg.battle.TargetRule.Enemy,
+            4006);
+        tremble["external_key"] = "TREMBLE";
+        tremble["catalog_snapshot_key"] = "sts2-v0.107.1-23811903-59260271";
+        tremble["play_destination"] = (int)cfg.battle.CardPlayDestination.ExhaustPile;
+        tremble["upgraded_play_destination"] = (int)cfg.battle.CardPlayDestination.ExhaustPile;
+        JObject vulnerable = CreateEffect(
+            4006,
+            cfg.battle.EffectType.ApplyVulnerable,
+            cfg.battle.Attribute.None,
+            value: 3);
+        using (var scenario = new QueueScenario(
+                   new[] { tremble },
+                   new[] { vulnerable },
+                   new[] { 3118 },
+                   playerStrength: 0,
+                   energyPerRound: 3))
+        {
+            CardInstanceId cardId = scenario.FindCard(3118);
+
+            scenario.Queue.SubmitRegistered(new PlayCardCommand(
+                scenario.Player.Id,
+                cardId,
+                scenario.Enemy.Id));
+
+            BattleCommandExecutionResult result = scenario.Presentation.Results[1];
+            Assert.That(result.Succeeded, Is.True);
+            Assert.That(result.Settlements.Count, Is.EqualTo(3));
+            var energy = result.Settlements[0] as BattleEnergySpentSettlement;
+            var status = result.Settlements[1] as BattleStatusAppliedSettlement;
+            var moved = result.Settlements[2] as BattleCardMovedSettlement;
+            Assert.That(energy, Is.Not.Null);
+            Assert.That(energy.Order, Is.Zero);
+            Assert.That(energy.EnergyBefore, Is.EqualTo(3));
+            Assert.That(energy.EnergyAfter, Is.EqualTo(2));
+            Assert.That(status, Is.Not.Null);
+            Assert.That(status.Order, Is.EqualTo(1));
+            Assert.That(status.Status, Is.EqualTo(BattleStatusType.Vulnerable));
+            Assert.That(status.ValueBefore, Is.Zero);
+            Assert.That(status.ValueAfter, Is.EqualTo(3));
+            Assert.That(moved, Is.Not.Null);
+            Assert.That(moved.Order, Is.EqualTo(2));
+            Assert.That(moved.CardId, Is.EqualTo(cardId));
+            Assert.That(moved.FromZone, Is.EqualTo(BattleCardZone.Hand));
+            Assert.That(moved.ToZone, Is.EqualTo(BattleCardZone.ExhaustPile));
+            Assert.That(scenario.Enemy.CurrentVulnerable, Is.EqualTo(3));
+            Assert.That(scenario.Zones.Hand, Is.Empty);
+            Assert.That(scenario.Zones.DiscardPile, Is.Empty);
+            Assert.That(scenario.Zones.ExhaustPile, Is.EqualTo(new[] { cardId }));
+            Assert.That(scenario.Queue.Queue.CurrentValue.IsFaulted, Is.False);
+            Assert.That(
+                scenario.Queue.Turn.CurrentValue.Phase,
+                Is.EqualTo(BattleTurnPhase.PlayerAction));
+        }
+    }
+
     /// <summary>验证 Bash 首个 Effect 致死后跳过易伤，但命令仍成功并完成卡牌归堆。</summary>
     [Test]
     public void Submit_FatalBash_SkipsVulnerableAndStillDiscards()
@@ -404,6 +467,76 @@ public sealed class BattleEffectCommandQueueTests
                 reshuffled.NewDrawPileOrder[0],
             }));
             Assert.That(scenario.Zones.DiscardPile, Is.Empty);
+        }
+    }
+
+    /// <summary>验证目录占位卡经唯一队列明确失败，且不修改任何战斗权威事实。</summary>
+    [Test]
+    public void Submit_CatalogOnlyCard_FailsBeforeEnergyOrCardZoneWrites()
+    {
+        JObject catalogOnlyCard = CreateCard(
+            3900,
+            cost: 2,
+            cfg.battle.TargetRule.Self,
+            cfg.battle.CardImplementationStatus.CatalogOnly,
+            4900);
+        JObject catalogOnlyEffect = CreateEffect(
+            4900,
+            cfg.battle.EffectType.ModifyAttribute,
+            cfg.battle.Attribute.Strength,
+            value: 9);
+        using (var scenario = new QueueScenario(
+                   new[] { catalogOnlyCard },
+                   new[] { catalogOnlyEffect },
+                   new[] { 3900 },
+                   playerStrength: 1,
+                   energyPerRound: 3))
+        {
+            CardInstanceId cardId = scenario.FindCard(3900);
+            BattleTurnData turnBefore = scenario.Queue.Turn.CurrentValue;
+            CardZoneLayoutData layoutBefore = scenario.Zones.Layout.CurrentValue;
+            int presentationCountBefore = scenario.Presentation.Results.Count;
+            int playerHealthBefore = scenario.Player.CurrentHealth;
+            int playerStrengthBefore = scenario.Player.CurrentStrength;
+            int playerBlockBefore = scenario.Player.CurrentBlock;
+            int playerVulnerableBefore = scenario.Player.CurrentVulnerable;
+            int enemyHealthBefore = scenario.Enemy.CurrentHealth;
+            int enemyStrengthBefore = scenario.Enemy.CurrentStrength;
+            int enemyBlockBefore = scenario.Enemy.CurrentBlock;
+            int enemyVulnerableBefore = scenario.Enemy.CurrentVulnerable;
+
+            using BattleCommandLifecycleExecutionRecorder recorder =
+                scenario.Queue.RecordExecutionLifecycle();
+            BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(
+                new PlayCardCommand(
+                    scenario.Player.Id,
+                    cardId,
+                    scenario.Player.Id));
+
+            BattleCommandLifecycleEvent result = recorder.RequireTerminal(submission);
+            Assert.That(result.Stage, Is.EqualTo(BattleCommandLifecycleStage.ExecutionFailed));
+            Assert.That(
+                result.FailureReason,
+                Is.EqualTo(BattleCommandExecutionFailureReason.CardNotImplemented));
+            Assert.That(result.Settlements, Is.Empty);
+            Assert.That(scenario.Presentation.Results, Has.Count.EqualTo(presentationCountBefore));
+            Assert.That(scenario.Queue.Queue.CurrentValue.IsFaulted, Is.False);
+            Assert.That(scenario.Queue.Turn.CurrentValue, Is.SameAs(turnBefore));
+            Assert.That(scenario.Zones.Layout.CurrentValue, Is.SameAs(layoutBefore));
+            Assert.That(scenario.Player.CurrentHealth, Is.EqualTo(playerHealthBefore));
+            Assert.That(scenario.Player.CurrentStrength, Is.EqualTo(playerStrengthBefore));
+            Assert.That(scenario.Player.CurrentBlock, Is.EqualTo(playerBlockBefore));
+            Assert.That(scenario.Player.CurrentVulnerable, Is.EqualTo(playerVulnerableBefore));
+            Assert.That(scenario.Enemy.CurrentHealth, Is.EqualTo(enemyHealthBefore));
+            Assert.That(scenario.Enemy.CurrentStrength, Is.EqualTo(enemyStrengthBefore));
+            Assert.That(scenario.Enemy.CurrentBlock, Is.EqualTo(enemyBlockBefore));
+            Assert.That(scenario.Enemy.CurrentVulnerable, Is.EqualTo(enemyVulnerableBefore));
+            Assert.That(
+                scenario.Queue.Turn.CurrentValue.Players[scenario.Player.Id].Energy,
+                Is.EqualTo(3));
+            Assert.That(scenario.Zones.Hand, Is.EqualTo(new[] { cardId }));
+            Assert.That(scenario.Zones.DiscardPile, Is.Empty);
+            Assert.That(scenario.Zones.ExhaustPile, Is.Empty);
         }
     }
 
@@ -580,6 +713,22 @@ public sealed class BattleEffectCommandQueueTests
         cfg.battle.TargetRule targetRule,
         params int[] effectIds)
     {
+        return CreateCard(
+            id,
+            cost,
+            targetRule,
+            cfg.battle.CardImplementationStatus.Implemented,
+            effectIds);
+    }
+
+    /// <summary>创建一张带显式实现状态和正式有序 Effect 绑定的最小 Card JSON。</summary>
+    private static JObject CreateCard(
+        int id,
+        int cost,
+        cfg.battle.TargetRule targetRule,
+        cfg.battle.CardImplementationStatus implementationStatus,
+        params int[] effectIds)
+    {
         var bindings = new JArray();
         foreach (int effectId in effectIds)
         {
@@ -593,10 +742,23 @@ public sealed class BattleEffectCommandQueueTests
         return new JObject
         {
             ["id"] = id,
+            ["external_key"] = $"TEST_EFFECT_COMMAND_QUEUE_CARD_{id}",
+            ["catalog_snapshot_key"] = "test-fixture",
             ["name_i18n_key"] = $"battle.card.test_{id}.name",
             ["description_i18n_key"] = $"battle.card.test_{id}.description",
+            ["upgraded_description_i18n_key"] = $"battle.card.test_{id}.description",
+            ["card_type"] = (int)(targetRule == cfg.battle.TargetRule.Enemy
+                ? cfg.battle.CardType.Attack
+                : cfg.battle.CardType.Skill),
+            ["rarity"] = (int)cfg.battle.CardRarity.Basic,
             ["cost"] = cost,
+            ["cost_kind"] = (int)cfg.battle.CardCostKind.Fixed,
+            ["upgraded_cost"] = cost,
             ["target_rule"] = (int)targetRule,
+            ["play_destination"] = (int)cfg.battle.CardPlayDestination.DiscardPile,
+            ["upgraded_play_destination"] = (int)cfg.battle.CardPlayDestination.DiscardPile,
+            ["has_upgrade"] = false,
+            ["implementation_status"] = (int)implementationStatus,
             ["effect_bindings"] = bindings,
             ["illustration_key"] = string.Empty,
         };

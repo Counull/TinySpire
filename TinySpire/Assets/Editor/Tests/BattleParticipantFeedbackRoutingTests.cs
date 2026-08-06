@@ -1774,9 +1774,16 @@ public sealed class BattleParticipantFeedbackRoutingTests
             ["battle_tbdeck"] = JArray.Parse(
                 "[{\"id\":1001,\"card_template_ids\":[3001]}]"),
             ["battle_tbcard"] = JArray.Parse(
-                "[{\"id\":3001,\"name_i18n_key\":\"battle.card.test.name\"," +
-                "\"description_i18n_key\":\"battle.card.test.description\",\"cost\":0," +
-                "\"target_rule\":0,\"effect_bindings\":[{\"argument_key\":\"block\"," +
+                "[{\"id\":3001,\"external_key\":\"TEST_FEEDBACK_ROUTING_CARD_3001\"," +
+                "\"catalog_snapshot_key\":\"test-fixture\"," +
+                "\"name_i18n_key\":\"battle.card.test.name\"," +
+                "\"description_i18n_key\":\"battle.card.test.description\"," +
+                "\"upgraded_description_i18n_key\":\"battle.card.test.description\"," +
+                "\"card_type\":1,\"rarity\":0,\"cost\":0,\"cost_kind\":0," +
+                "\"upgraded_cost\":0,\"target_rule\":0,\"play_destination\":0," +
+                "\"upgraded_play_destination\":0,\"has_upgrade\":false," +
+                "\"implementation_status\":0," +
+                "\"effect_bindings\":[{\"argument_key\":\"block\"," +
                 "\"effect_id\":4001}]}]"),
             ["battle_tbcardeffect"] = JArray.Parse(
                 "[{\"id\":4001,\"effect_type\":2,\"attribute\":0,\"value\":1}]"),

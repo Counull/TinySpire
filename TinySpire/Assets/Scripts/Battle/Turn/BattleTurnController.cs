@@ -141,7 +141,7 @@ namespace TinySpire.Battle
             });
         }
 
-        /// <summary>按队首事实预构建全部 Effect，再依次支付、执行和把当前卡牌移入弃牌堆。</summary>
+        /// <summary>按队首事实预构建全部 Effect，再依次支付、执行和把当前卡牌移入配置归宿。</summary>
         internal BattleTurnOperationResult TryPlayCard(PlayCardCommand command)
         {
             if (command == null)
@@ -157,6 +157,20 @@ namespace TinySpire.Battle
             BattleCardZonesData cardZones = _playerCardZones[command.ActorId];
             CardInstanceData card = cardZones.Cards[command.CardId];
             cfg.battle.Card cardTemplate = _tables.TbCard.GetOrDefault(card.TemplateId);
+            bool moveToExhaustPile;
+            switch (cardTemplate.PlayDestination)
+            {
+                case cfg.battle.CardPlayDestination.DiscardPile:
+                    moveToExhaustPile = false;
+                    break;
+                case cfg.battle.CardPlayDestination.ExhaustPile:
+                    moveToExhaustPile = true;
+                    break;
+                default:
+                    throw new InvalidOperationException(
+                        $"当前出牌归宿尚不支持：{cardTemplate.PlayDestination}。");
+            }
+
             if (!TryCreateOrderedCardEffectIds(cardTemplate.EffectBindings, out IReadOnlyList<BattleEffectId> effectIds))
             {
                 return BattleTurnOperationResult.Failed(
@@ -197,16 +211,20 @@ namespace TinySpire.Battle
                 _effectExecutor.CommitPrepared(preparation.Plan);
             settlements.AddRange(effectResult.Settlements);
 
-            BattleCardZoneOperationResult discardResult = cardZones.DiscardFromHand(
-                command.CardId,
-                startingOrder: settlements.Count);
-            if (!discardResult.Succeeded)
+            BattleCardZoneOperationResult destinationResult = moveToExhaustPile
+                ? cardZones.ExhaustFromHand(
+                    command.CardId,
+                    startingOrder: settlements.Count)
+                : cardZones.DiscardFromHand(
+                    command.CardId,
+                    startingOrder: settlements.Count);
+            if (!destinationResult.Succeeded)
             {
                 throw new InvalidOperationException(
                     "Effect 执行完成后当前卡牌意外离开手牌。");
             }
 
-            settlements.AddRange(discardResult.Settlements);
+            settlements.AddRange(destinationResult.Settlements);
             BattleTerminalOutcome terminalOutcome = _terminalRules.Evaluate();
             if (terminalOutcome == BattleTerminalOutcome.Ongoing)
             {

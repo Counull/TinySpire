@@ -2,7 +2,7 @@
 title: plans · 实现计划（03_design 角色）
 page_type: plan
 lifecycle: active
-updated: 2026-08-05
+updated: 2026-08-06
 m10_status: m10-complete-targeted-25-green-full-451-with-2-non-m10-failures
 ---
 
@@ -14,6 +14,7 @@ m10_status: m10-complete-targeted-25-green-full-451-with-2-non-m10-failures
 
 ## 现有计划
 
+- [2026-08-06 STS2 v0.107.1 Ironclad 单人卡池接入](2026-08-06-sts2-v01071-ironclad-card-pool.md) — 以本机 public/main build 23811903 冻结 85 张单人卡；先完成 CatalogOnly 运行时/构建隔离与目录录入，再按机制串行翻转为可玩
 - [2026-08-05 M10 BattleScene MVP 对标、可靠性与内容扩展入口](2026-08-05-m10-battlescene-conformance.md) — 唯一实施计划已完成；M10 定向 25/25 通过，完整 EditMode 451 项中的两项非 M10 UI/Targeting 异常按交付时事实保留，不把未纳入本提交的后续 M9 测试校准计入 M10 通过口径
 - [2026-08-05 M9 目标箭头与锁定框视觉反馈](2026-08-05-m9-targeting-visual-feedback.md) — 已实施并通过 Unity 定向验收；保留后续 UI 调参入口
 - [2026-08-05 M9 出牌不飞向怪物](2026-08-05-play-card-no-target-flight.md)

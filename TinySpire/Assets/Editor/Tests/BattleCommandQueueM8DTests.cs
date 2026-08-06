@@ -1055,10 +1055,21 @@ public sealed class BattleCommandQueueM8DTests
             return new JObject
             {
                 ["id"] = LethalCardTemplateId,
+                ["external_key"] = "TEST_COMMAND_QUEUE_M8D_LETHAL",
+                ["catalog_snapshot_key"] = "test-fixture",
                 ["name_i18n_key"] = "battle.card.test_lethal.name",
                 ["description_i18n_key"] = "battle.card.test_lethal.description",
+                ["upgraded_description_i18n_key"] = "battle.card.test_lethal.description",
+                ["card_type"] = (int)cfg.battle.CardType.Attack,
+                ["rarity"] = (int)cfg.battle.CardRarity.Basic,
                 ["cost"] = 0,
+                ["cost_kind"] = (int)cfg.battle.CardCostKind.Fixed,
+                ["upgraded_cost"] = 0,
                 ["target_rule"] = (int)cfg.battle.TargetRule.Enemy,
+                ["play_destination"] = (int)cfg.battle.CardPlayDestination.DiscardPile,
+                ["upgraded_play_destination"] = (int)cfg.battle.CardPlayDestination.DiscardPile,
+                ["has_upgrade"] = false,
+                ["implementation_status"] = (int)cfg.battle.CardImplementationStatus.Implemented,
                 ["effect_bindings"] = new JArray(new JObject
                 {
                     ["argument_key"] = string.Empty,

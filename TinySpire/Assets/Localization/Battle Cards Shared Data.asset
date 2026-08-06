@@ -103,6 +103,1006 @@ MonoBehaviour:
     m_Key: battle.ui.action.exit
     m_Metadata:
       m_Items: []
+  - m_Id: 2603194543403008
+    m_Key: battle.card.strength.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872000
+    m_Key: battle.card.bash.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872001
+    m_Key: battle.card.strike.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872002
+    m_Key: battle.card.defend.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872003
+    m_Key: battle.card.sts2.anger.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872004
+    m_Key: battle.card.sts2.anger.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872005
+    m_Key: battle.card.sts2.anger.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872006
+    m_Key: battle.card.sts2.body_slam.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872007
+    m_Key: battle.card.sts2.body_slam.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872008
+    m_Key: battle.card.sts2.body_slam.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872009
+    m_Key: battle.card.sts2.breakthrough.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872010
+    m_Key: battle.card.sts2.breakthrough.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872011
+    m_Key: battle.card.sts2.breakthrough.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872012
+    m_Key: battle.card.sts2.cinder.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872013
+    m_Key: battle.card.sts2.cinder.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872014
+    m_Key: battle.card.sts2.cinder.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872015
+    m_Key: battle.card.sts2.headbutt.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872016
+    m_Key: battle.card.sts2.headbutt.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872017
+    m_Key: battle.card.sts2.headbutt.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872018
+    m_Key: battle.card.sts2.iron_wave.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872019
+    m_Key: battle.card.sts2.iron_wave.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872020
+    m_Key: battle.card.sts2.iron_wave.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872021
+    m_Key: battle.card.sts2.molten_fist.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872022
+    m_Key: battle.card.sts2.molten_fist.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872023
+    m_Key: battle.card.sts2.molten_fist.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872024
+    m_Key: battle.card.sts2.perfected_strike.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872025
+    m_Key: battle.card.sts2.perfected_strike.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872026
+    m_Key: battle.card.sts2.perfected_strike.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872027
+    m_Key: battle.card.sts2.pommel_strike.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872028
+    m_Key: battle.card.sts2.pommel_strike.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872029
+    m_Key: battle.card.sts2.pommel_strike.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872030
+    m_Key: battle.card.sts2.setup_strike.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872031
+    m_Key: battle.card.sts2.setup_strike.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872032
+    m_Key: battle.card.sts2.setup_strike.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872033
+    m_Key: battle.card.sts2.sword_boomerang.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872034
+    m_Key: battle.card.sts2.sword_boomerang.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872035
+    m_Key: battle.card.sts2.sword_boomerang.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872036
+    m_Key: battle.card.sts2.thunderclap.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872037
+    m_Key: battle.card.sts2.thunderclap.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872038
+    m_Key: battle.card.sts2.thunderclap.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872039
+    m_Key: battle.card.sts2.twin_strike.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872040
+    m_Key: battle.card.sts2.twin_strike.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872041
+    m_Key: battle.card.sts2.twin_strike.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872042
+    m_Key: battle.card.sts2.armaments.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872043
+    m_Key: battle.card.sts2.armaments.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872044
+    m_Key: battle.card.sts2.armaments.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872045
+    m_Key: battle.card.sts2.blood_wall.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872046
+    m_Key: battle.card.sts2.blood_wall.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872047
+    m_Key: battle.card.sts2.blood_wall.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872048
+    m_Key: battle.card.sts2.bloodletting.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872049
+    m_Key: battle.card.sts2.bloodletting.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872050
+    m_Key: battle.card.sts2.bloodletting.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872051
+    m_Key: battle.card.sts2.havoc.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872052
+    m_Key: battle.card.sts2.havoc.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872053
+    m_Key: battle.card.sts2.havoc.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872054
+    m_Key: battle.card.sts2.shrug_it_off.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872055
+    m_Key: battle.card.sts2.shrug_it_off.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872056
+    m_Key: battle.card.sts2.shrug_it_off.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872057
+    m_Key: battle.card.sts2.tremble.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872058
+    m_Key: battle.card.sts2.tremble.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194639872059
+    m_Key: battle.card.sts2.tremble.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066304
+    m_Key: battle.card.sts2.true_grit.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066305
+    m_Key: battle.card.sts2.true_grit.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066306
+    m_Key: battle.card.sts2.true_grit.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066307
+    m_Key: battle.card.sts2.ashen_strike.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066308
+    m_Key: battle.card.sts2.ashen_strike.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066309
+    m_Key: battle.card.sts2.ashen_strike.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066310
+    m_Key: battle.card.sts2.bludgeon.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066311
+    m_Key: battle.card.sts2.bludgeon.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066312
+    m_Key: battle.card.sts2.bludgeon.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066313
+    m_Key: battle.card.sts2.bully.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066314
+    m_Key: battle.card.sts2.bully.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066315
+    m_Key: battle.card.sts2.bully.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066316
+    m_Key: battle.card.sts2.dismantle.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066317
+    m_Key: battle.card.sts2.dismantle.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066318
+    m_Key: battle.card.sts2.dismantle.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066319
+    m_Key: battle.card.sts2.fight_me.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066320
+    m_Key: battle.card.sts2.fight_me.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066321
+    m_Key: battle.card.sts2.fight_me.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066322
+    m_Key: battle.card.sts2.hemokinesis.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066323
+    m_Key: battle.card.sts2.hemokinesis.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066324
+    m_Key: battle.card.sts2.hemokinesis.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066325
+    m_Key: battle.card.sts2.howl_from_beyond.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066326
+    m_Key: battle.card.sts2.howl_from_beyond.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066327
+    m_Key: battle.card.sts2.howl_from_beyond.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066328
+    m_Key: battle.card.sts2.pillage.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066329
+    m_Key: battle.card.sts2.pillage.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066330
+    m_Key: battle.card.sts2.pillage.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066331
+    m_Key: battle.card.sts2.rampage.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066332
+    m_Key: battle.card.sts2.rampage.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066333
+    m_Key: battle.card.sts2.rampage.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066334
+    m_Key: battle.card.sts2.spite.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066335
+    m_Key: battle.card.sts2.spite.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066336
+    m_Key: battle.card.sts2.spite.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066337
+    m_Key: battle.card.sts2.stomp.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066338
+    m_Key: battle.card.sts2.stomp.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066339
+    m_Key: battle.card.sts2.stomp.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066340
+    m_Key: battle.card.sts2.unrelenting.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066341
+    m_Key: battle.card.sts2.unrelenting.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066342
+    m_Key: battle.card.sts2.unrelenting.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066343
+    m_Key: battle.card.sts2.uppercut.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066344
+    m_Key: battle.card.sts2.uppercut.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066345
+    m_Key: battle.card.sts2.uppercut.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066346
+    m_Key: battle.card.sts2.whirlwind.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066347
+    m_Key: battle.card.sts2.whirlwind.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066348
+    m_Key: battle.card.sts2.whirlwind.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066349
+    m_Key: battle.card.sts2.battle_trance.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066350
+    m_Key: battle.card.sts2.battle_trance.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066351
+    m_Key: battle.card.sts2.battle_trance.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066352
+    m_Key: battle.card.sts2.burning_pact.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066353
+    m_Key: battle.card.sts2.burning_pact.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066354
+    m_Key: battle.card.sts2.burning_pact.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066355
+    m_Key: battle.card.sts2.colossus.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066356
+    m_Key: battle.card.sts2.colossus.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066357
+    m_Key: battle.card.sts2.colossus.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066358
+    m_Key: battle.card.sts2.dominate.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066359
+    m_Key: battle.card.sts2.dominate.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066360
+    m_Key: battle.card.sts2.dominate.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066361
+    m_Key: battle.card.sts2.drum_of_battle.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066362
+    m_Key: battle.card.sts2.drum_of_battle.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066363
+    m_Key: battle.card.sts2.drum_of_battle.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066364
+    m_Key: battle.card.sts2.evil_eye.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066365
+    m_Key: battle.card.sts2.evil_eye.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066366
+    m_Key: battle.card.sts2.evil_eye.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066367
+    m_Key: battle.card.sts2.expect_a_fight.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066368
+    m_Key: battle.card.sts2.expect_a_fight.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066369
+    m_Key: battle.card.sts2.expect_a_fight.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066370
+    m_Key: battle.card.sts2.flame_barrier.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066371
+    m_Key: battle.card.sts2.flame_barrier.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066372
+    m_Key: battle.card.sts2.flame_barrier.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066373
+    m_Key: battle.card.sts2.forgotten_ritual.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066374
+    m_Key: battle.card.sts2.forgotten_ritual.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066375
+    m_Key: battle.card.sts2.forgotten_ritual.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066376
+    m_Key: battle.card.sts2.infernal_blade.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066377
+    m_Key: battle.card.sts2.infernal_blade.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066378
+    m_Key: battle.card.sts2.infernal_blade.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066379
+    m_Key: battle.card.sts2.rage.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066380
+    m_Key: battle.card.sts2.rage.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066381
+    m_Key: battle.card.sts2.rage.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066382
+    m_Key: battle.card.sts2.second_wind.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066383
+    m_Key: battle.card.sts2.second_wind.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066384
+    m_Key: battle.card.sts2.second_wind.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066385
+    m_Key: battle.card.sts2.taunt.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066386
+    m_Key: battle.card.sts2.taunt.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066387
+    m_Key: battle.card.sts2.taunt.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066388
+    m_Key: battle.card.sts2.feel_no_pain.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066389
+    m_Key: battle.card.sts2.feel_no_pain.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066390
+    m_Key: battle.card.sts2.feel_no_pain.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066391
+    m_Key: battle.card.sts2.inferno.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066392
+    m_Key: battle.card.sts2.inferno.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066393
+    m_Key: battle.card.sts2.inferno.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066394
+    m_Key: battle.card.sts2.inflame.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066395
+    m_Key: battle.card.sts2.inflame.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066396
+    m_Key: battle.card.sts2.inflame.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066397
+    m_Key: battle.card.sts2.juggling.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066398
+    m_Key: battle.card.sts2.juggling.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066399
+    m_Key: battle.card.sts2.juggling.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066400
+    m_Key: battle.card.sts2.rupture.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066401
+    m_Key: battle.card.sts2.rupture.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066402
+    m_Key: battle.card.sts2.rupture.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066403
+    m_Key: battle.card.sts2.stampede.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066404
+    m_Key: battle.card.sts2.stampede.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066405
+    m_Key: battle.card.sts2.stampede.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066406
+    m_Key: battle.card.sts2.stone_armor.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066407
+    m_Key: battle.card.sts2.stone_armor.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066408
+    m_Key: battle.card.sts2.stone_armor.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066409
+    m_Key: battle.card.sts2.vicious.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066410
+    m_Key: battle.card.sts2.vicious.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066411
+    m_Key: battle.card.sts2.vicious.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066412
+    m_Key: battle.card.sts2.conflagration.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066413
+    m_Key: battle.card.sts2.conflagration.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066414
+    m_Key: battle.card.sts2.conflagration.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066415
+    m_Key: battle.card.sts2.feed.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066416
+    m_Key: battle.card.sts2.feed.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066417
+    m_Key: battle.card.sts2.feed.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066418
+    m_Key: battle.card.sts2.fiend_fire.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066419
+    m_Key: battle.card.sts2.fiend_fire.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066420
+    m_Key: battle.card.sts2.fiend_fire.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066421
+    m_Key: battle.card.sts2.mangle.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066422
+    m_Key: battle.card.sts2.mangle.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066423
+    m_Key: battle.card.sts2.mangle.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066424
+    m_Key: battle.card.sts2.pacts_end.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066425
+    m_Key: battle.card.sts2.pacts_end.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066426
+    m_Key: battle.card.sts2.pacts_end.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066427
+    m_Key: battle.card.sts2.tear_asunder.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066428
+    m_Key: battle.card.sts2.tear_asunder.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066429
+    m_Key: battle.card.sts2.tear_asunder.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066430
+    m_Key: battle.card.sts2.thrash.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066431
+    m_Key: battle.card.sts2.thrash.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066432
+    m_Key: battle.card.sts2.thrash.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066433
+    m_Key: battle.card.sts2.brand.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066434
+    m_Key: battle.card.sts2.brand.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066435
+    m_Key: battle.card.sts2.brand.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066436
+    m_Key: battle.card.sts2.cascade.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066437
+    m_Key: battle.card.sts2.cascade.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066438
+    m_Key: battle.card.sts2.cascade.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066439
+    m_Key: battle.card.sts2.impervious.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066440
+    m_Key: battle.card.sts2.impervious.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066441
+    m_Key: battle.card.sts2.impervious.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066442
+    m_Key: battle.card.sts2.not_yet.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066443
+    m_Key: battle.card.sts2.not_yet.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066444
+    m_Key: battle.card.sts2.not_yet.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066445
+    m_Key: battle.card.sts2.offering.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066446
+    m_Key: battle.card.sts2.offering.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066447
+    m_Key: battle.card.sts2.offering.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066448
+    m_Key: battle.card.sts2.one_two_punch.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066449
+    m_Key: battle.card.sts2.one_two_punch.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066450
+    m_Key: battle.card.sts2.one_two_punch.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066451
+    m_Key: battle.card.sts2.primal_force.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066452
+    m_Key: battle.card.sts2.primal_force.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066453
+    m_Key: battle.card.sts2.primal_force.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066454
+    m_Key: battle.card.sts2.stoke.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066455
+    m_Key: battle.card.sts2.stoke.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066456
+    m_Key: battle.card.sts2.stoke.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066457
+    m_Key: battle.card.sts2.aggression.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066458
+    m_Key: battle.card.sts2.aggression.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066459
+    m_Key: battle.card.sts2.aggression.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066460
+    m_Key: battle.card.sts2.barricade.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066461
+    m_Key: battle.card.sts2.barricade.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066462
+    m_Key: battle.card.sts2.barricade.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066463
+    m_Key: battle.card.sts2.crimson_mantle.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066464
+    m_Key: battle.card.sts2.crimson_mantle.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066465
+    m_Key: battle.card.sts2.crimson_mantle.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066466
+    m_Key: battle.card.sts2.cruelty.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066467
+    m_Key: battle.card.sts2.cruelty.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066468
+    m_Key: battle.card.sts2.cruelty.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066469
+    m_Key: battle.card.sts2.dark_embrace.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066470
+    m_Key: battle.card.sts2.dark_embrace.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066471
+    m_Key: battle.card.sts2.dark_embrace.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066472
+    m_Key: battle.card.sts2.demon_form.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066473
+    m_Key: battle.card.sts2.demon_form.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066474
+    m_Key: battle.card.sts2.demon_form.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066475
+    m_Key: battle.card.sts2.hellraiser.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066476
+    m_Key: battle.card.sts2.hellraiser.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066477
+    m_Key: battle.card.sts2.hellraiser.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066478
+    m_Key: battle.card.sts2.juggernaut.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066479
+    m_Key: battle.card.sts2.juggernaut.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066480
+    m_Key: battle.card.sts2.juggernaut.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066481
+    m_Key: battle.card.sts2.pyre.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066482
+    m_Key: battle.card.sts2.pyre.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066483
+    m_Key: battle.card.sts2.pyre.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066484
+    m_Key: battle.card.sts2.unmovable.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066485
+    m_Key: battle.card.sts2.unmovable.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066486
+    m_Key: battle.card.sts2.unmovable.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066487
+    m_Key: battle.card.sts2.break.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066488
+    m_Key: battle.card.sts2.break.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066489
+    m_Key: battle.card.sts2.break.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066490
+    m_Key: battle.card.sts2.corruption.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066491
+    m_Key: battle.card.sts2.corruption.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2603194644066492
+    m_Key: battle.card.sts2.corruption.upgrade_description
+    m_Metadata:
+      m_Items: []
   m_Metadata:
     m_Items: []
   m_KeyGenerator:

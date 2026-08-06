@@ -480,6 +480,30 @@ public sealed class BattleEnemyIntentsDataTests
         }
     }
 
+    /// <summary>验证卡牌目录新增的群体与随机目标不会被敌人行为误判为已支持。</summary>
+    [TestCase((int)cfg.battle.TargetRule.AllEnemies)]
+    [TestCase((int)cfg.battle.TargetRule.RandomEnemy)]
+    public void UnsupportedEnemyTargetRules_AreRejectedDuringInitialization(int targetRule)
+    {
+        Tables tables = CreateTables(
+            new JArray(CreateEnemy(2001, 6001)),
+            new JArray(CreateGroup(6001, 7001)),
+            new JArray(CreateBehavior(7001, weight: 1, targetRule: targetRule)));
+        var combatants = new BattleCombatantsData();
+        EnemyCombatantData enemy = combatants.AddEnemy(2001, maxHealth: 20, strength: 0);
+
+        try
+        {
+            Assert.That(
+                () => new BattleEnemyIntentsData(combatants, new[] { enemy.Id }, tables, battleSeed: 1),
+                Throws.InvalidOperationException.With.Message.Contains("unsupported target rule"));
+        }
+        finally
+        {
+            combatants.Dispose();
+        }
+    }
+
     /// <summary>验证缺少行为组、行为或 Effect 引用时都在发布初始意图前失败。</summary>
     [TestCase("group", "behavior group")]
     [TestCase("behavior", "behavior 7001")]

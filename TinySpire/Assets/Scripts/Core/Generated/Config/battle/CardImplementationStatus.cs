@@ -12,26 +12,18 @@
 namespace cfg.battle
 { 
     /// <summary>
-    /// Card target rule
+    /// Card implementation status
     /// </summary>
-    public enum TargetRule
+    public enum CardImplementationStatus
     {
         /// <summary>
-        /// Self target only
+        /// Fully implemented and playable
         /// </summary>
-        Self = 0,
+        Implemented = 0,
         /// <summary>
-        /// Modify an attribute
+        /// Catalog entry blocked from play
         /// </summary>
-        Enemy = 1,
-        /// <summary>
-        /// All enemies
-        /// </summary>
-        AllEnemies = 2,
-        /// <summary>
-        /// One deterministic random enemy
-        /// </summary>
-        RandomEnemy = 3,
+        CatalogOnly = 1,
     }
 
 } 

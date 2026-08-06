@@ -12,26 +12,22 @@
 namespace cfg.battle
 { 
     /// <summary>
-    /// Card target rule
+    /// Successful card play destination
     /// </summary>
-    public enum TargetRule
+    public enum CardPlayDestination
     {
         /// <summary>
-        /// Self target only
+        /// Move to discard pile
         /// </summary>
-        Self = 0,
+        DiscardPile = 0,
         /// <summary>
-        /// Modify an attribute
+        /// Move to exhaust pile
         /// </summary>
-        Enemy = 1,
+        ExhaustPile = 1,
         /// <summary>
-        /// All enemies
+        /// Become a power
         /// </summary>
-        AllEnemies = 2,
-        /// <summary>
-        /// One deterministic random enemy
-        /// </summary>
-        RandomEnemy = 3,
+        Power = 2,
     }
 
 } 

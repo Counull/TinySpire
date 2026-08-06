@@ -1,7 +1,44 @@
 ---
 created: 2026-07-06
-updated: 2026-08-05
+updated: 2026-08-06
 ---
+
+## 2026-08-06 STS2 v0.107.1 Ironclad 卡池 I4 成功归宿与 Tremble（已完成）
+
+- 用户单独确认 I4 后，先经公开 `BattleCommandQueue.Submit` 固定真实 Tremble 命令顺序。精确红灯 `60927f80b92b432d95c7681759fa1e82` 为 0/1：期望 Hand→ExhaustPile，旧实现实际为 Hand→DiscardPile；最小 Turn 改动后 `f68c558591014dc285d6a1888fa8717b` 为 1/1。`TryPlayCard` 现在在首次权威写入前冻结基础 Discard/Exhaust 归宿，仍按 EnergySpent → Effect → CardMoved 结算，并复用既有 CardZones 原语；未知/Power 归宿在首写前 fail-fast。
+- 生产 Tremble（3118）已改为 1 费 Enemy、`vulnerable:4006`、ApplyVulnerable 3、Exhaust，使用项目自有 en/zh-CN Smart String；生成数据红灯 `97b377dce0c34921938064049ef89c0f` 先得到期望 Implemented、实际 CatalogOnly。构建门禁另以 `bab167110fba448ea937e4e961092946` 固定 4/81 数量不变但 Tremble/Anger 身份互换的失败，旧代码只报告 3/82；身份门禁绿灯 `90bff86aca1d4225a3ad0715ae2c5297` 为 1/1。
+- 三份作者工作簿经 Artifact Tool 候选检查、公式错误扫描、渲染目视、写回后重导入与再次渲染，均通过；Luban validation 与 JSON 生成成功。唯一 Unity Editor 的 `TinySpire/Build/Sync and Build All` 已同步 Localization 并重建 Local Addressables，Console 记录 Addressables 成功构建约 29.244 秒及整体完成日志；同步构建后、测试前 error 过滤为 0。最终 Console 保留 3 条“Localization validation passed”和 3 条保存 TestResults.xml 的 Test Runner 捕获记录，InvalidKey 为 0，没有产品编译或运行时错误。Tremble 继续使用 `art_placeholder` / `card-art/art_placeholder`，未生成、下载或引用新美术；缺图清单仍为 82 张，其中 Tremble 为 Implemented、其余 81 张为 CatalogOnly。
+- 最终窄回归 `4892bc7cad4c42769aaef7ff4a349837` 为 3/3，相关 Turn/CardZones/Queue/展示边界/构建门禁任务 `5ba43fb9daed4a9c9e5467dfb3e69762` 为 61/61；第一次相关任务 `f3cea318acd94378bb27a2cdaf1b7b7c` 只发生 Test Runner 初始化超时，0 项开始，不是用例失败。完整 EditMode `65ba008cb21947f3bfb2da54539912af` 为 **482/482 passed、0 failed、0 skipped**；solution build 为 0 error、12 条既有程序集版本冲突 warning。
+- 新增 CD-060 与验收页 `06_testing/2026-08-06-sts2-ironclad-i4-success-destination.md`。STS2 子集当前为 4 张 Implemented / 81 张 CatalogOnly，加项目自有 Strength 后生产表为 5 / 81；默认 Deck 未加入 Tremble。I4 不包含 Exhaust 飞行动画，也未修改 Queue/settlement/CardZones 公共契约、Scene、Prefab、ProjectSettings、asmdef、HybridCLR、DI 或启动流程。本切片没有声称真实 Game View 展示 Tremble；逐卡真实 BattleScene 验收留到 I14。I5 尚未开始，必须取得新的明确确认。用户随后授权以一次本地提交收口 I0–I4 与根 `.codex_work/` 忽略规则；不推送远端。
+
+## 2026-08-06 STS2 v0.107.1 Ironclad 卡池 I3 目录与占位素材（已完成）
+
+- 冻结快照 `sts2-v0.107.1-23811903-59260271` 的 85 张单人战士卡已全部录入 `battle.Card`，明确排除多人专用 `DEMONIC_SHIELD` 与 `TANK`。STS2 子集为 3 张 `Implemented`、82 张 `CatalogOnly`；加项目自有 Strength 后生产表共 86 行、4 张 `Implemented`、82 张 `CatalogOnly`。目录补齐稳定外部 key、快照、类型、稀有度、Fixed/X 费用、目标、成功归宿、升级费用/说明与 `has_upgrade`，当前 Deck 仍只引用 `Implemented`。
+- 未生成、下载或引用官方/候选卡图。82 张缺图卡统一复用项目既有 `Assets/Arts/Runtime/Card/Texture/art_placeholder.png`，短键为 `art_placeholder`，逻辑地址为 `card-art/art_placeholder`；当前唯一 Unity Editor 将其校验为 `Sprite / Single / no mipmap`。逐卡交付清单见 `10_communication/2026-08-06-sts2-ironclad-card-art-checklist.md`；后续 Agent 不得自行生成或下载卡图，没有用户提供或明确授权素材时继续占位。
+- 精确红灯任务 `f7b8315680f54d539e70a446d989b1fa` 先得到期望 85、实际 0。最终身份/漂移/双语任务 `c3a9df29333e45448edf17447a4f84fc` 为 **5/5**，I2+I3 构建门禁 `078210dc2aad49d2894a404a29bab357` 为 **10/10**，敌人目标 fail-fast `c865f8dab8f145b8bf5666f1e5174798` 为 **20/20**，真实 Addressables Sprite 加载 `0b6e50d98b7245098c312d06839fed8e` 为 **5/5**，夹具相关回归 `b0fe67cd2f45443a82a0d51de15c2d8c` 为 **86/86**，完整 EditMode `7e7738c02c4c411294596b1e9d040324` 为 **479/479**。solution build 为 0 error、12 条既有程序集版本 warning；Luban 与 `TinySpire/Build/Sync and Build All` 成功完成。
+- 新增 CD-059 与验收页 `06_testing/2026-08-06-sts2-ironclad-i3-card-catalog.md`。I3 没有实现 Twin Strike、Bludgeon 或其他新规则，没有修改 Queue、Turn、settlement、公式、Scene、Prefab、ProjectSettings、asmdef 或 HybridCLR。I4 尚未开始；它将首次修改 `BattleTurnController` 的成功归宿，必须另行确认。未暂存、提交或推送 I0-I3 工作区改动。
+
+## 2026-08-06 STS2 v0.107.1 Ironclad 卡池 I2 CatalogOnly 构建隔离（已完成）
+
+- 新增独立 Editor `BattleCardCatalogBuildValidator`，并接入 `TinySpire/Build/Sync and Build All` 的 Luban/Refresh/四源表清单之后、Localization 与 Addressables 之前。它拒绝 Deck 引用缺失或 `CatalogOnly` 卡、未知状态、`Implemented` 空/漂移程序、非法或缺失牌面短键，并要求 Deck/Card/Effect JSON 顶层键与运行时内嵌 `id` 一致；没有修改 Queue、Turn、settlement 或其他权威写链。
+- I2 测试阶段为 `CatalogOnly` 预留占位短键 `card_art_catalog_placeholder`，且仍由现有真实 AssetDatabase/Sprite 解析器校验，不允许伪造路径；当时生产表仍为 4 张 `Implemented`、0 张 `CatalogOnly`，因此没有添加占位资产或新卡。I3 已按 CD-059 将生产标准最终锁定为项目既有 `art_placeholder`。
+- 原始精确 Deck 任务 `cfaf05a194e34796b9c3f96808126cea` 为 1/1；审计追加的 Effect key/id 漂移红灯 `0107906ab3824efea6cb20e40902b798` 转绿任务为 `76cf944b4efc4ae7a1c037efcd7b9122` 1/1。最终 Luban 与 `Sync and Build All` 成功，相关任务 `e35a3b7e3f0f4bacab7c34ce9e6d0e31` 为 **102/102 passed**，真实 `card-art/{key}` 加载任务 `b6391ca3dde14ff189837a5401bcd310` 为 **1/1 passed**；BuildLayout 证明四个地址同属 `TinySpire Card Art` PackTogether 物理 bundle，并使用 `AssetBundleProvider / IAssetBundleResource`。solution build 为 0 error、12 条既有 warning，Console 无 InvalidKey。
+- 第一次真实地址协程任务在 Editor 未聚焦时按 180 秒超时，并明确报告 `editor_unfocused`；相同任务在 focused/idle 后通过，没有修改超时或 ProjectSettings。新增 CD-058 与验收页 `06_testing/2026-08-06-sts2-ironclad-i2-build-isolation.md`。I2 独立停止点完成，I3 尚未开始；未暂存、提交或推送 STS2 改动。
+
+## 2026-08-06 STS2 v0.107.1 Ironclad 卡池 I1 CatalogOnly 运行时隔离（已完成）
+
+- 精确红灯 `Submit_CatalogOnlyCard_FailsBeforeEnergyOrCardZoneWrites` 先在 solution build 得到 `CS0234`：缺少 `cfg.battle.CardImplementationStatus`。最小实现给 `battle.Card` 增加必填 `Implemented / CatalogOnly` 状态，并让 `BattleCardPlayRules.Evaluate` 在费用、目标与 Effect 之前以 `CardNotImplemented` 拒绝目录占位卡；Queue、Turn、settlement 与公式均未修改。
+- Queue seam 测试断言 typed failure、空 settlement、Queue 不 fault，并保持同一 Turn/Layout、能量、Hand/Discard/Exhaust 与玩家/敌人的 Health/Strength/Block/Vulnerable 标量；目录卡绑定真实 `Strength +9` Effect，确保测试能发现参与者内部写入。`TinySpire/Build/Sync and Build All` 后最终精确任务 `119aeec7577640109aa4173c41c2566b` 为 **1/1 passed**，相关七类任务 `9e54ef937764492ba2ef41bcdfcad930` 为 **86/86 passed**。额外完整 EditMode 任务 `ad9b7b3e47a340bba4ce38e368c8628a` 完成 461 项，但 Editor 未聚焦时两项既有 Addressables 实例化测试各超时 180 秒；服务此前明确报告 `editor_unfocused`，未报告其他失败，故未把该任务伪报为全绿或作为 I1 通过依据。
+- `DataTables/gen.bat` 已成功生成 `CardImplementationStatus.cs`、更新 `Card.cs` 与 `Assets/GameData/battle_tbcard.json`；四张既有生产卡均显式为 `Implemented`，插列后的 Effect/Illustration 工作簿样式也已恢复。`CardNotImplemented` 追加在既有失败枚举末尾，不改变旧整数值。solution build 为 **0 error、12 条既有程序集版本冲突 warning**。当前唯一 Unity 6000.5.5f1 Editor 完成同步与本地 Addressables 构建，Console 明确报告 `TinySpire sync and local content build completed successfully.`；测试后的 error 过滤仅有三条 TestRunner 保存 `TestResults.xml` 的记录，没有编译、运行时或 InvalidKey 错误。
+- 新增 CD-057 与验收页 `06_testing/2026-08-06-sts2-ironclad-i1-catalog-runtime-gate.md`。I1 未录入新卡、未改 Deck/Localization/Scene/Prefab/ProjectSettings/asmdef/HybridCLR 或素材地址；`CatalogOnly` 构建期 Deck/程序/牌面校验尚未实现，I2 必须从独立红灯开始。未暂存、提交或推送本次 STS2 改动。
+
+## 2026-08-06 STS2 v0.107.1 Ironclad 卡池 I0 快照（已完成）
+
+- 新增长期实施计划 `plans/2026-08-06-sts2-v01071-ironclad-card-pool.md` 与研究页 `04_research/2026-08-06-sts2-v01071-ironclad-card-snapshot.md`。本机 Steam public/main manifest、`release_info.json` 与 Spire Codex stable changelog/API 交叉一致：`v0.107.1`、build `23811903`、commit `59260271`；本快照固定为英文源、2026-08-06 提取。
+- API 返回 87 个 Ironclad 实体；排除 `multiplayer_only` 的 `Demonic Shield` 与 `Tank` 后，单人基线为 **85 张**：Basic 3、Common 20、Uncommon 35、Rare 25、Ancient 2；类型为 Attack 37、Skill 29、Power 19。两张多人卡等待 `DEP-008`，不以单玩家状态假实现。
+- 当前能忠实复用固定费用、Self/单体 Enemy、Damage/Block/Strength/Vulnerable 与普通弃牌的只有 Bash、Defend、Strike、Twin Strike、Bludgeon 五张。其余卡涉及 Effect 独立目标、多目标/随机/重复、抽牌、能量/X 费、Exhaust、Power 触发、选择、生成、升级、条件、状态或 Run 权威边界；完整重叠矩阵已记录在研究页。
+- 现有空 `effect_bindings` 会成功扣能量并弃牌，因此不能直接把未实现目录行塞入生产 Card 表。I1 先增加 `Implemented / CatalogOnly` 运行时门禁，I2 再增加 Deck/程序/牌面构建隔离，均不改 Queue、Turn 或 settlement；I3 才安全录入 85 张目录。I4 起需要修改 Turn/settlement，必须依用户此前停止边界另行报告并确认。
+- 仓库不提交 STS2 官方卡图、二进制、解包结果或完整英文规则文本镜像；目录使用结构化机制事实，双语说明采用项目自有表述，牌面只使用 TinySpire 自有/占位素材并继续走 Addressables/AssetBundle。I0 只修改文档，未改 DataTables、生成文件、Localization、代码、Scene、Prefab 或 Addressables 内容，未暂存、提交或推送。
 
 ## 2026-08-05 M9C 伤害飘字渲染层级修正（已完成）
 

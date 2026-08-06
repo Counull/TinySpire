@@ -115,6 +115,7 @@ public static class LocalizationBuildTools
             JObject card = (JObject)cardProperty.Value;
             requiredKeys.Add(card.Value<string>("name_i18n_key"));
             requiredKeys.Add(card.Value<string>("description_i18n_key"));
+            requiredKeys.Add(card.Value<string>("upgraded_description_i18n_key"));
         }
         AddParticipantNameKeys(requiredKeys, heroes, "Hero");
         AddParticipantNameKeys(requiredKeys, enemies, "Enemy");
@@ -141,12 +142,21 @@ public static class LocalizationBuildTools
                 JObject card = (JObject)cardProperty.Value;
                 string nameKey = card.Value<string>("name_i18n_key");
                 string descriptionKey = card.Value<string>("description_i18n_key");
+                string upgradedDescriptionKey =
+                    card.Value<string>("upgraded_description_i18n_key");
                 RequireEntry(table, nameKey);
                 StringTableEntry description = RequireEntry(table, descriptionKey);
+                StringTableEntry upgradedDescription = RequireEntry(table, upgradedDescriptionKey);
                 if (!description.IsSmart)
                 {
                     throw new InvalidOperationException(
                         $"Card {cardProperty.Name} description for locale " +
+                        $"'{table.LocaleIdentifier.Code}' must be a Smart String.");
+                }
+                if (!upgradedDescription.IsSmart)
+                {
+                    throw new InvalidOperationException(
+                        $"Card {cardProperty.Name} upgraded description for locale " +
                         $"'{table.LocaleIdentifier.Code}' must be a Smart String.");
                 }
 

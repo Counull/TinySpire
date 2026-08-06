@@ -21,10 +21,21 @@ public sealed partial class Card : Luban.BeanBase
     {
         JObject _obj = _buf as JObject;
         Id = (int)_obj.GetValue("id");
+        ExternalKey = (string)_obj.GetValue("external_key");
+        CatalogSnapshotKey = (string)_obj.GetValue("catalog_snapshot_key");
         NameI18nKey = (string)_obj.GetValue("name_i18n_key");
         DescriptionI18nKey = (string)_obj.GetValue("description_i18n_key");
+        UpgradedDescriptionI18nKey = (string)_obj.GetValue("upgraded_description_i18n_key");
+        CardType = (battle.CardType)(int)_obj.GetValue("card_type");
+        Rarity = (battle.CardRarity)(int)_obj.GetValue("rarity");
         Cost = (int)_obj.GetValue("cost");
+        CostKind = (battle.CardCostKind)(int)_obj.GetValue("cost_kind");
+        UpgradedCost = (int)_obj.GetValue("upgraded_cost");
         TargetRule = (battle.TargetRule)(int)_obj.GetValue("target_rule");
+        PlayDestination = (battle.CardPlayDestination)(int)_obj.GetValue("play_destination");
+        UpgradedPlayDestination = (battle.CardPlayDestination)(int)_obj.GetValue("upgraded_play_destination");
+        HasUpgrade = (bool)_obj.GetValue("has_upgrade");
+        ImplementationStatus = (battle.CardImplementationStatus)(int)_obj.GetValue("implementation_status");
         { var __json0 = _obj.GetValue("effect_bindings"); int _n0 = (__json0 as JArray).Count; EffectBindings = new battle.CardEffectBinding[_n0]; int __index0=0; foreach(JToken __e0 in __json0) { battle.CardEffectBinding __v0;  __v0 = global::cfg.battle.CardEffectBinding.DeserializeCardEffectBinding(__e0);  EffectBindings[__index0++] = __v0; }   }
         IllustrationKey = (string)_obj.GetValue("illustration_key");
     }
@@ -39,21 +50,65 @@ public sealed partial class Card : Luban.BeanBase
     /// </summary>
     public readonly int Id;
     /// <summary>
+    /// Stable external key
+    /// </summary>
+    public readonly string ExternalKey;
+    /// <summary>
+    /// Frozen catalog snapshot
+    /// </summary>
+    public readonly string CatalogSnapshotKey;
+    /// <summary>
     /// Name localization key
     /// </summary>
     public readonly string NameI18nKey;
     /// <summary>
-    /// Description localization key
+    /// Base description localization key
     /// </summary>
     public readonly string DescriptionI18nKey;
     /// <summary>
-    /// Cost
+    /// Upgrade description localization key
+    /// </summary>
+    public readonly string UpgradedDescriptionI18nKey;
+    /// <summary>
+    /// Catalog card type
+    /// </summary>
+    public readonly battle.CardType CardType;
+    /// <summary>
+    /// Catalog rarity
+    /// </summary>
+    public readonly battle.CardRarity Rarity;
+    /// <summary>
+    /// Base energy cost
     /// </summary>
     public readonly int Cost;
+    /// <summary>
+    /// Fixed or X cost
+    /// </summary>
+    public readonly battle.CardCostKind CostKind;
+    /// <summary>
+    /// Final upgraded cost
+    /// </summary>
+    public readonly int UpgradedCost;
     /// <summary>
     /// Target rule
     /// </summary>
     public readonly battle.TargetRule TargetRule;
+    /// <summary>
+    /// Successful play destination
+    /// </summary>
+    public readonly battle.CardPlayDestination PlayDestination;
+    /// <summary>
+    /// Upgraded successful destination
+    /// </summary>
+    public readonly battle.CardPlayDestination UpgradedPlayDestination;
+    /// <summary>
+    /// Whether an upgrade exists
+    /// </summary>
+    public readonly bool HasUpgrade;
+    /// <summary>
+    /// Runtime implementation gate
+    /// </summary>
+    public readonly battle.CardImplementationStatus ImplementationStatus;
     /// <summary>
     /// Ordered effect argument bindings
     /// </summary>
@@ -76,10 +131,21 @@ public sealed partial class Card : Luban.BeanBase
     {
         return "{ "
         + "id:" + Id + ","
+        + "externalKey:" + ExternalKey + ","
+        + "catalogSnapshotKey:" + CatalogSnapshotKey + ","
         + "nameI18nKey:" + NameI18nKey + ","
         + "descriptionI18nKey:" + DescriptionI18nKey + ","
+        + "upgradedDescriptionI18nKey:" + UpgradedDescriptionI18nKey + ","
+        + "cardType:" + CardType + ","
+        + "rarity:" + Rarity + ","
         + "cost:" + Cost + ","
+        + "costKind:" + CostKind + ","
+        + "upgradedCost:" + UpgradedCost + ","
         + "targetRule:" + TargetRule + ","
+        + "playDestination:" + PlayDestination + ","
+        + "upgradedPlayDestination:" + UpgradedPlayDestination + ","
+        + "hasUpgrade:" + HasUpgrade + ","
+        + "implementationStatus:" + ImplementationStatus + ","
         + "effectBindings:" + Luban.StringUtil.CollectionToString(EffectBindings) + ","
         + "illustrationKey:" + IllustrationKey + ","
         + "}";

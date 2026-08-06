@@ -12,26 +12,22 @@
 namespace cfg.battle
 { 
     /// <summary>
-    /// Card target rule
+    /// Catalog card type
     /// </summary>
-    public enum TargetRule
+    public enum CardType
     {
         /// <summary>
-        /// Self target only
+        /// Attack card
         /// </summary>
-        Self = 0,
+        Attack = 0,
         /// <summary>
-        /// Modify an attribute
+        /// Skill card
         /// </summary>
-        Enemy = 1,
+        Skill = 1,
         /// <summary>
-        /// All enemies
+        /// Power card
         /// </summary>
-        AllEnemies = 2,
-        /// <summary>
-        /// One deterministic random enemy
-        /// </summary>
-        RandomEnemy = 3,
+        Power = 2,
     }
 
 } 

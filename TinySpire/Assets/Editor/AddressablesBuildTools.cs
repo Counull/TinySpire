@@ -22,6 +22,8 @@ public static class AddressablesBuildTools
     private const string CharacterPrefabRoot = "Assets/Arts/Runtime/Character/Prefabs";
     private const string CardTableJsonPath = "Assets/GameData/battle_tbcard.json";
     private const string CardIllustrationRoot = "Assets/Arts/Runtime/Card/Illustrations";
+    private const string CatalogPlaceholderIllustrationPath =
+        "Assets/Arts/Runtime/Card/Texture/art_placeholder.png";
 
     private static readonly string[] ScenePaths =
     {
@@ -255,6 +257,25 @@ public static class AddressablesBuildTools
 
         IReadOnlyDictionary<string, string> pathsByKey = IndexCardIllustrationPaths();
         JObject cards = JObject.Parse(File.ReadAllText(CardTableJsonPath));
+        return ResolveCardIllustrationEntries(pathsByKey, cards);
+    }
+
+    /// <summary>用当前专用素材目录校验卡表中的全部牌面短键与 Sprite 导入契约。</summary>
+    internal static void ValidateCardIllustrations(JObject cards)
+    {
+        ResolveCardIllustrationEntries(IndexCardIllustrationPaths(), cards);
+    }
+
+    /// <summary>把卡牌短键解析成精确 Addressables 清单，并校验缺失、大小写与 Sprite 契约。</summary>
+    internal static IReadOnlyDictionary<string, string> ResolveCardIllustrationEntries(
+        IReadOnlyDictionary<string, string> pathsByKey,
+        JObject cards)
+    {
+        if (pathsByKey == null)
+            throw new ArgumentNullException(nameof(pathsByKey));
+        if (cards == null || cards.Count == 0)
+            throw new InvalidOperationException("Generated card table has no records.");
+
         var entries = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (JProperty card in cards.Properties())
         {
@@ -289,21 +310,33 @@ public static class AddressablesBuildTools
         foreach (string guid in AssetDatabase.FindAssets("t:Texture2D", new[] { CardIllustrationRoot }))
         {
             string assetPath = AssetDatabase.GUIDToAssetPath(guid);
-            string key = Path.GetFileNameWithoutExtension(assetPath);
-            CardIllustrationAddress.FromKey(key);
-            if (pathsByKey.TryGetValue(key, out string existingPath))
-            {
-                throw new InvalidOperationException(
-                    $"Duplicate card illustration key '{key}': {existingPath}, {assetPath}");
-            }
-
-            pathsByKey.Add(key, assetPath);
+            IndexCardIllustrationPath(pathsByKey, assetPath);
         }
+        IndexCardIllustrationPath(pathsByKey, CatalogPlaceholderIllustrationPath);
 
         if (pathsByKey.Count == 0)
             throw new InvalidOperationException($"Card illustration folder is empty: {CardIllustrationRoot}");
 
         return pathsByKey;
+    }
+
+    /// <summary>把一个明确允许的牌面资源路径加入短键索引，并拒绝缺失或重名。</summary>
+    private static void IndexCardIllustrationPath(
+        IDictionary<string, string> pathsByKey,
+        string assetPath)
+    {
+        if (AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath) == null)
+            throw new InvalidOperationException($"Card illustration asset does not exist: {assetPath}");
+
+        string key = Path.GetFileNameWithoutExtension(assetPath);
+        CardIllustrationAddress.FromKey(key);
+        if (pathsByKey.TryGetValue(key, out string existingPath))
+        {
+            throw new InvalidOperationException(
+                $"Duplicate card illustration key '{key}': {existingPath}, {assetPath}");
+        }
+
+        pathsByKey.Add(key, assetPath);
     }
 
     /// <summary>确保短键指向单 Sprite 且关闭 mipmap，避免运行时加载到错误的主资源。</summary>

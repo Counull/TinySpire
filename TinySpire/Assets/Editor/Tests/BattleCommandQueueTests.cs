@@ -1299,16 +1299,32 @@ internal static class BattleCommandQueueTestFactory
         {
             foreach (KeyValuePair<int, int> entry in cardCosts)
             {
+                cfg.battle.TargetRule cardTargetRule = cardTargetRules != null &&
+                                                       cardTargetRules.TryGetValue(
+                                                           entry.Key,
+                                                           out cfg.battle.TargetRule configuredTargetRule)
+                    ? configuredTargetRule
+                    : cfg.battle.TargetRule.Self;
                 cards.Add(new JObject
                 {
                     ["id"] = entry.Key,
+                    ["external_key"] = $"TEST_COMMAND_QUEUE_CARD_{entry.Key}",
+                    ["catalog_snapshot_key"] = "test-fixture",
                     ["name_i18n_key"] = $"battle.card.test_{entry.Key}.name",
                     ["description_i18n_key"] = $"battle.card.test_{entry.Key}.description",
+                    ["upgraded_description_i18n_key"] = $"battle.card.test_{entry.Key}.description",
+                    ["card_type"] = (int)(cardTargetRule == cfg.battle.TargetRule.Enemy
+                        ? cfg.battle.CardType.Attack
+                        : cfg.battle.CardType.Skill),
+                    ["rarity"] = (int)cfg.battle.CardRarity.Basic,
                     ["cost"] = entry.Value,
-                    ["target_rule"] = cardTargetRules != null &&
-                                        cardTargetRules.TryGetValue(entry.Key, out cfg.battle.TargetRule targetRule)
-                        ? (int)targetRule
-                        : (int)cfg.battle.TargetRule.Self,
+                    ["cost_kind"] = (int)cfg.battle.CardCostKind.Fixed,
+                    ["upgraded_cost"] = entry.Value,
+                    ["target_rule"] = (int)cardTargetRule,
+                    ["play_destination"] = (int)cfg.battle.CardPlayDestination.DiscardPile,
+                    ["upgraded_play_destination"] = (int)cfg.battle.CardPlayDestination.DiscardPile,
+                    ["has_upgrade"] = false,
+                    ["implementation_status"] = (int)cfg.battle.CardImplementationStatus.Implemented,
                     ["effect_bindings"] = new JArray(),
                     ["illustration_key"] = string.Empty
                 });

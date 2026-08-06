@@ -2,7 +2,7 @@
 title: 06_testing · 测试记录
 page_type: testing
 lifecycle: active
-updated: 2026-08-05
+updated: 2026-08-06
 ---
 
 - [2026-07-30 BattleScene LifetimeScope](2026-07-30-battle-lifetime-scope.md)
@@ -15,6 +15,10 @@ updated: 2026-08-05
 
 ## 验证记录
 
+- [2026-08-06 STS2 Ironclad I4 成功归宿与 Tremble](2026-08-06-sts2-ironclad-i4-success-destination.md) — Tremble 以 3 层易伤和 Exhaust 真实归宿翻为 Implemented；相关 61/61、完整 EditMode 482/482、Luban/Localization/Local Content 通过，不含 Exhaust 飞行动画
+- [2026-08-06 STS2 Ironclad I3 85 张目录与占位素材](2026-08-06-sts2-ironclad-i3-card-catalog.md) — 冻结单人卡 85/85 录入，82 张 CatalogOnly 复用既有占位并走真实 AB；完整 EditMode 479/479、真实牌面加载 5/5 通过
+- [2026-08-06 STS2 Ironclad I2 CatalogOnly 构建隔离](2026-08-06-sts2-ironclad-i2-build-isolation.md) — Deck/程序/牌面/记录身份在 Localization 与 Addressables 前 fail-fast；最终相关 102/102、Local Content 与真实逻辑地址 1/1 通过
+- [2026-08-06 STS2 Ironclad I1 CatalogOnly 运行时隔离](2026-08-06-sts2-ironclad-i1-catalog-runtime-gate.md) — Queue typed failure 在费用、卡区与 Effect 写入前终止；精确 1/1、相关与同步构建后回归各 86/86，Luban 与 Local Content 成功
 - [2026-08-05 DOTween Pro 仓库净化与免费版独立验证](2026-08-05-dotween-pro-repository-sanitization.md) — 当前树与 GitHub `main` 可达历史已移除 Pro；免费版无 Pro 编译、459/459 EditMode、真实 Bootstrap、精确非 Pro LFS 补传与远端回读审计均通过
 - [2026-08-05 配置素材短键与真实 AssetBundle 加载](2026-08-05-config-asset-logical-keys.md) — Hero/Enemy 表迁移为短键，构建期漂移校验、逻辑地址组、Luban/本地内容构建、Packed Play Mode 物理 bundle 与真实 Game View 证据
 - [2026-08-05 M10D 交付级验证与性能基线](2026-08-05-m10d-delivery-validation.md) — M10 定向 EditMode 25/25、默认 Game View/Console 和可重复微基线已取证；完整 451 项中的两项非 M10 UI/Targeting 异常保留为历史事实，不将其伪报为 M10 全量全绿

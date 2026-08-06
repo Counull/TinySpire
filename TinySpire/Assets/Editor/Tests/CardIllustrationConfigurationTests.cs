@@ -16,7 +16,7 @@ public sealed class CardIllustrationConfigurationTests
 {
     private const string CardTableJsonPath = "Assets/GameData/battle_tbcard.json";
 
-    /// <summary>确认生成表只保存文件短键，并能在专用牌面目录中解析为单 Sprite 主资源。</summary>
+    /// <summary>确认生成表只保存文件短键，并能解析正式牌面与明确占位图的单 Sprite 主资源。</summary>
     [Test]
     public void GeneratedCardTable_UsesFilenameStemIllustrationKeys()
     {
@@ -25,7 +25,8 @@ public sealed class CardIllustrationConfigurationTests
             [3001] = "card_art_strength",
             [3002] = "card_art_strike",
             [3003] = "card_art_defend",
-            [3004] = "card_art_bash"
+            [3004] = "card_art_bash",
+            [3101] = "art_placeholder"
         };
         JObject cards = JObject.Parse(File.ReadAllText(CardTableJsonPath));
         foreach (KeyValuePair<int, string> expected in expectedKeys)
@@ -38,7 +39,9 @@ public sealed class CardIllustrationConfigurationTests
             Assert.That(key, Does.Not.Contain("/"));
             Assert.That(Path.HasExtension(key), Is.False);
 
-            string assetPath = $"Assets/Arts/Runtime/Card/Illustrations/{key}.png";
+            string assetPath = key == "art_placeholder"
+                ? "Assets/Arts/Runtime/Card/Texture/art_placeholder.png"
+                : $"Assets/Arts/Runtime/Card/Illustrations/{key}.png";
             Assert.That(AssetDatabase.LoadAssetAtPath<Sprite>(assetPath), Is.Not.Null);
 
             var importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
@@ -70,18 +73,54 @@ public sealed class CardIllustrationConfigurationTests
 
         AddressableAssetGroup group = settings.FindGroup("TinySpire Card Art");
         Assert.That(group, Is.Not.Null);
-        Assert.That(group.entries.Count, Is.EqualTo(4));
+        var expectedPaths = new HashSet<string>
+        {
+            "Assets/Arts/Runtime/Card/Illustrations/card_art_strength.png",
+            "Assets/Arts/Runtime/Card/Illustrations/card_art_strike.png",
+            "Assets/Arts/Runtime/Card/Illustrations/card_art_defend.png",
+            "Assets/Arts/Runtime/Card/Illustrations/card_art_bash.png",
+            "Assets/Arts/Runtime/Card/Texture/art_placeholder.png"
+        };
+        Assert.That(group.entries.Count, Is.EqualTo(expectedPaths.Count));
 
         foreach (AddressableAssetEntry entry in group.entries)
         {
             string assetPath = AssetDatabase.GUIDToAssetPath(entry.guid);
             string key = Path.GetFileNameWithoutExtension(assetPath);
-            Assert.That(assetPath, Does.StartWith("Assets/Arts/Runtime/Card/Illustrations/"));
+            Assert.That(expectedPaths.Remove(assetPath), Is.True, $"Unexpected card art entry: {assetPath}");
             Assert.That(entry.address, Is.EqualTo(CardIllustrationAddress.FromKey(key)));
         }
+        Assert.That(expectedPaths, Is.Empty);
     }
 
-    /// <summary>确认运行时 Addressables API 能用逻辑地址取得四张牌面 Sprite。</summary>
+    /// <summary>确认生成卡表引用不存在的牌面短键时会报告精确的卡牌身份与短键。</summary>
+    [Test]
+    public void CardIllustrationEntries_RejectMissingAssetKey()
+    {
+        const int cardId = 9109;
+        const string missingKey = "missing_card_art";
+        var pathsByKey = new Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase)
+        {
+            ["card_art_strike"] = "Assets/Arts/Runtime/Card/Illustrations/card_art_strike.png"
+        };
+        var cards = new JObject
+        {
+            [cardId.ToString()] = new JObject
+            {
+                ["id"] = cardId,
+                ["illustration_key"] = missingKey
+            }
+        };
+
+        System.InvalidOperationException failure = Assert.Throws<System.InvalidOperationException>(
+            () => AddressablesBuildTools.ResolveCardIllustrationEntries(pathsByKey, cards));
+
+        Assert.That(
+            failure.Message,
+            Is.EqualTo($"Card template {cardId} illustration key does not exist: {missingKey}"));
+    }
+
+    /// <summary>确认运行时 Addressables API 能用逻辑地址取得四张正式牌面与一张占位 Sprite。</summary>
     [UnityTest]
     public IEnumerator CardArtLogicalAddresses_LoadSprites()
     {
@@ -90,7 +129,8 @@ public sealed class CardIllustrationConfigurationTests
             "card_art_strength",
             "card_art_strike",
             "card_art_defend",
-            "card_art_bash"
+            "card_art_bash",
+            "art_placeholder"
         };
 
         foreach (string key in keys)

@@ -12,26 +12,30 @@
 namespace cfg.battle
 { 
     /// <summary>
-    /// Card target rule
+    /// Catalog card rarity
     /// </summary>
-    public enum TargetRule
+    public enum CardRarity
     {
         /// <summary>
-        /// Self target only
+        /// Basic card
         /// </summary>
-        Self = 0,
+        Basic = 0,
         /// <summary>
-        /// Modify an attribute
+        /// Common card
         /// </summary>
-        Enemy = 1,
+        Common = 1,
         /// <summary>
-        /// All enemies
+        /// Uncommon card
         /// </summary>
-        AllEnemies = 2,
+        Uncommon = 2,
         /// <summary>
-        /// One deterministic random enemy
+        /// Rare card
         /// </summary>
-        RandomEnemy = 3,
+        Rare = 3,
+        /// <summary>
+        /// Ancient card
+        /// </summary>
+        Ancient = 4,
     }
 
 } 

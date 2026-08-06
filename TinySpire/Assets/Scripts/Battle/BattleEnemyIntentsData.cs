@@ -572,8 +572,12 @@ namespace TinySpire.Battle
                     $"Enemy behavior {behavior.Id} max consecutive must not be negative.");
             if (!Enum.IsDefined(typeof(cfg.battle.EnemyIntentType), behavior.IntentType))
                 throw new InvalidOperationException($"Enemy behavior {behavior.Id} has an invalid intent type.");
-            if (!Enum.IsDefined(typeof(cfg.battle.TargetRule), behavior.TargetRule))
-                throw new InvalidOperationException($"Enemy behavior {behavior.Id} has an invalid target rule.");
+            if (behavior.TargetRule != cfg.battle.TargetRule.Self
+                && behavior.TargetRule != cfg.battle.TargetRule.Enemy)
+            {
+                throw new InvalidOperationException(
+                    $"Enemy behavior {behavior.Id} has an unsupported target rule {behavior.TargetRule}.");
+            }
             if (_tables.TbCardEffect.GetOrDefault(behavior.EffectId) == null)
                 throw new InvalidOperationException(
                     $"Enemy behavior {behavior.Id} references missing effect {behavior.EffectId}.");

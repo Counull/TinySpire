@@ -28,5 +28,11 @@
     "effect_type": 3,
     "attribute": 0,
     "value": 2
+  },
+  "4006": {
+    "id": 4006,
+    "effect_type": 3,
+    "attribute": 0,
+    "value": 3
   }
 }

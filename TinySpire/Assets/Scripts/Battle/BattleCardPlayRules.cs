@@ -108,7 +108,14 @@ namespace TinySpire.Battle
             }
 
             cfg.battle.Card cardTemplate = _tables.TbCard.GetOrDefault(card.TemplateId);
-            if (cardTemplate == null || cardTemplate.Cost < 0)
+            if (cardTemplate == null)
+                return Failure(BattleCommandExecutionFailureReason.CardTemplateNotFound);
+            if (cardTemplate.ImplementationStatus !=
+                cfg.battle.CardImplementationStatus.Implemented)
+            {
+                return Failure(BattleCommandExecutionFailureReason.CardNotImplemented);
+            }
+            if (cardTemplate.Cost < 0)
                 return Failure(BattleCommandExecutionFailureReason.CardTemplateNotFound);
 
             bool canPayCost = playerTurn.Energy >= cardTemplate.Cost;

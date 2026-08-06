@@ -86,7 +86,8 @@ namespace TinySpire.Battle
         EffectTemplateNotFound,
         UnsupportedEffectType,
         UnsupportedEffectAttribute,
-        EffectValueOverflow
+        EffectValueOverflow,
+        CardNotImplemented
     }
 
     /// <summary>
