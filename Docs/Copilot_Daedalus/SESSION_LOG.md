@@ -3,6 +3,14 @@ created: 2026-07-06
 updated: 2026-08-05
 ---
 
+## 2026-08-05 M9C 伤害飘字渲染层级修正（已完成）
+
+- 用户实机所见“没有伤害数字”已定位为局部表现层排序缺陷，而不是伤害结算、Queue、Turn 或 settlement 未产生反馈：`BattleScene` 的 HUD Canvas 使用 `Default/0`，角色 SpriteRenderer 使用 `Character/0`，位于角色中心的 `FeedbackAnchor` 原先没有局部 Canvas，因此已创建并播放的纯字符飘字会被角色精灵遮住。
+- 精确渲染红灯 `CreateCombatFeedbackTween_HealthLossRendersAboveCharacterSprite` 通过真实 `ParticipantHudView.CreateCombatFeedbackTween`、正式飘字 Prefab、Screen Space-Camera Canvas 与重叠角色 SpriteRenderer 渲染到 RenderTexture；修复前任务 `0ca6b14458944965b205982acddddd9d` 与复跑 `8a125a28e0074e4392f164d3bfeb00c7` 均为 0/1，角色中心可见红色字形像素为 0。最小修复只给 `ParticipantHudView.prefab/FeedbackAnchor` 增加 `overrideSorting=true` 的局部 Canvas，使用既有 `Character` 层、order `1`，不加 GraphicRaycaster；HUD 根与纯字符飘字 Prefab 仍无额外 Canvas。
+- 修复后渲染测试任务 `a230c1024de14eb68c2bf6a4384cd44c` 为 1/1；渲染与 Prefab 合约组合任务 `1a0a8627c1444029a2918d69b8b6bfe4` 为 2/2；最终相关五类回归任务 `3f1f21cba5424f2783f5b6ac1cb3af92` 为 42/42；完整 EditMode 任务 `1023abd0836f475db43e7e5ce62507ca` 为 **460/460 passed，0 failed，0 skipped**。`dotnet build TinySpire/TinySpire.sln --no-restore -m:1` 为 **0 error、12 条既有程序集版本冲突 warning**。
+- 当前唯一 Unity 6000.5.5f1 Editor 已执行 `TinySpire/Build/Sync and Build All`；Addressables 本地内容构建成功（约 50.923 秒），输出 `Library/com.unity.addressables/aa/Windows/settings.json` 与最新 build layout。正常 Bootstrap 中真实 End Action 按钮 listener 令玩家生命从 30 降到 24、Queue 无 fault；为取得稳定前景画面，另在同一真实运行时 HUD 上调用既有内部反馈 seam 并暂停实际 tween，玩家与敌人中心均清晰显示红色 `-6`。该稳定截图只证明前景排序，不冒充自然结算时序；诊断完成后 `numbers=0 / activeTweens=0 / playingTweens=0`，权威生命恢复为玩家 30、两名敌人各 20，Console 为 0 Error / 0 Warning，Play Mode 已退出。
+- 未修改 Queue、Turn、settlement、公式、Combatant/CardZones/Intent 权威事实、Presenter 映射、BattleScene、DI、DataTables、Localization、ProjectSettings、asmdef 或 HybridCLR；没有新玩法、新输入锁、第二动画队列或第二份权威状态。完整证据见 `06_testing/2026-08-05-m9-post-validation-bug-triage.md` 与 M9C 验收页的后验修正说明；未暂存、未提交、未推送。
+
 ## 2026-08-05 DOTween Pro 仓库净化、NOTICE 补全与远端历史更新（已完成）
 
 - 从索引移除 `DOTweenPro/`、`DOTweenPro Examples/`、对应目录 Meta 与 `readme_DOTweenPro.txt`/Meta 共 46 个跟踪项，并在 `TinySpire/.gitignore` 添加六条精确规则；免费 `DOTween/` 与 `DemiLib/` 继续跟踪 307 项。新增 CD-056，并修订 CD-003，明确 Pro 只允许持证开发者本地安装，不是 Clone、构建或运行前置条件。

@@ -23,7 +23,7 @@ updated: 2026-08-05
 - [2026-08-05 M10A 配置原子性与表清单 fail-fast](2026-08-05-m10a-config-fail-fast.md) — 配置 typed failure、原子发布、重试与四份清单构建期校验；定向 EditMode 9/9 通过
 - [2026-08-05 M9 目标箭头与锁定框视觉反馈验收](2026-08-05-m9-targeting-visual-feedback.md) — 分段切线箭身、四角锁定框与相关 Prefab 契约；Unity 定向类集 26/26 通过
 - [2026-08-05 M9 出牌不飞向怪物验收](2026-08-05-play-card-no-target-flight.md) — Prelude 仅持有 transient，卡牌只飞向弃牌堆；Unity 定向类集 26/26 通过
-- [2026-08-05 M9 验收后 BUG 分诊与结构审查关联](2026-08-05-m9-post-validation-bug-triage.md) — 两项 Hand motion 由精确红灯、426/426 EditMode 覆盖；生命 HUD 临时投影到角色头顶，并在五种真实 BattleScene 尺寸复测为 0 相交对
+- [2026-08-05 M9 验收后 BUG 分诊与结构审查关联](2026-08-05-m9-post-validation-bug-triage.md) — 两项 Hand motion、生命 HUD 头顶投影及 `BUG-UI-002` 伤害飘字局部排序均有精确红绿证据；当前完整 EditMode 460/460，玩家/敌人真实 HUD 前景与 Console 已复核
 - [2026-08-02 M9G 全量验证、真实交互、Player 退出与双轴复审](2026-08-02-m9g-full-validation-review.md)
 - [2026-08-02 M9F 阶段横幅、胜负面板、重开与退出](2026-08-02-m9f-turn-terminal-restart-exit.md)
 - [2026-08-02 M9E 出牌、弃牌、抽牌与重洗运动](2026-08-02-m9e-card-zone-motion.md)

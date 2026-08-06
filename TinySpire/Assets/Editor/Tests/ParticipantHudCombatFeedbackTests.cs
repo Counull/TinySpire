@@ -106,6 +106,161 @@ public sealed class ParticipantHudCombatFeedbackTests
         }
     }
 
+    /// <summary>确认生命损失数字在按正式 Character/0 排序配置的测试角色之上产生可见红色字形像素。</summary>
+    [UnityTest]
+    public IEnumerator CreateCombatFeedbackTween_HealthLossRendersAboveCharacterSprite()
+    {
+        var localization = new LocalizationService();
+        yield return localization.InitializeAsync().ToCoroutine();
+        Locale previousLocale = LocalizationSettings.SelectedLocale;
+        Assert.That(localization.SetLocale("en"), Is.True);
+
+        var combatants = new BattleCombatantsData();
+        GameObject cameraObject = null;
+        GameObject canvasObject = null;
+        GameObject worldView = null;
+        ParticipantHudView hudView = null;
+        Texture2D spriteTexture = null;
+        Sprite characterSprite = null;
+        RenderTexture renderTexture = null;
+        Texture2D renderedFrame = null;
+        Sequence timeline = null;
+        object timelineId = null;
+        BattleCommandPresentationTween lease = null;
+        RenderTexture previousActive = RenderTexture.active;
+        try
+        {
+            const int renderWidth = 640;
+            const int renderHeight = 360;
+            PlayerCombatantData player = combatants.AddPlayer(1001, 30, 0);
+
+            cameraObject = new GameObject(
+                "ParticipantHudHealthLossCamera",
+                typeof(Camera));
+            Camera camera = cameraObject.GetComponent<Camera>();
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = Color.black;
+            camera.orthographic = true;
+            camera.orthographicSize = 5f;
+            camera.transform.position = new Vector3(0f, 0f, -10f);
+            renderTexture = new RenderTexture(
+                renderWidth,
+                renderHeight,
+                depth: 24,
+                RenderTextureFormat.ARGB32);
+            camera.targetTexture = renderTexture;
+
+            canvasObject = new GameObject(
+                "ParticipantHudHealthLossCanvas",
+                typeof(RectTransform),
+                typeof(Canvas));
+            Canvas canvas = canvasObject.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceCamera;
+            canvas.worldCamera = camera;
+            canvas.planeDistance = 1f;
+            canvas.sortingLayerID = SortingLayer.NameToID("Default");
+            canvas.sortingOrder = 0;
+
+            worldView = new GameObject(
+                "ParticipantHudHealthLossCharacter",
+                typeof(SpriteRenderer));
+            SpriteRenderer spriteRenderer = worldView.GetComponent<SpriteRenderer>();
+            spriteTexture = new Texture2D(128, 128, TextureFormat.RGBA32, mipChain: false);
+            var spritePixels = new Color[128 * 128];
+            for (int index = 0; index < spritePixels.Length; index++)
+                spritePixels[index] = Color.blue;
+            spriteTexture.SetPixels(spritePixels);
+            spriteTexture.Apply();
+            characterSprite = Sprite.Create(
+                spriteTexture,
+                new Rect(0f, 0f, 128f, 128f),
+                new Vector2(0.5f, 0.5f),
+                pixelsPerUnit: 16f);
+            spriteRenderer.sprite = characterSprite;
+            spriteRenderer.sortingLayerID = SortingLayer.NameToID("Character");
+            spriteRenderer.sortingOrder = 0;
+
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
+            hudView = Object.Instantiate(prefab, canvas.transform).GetComponent<ParticipantHudView>();
+            hudView.Bind(
+                player,
+                "battle.keyword.strength.name",
+                worldView.transform,
+                canvas,
+                localization,
+                new cfg.Tables(_ => new JArray()),
+                enemyIntents: null);
+            hudView.transform.Find("NameAnchor").gameObject.SetActive(false);
+            hudView.transform.Find("VitalsAnchor").gameObject.SetActive(false);
+            hudView.transform.Find("TargetHighlightAnchor").gameObject.SetActive(false);
+            RectTransform feedbackAnchor =
+                hudView.transform.Find("FeedbackAnchor").GetComponent<RectTransform>();
+            feedbackAnchor.anchoredPosition = Vector2.zero;
+
+            lease = hudView.CreateCombatFeedbackTween(
+                new BattleCombatFeedbackCue(
+                    player.Id,
+                    BattleCommandPresentationStepKind.HealthLossNumber,
+                    amount: 6));
+            timeline = CreateManualTimeline(out timelineId)
+                .Append(lease.Tween);
+            timeline.Play();
+            timeline.ManualUpdate(0.01f, 0.01f);
+
+            Canvas.ForceUpdateCanvases();
+            camera.Render();
+            RenderTexture.active = renderTexture;
+            renderedFrame = new Texture2D(
+                renderWidth,
+                renderHeight,
+                TextureFormat.RGB24,
+                mipChain: false);
+            renderedFrame.ReadPixels(
+                new Rect(0f, 0f, renderWidth, renderHeight),
+                destX: 0,
+                destY: 0);
+            renderedFrame.Apply();
+
+            int visibleHealthLossPixels = CountVisibleHealthLossPixels(
+                renderedFrame,
+                renderWidth / 2,
+                renderHeight / 2);
+            Assert.That(
+                visibleHealthLossPixels,
+                Is.GreaterThan(8),
+                "生命损失数字已播放，但红色字形仍被 Character 排序层角色完全遮挡。");
+            Assert.That(player.CurrentHealth, Is.EqualTo(30));
+        }
+        finally
+        {
+            RenderTexture.active = previousActive;
+            KillManualTimeline(timelineId);
+            lease?.Cleanup();
+            LocalizationSettings.SelectedLocale = previousLocale;
+            if (hudView != null)
+                Object.DestroyImmediate(hudView.gameObject);
+            if (worldView != null)
+                Object.DestroyImmediate(worldView);
+            if (canvasObject != null)
+                Object.DestroyImmediate(canvasObject);
+            if (cameraObject != null)
+                Object.DestroyImmediate(cameraObject);
+            if (characterSprite != null)
+                Object.DestroyImmediate(characterSprite);
+            if (spriteTexture != null)
+                Object.DestroyImmediate(spriteTexture);
+            if (renderedFrame != null)
+                Object.DestroyImmediate(renderedFrame);
+            if (renderTexture != null)
+            {
+                renderTexture.Release();
+                Object.DestroyImmediate(renderTexture);
+            }
+            combatants.Dispose();
+            localization.Dispose();
+        }
+    }
+
     /// <summary>验证数字 cue 同步构建失败时立即销毁已实例化 transient，不把 orphan 留在 HUD。</summary>
     [UnityTest]
     public IEnumerator CreateCombatFeedbackTween_InvalidNumberAmountThrowsWithoutLeavingTransient()
@@ -603,6 +758,30 @@ public sealed class ParticipantHudCombatFeedbackTests
     {
         if (timelineId != null)
             DOTween.Kill(timelineId, complete: false);
+    }
+
+    /// <summary>统计角色中心附近符合生命损失红色样式的可见字形像素。</summary>
+    private static int CountVisibleHealthLossPixels(
+        Texture2D renderedFrame,
+        int centerX,
+        int centerY)
+    {
+        int count = 0;
+        for (int y = centerY - 48; y <= centerY + 48; y++)
+        {
+            for (int x = centerX - 96; x <= centerX + 96; x++)
+            {
+                Color pixel = renderedFrame.GetPixel(x, y);
+                if (pixel.r > 0.65f &&
+                    pixel.r > pixel.g * 1.35f &&
+                    pixel.r > pixel.b * 1.35f)
+                {
+                    count++;
+                }
+            }
+        }
+
+        return count;
     }
 
     /// <summary>创建含单一攻击意图与共享伤害效果的最小完整 Luban 表集合。</summary>

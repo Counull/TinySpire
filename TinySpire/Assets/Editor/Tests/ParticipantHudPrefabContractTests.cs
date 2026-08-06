@@ -59,7 +59,7 @@ public sealed class ParticipantHudPrefabContractTests
             Is.False);
     }
 
-    /// <summary>验证 Participant HUD 只持有一个反馈锚点和一个纯字符飘字 Prefab 引用。</summary>
+    /// <summary>验证 Participant HUD 只持有一个前景反馈锚点和一个纯字符飘字 Prefab 引用。</summary>
     [Test]
     public void ParticipantHudPrefab_ReferencesSingleFloatingNumberPrefabAndFeedbackAnchor()
     {
@@ -79,6 +79,13 @@ public sealed class ParticipantHudPrefabContractTests
         Assert.That(feedbackAnchor.GetSiblingIndex(), Is.EqualTo(prefab.transform.childCount - 1));
         Assert.That(feedbackAnchor.sizeDelta, Is.EqualTo(Vector2.zero));
         Assert.That(feedbackAnchor.GetComponentsInChildren<Graphic>(includeInactive: true), Is.Empty);
+        Assert.That(feedbackAnchor.GetComponents<Canvas>(), Has.Length.EqualTo(1));
+        Canvas feedbackCanvas = feedbackAnchor.GetComponent<Canvas>();
+        Assert.That(feedbackCanvas.overrideSorting, Is.True);
+        Assert.That(feedbackCanvas.sortingLayerName, Is.EqualTo("Character"));
+        Assert.That(feedbackCanvas.sortingOrder, Is.EqualTo(1));
+        Assert.That(feedbackAnchor.GetComponent<GraphicRaycaster>(), Is.Null);
+        Assert.That(prefab.GetComponent<Canvas>(), Is.Null);
         Assert.That(floatingPrefab, Is.Not.Null);
         Assert.That(
             AssetDatabase.GetAssetPath(floatingPrefab),

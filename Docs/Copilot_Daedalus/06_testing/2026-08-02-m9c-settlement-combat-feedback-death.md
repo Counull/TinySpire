@@ -17,6 +17,10 @@ M9C 已通过。`BattleCommandPresentationAdapter` 继续只消费 M9A 的不可
 
 经用户 2026-08-03 明确确认，飘字采用纯字符 `-N / +N` 与颜色区分，不接伤害数字底板；未读取或引用 Candidates。启动 readiness 只读当前 Session 与 Presenter 映射，在映射未齐时局部关闭 End Action 与 Hand 系统指针入口；它没有接入 Queue、`IsWaitingForPresentation`、第二 completion、事件总线或权威事实。
 
+### 2026-08-05 后验修正：伤害飘字前景排序
+
+原 M9C 的文本、alpha、播放、连续帧与清理证据证明反馈对象存在且生命周期正确，但没有证明其最终屏幕像素位于角色 SpriteRenderer 前方。用户后续所见“没有伤害数字”已由精确 RenderTexture 红灯确认是局部排序缺陷：飘字继承 `Default/0`，被 `Character/0` 角色精灵遮挡。当前只给 `ParticipantHudView.prefab/FeedbackAnchor` 增加 `Character/1`、`overrideSorting=true` 的非交互局部 Canvas；纯字符飘字 Prefab 仍无 Canvas，Queue、Turn、settlement、公式与权威事实均未改变。完整红绿、Addressables、真实 Game View 和 Console 证据见 [M9 验收后 BUG 分诊的 BUG-UI-002](2026-08-05-m9-post-validation-bug-triage.md#bug-ui-002--伤害飘字被角色精灵遮挡)。
+
 ## 测试先行与红绿证据
 
 | 契约 | 红灯 | 最小实现 | 最终绿灯 |

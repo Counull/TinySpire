@@ -5,7 +5,7 @@ lifecycle: active
 created: 2026-08-05
 updated: 2026-08-05
 status: passed
-scope: M9 验收后用户实机反馈、卡牌运动修复证据、生命 HUD 临时头顶投影边界
+scope: M9 验收后用户实机反馈、卡牌运动修复证据、生命 HUD 临时头顶投影与伤害飘字局部排序
 plan: ../plans/2026-08-02-m9-sts-feedback-outcome-restart.md
 status_source: ../SESSION_LOG.md
 ---
@@ -14,9 +14,10 @@ status_source: ../SESSION_LOG.md
 
 ## 当前结论
 
-本页记录 M9 完成后用户实机发现的三个可见问题。`BUG-MOTION-001` 与 `BUG-MOTION-002` 已在真实 `CardZones.Layout` 订阅、`HandCardContainer`、`HandCardVisual` 与命令 runner 组合的 EditMode 红灯中复现并转绿；这证明可见运动时序，不冒充真实 Game View 连续帧。`BUG-UI-001` 已在既有 Editor 的五种 M9 Game View 预设中用运行时屏幕矩形复现：生命条与手牌相交，而二者处在会确定遮挡方向的不同 Canvas 渲染模式。用户明确后续 UI 会大规模重做，因此本轮不调整 Canvas，而以临时头顶投影降低当前遮挡风险。
+本页记录 M9 完成后用户实机发现的四个可见问题。`BUG-MOTION-001` 与 `BUG-MOTION-002` 已在真实 `CardZones.Layout` 订阅、`HandCardContainer`、`HandCardVisual` 与命令 runner 组合的 EditMode 红灯中复现并转绿；这证明可见运动时序，不冒充真实 Game View 连续帧。`BUG-UI-001` 已在既有 Editor 的五种 M9 Game View 预设中用运行时屏幕矩形复现：生命条与手牌相交，而二者处在会确定遮挡方向的不同 Canvas 渲染模式。用户明确后续 UI 会大规模重做，因此该问题不调整 Canvas，而以临时头顶投影降低当前遮挡风险。`BUG-UI-002` 则是独立的局部排序缺陷：伤害反馈对象实际存在并播放，但在角色中心继承 `Default/0` 时会被 `Character/0` 精灵遮住；现已用 `FeedbackAnchor` 的局部排序 Canvas 最小修复。
 
 - `BUG-UI-001`：战斗生命 HUD 仍被遮挡。它与用户提出的整体 Battle UI 重设计相关，但“遮挡”本身是独立缺陷，“整体重设计”是另一个产品/设计任务。
+- `BUG-UI-002`：伤害数字已创建并播放，但被角色精灵遮挡，画面看起来像“没有伤害数字”；已用局部 `Character/1` Canvas 修复，并分别取得玩家与敌人的真实 Game View 前景证据。
 - `BUG-MOTION-001`：已修复为 opening Hand View 在 StartBattle 覆盖层期间保持隐藏，只在冻结的 `DrawPile → Hand` cue 开始时显示。
 - `BUG-MOTION-002`：已修复为下一轮 Hand View 在伤害数字与 HealthLossShake 结束前保持隐藏，只在其 `DrawPile → Hand` cue 开始时显示。
 
@@ -31,6 +32,7 @@ status_source: ../SESSION_LOG.md
 | 固定编号 | 聊天中的称呼 | 状态 |
 |---|---|---|
 | `BUG-UI-001` | `BUG-001：战斗生命条仍被遮挡` | 五种 M9 宽高比已运行时复现；临时头顶投影已在五种真实尺寸复测为 0 相交对，完整 UI 重做另行处理 |
+| `BUG-UI-002` | “没有伤害数字”“伤害飘字看不到” | 精确渲染红灯稳定得到 0 个可见红色字形像素；局部排序修复后转绿，玩家/敌人真实 HUD 前景截图与清理事实均已取得 |
 | `BUG-MOTION-001` | “第一个 BUG”“两套抽牌动画” | 精确 EditMode 红灯已复现并转绿；真实 Game View 连续帧待补 |
 | `BUG-MOTION-002` | “第二个 BUG”“敌人受击未完就抽牌” | 精确 EditMode 红灯已复现并转绿；真实 Game View 连续帧待补 |
 
@@ -79,6 +81,31 @@ status_source: ../SESSION_LOG.md
 ### 与整体 UI 重设计的边界
 
 用户已明确后续 UI 会大规模修改。`REQ-UI-001` 因此是后续设计任务：本轮头顶投影只为保持当前生命信息可读，不设定最终 HUD 的层级、布局、交互或视觉规范。后续大改应整体替换该临时锚点规则；若要在此之前再扩大到 Canvas、Scene、层级注册或整体布局，必须先提交影响文件、风险与回滚方式并等待确认。
+
+## BUG-UI-002 · 伤害飘字被角色精灵遮挡
+
+### 实际表现与根因
+
+伤害结算、冻结反馈映射与飘字生命周期都已经执行，但玩家和敌人身上的红色 `-N` 在正常画面中不可见。根因是 `BattleScene` 的主 HUD Canvas 为 Screen Space-Camera、`Default/0`，角色 SpriteRenderer 为 `Character/0`；`FeedbackAnchor` 位于角色 bounds 中心且原先没有局部 Canvas，纯字符飘字因而继承 HUD 的 `Default/0`，稳定渲染在角色精灵后方。旧测试只验证文本、alpha、播放和清理，没有验证最终屏幕像素是否位于角色前方。
+
+### 精确红灯与最小实现
+
+新增 `CreateCombatFeedbackTween_HealthLossRendersAboveCharacterSprite`，把真实 `ParticipantHudView.CreateCombatFeedbackTween`、正式飘字 Prefab、Screen Space-Camera Canvas 与按正式 `Character/0` 配置的重叠测试 SpriteRenderer 渲染到 `640×360` RenderTexture，并统计角色中心附近的红色字形像素。它同时断言生产反馈不会改变 Combatant Health。修复前任务 `0ca6b14458944965b205982acddddd9d` 与独立复跑 `8a125a28e0074e4392f164d3bfeb00c7` 均为 **0/1 failed**，可见红色字形像素为 **0**。
+
+最小实现只在 `ParticipantHudView.prefab/FeedbackAnchor` 增加一个局部 Canvas：`overrideSorting=true`、sorting layer 为既有 `Character`、sorting order 为 `1`。它不带 GraphicRaycaster，不提升整个 Battle Canvas；HUD 根节点与 `BattleFloatingNumberView.prefab` 仍不含额外 Canvas。Prefab 合约同步锁定上述条件，避免未来再次让反馈退回角色精灵后方。
+
+### 自动、Addressables 与真实画面证据
+
+- 精确渲染任务 `a230c1024de14eb68c2bf6a4384cd44c` 为 **1/1 passed**；渲染与 Prefab 合约组合任务 `1a0a8627c1444029a2918d69b8b6bfe4` 为 **2/2 passed**。
+- 最终五类相关回归任务 `3f1f21cba5424f2783f5b6ac1cb3af92` 为 **42/42 passed**；完整 EditMode 任务 `1023abd0836f475db43e7e5ce62507ca` 为 **460/460 passed，0 failed，0 skipped**。
+- `dotnet build TinySpire/TinySpire.sln --no-restore -m:1` 为 **0 error、12 条既有程序集版本冲突 warning**。
+- 因 addressable HUD Prefab 被修改，当前唯一 Editor 已执行 `TinySpire/Build/Sync and Build All`；本地 Addressables 内容构建成功（约 50.923 秒），生成 `Library/com.unity.addressables/aa/Windows/settings.json` 与最新 build layout。
+- 正常 Bootstrap 中调用真实 End Action Button listener 后，玩家生命从 30 降至 24，Queue 无 fault，证明生产战斗执行链仍工作。为稳定捕捉排序结果，另在同一真实运行时 HUD 上调用既有内部 `CreateCombatFeedbackTween` seam，将实际 tween 推进到 0.05 秒后暂停；玩家与敌人中心均清晰显示红色 `-6`，局部 Canvas 只读事实为 `Character/1/override=true`。这两张截图只证明真实 HUD 上的前景排序，不冒充自然结算时序或物理鼠标交互。
+- 诊断对象已销毁并恢复时间设置；最终 `numbers=0 / activeTweens=0 / playingTweens=0`，PlayerAction 下权威生命仍为玩家 30、两名敌人各 20，Console 为 **0 Error / 0 Warning**，Play Mode 已退出。
+
+### 边界
+
+本修复没有修改 Queue、Turn、settlement、伤害公式、Combatant/CardZones/Intent 权威事实、Presenter 映射、BattleScene、DI、DataTables、Localization、ProjectSettings、asmdef 或 HybridCLR；没有引入全局输入锁、第二动画队列、第二份权威状态或新玩法。局部 `Character/1` 只保证飘字高于角色精灵，不宣称其覆盖 Screen Space-Overlay 手牌或未来完整 Battle UI；若产品目标变为“高于所有 UI”，必须另行设计专用 Overlay feedback root。
 
 ## BUG-MOTION-001 · 初始手牌提前出现并重复发牌
 
