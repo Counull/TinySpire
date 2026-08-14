@@ -388,12 +388,8 @@ public sealed class BattleTurnHudFlowFeedbackTests
                 () => UniTask.CompletedTask,
                 () => { });
 
-            using var combatants = new BattleCombatantsData();
-            combatants.AddPlayer(templateId: 1001, maxHealth: 30, strength: 0);
-            combatants.AddEnemy(templateId: 2001, maxHealth: 20, strength: 0);
             float deltaTime = 0.01f;
             adapter = new BattleCommandPresentationAdapter(
-                combatants,
                 view.CreateFlowFeedbackTween,
                 () => deltaTime);
             var phaseChanged = new BattlePhaseChangedSettlement(

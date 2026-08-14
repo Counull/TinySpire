@@ -909,12 +909,21 @@ public sealed class BattleCommandPresentationPlanTests
             1,
             secondEnemyId,
             null);
+        var battleResult = new BattleResult(
+            BattleResultKind.Victory,
+            authoritySequence: 14,
+            roundNumber: 1,
+            players: new[]
+            {
+                new BattleResultPlayerSnapshot(new CombatantId(1), 1001, 30, 30),
+            });
         var result = new BattleCommandExecutionResult(
             authoritySequence: 14,
             BattleCommandType.CompleteEnemyAction,
             submitterId: null,
             BattleCommandExecutionFailureReason.None,
-            new BattleSettlementRecord[] { playerTurn, enemyTurn, actorHandoff, battleEnded });
+            new BattleSettlementRecord[] { playerTurn, enemyTurn, actorHandoff, battleEnded },
+            battleResult);
 
         BattleCommandPresentationPlan plan = BattleCommandPresentationPlan.Create(result);
 
@@ -930,6 +939,7 @@ public sealed class BattleCommandPresentationPlanTests
                 (BattleCommandPresentationStepKind.EnemyTurnBanner, 1, 0),
                 (BattleCommandPresentationStepKind.BattleOutcome, 3, 0),
             }));
+        Assert.That(plan.SettlementSteps[2].BattleResult, Is.SameAs(battleResult));
     }
 
     /// <summary>确认七类仅更新最终 HUD 或明确 skip 的记录仍保留 entry，但不会制造可见步骤。</summary>

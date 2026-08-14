@@ -16,7 +16,7 @@ public sealed class BattleLifetimeScope : LifetimeScope
     /// <summary>注册本场战斗的运行时事实、权威命令队列、逐帧入口与现有只读视图。</summary>
     protected override void Configure(IContainerBuilder builder)
     {
-        builder.RegisterInstance(new BattleSetupOptions(heroTemplateId, encounterTemplateId, battleSeed));
+        RegisterBattleSetupOptions(builder, heroTemplateId, encounterTemplateId, battleSeed);
         builder.Register(
             resolver => new BattleSession(
                 resolver.Resolve<ConfigService>(),
@@ -38,6 +38,40 @@ public sealed class BattleLifetimeScope : LifetimeScope
                 resolver.Resolve<BattleCommandSubmissionCoordinator>()),
             Lifetime.Singleton);
         builder.RegisterEntryPoint<BattleCommandRuntimeDriver>();
+    }
+
+    /// <summary>优先冻结父 Scope 输入来源，并在缺少来源时使用 Inspector 默认值。</summary>
+    internal static void RegisterBattleSetupOptions(
+        IContainerBuilder builder,
+        int defaultHeroTemplateId,
+        int defaultEncounterTemplateId,
+        int defaultBattleSeed)
+    {
+        if (builder == null)
+            throw new ArgumentNullException(nameof(builder));
+
+        builder.Register(
+            resolver =>
+            {
+                if (resolver.TryResolve(
+                        out IBattleSetupOptionsSource source))
+                {
+                    BattleSetupOptions injected = source.CreateBattleSetupOptions();
+                    if (injected == null)
+                    {
+                        throw new InvalidOperationException(
+                            "IBattleSetupOptionsSource must return one immutable BattleSetupOptions instance.");
+                    }
+
+                    return injected;
+                }
+
+                return new BattleSetupOptions(
+                    defaultHeroTemplateId,
+                    defaultEncounterTemplateId,
+                    defaultBattleSeed);
+            },
+            Lifetime.Singleton);
     }
 
     /// <summary>从当前单玩家生产 Session 组装多人根兼容的权威命令队列。</summary>

@@ -17,21 +17,14 @@ public sealed class BattleFlowFeedbackTweenFactoryTests
 
     /// <summary>确认 StartBattle 前奏只建立一次正式本地化覆盖层并局部阻断系统指针。</summary>
     [Test]
-    public void TryCreate_StartBattlePrelude_UsesBlockingLocalizedOverlayWithoutReadingOutcome()
+    public void TryCreate_StartBattlePrelude_UsesBlockingLocalizedOverlay()
     {
         var captured = new List<BattleFlowFeedbackCue>();
-        int outcomeReadCount = 0;
-        var factory = new BattleFlowFeedbackTweenFactory(
-            cue =>
-            {
-                captured.Add(cue);
-                return CreateTestTween();
-            },
-            () =>
-            {
-                outcomeReadCount++;
-                return "battle.ui.result.victory";
-            });
+        var factory = new BattleFlowFeedbackTweenFactory(cue =>
+        {
+            captured.Add(cue);
+            return CreateTestTween();
+        });
 
         bool created = factory.TryCreate(
             new BattleCommandPrelude(BattleCommandPreludeKind.StartBattle),
@@ -43,26 +36,18 @@ public sealed class BattleFlowFeedbackTweenFactoryTests
         Assert.That(captured[0].Kind, Is.EqualTo(BattleFlowFeedbackCueKind.BattleStartOverlay));
         Assert.That(captured[0].LocalizationKey, Is.EqualTo("battle.ui.battle.start"));
         Assert.That(captured[0].BlocksSystemPointer, Is.True);
-        Assert.That(outcomeReadCount, Is.Zero);
     }
 
-    /// <summary>确认玩家与敌人横幅使用正式键且不形成覆盖层指针锁，也不提前读取终局。</summary>
+    /// <summary>确认玩家与敌人横幅使用正式键且不形成覆盖层指针锁。</summary>
     [Test]
-    public void TryCreate_PlayerAndEnemyTurnSteps_UseTransientLocalizedBannersWithoutReadingOutcome()
+    public void TryCreate_PlayerAndEnemyTurnSteps_UseTransientLocalizedBanners()
     {
         var captured = new List<BattleFlowFeedbackCue>();
-        int outcomeReadCount = 0;
-        var factory = new BattleFlowFeedbackTweenFactory(
-            cue =>
-            {
-                captured.Add(cue);
-                return CreateTestTween();
-            },
-            () =>
-            {
-                outcomeReadCount++;
-                return "battle.ui.result.victory";
-            });
+        var factory = new BattleFlowFeedbackTweenFactory(cue =>
+        {
+            captured.Add(cue);
+            return CreateTestTween();
+        });
         var playerPhase = new BattlePhaseChangedSettlement(
             order: 0,
             BattleTurnPhase.BattleStart,
@@ -106,28 +91,21 @@ public sealed class BattleFlowFeedbackTweenFactoryTests
         Assert.That(captured[1].Kind, Is.EqualTo(BattleFlowFeedbackCueKind.EnemyTurnBanner));
         Assert.That(captured[1].LocalizationKey, Is.EqualTo("battle.ui.turn.enemy"));
         Assert.That(captured[1].BlocksSystemPointer, Is.False);
-        Assert.That(outcomeReadCount, Is.Zero);
     }
 
-    /// <summary>确认终局步骤只在构造该步骤时读取一次 adapter 已映射的胜负文案键。</summary>
-    [TestCase("battle.ui.result.victory")]
-    [TestCase("battle.ui.result.defeat")]
-    public void TryCreate_BattleOutcomeStep_ReadsMappedLocalizationKeyExactlyOnce(
-        string outcomeLocalizationKey)
+    /// <summary>确认终局步骤只从同一份 typed BattleResult 映射现有胜负文案键。</summary>
+    [TestCase(BattleResultKind.Victory, "battle.ui.result.victory")]
+    [TestCase(BattleResultKind.Defeat, "battle.ui.result.defeat")]
+    public void TryCreate_BattleOutcomeStep_MapsTypedBattleResult(
+        BattleResultKind resultKind,
+        string expectedLocalizationKey)
     {
         var captured = new List<BattleFlowFeedbackCue>();
-        int outcomeReadCount = 0;
-        var factory = new BattleFlowFeedbackTweenFactory(
-            cue =>
-            {
-                captured.Add(cue);
-                return CreateTestTween();
-            },
-            () =>
-            {
-                outcomeReadCount++;
-                return outcomeLocalizationKey;
-            });
+        var factory = new BattleFlowFeedbackTweenFactory(cue =>
+        {
+            captured.Add(cue);
+            return CreateTestTween();
+        });
         var battleEnded = new BattlePhaseChangedSettlement(
             order: 0,
             BattleTurnPhase.EnemyAction,
@@ -136,21 +114,29 @@ public sealed class BattleFlowFeedbackTweenFactoryTests
             roundNumberAfter: 3,
             currentActingEnemyIdBefore: new CombatantId(2001),
             currentActingEnemyIdAfter: null);
+        var battleResult = new BattleResult(
+            resultKind,
+            authoritySequence: 31,
+            roundNumber: 3,
+            players: new[]
+            {
+                new BattleResultPlayerSnapshot(new CombatantId(1), 1001, 30, 30),
+            });
 
         bool created = factory.TryCreate(
             new BattleCommandPresentationStep(
                 BattleCommandPresentationStepKind.BattleOutcome,
                 battleEnded,
-                substepIndex: 0),
+                substepIndex: 0,
+                battleResult: battleResult),
             out BattleCommandPresentationTween tween);
 
         Assert.That(created, Is.True);
         Assert.That(tween, Is.Not.Null);
         Assert.That(captured, Has.Count.EqualTo(1));
         Assert.That(captured[0].Kind, Is.EqualTo(BattleFlowFeedbackCueKind.BattleOutcome));
-        Assert.That(captured[0].LocalizationKey, Is.EqualTo(outcomeLocalizationKey));
+        Assert.That(captured[0].LocalizationKey, Is.EqualTo(expectedLocalizationKey));
         Assert.That(captured[0].BlocksSystemPointer, Is.True);
-        Assert.That(outcomeReadCount, Is.EqualTo(1));
     }
 
     /// <summary>建立由测试夹具独占的最小 cue Tween。</summary>

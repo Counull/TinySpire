@@ -445,7 +445,15 @@ public sealed class BattleCombatFeedbackTweenFactoryTests
             BattleCommandType.CompleteEnemyAction,
             submitterId: null,
             BattleCommandExecutionFailureReason.None,
-            records);
+            records,
+            new BattleResult(
+                BattleResultKind.Victory,
+                authoritySequence: 5,
+                roundNumber: 1,
+                players: new[]
+                {
+                    new BattleResultPlayerSnapshot(new CombatantId(1), 1001, 30, 30),
+                }));
         BattleCommandPresentationPlan plan = BattleCommandPresentationPlan.Create(result);
         var played = new List<(CombatantId TargetId, BattleCommandPresentationStepKind Kind, int Amount)>();
         var fallbackPlayed = new List<BattleCommandPresentationStepKind>();
@@ -520,7 +528,15 @@ public sealed class BattleCombatFeedbackTweenFactoryTests
             BattleCommandType.CompleteEnemyAction,
             submitterId: null,
             BattleCommandExecutionFailureReason.None,
-            records);
+            records,
+            new BattleResult(
+                BattleResultKind.Victory,
+                authoritySequence: 6,
+                roundNumber: 2,
+                players: new[]
+                {
+                    new BattleResultPlayerSnapshot(new CombatantId(1), 1001, 30, 30),
+                }));
         BattleCommandPresentationPlan plan = BattleCommandPresentationPlan.Create(result);
         var playbackOrder = new List<string>();
         var combatFactory = new BattleCombatFeedbackTweenFactory(cue =>
@@ -530,8 +546,7 @@ public sealed class BattleCombatFeedbackTweenFactoryTests
         var flowFactory = new BattleFlowFeedbackTweenFactory(
             cue => new BattleCommandPresentationTween(
                 CreateTestSequence().AppendCallback(() => playbackOrder.Add(cue.Kind.ToString())),
-                cleanup: null),
-            () => "battle.ui.result.victory");
+                cleanup: null));
         using var runner = new BattleCommandPresentationRunner(
             _ => throw new AssertionException("CompleteEnemyAction 不得建立命令前奏。"),
             step =>
@@ -590,7 +605,15 @@ public sealed class BattleCombatFeedbackTweenFactoryTests
             BattleCommandType.CompleteEnemyAction,
             submitterId: null,
             BattleCommandExecutionFailureReason.None,
-            new BattleSettlementRecord[] { moved, phaseChanged });
+            new BattleSettlementRecord[] { moved, phaseChanged },
+            new BattleResult(
+                BattleResultKind.Victory,
+                authoritySequence: 7,
+                roundNumber: 1,
+                players: new[]
+                {
+                    new BattleResultPlayerSnapshot(new CombatantId(1), 1001, 30, 30),
+                }));
         BattleCommandPresentationPlan plan = BattleCommandPresentationPlan.Create(result);
         var createCount = 0;
         var factory = new BattleCombatFeedbackTweenFactory(_ =>

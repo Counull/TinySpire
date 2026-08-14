@@ -1230,3 +1230,15 @@ Run 规划采用递归切片门禁：每个可执行切片先处于 `needs-grill
 **阶段边界**：当前只完成 Roadmap 换轨。G1 尚未 Grill、尚未切片、尚未实施。“恭喜/战后总结”是否独立存在、是否承担奖励事实、何时可跳过等没有冻结来源，只登记为未来 G1/G4 交界处的 Grill 问题，不在本决定中发明功能。BattleScene UI、视觉反馈和动画是功能性基线但非最终品质；它们进入独立表现债务轨道，除非阻塞新切片验收，否则不抢占 Run 本体，最终统一收口仍属于 G8 或单独获批的表现切片。
 
 **检查点与影响**：BattleScene 里程碑 commit 为 `e07e39a`，tag 为 `milestone-battlescene-mvp-2026-08-14`，检查点分支已推送 GitHub；最新完整 Unity EditMode 记录为 807/807 passed。根 `README.md` 对外状态改为 BattleScene MVP complete / Run planning next，并明确当前 UI 与动画仍是 provisional。本决定只改文档职责和规划门禁，不改运行时代码、配置表、生成物、Scene、Prefab 或构建产物。
+
+## CD-111：Battle 进出边界使用 Queue-owned 终局结果与父 Scope 输入来源
+
+**问题**：交接审计 B2R-101/201 证明胜负原先只由 internal 终局规则即时派生，UI 为终局文案再次读取参与者事实；未来非 UI Run 消费者没有 typed、exactly-once 的读取点。B2R-102/202 又证明 `BattleLifetimeScope` 无条件用 Inspector 常量创建 `BattleSetupOptions`，未来父 Run 生命周期不能替换 hero / encounter / seed。若 UI 回调成为结果来源，或 Run 分别写 seed、HP、牌组，会产生第二事实源；若终局刚进入 `BattleEnded` 就对外发布，又会早于当前表现屏障的稳定结束语义。
+
+**终局结果选择**：新增公开不可变 `BattleResult`，包含 `BattleResultKind`（Victory / Defeat）、产生结果的 `AuthoritySequence`、终局 `RoundNumber`，以及按 `CombatantId` 稳定排序的不可变玩家结算快照 `Players`；每项冻结 `CombatantId / TemplateId / Health / MaxHealth`，并提供派生事实 `IsAlive`。`BattleCommandQueue` 只在首次成功进入 `BattleEnded`，且终局 settlement 与 continuation 已完全冻结后创建一次，保证玩家快照读取的是结算后权威事实；同一对象附着到 `BattleCommandExecutionResult`，表现计划必须把它传给 `BattleOutcome` step，UI 只将 `Kind` 映射为既有本地化键，不再重跑 `BattleTerminalRules`。Queue 的只读 R3 `Result` 在对应表现 completion 真正解除屏障后才发布该同一对象；旧、迟到或重复 completion 不能重复发布，新 Battle Scope 从空结果开始。
+
+**输入选择**：`BattleSetupOptions` 继续是 hero / encounter / seed 的唯一不可变载体。每个 `BattleLifetimeScope` child container 注册一个 singleton：若父链能解析 `IBattleSetupOptionsSource`，只调用一次并冻结其返回对象；若不存在来源，才以当前 Inspector 字段创建默认对象；来源返回空对象直接失败，不静默使用默认值。`BattleSession` 继续从 Hero MaxHealth 与 Deck 模板建立生命和牌组，并由同一个 seed 沿用现有卡区、敌人意图、职业及卡牌目标随机域派生，不增加第二随机源或改变盐。
+
+**边界与后续**：本决定不增加 `Abandoned`，不把 Restart / Exit / 回地图 / 奖励从 HUD 收回流程层，也不把牌组或奖励塞进当前 `BattleResult`。结果已经冻结结算后玩家身份与生命事实；但父 Scope 的生产 Run 注册、Run 根种子与战斗标识、初始 HP / 牌组输入，以及 `BattleResult → RunState` 原子写回仍需 G1 分别 Grill。因此 DEP-007 保持 open，不能宣称完整 Battle 进出契约已经完成。现有 `BattleEnded`、`BattleAlreadyEnded`、M9F 稳定面板与按钮门控不变。
+
+**架构与验收**：这是对 AC-002 已确定替换源的最小接缝实现，并遵守 AC-001/004/007/008/009；没有 reopen Locked 约定，不修改 `ARCHITECTURE_CONVENTIONS.md`。结算快照补强的 compile RED 为 6 个缺失类型 / `Players` 错误，两个精确 GREEN 均为 1/1；QueueM8D 14/14、相关 9 个 fixture 127/127、完整 EditMode 811/811、Runtime / Editor 静态编译均通过。唯一 Unity Editor 中已串行通过 Bootstrap → BattleScene、真实 Queue 胜利、HUD Restart、新 Scope 空结果、真实 Queue 失败、HUD Exit exactly-once guard、2 秒无晚到结果、零 active tween 与 Stop 后 Battle Scope 归零；Editor 未证明 Player OS 进程实际退出，只证明 HUD Exit listener 与重复提交 guard。完整任务号和排除范围见 `06_testing/2026-08-14-battlescene-to-run-seam-corrections.md`。

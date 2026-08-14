@@ -14,18 +14,23 @@ namespace TinySpire.Battle
         private readonly IBattleCommandPresentation _presentation;
         private readonly BattleCommandSubmissionCoordinator _coordinator;
         private readonly BattleCommandSchedulingCore _scheduling;
+        private readonly BattleCombatantsData _combatants;
         private readonly BattleTurnController _turnController;
         private readonly BattleEnemyActionExecutor _enemyActionExecutor;
         private readonly BattleTerminalRules _terminalRules;
         private readonly MachineGunnerBattleRuntime _machineGunnerRuntime;
         private readonly BattleSettlementTriggerEngine _settlementTriggerEngine;
         private readonly ReactiveProperty<BattleCommandQueueData> _queue;
+        private readonly ReactiveProperty<BattleResult> _result;
 
         /// <summary>权威命令顺序的只读响应式事实。</summary>
         public ReadOnlyReactiveProperty<BattleCommandQueueData> Queue { get; }
 
         /// <summary>权威回合状态的只读响应式事实。</summary>
         public ReadOnlyReactiveProperty<BattleTurnData> Turn => _turnController.Turn;
+
+        /// <summary>表现屏障完成后公开的单场战斗结果；战斗进行中为空。</summary>
+        public ReadOnlyReactiveProperty<BattleResult> Result { get; }
 
         /// <summary>返回队列执行时使用的同一出牌规则读取入口。</summary>
         internal BattleCardPlayRules CardPlayRules => _turnController.CardPlayRules;
@@ -82,6 +87,7 @@ namespace TinySpire.Battle
             if (enemyIntents == null)
                 throw new ArgumentNullException(nameof(enemyIntents));
 
+            _combatants = combatants;
             _machineGunnerRuntime = machineGunnerRuntime;
             _settlementTriggerEngine = new BattleSettlementTriggerEngine(
                 combatants,
@@ -107,6 +113,8 @@ namespace TinySpire.Battle
                 _settlementTriggerEngine);
             _queue = new ReactiveProperty<BattleCommandQueueData>(_scheduling.CreateQueueSnapshot());
             Queue = _queue.ToReadOnlyReactiveProperty();
+            _result = new ReactiveProperty<BattleResult>(null);
+            Result = _result.ToReadOnlyReactiveProperty();
         }
 
         /// <summary>消费同一命令引用的预注册句柄，并通过唯一迭代 drain 接受或执行命令。</summary>
@@ -232,13 +240,20 @@ namespace TinySpire.Battle
 
                 if (executionResult.Settlements.Count == 0)
                 {
+                    if (executionResult.BattleResult != null)
+                    {
+                        throw new InvalidOperationException(
+                            "终局执行必须携带可建立表现屏障的阶段结算记录。");
+                    }
+
                     PublishLifecycle(completion.CurrentLifecycle);
                     continue;
                 }
 
                 var presentationCompletion = new PresentationCompletion(
                     this,
-                    entry.AuthoritySequence);
+                    entry.AuthoritySequence,
+                    executionResult.BattleResult);
                 try
                 {
                     _presentation.Present(executionResult, presentationCompletion.Complete);
@@ -415,17 +430,18 @@ namespace TinySpire.Battle
                 operationResult,
                 turnBefore,
                 Turn.CurrentValue);
-            var executionResult = new BattleCommandExecutionResult(
+            var continuationInput = new BattleCommandExecutionResult(
                 entry.AuthoritySequence,
                 entry.Command.Type,
                 entry.Command.SubmitterId,
                 visibleResult.FailureReason,
-                visibleResult.Settlements);
+                visibleResult.Settlements,
+                battleResult: null);
             if (!hasFrozenContinuation && requiredEndPlayerActionActorId.HasValue)
             {
                 if (!(entry.Command is PlayCardCommand playCardCommand) ||
                     playCardCommand.ActorId != requiredEndPlayerActionActorId.Value ||
-                    !executionResult.Succeeded ||
+                    !continuationInput.Succeeded ||
                     Turn.CurrentValue.Phase != BattleTurnPhase.PlayerAction)
                 {
                     throw new InvalidOperationException(
@@ -443,7 +459,7 @@ namespace TinySpire.Battle
                     playCardCommand.ActorId == triggeredCardPlayRequest.ActorId ||
                     entry.Command is ResolveSettlementTriggersCommand;
                 if (!validSource ||
-                    !executionResult.Succeeded ||
+                    !continuationInput.Succeeded ||
                     Turn.CurrentValue.Phase != BattleTurnPhase.PlayerAction)
                 {
                     throw new InvalidOperationException(
@@ -462,14 +478,14 @@ namespace TinySpire.Battle
 
             BattleCommand continuation = hasFrozenContinuation
                 ? frozenContinuation
-                : CreateTurnContinuation(executionResult);
+                : CreateTurnContinuation(continuationInput);
             if (entry.Command is PlayCardCommand completedTriggeredPlay &&
                 completedTriggeredPlay.TriggeredPlayRequest?.ContinuationAfterPlay != null &&
                 continuation == null)
             {
                 continuation = completedTriggeredPlay.TriggeredPlayRequest.ContinuationAfterPlay;
             }
-            if (executionResult.Succeeded)
+            if (continuationInput.Succeeded)
             {
                 int? suppressedRegistrationId =
                     (entry.Command as PlayCardCommand)?.TriggeredPlayRequest?
@@ -484,6 +500,19 @@ namespace TinySpire.Battle
                     continuation,
                     suppressedRegistrationId);
             }
+
+            BattleResult battleResult = CreateBattleResult(
+                entry.AuthoritySequence,
+                visibleResult,
+                turnBefore,
+                Turn.CurrentValue);
+            var executionResult = new BattleCommandExecutionResult(
+                entry.AuthoritySequence,
+                entry.Command.Type,
+                entry.Command.SubmitterId,
+                visibleResult.FailureReason,
+                visibleResult.Settlements,
+                battleResult);
             return BattleQueueExecutionOutcome.Completed(
                 executionResult,
                 continuation);
@@ -543,13 +572,92 @@ namespace TinySpire.Battle
                 operationResult.TriggeredCardPlayRequest);
         }
 
+        /// <summary>首次成功进入终局时从结算后参与者事实冻结唯一 typed 战斗结果。</summary>
+        private BattleResult CreateBattleResult(
+            long authoritySequence,
+            BattleTurnOperationResult visibleResult,
+            BattleTurnData turnBefore,
+            BattleTurnData turnAfter)
+        {
+            if (visibleResult == null)
+                throw new ArgumentNullException(nameof(visibleResult));
+            if (turnBefore == null)
+                throw new ArgumentNullException(nameof(turnBefore));
+            if (turnAfter == null)
+                throw new ArgumentNullException(nameof(turnAfter));
+            if (visibleResult.FailureReason != BattleCommandExecutionFailureReason.None ||
+                turnBefore.Phase == BattleTurnPhase.BattleEnded ||
+                turnAfter.Phase != BattleTurnPhase.BattleEnded)
+            {
+                return null;
+            }
+
+            if (visibleResult.Settlements.Count == 0 ||
+                !(visibleResult.Settlements[visibleResult.Settlements.Count - 1] is
+                    BattlePhaseChangedSettlement terminalPhase) ||
+                terminalPhase.PhaseAfter != BattleTurnPhase.BattleEnded)
+            {
+                throw new InvalidOperationException(
+                    "首次进入终局的命令必须以 BattleEnded 阶段结算收尾。");
+            }
+
+            BattleTerminalOutcome outcome = _terminalRules.Evaluate();
+            BattleResultKind kind;
+            switch (outcome)
+            {
+                case BattleTerminalOutcome.Victory:
+                    kind = BattleResultKind.Victory;
+                    break;
+                case BattleTerminalOutcome.Defeat:
+                    kind = BattleResultKind.Defeat;
+                    break;
+                default:
+                    throw new InvalidOperationException(
+                        "进入 BattleEnded 后必须能派生唯一 Victory 或 Defeat 结果。");
+            }
+
+            var players = new List<PlayerCombatantData>();
+            foreach (CombatantData combatant in _combatants.All.Values)
+            {
+                if (combatant is PlayerCombatantData player)
+                    players.Add(player);
+            }
+            players.Sort((left, right) => left.Id.Value.CompareTo(right.Id.Value));
+
+            var playerSnapshots = new List<BattleResultPlayerSnapshot>(players.Count);
+            for (int index = 0; index < players.Count; index++)
+            {
+                PlayerCombatantData player = players[index];
+                playerSnapshots.Add(new BattleResultPlayerSnapshot(
+                    player.Id,
+                    player.TemplateId,
+                    player.CurrentHealth,
+                    player.MaxHealth));
+            }
+
+            return new BattleResult(
+                kind,
+                authoritySequence,
+                turnAfter.RoundNumber,
+                playerSnapshots);
+        }
+
         /// <summary>精确 completion 只解除所属屏障，随后尝试由新的外层 drain 继续。</summary>
-        private void CompletePresentation(long authoritySequence)
+        private void CompletePresentation(long authoritySequence, BattleResult battleResult)
         {
             if (!_scheduling.CompletePresentation(authoritySequence))
                 return;
 
             PublishQueueSnapshot();
+            if (battleResult != null)
+            {
+                if (battleResult.AuthoritySequence != authoritySequence)
+                    throw new InvalidOperationException("表现完成回调携带了其他命令的战斗结果。");
+                if (_result.Value != null)
+                    throw new InvalidOperationException("单场战斗结果不得重复发布。");
+
+                _result.Value = battleResult;
+            }
             DrainIfAvailable();
         }
 
@@ -598,6 +706,8 @@ namespace TinySpire.Battle
         /// <summary>释放 Queue 与内部回合事实，不释放由场景容器独立拥有的 coordinator。</summary>
         public void Dispose()
         {
+            Result.Dispose();
+            _result.Dispose();
             Queue.Dispose();
             _queue.Dispose();
             _turnController.Dispose();
@@ -608,16 +718,29 @@ namespace TinySpire.Battle
         {
             private readonly BattleCommandQueue _owner;
             private readonly long _authoritySequence;
+            private readonly BattleResult _battleResult;
             private bool _isArmed;
             private bool _isCompletionRequested;
             private bool _isCanceled;
             private bool _isCompleted;
 
             /// <summary>保存 Queue 与精确序号，防止迟到回调跨过新屏障。</summary>
-            internal PresentationCompletion(BattleCommandQueue owner, long authoritySequence)
+            internal PresentationCompletion(
+                BattleCommandQueue owner,
+                long authoritySequence,
+                BattleResult battleResult)
             {
                 _owner = owner ?? throw new ArgumentNullException(nameof(owner));
                 _authoritySequence = authoritySequence;
+                if (battleResult != null &&
+                    battleResult.AuthoritySequence != authoritySequence)
+                {
+                    throw new ArgumentException(
+                        "表现完成回调只能携带同一命令的战斗结果。",
+                        nameof(battleResult));
+                }
+
+                _battleResult = battleResult;
             }
 
             /// <summary>在 Present 成功返回前只记录同步 completion，避免先完成后抛错逃逸 fault。</summary>
@@ -632,7 +755,7 @@ namespace TinySpire.Battle
                 }
 
                 _isCompleted = true;
-                _owner.CompletePresentation(_authoritySequence);
+                _owner.CompletePresentation(_authoritySequence, _battleResult);
             }
 
             /// <summary>在生命周期终态发布后启用 completion，并兑现此前的同步请求。</summary>
@@ -646,7 +769,7 @@ namespace TinySpire.Battle
                     return;
 
                 _isCompleted = true;
-                _owner.CompletePresentation(_authoritySequence);
+                _owner.CompletePresentation(_authoritySequence, _battleResult);
             }
 
             /// <summary>表现入口抛错后永久作废已给出的 completion，保留 fault 诊断现场。</summary>

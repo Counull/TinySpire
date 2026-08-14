@@ -94,16 +94,15 @@ namespace TinySpire.UI.Battle
         {
         }
 
-        /// <summary>以当前参与者事实与可控流程 View 工厂验证终局即时映射，不公开或缓存 outcome。</summary>
+        /// <summary>以可控流程 View 工厂验证冻结的 typed 终局结果映射。</summary>
         internal BattleCommandPresentationAdapter(
-            BattleCombatantsData combatants,
             Func<BattleFlowFeedbackCue, BattleCommandPresentationTween> createFlowFeedbackTween,
             Func<float> unscaledDeltaTimeProvider)
             : this(
                 cueDurationSeconds: 0f,
                 unscaledDeltaTimeProvider,
                 combatFeedbackFactory: null,
-                CreateFlowFeedbackFactory(combatants, createFlowFeedbackTween),
+                CreateFlowFeedbackFactory(createFlowFeedbackTween),
                 participantPresenter: null,
                 handCardContainerProvider: null,
                 cardPileHudView: null,
@@ -232,19 +231,14 @@ namespace TinySpire.UI.Battle
                 participantPresenter.CreateCombatFeedbackTween);
         }
 
-        /// <summary>以当前参与者事实建立终局延迟映射，结果只在对应步骤构造时即时返回文案键。</summary>
+        /// <summary>建立只消费冻结 presentation step 的可控流程反馈工厂。</summary>
         private static BattleFlowFeedbackTweenFactory CreateFlowFeedbackFactory(
-            BattleCombatantsData combatants,
             Func<BattleFlowFeedbackCue, BattleCommandPresentationTween> createFlowFeedbackTween)
         {
-            if (combatants == null)
-                throw new ArgumentNullException(nameof(combatants));
             if (createFlowFeedbackTween == null)
                 throw new ArgumentNullException(nameof(createFlowFeedbackTween));
 
-            return new BattleFlowFeedbackTweenFactory(
-                createFlowFeedbackTween,
-                () => ResolveBattleOutcomeLocalizationKey(combatants));
+            return new BattleFlowFeedbackTweenFactory(createFlowFeedbackTween);
         }
 
         /// <summary>以当前 Scope 的延迟解析建立生产流程反馈，不引入 TurnHud 与 Queue 的构造环。</summary>
@@ -255,25 +249,22 @@ namespace TinySpire.UI.Battle
                 throw new ArgumentNullException(nameof(resolver));
 
             BattleTurnHudView configuredView = null;
-            return new BattleFlowFeedbackTweenFactory(
-                cue =>
+            return new BattleFlowFeedbackTweenFactory(cue =>
+            {
+                BattleTurnHudView currentView = resolver.Resolve<BattleTurnHudView>();
+                if (currentView == null)
                 {
-                    BattleTurnHudView currentView = resolver.Resolve<BattleTurnHudView>();
-                    if (currentView == null)
-                    {
-                        throw new InvalidOperationException(
-                            "Current Battle Scope does not contain BattleTurnHudView.");
-                    }
-                    if (configuredView != currentView)
-                    {
-                        ConfigureProductionFlowFeedbackView(resolver, currentView);
-                        configuredView = currentView;
-                    }
+                    throw new InvalidOperationException(
+                        "Current Battle Scope does not contain BattleTurnHudView.");
+                }
+                if (configuredView != currentView)
+                {
+                    ConfigureProductionFlowFeedbackView(resolver, currentView);
+                    configuredView = currentView;
+                }
 
-                    return currentView.CreateFlowFeedbackTween(cue);
-                },
-                () => ResolveBattleOutcomeLocalizationKey(
-                    resolver.Resolve<BattleSession>().Combatants));
+                return currentView.CreateFlowFeedbackTween(cue);
+            });
         }
 
         /// <summary>把现有本地化、同地址场景流与 Application.Quit 接到当前 concrete TurnHud。</summary>
@@ -288,27 +279,6 @@ namespace TinySpire.UI.Battle
                 key => localization.GetString(key),
                 () => sceneFlow.LoadSceneWithLoadingAsync(startupOptions.InitialSceneAddress),
                 () => Application.Quit());
-        }
-
-        /// <summary>临时调用同程序集终局规则并立即映射正式文案键，不保存第二份 outcome。</summary>
-        private static string ResolveBattleOutcomeLocalizationKey(
-            BattleCombatantsData combatants)
-        {
-            switch (new BattleTerminalRules(combatants).Evaluate())
-            {
-                case BattleTerminalOutcome.Victory:
-                    return "battle.ui.result.victory";
-                case BattleTerminalOutcome.Defeat:
-                    return "battle.ui.result.defeat";
-                case BattleTerminalOutcome.Ongoing:
-                    throw new InvalidOperationException(
-                        "BattleOutcome presentation requires terminal combatant facts.");
-                case BattleTerminalOutcome.InvalidFacts:
-                    throw new InvalidOperationException(
-                        "BattleOutcome presentation cannot map invalid empty-alive-side facts.");
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
         }
 
         /// <summary>从当前 Scope 保留延迟解析入口，避免 adapter 构造时递归创建仍依赖 Queue 的 Hand。</summary>

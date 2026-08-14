@@ -1727,7 +1727,15 @@ public sealed class BattleParticipantFeedbackRoutingTests
                     roundNumberAfter: 1,
                     currentActingEnemyIdBefore: sourceId,
                     currentActingEnemyIdAfter: null),
-            });
+            },
+            new BattleResult(
+                BattleResultKind.Defeat,
+                authoritySequence: 90,
+                roundNumber: 1,
+                players: new[]
+                {
+                    new BattleResultPlayerSnapshot(new CombatantId(1), 1001, 0, 30),
+                }));
     }
 
     /// <summary>创建双敌人 HUD 所需的最小确定性意图表集合。</summary>

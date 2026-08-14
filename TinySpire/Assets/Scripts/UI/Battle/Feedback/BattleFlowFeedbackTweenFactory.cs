@@ -1,4 +1,5 @@
 using System;
+using TinySpire.Battle;
 
 namespace TinySpire.UI.Battle
 {
@@ -44,18 +45,16 @@ namespace TinySpire.UI.Battle
         private const string BattleStartLocalizationKey = "battle.ui.battle.start";
         private const string PlayerTurnLocalizationKey = "battle.ui.turn.player";
         private const string EnemyTurnLocalizationKey = "battle.ui.turn.enemy";
+        private const string VictoryLocalizationKey = "battle.ui.result.victory";
+        private const string DefeatLocalizationKey = "battle.ui.result.defeat";
 
         private readonly Func<BattleFlowFeedbackCue, BattleCommandPresentationTween> _createTween;
-        private readonly Func<string> _outcomeLocalizationKeyProvider;
 
-        /// <summary>以 concrete View 工厂和延迟终局文案映射创建流程反馈工厂。</summary>
+        /// <summary>以 concrete View 工厂创建只消费冻结步骤事实的流程反馈工厂。</summary>
         internal BattleFlowFeedbackTweenFactory(
-            Func<BattleFlowFeedbackCue, BattleCommandPresentationTween> createTween,
-            Func<string> outcomeLocalizationKeyProvider)
+            Func<BattleFlowFeedbackCue, BattleCommandPresentationTween> createTween)
         {
             _createTween = createTween ?? throw new ArgumentNullException(nameof(createTween));
-            _outcomeLocalizationKeyProvider = outcomeLocalizationKeyProvider
-                ?? throw new ArgumentNullException(nameof(outcomeLocalizationKeyProvider));
         }
 
         /// <summary>只消费 StartBattle 前奏；PlayCard 继续交给卡牌运动工厂。</summary>
@@ -87,7 +86,7 @@ namespace TinySpire.UI.Battle
             if (step == null)
                 throw new ArgumentNullException(nameof(step));
 
-            if (!(step.Settlement is TinySpire.Battle.BattlePhaseChangedSettlement))
+            if (!(step.Settlement is BattlePhaseChangedSettlement))
             {
                 tween = null;
                 return false;
@@ -110,16 +109,29 @@ namespace TinySpire.UI.Battle
                     return true;
 
                 case BattleCommandPresentationStepKind.BattleOutcome:
-                    string outcomeLocalizationKey = _outcomeLocalizationKeyProvider.Invoke();
                     tween = _createTween.Invoke(new BattleFlowFeedbackCue(
                         BattleFlowFeedbackCueKind.BattleOutcome,
-                        outcomeLocalizationKey,
+                        ResolveOutcomeLocalizationKey(step.BattleResult.Kind),
                         blocksSystemPointer: true));
                     return true;
 
                 default:
                     tween = null;
                     return false;
+            }
+        }
+
+        /// <summary>只把权威战斗结果类别映射为现有终局本地化键。</summary>
+        private static string ResolveOutcomeLocalizationKey(BattleResultKind kind)
+        {
+            switch (kind)
+            {
+                case BattleResultKind.Victory:
+                    return VictoryLocalizationKey;
+                case BattleResultKind.Defeat:
+                    return DefeatLocalizationKey;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(kind));
             }
         }
     }

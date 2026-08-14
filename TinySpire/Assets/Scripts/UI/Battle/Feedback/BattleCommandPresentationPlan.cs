@@ -94,16 +94,29 @@ namespace TinySpire.UI.Battle
         /// <summary>该步骤消费的原始冻结 settlement。</summary>
         public BattleSettlementRecord Settlement { get; }
 
+        /// <summary>终局步骤消费的同一份权威战斗结果；非终局步骤为空。</summary>
+        public BattleResult BattleResult { get; }
+
         /// <summary>冻结一个由 settlement 派生的表现步骤。</summary>
         internal BattleCommandPresentationStep(
             BattleCommandPresentationStepKind kind,
             BattleSettlementRecord settlement,
-            int substepIndex)
+            int substepIndex,
+            BattleResult battleResult = null)
         {
+            bool isBattleOutcome = kind == BattleCommandPresentationStepKind.BattleOutcome;
+            if (isBattleOutcome != (battleResult != null))
+            {
+                throw new ArgumentException(
+                    "只有 BattleOutcome 步骤必须携带权威 BattleResult。",
+                    nameof(battleResult));
+            }
+
             Kind = kind;
             Settlement = settlement ?? throw new ArgumentNullException(nameof(settlement));
             SettlementOrder = settlement.Order;
             SubstepIndex = substepIndex;
+            BattleResult = battleResult;
         }
     }
 
@@ -142,6 +155,7 @@ namespace TinySpire.UI.Battle
                 throw new ArgumentNullException(nameof(result));
 
             var entries = new List<BattleCommandPresentationSettlementEntry>();
+            bool hasTerminalSettlement = false;
 
             for (int index = 0; index < result.Settlements.Count; index++)
             {
@@ -155,21 +169,59 @@ namespace TinySpire.UI.Battle
                 }
                 if (settlement is BattlePhaseChangedSettlement phaseChanged &&
                     phaseChanged.PhaseBefore != phaseChanged.PhaseAfter &&
-                    phaseChanged.PhaseAfter == BattleTurnPhase.BattleEnded &&
-                    index != result.Settlements.Count - 1)
+                    phaseChanged.PhaseAfter == BattleTurnPhase.BattleEnded)
                 {
-                    throw new ArgumentException(
-                        "进入 BattleEnded 必须是最后一条 settlement，终局不得早于前序反馈。",
-                        nameof(result));
+                    if (index != result.Settlements.Count - 1)
+                    {
+                        throw new ArgumentException(
+                            "进入 BattleEnded 必须是最后一条 settlement，终局不得早于前序反馈。",
+                            nameof(result));
+                    }
+
+                    ValidateTerminalBattleResult(result, phaseChanged);
+                    hasTerminalSettlement = true;
                 }
 
                 var steps = new List<BattleCommandPresentationStep>();
-                AddSettlementSteps(settlement, steps);
+                AddSettlementSteps(settlement, result.BattleResult, steps);
                 entries.Add(new BattleCommandPresentationSettlementEntry(settlement, steps));
+            }
+
+            if (!hasTerminalSettlement && result.BattleResult != null)
+            {
+                throw new ArgumentException(
+                    "非终局执行结果不得携带 BattleResult。",
+                    nameof(result));
             }
 
             BattleCommandPrelude prelude = CreatePrelude(result.CommandType, entries);
             return new BattleCommandPresentationPlan(prelude, entries);
+        }
+
+        /// <summary>确认终局步骤携带的权威结果与当前执行序号和终局轮次完全一致。</summary>
+        private static void ValidateTerminalBattleResult(
+            BattleCommandExecutionResult result,
+            BattlePhaseChangedSettlement phaseChanged)
+        {
+            BattleResult battleResult = result.BattleResult;
+            if (battleResult == null)
+            {
+                throw new ArgumentException(
+                    "进入 BattleEnded 的执行结果必须携带 BattleResult。",
+                    nameof(result));
+            }
+            if (battleResult.AuthoritySequence != result.AuthoritySequence)
+            {
+                throw new ArgumentException(
+                    "BattleResult 必须属于当前终局命令的权威序号。",
+                    nameof(result));
+            }
+            if (battleResult.RoundNumber != phaseChanged.RoundNumberAfter)
+            {
+                throw new ArgumentException(
+                    "BattleResult 必须冻结当前终局 settlement 的轮次。",
+                    nameof(result));
+            }
         }
 
         /// <summary>只从命令类别、唯一离手记录与首个可见 Effect 派生命令前奏。</summary>
@@ -227,6 +279,7 @@ namespace TinySpire.UI.Battle
         /// <summary>只按当前已覆盖的 settlement 类别追加稳定可见步骤。</summary>
         private static void AddSettlementSteps(
             BattleSettlementRecord settlement,
+            BattleResult battleResult,
             ICollection<BattleCommandPresentationStep> steps)
         {
             if (settlement is BattleDamageAppliedSettlement damage)
@@ -443,7 +496,10 @@ namespace TinySpire.UI.Battle
                     steps.Add(new BattleCommandPresentationStep(
                         kind.Value,
                         settlement,
-                        substepIndex: 0));
+                        substepIndex: 0,
+                        kind.Value == BattleCommandPresentationStepKind.BattleOutcome
+                            ? battleResult
+                            : null));
                 }
 
                 return;

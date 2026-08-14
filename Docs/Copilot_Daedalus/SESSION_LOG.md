@@ -3,6 +3,21 @@ created: 2026-07-06
 updated: 2026-08-14
 ---
 
+## 2026-08-14 BattleScene → Run 交接最小 seam 修复（自动门禁与 Editor 原生串行验收完成，G1 仍未开始）
+
+- 所有者在只读审计完成后另行授权 B2R-101/201 与 B2R-102/202 的最小边界加固；这不是 P0/P1/blocker 修复，也不改变审计的 `SAFE_TO_START_G1_GRILL` 结论。G1 仍为 `needs-grill`。
+- W1 新增 Queue-owned 公开不可变 `BattleResult`，支持 Victory / Defeat，并冻结 `Kind / AuthoritySequence / RoundNumber` 与按 `CombatantId` 稳定排序的不可变 `Players`；每个玩家结算快照含 `CombatantId / TemplateId / Health / MaxHealth / IsAlive`。Queue 在终局 settlement 与 continuation 完全冻结后才创建同一结果对象，表现层直接消费它映射既有文案，公开只读 `Result` 在表现屏障完成后 exactly-once 发布；连续 Battle Scope 不残留旧结果。`Abandoned`、牌组 / 奖励与 `BattleResult → RunState` 原子写回仍留给 G1。
+- W2 新增父 Scope `IBattleSetupOptionsSource` 注入边界；每个 Battle child Scope 只求值一次并冻结唯一 `BattleSetupOptions`，无来源时继续使用 Inspector `1001 / 5001 / 5`。只注入 hero / encounter / seed；生命与牌组仍从模板创建，Run 根种子/恢复、初始 HP / 牌组输入仍属 DEP-007 / G1。
+- 结算快照补强先得到 Editor compile RED：6 个缺失 `Players` / 快照类型错误；随后两个精确 GREEN `cdbee956af0449ceb154b459d9115ab6` 与 `9b2cc0f1a9c94bd3883bac240cfeba79` 均为 1/1。QueueM8D `439414c167ee4058ae6ce48bfd6e137b` 14/14、相关 9 个 fixture `445e2407b7494d7291c9d192b12ba0fe` 127/127、完整 EditMode `7057ee5000a24d739b347076ee766c6e` **811/811**（18.8400845 秒）均通过；Runtime / Editor 静态 build 分别为 0 error / 6 条既有 warning 与 0 error / 12 条既有 warning。
+- 唯一 Unity Editor 已串行通过 BootstrapScene → BattleScene、真实 Queue 胜利（屏障后 Result 与 Players 匹配）、HUD Restart、旧 Scope 消失与新 Result 为空、真实 Queue 失败、HUD Exit 临时 probe 连点两次仅调用一次且按钮锁、2 秒无晚到 Result、`activeTweens=0`，以及 Stop 后回到 BootstrapScene 且 `BattleLifetimeScope=0`；Console error=0。Editor 只证明 HUD Exit listener / guard，没有证明 Player OS 进程实际退出。B2R-203 继续作为 owner open；未修改 `Docs/Hermes_Pegasus/**`。决定见 CD-111，计划与证据见 `plans/2026-08-14-battlescene-to-run-seam-corrections.md`、`06_testing/2026-08-14-battlescene-to-run-seam-corrections.md`。
+
+## 2026-08-14 BattleScene → Run 交接审计已执行（SAFE_TO_START_G1_GRILL）
+
+- 外部只读审计已执行并归档：结论 SAFE_TO_START_G1_GRILL，无 ExistingDefect / PreG1Blocker / P0 / P1。基线核验通过：tag `milestone-battlescene-mvp-2026-08-14` 解引用 `e07e39a`，快照 `18d9023` 可解析且为其后代，两者之间 `TinySpire/**` 无已提交变化；审计范围内源码/测试/Scene/Prefab 无未提交改动。
+- 两轴独立评审共呈报 5 条：4 × G1DesignInput·P2（Battle 终局结果 seam 与输入注入 seam，两轴各自独立收敛到同一结论）+ 1 × DocumentationDrift·P3（Pegasus STATUS / project-definition / decision-locks D-003 漂移，待所有者裁决，不阻塞 Grill）。
+- 已核验不成立：唯一写 seam（`BattleCommandQueue.Submit`）无绕过、UI 无权威写入、确定性随机无跨域耦合、场景生命周期与订阅销毁合规、完成定义与 807/807 记录一致。
+- G1 仍为 `needs-grill`；不存在开始 G1 首片 Grill 前必须纠正的真实缺陷，也没有发生任何修复授权。审计记录：`06_testing/2026-08-14-battlescene-to-run-audit.md`。
+
 ## 2026-08-14 BattleScene MVP 检查点与 Run 路线图交接（G1 未开始）
 
 - BattleScene MVP 与当前基础卡牌运行时已形成 Git 检查点：commit `e07e39a`，tag `milestone-battlescene-mvp-2026-08-14`，分支 `codex/battlescene-mvp-checkpoint` 已推送到 GitHub。该检查点保留完整 EditMode **807/807 passed** 的最新权威记录。

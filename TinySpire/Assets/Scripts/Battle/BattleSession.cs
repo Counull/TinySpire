@@ -5,6 +5,13 @@ using cfg;
 
 namespace TinySpire.Battle
 {
+    /// <summary>为每个 Battle child Scope 提供一次不可变战斗装配参数。</summary>
+    public interface IBattleSetupOptionsSource
+    {
+        /// <summary>创建或返回当前单场战斗唯一使用的装配参数。</summary>
+        BattleSetupOptions CreateBattleSetupOptions();
+    }
+
     /// <summary>
     /// 创建单场战斗运行时数据所需的静态模板标识与随机种子。
     /// </summary>

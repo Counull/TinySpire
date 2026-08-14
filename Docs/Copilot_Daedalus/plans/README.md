@@ -8,6 +8,7 @@ m10_status: m10-complete-targeted-25-green-full-451-with-2-non-m10-failures
 
 ## 最新状态
 
+- [2026-08-14 BattleScene → Run 交接最小 seam 修复](2026-08-14-battlescene-to-run-seam-corrections.md) — 所有者在审计后授权的 G1 前置边界加固；typed BattleResult、结算后玩家快照与父 Scope hero/encounter/seed 输入 seam 已完成 811/811 和唯一 Editor 原生串行验收，G1 仍为 `needs-grill`
 - [Run MVP 路线图](../RUN_ROADMAP.md) — 当前阶段结构与逐切片门禁；动态状态查 `../SESSION_LOG.md`，本索引不预登记覆盖整个 G1 的实施计划
 - [2026-08-06 STS2 v0.107.1 Ironclad 单人卡池接入](2026-08-06-sts2-v01071-ironclad-card-pool.md) — Juggernaut 基础态已经 settlement-derived trigger 与 Queue 表现屏障正式发布；Ironclad 15/70、全项目 98/70，定向 7/7、完整 EditMode 807/807
 - [2026-08-12 Marine Game 机枪兵 V2 卡牌单场战斗接入](2026-08-12-machine-gunner-v2-card-runtime-plan.md) — Unstoppable 基础态已共用同一 settlement trigger 深模块正式发布；Marine 82/0（V1 64/0、V2 18/0）
@@ -21,6 +22,7 @@ m10_status: m10-complete-targeted-25-green-full-451-with-2-non-m10-failures
 
 ## 现有计划
 
+- [2026-08-14 BattleScene → Run 交接最小 seam 修复](2026-08-14-battlescene-to-run-seam-corrections.md) — B2R-101/201 与 B2R-102/202 的窄修复计划已完成；已冻结终局玩家生命快照，但不包含初始 HP/牌组输入、牌组/奖励结果、RunState 写回、Abandoned 或战后流程收权；原生验收及 Editor Exit 边界见验收页
 - [2026-08-12 Marine Game 机枪兵 V2 卡牌单场战斗接入](2026-08-12-machine-gunner-v2-card-runtime-plan.md) — 当前 README web 的单场卡牌实施计划；Unstoppable 已验收，当前 82 Implemented / 0 CatalogOnly（V1 64/0、V2 18/0）
 - [2026-08-06 STS2 v0.107.1 Ironclad 单人卡池接入](2026-08-06-sts2-v01071-ironclad-card-pool.md) — 以本机 public/main build 23811903 冻结 85 张单人卡；Juggernaut 已验收，当前 15 Implemented / 70 CatalogOnly
 - [2026-08-05 M10 BattleScene MVP 对标、可靠性与内容扩展入口](2026-08-05-m10-battlescene-conformance.md) — 唯一实施计划已完成；M10 定向 25/25 通过，完整 EditMode 451 项中的两项非 M10 UI/Targeting 异常按交付时事实保留，不把未纳入本提交的后续 M9 测试校准计入 M10 通过口径

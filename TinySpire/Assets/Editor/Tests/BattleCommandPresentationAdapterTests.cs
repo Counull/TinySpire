@@ -1378,18 +1378,16 @@ public sealed class BattleCommandPresentationAdapterTests
         Assert.That(completionCount, Is.Zero);
     }
 
-    /// <summary>确认终局步骤在 adapter 构造后才即时读取最新阵营事实，并在胜负反馈后释放唯一 completion。</summary>
-    [TestCase(true, "battle.ui.result.victory")]
-    [TestCase(false, "battle.ui.result.defeat")]
-    public void BattleEnded_MapsCurrentTerminalOutcomeBeforeCompletion(
-        bool playerWon,
+    /// <summary>确认终局步骤消费执行结果携带的 typed 事实，并在胜负反馈后释放唯一 completion。</summary>
+    [TestCase(BattleResultKind.Victory, "battle.ui.result.victory")]
+    [TestCase(BattleResultKind.Defeat, "battle.ui.result.defeat")]
+    public void BattleEnded_MapsTypedResultBeforeCompletion(
+        BattleResultKind resultKind,
         string expectedLocalizationKey)
     {
-        using var combatants = new BattleCombatantsData();
         BattleFlowFeedbackCue capturedCue = null;
         var callbackOrder = new List<string>();
         using var adapter = new BattleCommandPresentationAdapter(
-            combatants,
             cue =>
             {
                 capturedCue = cue;
@@ -1398,10 +1396,6 @@ public sealed class BattleCommandPresentationAdapterTests
                 return new BattleCommandPresentationTween(sequence, cleanup: null);
             },
             () => 0f);
-        if (playerWon)
-            combatants.AddPlayer(templateId: 1001, maxHealth: 30, strength: 0);
-        else
-            combatants.AddEnemy(templateId: 2001, maxHealth: 20, strength: 0);
 
         var battleEnded = new BattlePhaseChangedSettlement(
             order: 0,
@@ -1411,12 +1405,21 @@ public sealed class BattleCommandPresentationAdapterTests
             roundNumberAfter: 3,
             currentActingEnemyIdBefore: new CombatantId(2001),
             currentActingEnemyIdAfter: null);
+        var battleResult = new BattleResult(
+            resultKind,
+            authoritySequence: 65,
+            roundNumber: 3,
+            players: new[]
+            {
+                new BattleResultPlayerSnapshot(new CombatantId(1), 1001, 30, 30),
+            });
         var result = new BattleCommandExecutionResult(
             authoritySequence: 65,
             BattleCommandType.CompleteEnemyAction,
             submitterId: null,
             BattleCommandExecutionFailureReason.None,
-            new BattleSettlementRecord[] { battleEnded });
+            new BattleSettlementRecord[] { battleEnded },
+            battleResult);
 
         ((IBattleCommandPresentation)adapter).Present(
             result,
@@ -1430,22 +1433,12 @@ public sealed class BattleCommandPresentationAdapterTests
         Assert.That(callbackOrder, Is.EqualTo(new[] { "BattleOutcome", "Completion" }));
     }
 
-    /// <summary>确认 BattleEnded 与 ongoing/空阵营事实矛盾时同步 fault，且不伪造终局 cue 或 completion。</summary>
-    [TestCase(true)]
-    [TestCase(false)]
-    public void BattleEnded_NonTerminalOrInvalidFacts_ThrowsWithoutCueOrCompletion(
-        bool keepBothSidesAlive)
+    /// <summary>确认缺少 typed 结果的 BattleEnded 同步 fault，且不伪造终局 cue 或 completion。</summary>
+    [Test]
+    public void BattleEnded_WithoutTypedResult_ThrowsWithoutCueOrCompletion()
     {
-        using var combatants = new BattleCombatantsData();
-        if (keepBothSidesAlive)
-        {
-            combatants.AddPlayer(templateId: 1001, maxHealth: 30, strength: 0);
-            combatants.AddEnemy(templateId: 2001, maxHealth: 20, strength: 0);
-        }
-
         int cueCount = 0;
         using var adapter = new BattleCommandPresentationAdapter(
-            combatants,
             cue =>
             {
                 cueCount++;
@@ -1470,7 +1463,7 @@ public sealed class BattleCommandPresentationAdapterTests
             new BattleSettlementRecord[] { battleEnded });
         int completionCount = 0;
 
-        Assert.Throws<InvalidOperationException>(
+        Assert.Throws<ArgumentException>(
             () => ((IBattleCommandPresentation)adapter).Present(
                 result,
                 () => completionCount++));

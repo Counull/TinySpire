@@ -7,6 +7,8 @@ updated: 2026-08-14
 
 ## 最新记录
 
+- [2026-08-14 BattleScene → Run 交接最小 seam 修复验收](2026-08-14-battlescene-to-run-seam-corrections.md) — Queue-owned typed BattleResult、结算后玩家快照、屏障后 exactly-once 发布与父 Scope hero/encounter/seed 注入已完成；QueueM8D 14/14、相关 9 个 fixture 127/127、完整 EditMode 811/811，以及唯一 Editor 中的真实胜利、Restart、失败、Exit guard、无晚到结果与 Scope 归零均通过
+- [2026-08-14 BattleScene → Run 交接只读审计](2026-08-14-battlescene-to-run-audit.md) — `SAFE_TO_START_G1_GRILL`，无 P0/P1/PreG1Blocker；4 条 G1DesignInput·P2 后由所有者另行授权最小 seam 修复，B2R-203 仍为 owner open
 - [2026-08-14 共享 settlement-derived trigger、Ironclad Juggernaut 与机枪兵 Unstoppable](2026-08-14-shared-settlement-trigger-juggernaut-unstoppable-runtime.md) — 基础运行时、强枚举、Queue 表现屏障、正式表 / AB 与 Unity 原生验证已收口；全项目 98/70、Ironclad 15/70、Marine 82/0、Effect 19，定向 7/7、完整 EditMode 807/807
 - [2026-08-14 共享触发出牌、Ironclad Havoc 与机枪兵 Opportunistic Strike](2026-08-14-shared-triggered-play-havoc-opportunistic-strike-runtime.md) — Queue-owned system-token continuation、DrawPile 顶牌免费强制 Exhaust 与前置 Attack/Shoot 后随机手牌 Attack 均完成正式表、真实 AB 与 Unity 原生验证；定向 8/8、完整 EditMode 802/802
 - [2026-08-14 共享 Block 保留、Ironclad Barricade 与机枪兵 Garrison](2026-08-14-shared-block-retention-barricade-garrison-runtime.md) — 永久 / 计时 Prepare-Validate-Commit、Garrison 精确双选与一次行动手牌保留均完成正式表、Localization、真实 AB 与 Unity 原生验证；定向 300/300、完整 EditMode 798/798
@@ -67,6 +69,8 @@ updated: 2026-08-14
 
 ## 验证记录
 
+- [2026-08-14 BattleScene → Run 交接最小 seam 修复验收](2026-08-14-battlescene-to-run-seam-corrections.md) — W1/W2 精确 RED→GREEN、胜败同一 typed 结果、结算后玩家快照、重复 completion、连续 Battle、父来源单次冻结、Inspector fallback 与同/异 seed 均已覆盖；完整 811/811、Runtime/Editor 静态 0 error 与唯一 Editor 原生串行路径通过，Exit 仅证明 listener / guard、不冒充 Player OS 退出证据
+- [2026-08-14 BattleScene → Run 交接只读审计](2026-08-14-battlescene-to-run-audit.md) — 固定 `e07e39a` 产品基线与 `18d9023` Run 语义的双轴外部审计复核归档；审计本身不构成修复授权，Pegasus 漂移只等待所有者裁决
 - [2026-08-13 共享重复伤害、Ironclad Sword Boomerang 与机枪兵幻彩射击](2026-08-13-shared-repeated-damage-sword-boomerang-prismatic-shot-runtime.md) — 通用随机/固定目标 planner 与职业 hit-sequence 适配边界、每击存活候选、RNG 原子性、Stim 全额 Ammo、固定目标死亡停止和既有 MG settlement 前缀回归修复均已收口；正式表/Luban/Localization/Sync/BuildLayout 与 Unity 11/11、53/53、5/5、243/243、776/776 通过
 - [2026-08-13 共享 Heal、Ironclad Not Yet 与机枪兵战地手术](2026-08-13-shared-heal-not-yet-field-surgery-runtime.md) — 普通 Effect 与 Regeneration 共用封顶 outcome、prepared 内部生命写入口、`BattleHealthRestoredSettlement` 与正实际值表现；Not Yet 满血仍记录 0 并 Exhaust，Field Surgery 按 `Shackle→LoseStrength→Heal→Regeneration-1→Bomb→Burn`，正式 9/9、50/50、视图 1/1、含真实 AB 243/243、完整 766/766 已收口
 - [2026-08-13 STS2 Ironclad Burning Pact 与通用选择消耗抽牌事务](2026-08-13-sts2-ironclad-burning-pact-runtime.md) — `ExhaustSelectedHandCard=5` 与选择后 Draw 语法、Rules→UI Session→Queue 协议、selected Exhaust→重洗/Draw→source Discard 单 Layout 深事务、零候选/Hand10/RNG 漂移/表现顺序均通过；正式表/Luban/Localization/Sync/BuildLayout 与 Unity 9/9、22/22、172/172、754/754 已收口

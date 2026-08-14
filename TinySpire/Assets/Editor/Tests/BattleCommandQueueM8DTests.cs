@@ -578,6 +578,12 @@ public sealed class BattleCommandQueueM8DTests
                    firstEnemyAttackValue: 6))
         {
             scenario.StartAndCompleteFeedback();
+            var published = new List<BattleResult>();
+            using IDisposable resultSubscription = scenario.Queue.Result.Subscribe(result =>
+            {
+                if (result != null)
+                    published.Add(result);
+            });
             BattleEnemyIntentAuthoritySnapshot secondIntentBefore =
                 scenario.Intents.CaptureAuthoritySnapshot(scenario.SecondEnemy.Id);
             scenario.Queue.SubmitRegistered(new EndPlayerActionCommand(scenario.Player.Id));
@@ -608,12 +614,20 @@ public sealed class BattleCommandQueueM8DTests
             Assert.That(scenario.Player.IsAlive, Is.False);
             Assert.That(scenario.Queue.Turn.CurrentValue.Phase, Is.EqualTo(BattleTurnPhase.BattleEnded));
             Assert.That(new BattleTerminalRules(scenario.Combatants).Evaluate(), Is.EqualTo(BattleTerminalOutcome.Defeat));
+            Assert.That(result.BattleResult, Is.Not.Null);
+            Assert.That(result.BattleResult.Kind, Is.EqualTo(BattleResultKind.Defeat));
+            Assert.That(result.BattleResult.AuthoritySequence, Is.EqualTo(result.AuthoritySequence));
+            Assert.That(result.BattleResult.RoundNumber, Is.EqualTo(1));
+            Assert.That(scenario.Queue.Result.CurrentValue, Is.Null);
+            Assert.That(published, Is.Empty);
             AssertSingleCandidateEnemyIntentFactsUnchanged(secondIntentBefore, scenario.Intents);
             Assert.That(scenario.SecondEnemy.CurrentBlock, Is.Zero);
 
-            scenario.Presentation.CompleteNext();
+            scenario.Presentation.CompleteNextTwice();
 
             Assert.That(scenario.Presentation.Results, Has.Count.EqualTo(3));
+            Assert.That(scenario.Queue.Result.CurrentValue, Is.SameAs(result.BattleResult));
+            Assert.That(published, Is.EqualTo(new[] { result.BattleResult }));
             AssertSingleCandidateEnemyIntentFactsUnchanged(secondIntentBefore, scenario.Intents);
             Assert.That(scenario.Queue.Queue.CurrentValue.PendingCount, Is.Zero);
         }
@@ -659,6 +673,122 @@ public sealed class BattleCommandQueueM8DTests
 
             Assert.That(scenario.Presentation.Results, Has.Count.EqualTo(2));
             Assert.That(scenario.Queue.Turn.CurrentValue.Phase, Is.EqualTo(BattleTurnPhase.BattleEnded));
+        }
+    }
+
+    /// <summary>验证终局命令把同一 typed 胜利事实交给表现，并只在屏障完成后公开发布一次。</summary>
+    [Test]
+    public void PlayCard_LastEnemyKilled_PublishesTypedVictoryExactlyOnceAfterPresentation()
+    {
+        using (var scenario = new M8DQueueScenario(
+                   enemyCount: 1,
+                   deckTemplateIds: new[] { M8DQueueScenario.LethalCardTemplateId },
+                   initialHandCount: 1))
+        {
+            scenario.StartAndCompleteFeedback();
+            var published = new List<BattleResult>();
+            bool? wasWaitingWhenPublished = null;
+            using (scenario.Queue.Result.Subscribe(result =>
+                   {
+                       if (result != null)
+                       {
+                           published.Add(result);
+                           wasWaitingWhenPublished =
+                               scenario.Queue.Queue.CurrentValue.IsWaitingForPresentation;
+                       }
+                   }))
+            {
+                CardInstanceId lethalCard = scenario.Zones.Hand[0];
+                BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(
+                    new PlayCardCommand(
+                        scenario.Player.Id,
+                        lethalCard,
+                        scenario.FirstEnemy.Id));
+
+                BattleCommandExecutionResult terminalExecution = scenario.Presentation.Results[1];
+                Assert.That(submission.Accepted, Is.True);
+                Assert.That(terminalExecution.BattleResult, Is.Not.Null);
+                Assert.That(terminalExecution.BattleResult.Kind, Is.EqualTo(BattleResultKind.Victory));
+                Assert.That(
+                    terminalExecution.BattleResult.AuthoritySequence,
+                    Is.EqualTo(submission.AuthoritySequence));
+                Assert.That(terminalExecution.BattleResult.RoundNumber, Is.EqualTo(1));
+                Assert.That(terminalExecution.BattleResult.Players, Has.Count.EqualTo(1));
+                BattleResultPlayerSnapshot playerSnapshot =
+                    terminalExecution.BattleResult.Players[0];
+                Assert.That(playerSnapshot.CombatantId, Is.EqualTo(scenario.Player.Id));
+                Assert.That(playerSnapshot.TemplateId, Is.EqualTo(101));
+                Assert.That(playerSnapshot.Health, Is.EqualTo(30));
+                Assert.That(playerSnapshot.MaxHealth, Is.EqualTo(30));
+                Assert.That(playerSnapshot.IsAlive, Is.True);
+                Assert.That(scenario.Queue.Result.CurrentValue, Is.Null);
+                Assert.That(published, Is.Empty);
+
+                scenario.Presentation.CompleteNextTwice();
+
+                Assert.That(
+                    scenario.Queue.Result.CurrentValue,
+                    Is.SameAs(terminalExecution.BattleResult));
+                Assert.That(published, Is.EqualTo(new[] { terminalExecution.BattleResult }));
+                Assert.That(wasWaitingWhenPublished, Is.False);
+
+                Assert.That(published, Has.Count.EqualTo(1));
+                Assert.That(
+                    scenario.Queue.Result.CurrentValue,
+                    Is.SameAs(terminalExecution.BattleResult));
+            }
+        }
+    }
+
+    /// <summary>验证两个独立 Battle Scope 不共享上一场结果，第二场只发布自己的失败事实。</summary>
+    [Test]
+    public void IndependentBattles_StartWithoutResultAndPublishOnlyTheirOwnOutcome()
+    {
+        BattleResult firstBattleResult;
+        using (var first = new M8DQueueScenario(
+                   enemyCount: 1,
+                   deckTemplateIds: new[] { M8DQueueScenario.LethalCardTemplateId },
+                   initialHandCount: 1))
+        {
+            Assert.That(first.Queue.Result.CurrentValue, Is.Null);
+            first.StartAndCompleteFeedback();
+            first.Queue.SubmitRegistered(new PlayCardCommand(
+                first.Player.Id,
+                first.Zones.Hand[0],
+                first.FirstEnemy.Id));
+            first.Presentation.CompleteNext();
+            firstBattleResult = first.Queue.Result.CurrentValue;
+            Assert.That(firstBattleResult, Is.Not.Null);
+            Assert.That(firstBattleResult.Kind, Is.EqualTo(BattleResultKind.Victory));
+        }
+
+        using (var second = new M8DQueueScenario(
+                   enemyCount: 2,
+                   playerHealth: 5,
+                   firstEnemyAttackValue: 6))
+        {
+            Assert.That(second.Queue.Result.CurrentValue, Is.Null);
+            second.StartAndCompleteFeedback();
+            second.Queue.SubmitRegistered(new EndPlayerActionCommand(second.Player.Id));
+            second.Presentation.CompleteNext();
+
+            BattleCommandExecutionResult terminalExecution = second.Presentation.Results[2];
+            Assert.That(terminalExecution.BattleResult, Is.Not.Null);
+            Assert.That(terminalExecution.BattleResult.Kind, Is.EqualTo(BattleResultKind.Defeat));
+            Assert.That(terminalExecution.BattleResult.Players, Has.Count.EqualTo(1));
+            BattleResultPlayerSnapshot defeatedPlayer =
+                terminalExecution.BattleResult.Players[0];
+            Assert.That(defeatedPlayer.CombatantId, Is.EqualTo(second.Player.Id));
+            Assert.That(defeatedPlayer.TemplateId, Is.EqualTo(101));
+            Assert.That(defeatedPlayer.Health, Is.Zero);
+            Assert.That(defeatedPlayer.MaxHealth, Is.EqualTo(5));
+            Assert.That(defeatedPlayer.IsAlive, Is.False);
+            Assert.That(terminalExecution.BattleResult, Is.Not.SameAs(firstBattleResult));
+            Assert.That(second.Queue.Result.CurrentValue, Is.Null);
+
+            second.Presentation.CompleteNext();
+
+            Assert.That(second.Queue.Result.CurrentValue, Is.SameAs(terminalExecution.BattleResult));
         }
     }
 
@@ -1176,6 +1306,17 @@ public sealed class BattleCommandQueueM8DTests
                 throw new InvalidOperationException("当前没有待完成的 M8D 表现反馈。");
 
             _completions.Dequeue().Invoke();
+        }
+
+        /// <summary>对同一个表现完成回调重复调用两次，验证权威层的幂等门禁。</summary>
+        internal void CompleteNextTwice()
+        {
+            if (_completions.Count == 0)
+                throw new InvalidOperationException("当前没有待完成的 M8D 表现反馈。");
+
+            Action completion = _completions.Dequeue();
+            completion.Invoke();
+            completion.Invoke();
         }
     }
 }
