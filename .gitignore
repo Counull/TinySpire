@@ -17,7 +17,10 @@
 .nested-git-backup/
 .agents/
 .github/
+/.codex/
 /.codex_work/
+/.hermes/
+/outputs/
 [Tt]iny[Ss]pire/.vscode/
 [Tt]iny[Ss]pire/.codex_work/
 
