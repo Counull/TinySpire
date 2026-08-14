@@ -1218,3 +1218,15 @@ Tremble 作为 I4 的真实生产代表：1 费、Enemy、`ApplyVulnerable 3`、
 **消费者语义**：Juggernaut 通过 Effect 4019（raw type 10 / `None` / 6）注册 `BlockGained -> RandomEnemyDamage`；只匹配目标为 owner 且 `Amount > 0` 的格挡 settlement。这个 6 点子伤害不读 Strength / Vulnerable，仍由目标 Block / HP / 致死结果承接。Unstoppable 由 Program 50 注册 `FatalOrBlockBroken -> RandomCardPlay`；职业侧只负责从静态表顺序提供 `Implemented` / Attack / 非 Shoot / 目标可自动解析候选，共享引擎创建唯一临时实例，随后通过 Queue 以 `Waived` 费用完整出牌并强制 Exhaust。当前触发注册 ID 在它自己派生的 settlement 链中抑制，阻止同一 Unstoppable 自递归，其他注册仍可按顺序观察。
 
 **边界与验收**：只实现两张基础态；Juggernaut 升级伤害与 Unstoppable 升级 debuff 触发仍仅为 metadata。本切片不新增 HUD / Prefab / Scene，不开放通用 event bus、任意 action grammar、Deck / 奖励 / Run / 多人或升级实例。正式生成后全项目 168 张为 98/70、Ironclad 15/70、Marine 82/0（V1 64/0、V2 18/0）、Effect 19，强枚举已替代开发期 raw 10。Luban 通过；首次 Sync 正确拒绝缺少 `{triggerDamage}` 的 i18n，单点修复后 Localization / `Sync and Build All` 与 Addressables 15.175 秒成功，BuildLayout SHA-256 为 `429C1CD806275B7095205307B67DAE71F39678C19E53E3C39B574193ACDAA769`。Runtime / Editor 静态编译分别为 0 error / 6 warning 与 0 error / 12 warning；定向 `054b6bcd5d734f729a2f1f95c4e7a80d` 7/7，完整 EditMode `d156b8e2537546ef9e83da0ef5dadd2a` 807/807。作者表、生成物和精确耗时见 `06_testing/2026-08-14-shared-settlement-trigger-juggernaut-unstoppable-runtime.md`。
+
+## CD-110：BattleScene Roadmap 固定归档，Run 阶段使用独立 Roadmap 与递归切片 Grill 门
+
+**问题**：`ROADMAP.md` 的标题和主体职责一直是 BattleScene MVP（M0～M10），但末尾同时承载 G1～G8 的未来 Run 草案。BattleScene 已形成可验证检查点后，继续在同一文件扩写会让历史验收与当前计划争夺“活跃 Roadmap”职责；若现在一次性 Grill 整个 G1，又会在主菜单、Run 生命周期、战斗进出、战后过渡、奖励与存档尚未拆清时制造一个过大的伪实施计划。
+
+**选择**：`ROADMAP.md` 保留原路径并改为 `archived`，固定保存 BattleScene MVP 的目标、依赖和验收历史，不物理迁移，也不再承载 Run 动态规划。新增同层 `RUN_ROADMAP.md` 作为 G1～G8 的阶段骨架；它只记录阶段结果、依赖和门禁，不构成代码、表格、Scene、Prefab 或构建授权。动态阶段仍只在 `SESSION_LOG.md` 维护。
+
+Run 规划采用递归切片门禁：每个可执行切片先处于 `needs-grill`，只对该最小可观察结果 Grill，确认玩法事实、生命周期、失败语义、数据所有权、UI 边界、验收和排除项后，才在 `plans/` 建立窄计划；计划仍需用户明确授权才能实施。如果实施中拆出具有独立玩法选择、生命周期边界、高影响文件或失败语义的子切片，该子切片重新进入 `needs-grill`，不继承父切片授权。纯机械接线、已冻结契约下的测试补齐和生成物同步不重复 Grill。
+
+**阶段边界**：当前只完成 Roadmap 换轨。G1 尚未 Grill、尚未切片、尚未实施。“恭喜/战后总结”是否独立存在、是否承担奖励事实、何时可跳过等没有冻结来源，只登记为未来 G1/G4 交界处的 Grill 问题，不在本决定中发明功能。BattleScene UI、视觉反馈和动画是功能性基线但非最终品质；它们进入独立表现债务轨道，除非阻塞新切片验收，否则不抢占 Run 本体，最终统一收口仍属于 G8 或单独获批的表现切片。
+
+**检查点与影响**：BattleScene 里程碑 commit 为 `e07e39a`，tag 为 `milestone-battlescene-mvp-2026-08-14`，检查点分支已推送 GitHub；最新完整 Unity EditMode 记录为 807/807 passed。根 `README.md` 对外状态改为 BattleScene MVP complete / Run planning next，并明确当前 UI 与动画仍是 provisional。本决定只改文档职责和规划门禁，不改运行时代码、配置表、生成物、Scene、Prefab 或构建产物。

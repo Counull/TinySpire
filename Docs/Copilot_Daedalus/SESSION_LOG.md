@@ -3,6 +3,15 @@ created: 2026-07-06
 updated: 2026-08-14
 ---
 
+## 2026-08-14 BattleScene MVP 检查点与 Run 路线图交接（G1 未开始）
+
+- BattleScene MVP 与当前基础卡牌运行时已形成 Git 检查点：commit `e07e39a`，tag `milestone-battlescene-mvp-2026-08-14`，分支 `codex/battlescene-mvp-checkpoint` 已推送到 GitHub。该检查点保留完整 EditMode **807/807 passed** 的最新权威记录。
+- `ROADMAP.md` 原地冻结为 M0～M10 的固定归档，不移动路径，以保留历史计划和验收页的引用；独立 `RUN_ROADMAP.md` 开始承担 G1～G8 的阶段骨架、依赖和完成定义。根 `README.md` 已同步公开阶段转换。
+- G1 当前状态为 `needs-grill`：尚未 Grill、尚未拆成可执行切片、尚未形成 G1 实施计划，也没有任何运行时代码、Scene、Prefab、表格或构建授权。未来每个切片以及出现独立玩法/生命周期选择的子切片都分别 Grill 和授权。
+- 战斗 UI、视觉反馈与动画被认定为功能可用但非最终品质的产品债；除非阻塞某个新玩法切片的可读性或可操作性，否则不阻断 Run 本体推进。大范围表现改造后续单独切片。
+- 当前换轨分支为 `codex/run-roadmap-transition`。下一动作不是立即实施 G1，而是在用户明确提出“开始 G1 首片 Grill”后，只选择一个最小可观察结果进行问责和计划。
+- 决定见 `CODE_DECISIONS.md` CD-110；Run 阶段入口见 `RUN_ROADMAP.md`。
+
 ## 2026-08-14 共享 settlement-derived trigger、Ironclad Juggernaut 与机枪兵 Unstoppable（已完成 Unity 原生验证）
 
 - 新增共享 `BattleSettlementTriggerEngine`：Power 在父出牌事务内以 Prepare / Validate / Commit 注册持久触发；后续已提交 settlement 按 settlement 顺序、再按注册顺序冻结 trigger intent。Queue 只在父命令表现屏障完成后，以内部 system-token `ResolveSettlementTriggers` continuation 执行子事务；外部仍只能调用 `BattleCommandQueue.Submit`。

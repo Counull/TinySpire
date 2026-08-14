@@ -3,7 +3,7 @@ title: Copilot_Daedalus · 目录索引
 project: TinySpire
 page_type: index
 lifecycle: active
-updated: 2026-08-02
+updated: 2026-08-14
 ---
 
 # Copilot_Daedalus · 目录索引
@@ -40,10 +40,16 @@ Status Source: [SESSION_LOG.md](SESSION_LOG.md)
 | 页面 | 何时读 |
 |---|---|
 | [plans/](plans/) | 需要某个切片的完整实现计划时。 |
-| [ROADMAP.md](ROADMAP.md) | 需要看 BattleScene MVP 的阶段目标、依赖顺序与验收口径时；当前进度仍查 `SESSION_LOG.md`。 |
+| [RUN_ROADMAP.md](RUN_ROADMAP.md) | 需要看当前 Run MVP 的阶段骨架、依赖与逐切片 Grill 门禁时；它不构成实施授权。 |
 | [06_testing/](06_testing/) | 需要查切片自动验证、Bootstrap、真实 Game View 或复审证据时。 |
 | [DEPENDENCIES.md](DEPENDENCIES.md) | 需要查某个 `DEP-NNN` 依赖项的阻塞条件、状态或解决记录时。 |
 | [AGENT_PROMPT.md](AGENT_PROMPT.md) | 需要按标准格式向 Daedalus 派任务时。 |
+
+## Archive Docs
+
+| 页面 | 归档职责 |
+|---|---|
+| [ROADMAP.md](ROADMAP.md) | 已完成的 BattleScene MVP（M0～M10）固定路线与验收历史；Run 阶段不再在此扩写。 |
 
 ## 外部依赖（只读）
 

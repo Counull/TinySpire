@@ -8,6 +8,7 @@ m10_status: m10-complete-targeted-25-green-full-451-with-2-non-m10-failures
 
 ## 最新状态
 
+- [Run MVP 路线图](../RUN_ROADMAP.md) — 当前阶段结构与逐切片门禁；动态状态查 `../SESSION_LOG.md`，本索引不预登记覆盖整个 G1 的实施计划
 - [2026-08-06 STS2 v0.107.1 Ironclad 单人卡池接入](2026-08-06-sts2-v01071-ironclad-card-pool.md) — Juggernaut 基础态已经 settlement-derived trigger 与 Queue 表现屏障正式发布；Ironclad 15/70、全项目 98/70，定向 7/7、完整 EditMode 807/807
 - [2026-08-12 Marine Game 机枪兵 V2 卡牌单场战斗接入](2026-08-12-machine-gunner-v2-card-runtime-plan.md) — Unstoppable 基础态已共用同一 settlement trigger 深模块正式发布；Marine 82/0（V1 64/0、V2 18/0）
 
@@ -16,6 +17,7 @@ m10_status: m10-complete-targeted-25-green-full-451-with-2-non-m10-failures
 - 角色：llm-workflow `03_design` 的本地化落点——各切片的实现计划与技术方案。
 - 每份计划含：目标、影响的层（计算/状态/时序/UI）、Open Question、验收点。
 - 计划是 proposal，经 Theseus 确认后方可执行；当前状态见 `../SESSION_LOG.md`。
+- Roadmap 只负责阶段方向。G1 以及后续每个实际切片、必要时每个子切片，都必须先完成局部 Grill，再新增对应计划；本索引不会预先登记一个覆盖整个 G1 的大计划。
 
 ## 现有计划
 
