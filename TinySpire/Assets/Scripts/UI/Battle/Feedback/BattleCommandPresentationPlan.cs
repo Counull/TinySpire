@@ -17,12 +17,14 @@ namespace TinySpire.UI.Battle
     {
         BlockAbsorbedNumber,
         HealthLossNumber,
+        HealthRestoredNumber,
         HitShake,
         DeathTransition,
         BlockGainedNumber,
         StrengthIconPulse,
         VulnerableIconPulse,
         CardMoved,
+        CardCreated,
         CardsReshuffled,
         EnemyIntentPulse,
         PlayerTurnBanner,
@@ -180,22 +182,18 @@ namespace TinySpire.UI.Battle
             if (commandType != BattleCommandType.PlayCard)
                 return null;
 
-            BattleCardMovedSettlement handToDiscard = null;
+            BattleCardMovedSettlement soleHandDeparture = null;
+            bool hasAmbiguousHandDeparture = false;
             BattleSettlementRecord firstVisibleEffect = null;
             foreach (BattleCommandPresentationSettlementEntry entry in entries)
             {
                 if (entry.Settlement is BattleCardMovedSettlement moved &&
-                    moved.FromZone == BattleCardZone.Hand &&
-                    moved.ToZone == BattleCardZone.DiscardPile)
+                    moved.FromZone == BattleCardZone.Hand)
                 {
-                    if (handToDiscard != null)
-                    {
-                        throw new ArgumentException(
-                            "出牌前奏要求且只允许一条 Hand 到 DiscardPile 记录。",
-                            nameof(entries));
-                    }
-
-                    handToDiscard = moved;
+                    if (soleHandDeparture == null)
+                        soleHandDeparture = moved;
+                    else
+                        hasAmbiguousHandDeparture = true;
                 }
 
                 if (firstVisibleEffect == null &&
@@ -206,8 +204,13 @@ namespace TinySpire.UI.Battle
                 }
             }
 
-            if (handToDiscard == null || firstVisibleEffect == null)
+            if (hasAmbiguousHandDeparture ||
+                soleHandDeparture == null ||
+                soleHandDeparture.ToZone != BattleCardZone.DiscardPile ||
+                firstVisibleEffect == null)
+            {
                 return null;
+            }
             if (!firstVisibleEffect.TargetId.HasValue)
             {
                 throw new ArgumentException(
@@ -217,7 +220,7 @@ namespace TinySpire.UI.Battle
 
             return new BattleCommandPrelude(
                 BattleCommandPreludeKind.PlayCard,
-                handToDiscard.CardId,
+                soleHandDeparture.CardId,
                 firstVisibleEffect.TargetId.Value);
         }
 
@@ -257,6 +260,47 @@ namespace TinySpire.UI.Battle
                         substepIndex));
                 }
 
+                return;
+            }
+
+            if (settlement is BattlePoisonTickedSettlement poisonTicked)
+            {
+                int substepIndex = 0;
+                if (poisonTicked.HealthLoss > 0)
+                {
+                    steps.Add(new BattleCommandPresentationStep(
+                        BattleCommandPresentationStepKind.HealthLossNumber,
+                        settlement,
+                        substepIndex++));
+                }
+
+                if (poisonTicked.WasFatal)
+                {
+                    steps.Add(new BattleCommandPresentationStep(
+                        BattleCommandPresentationStepKind.DeathTransition,
+                        settlement,
+                        substepIndex));
+                }
+
+                return;
+            }
+
+            if (settlement is BattleHealthRestoredSettlement healthRestored)
+            {
+                if (healthRestored.Amount > 0)
+                {
+                    steps.Add(new BattleCommandPresentationStep(
+                        BattleCommandPresentationStepKind.HealthRestoredNumber,
+                        settlement,
+                        substepIndex: 0));
+                }
+
+                return;
+            }
+
+            if (settlement is MachineGunnerPrivateStatusChangedSettlement ||
+                settlement is MachineGunnerScheduledEffectChangedSettlement)
+            {
                 return;
             }
 
@@ -321,10 +365,25 @@ namespace TinySpire.UI.Battle
                     cardMoved.ToZone == BattleCardZone.Hand;
                 bool isHandToDiscard = cardMoved.FromZone == BattleCardZone.Hand &&
                     cardMoved.ToZone == BattleCardZone.DiscardPile;
-                if (isDrawToHand || isHandToDiscard)
+                bool isHandToExhaust = cardMoved.FromZone == BattleCardZone.Hand &&
+                    cardMoved.ToZone == BattleCardZone.ExhaustPile;
+                if (isDrawToHand || isHandToDiscard || isHandToExhaust)
                 {
                     steps.Add(new BattleCommandPresentationStep(
                         BattleCommandPresentationStepKind.CardMoved,
+                        settlement,
+                        substepIndex: 0));
+                }
+
+                return;
+            }
+
+            if (settlement is BattleCardCreatedSettlement cardCreated)
+            {
+                if (cardCreated.ToZone == BattleCardZone.Hand)
+                {
+                    steps.Add(new BattleCommandPresentationStep(
+                        BattleCommandPresentationStepKind.CardCreated,
                         settlement,
                         substepIndex: 0));
                 }
@@ -355,9 +414,12 @@ namespace TinySpire.UI.Battle
             }
 
             if (settlement is BattleEnergySpentSettlement ||
+                settlement is BattleEnergyGainedSettlement ||
+                settlement is BattleAmmoSpentSettlement ||
                 settlement is BattleOperationSkippedSettlement ||
                 settlement is BattleBlockClearedSettlement ||
                 settlement is BattleEnergyRefilledSettlement ||
+                settlement is BattleAmmoRefilledSettlement ||
                 settlement is BattleEnemyActionSkippedSettlement)
             {
                 return;

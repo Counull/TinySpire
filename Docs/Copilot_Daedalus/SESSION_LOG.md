@@ -1,7 +1,420 @@
 ---
 created: 2026-07-06
-updated: 2026-08-06
+updated: 2026-08-14
 ---
+
+## 2026-08-14 共享 settlement-derived trigger、Ironclad Juggernaut 与机枪兵 Unstoppable（已完成 Unity 原生验证）
+
+- 新增共享 `BattleSettlementTriggerEngine`：Power 在父出牌事务内以 Prepare / Validate / Commit 注册持久触发；后续已提交 settlement 按 settlement 顺序、再按注册顺序冻结 trigger intent。Queue 只在父命令表现屏障完成后，以内部 system-token `ResolveSettlementTriggers` continuation 执行子事务；外部仍只能调用 `BattleCommandQueue.Submit`。
+- `Juggernaut`（3169）基础态为 2 Energy / Rare Power / Self / PowerPile，Effect 4019 的目标语法为 raw type 10 / `Attribute.None` / value 6。每条目标为持有者且实际增加量为正的 `BattleBlockGainedSettlement` 冻结一次随机存活敌人 6 点子事务；伤害不读 Strength / Vulnerable，仍经目标 Block / HP / 致死写链。
+- `Unstoppable / 势不可挡`（3250）基础态为 1 Energy / Rare Power / Self / PowerPile / Program 50。持有者造成致死，或把目标正 Block 从正值降到 0 时，从静态表顺序冻结的 `Implemented` / Attack / 非 Shoot / 可自动解析目标候选中随机创建一张临时卡，免费出牌并强制 Exhaust。当前注册 ID 在自己派生链中被抑制，避免同一 Power 自递归。
+- 本切片不新增 HUD / Prefab / Scene；Juggernaut 升级伤害与 Unstoppable 升级追加 debuff 触发仍只是 metadata，升级实例未实现。正式生成后全项目 168 张为 **98/70**、Ironclad **15/70**、Marine **82/0**（V1 **64/0**、V2 **18/0**）、Effect **19**；Effect 强枚举已替代开发期 raw 10 引用。
+- 正式 xlsx SHA-256：Enums `D899B0C39E01A5829A8FDC0BA4EB0F4A36609E4BF177EF92D17BC2976E6BF194`、Effect `3224852248155DC34A0ADE73A2C7693E8F4AB8DFD5D041406E3448581EE15A9D`、Card `C22E2380915C4D847CB073228785EC20453C9170832C12E3977DDFE8B831A253`、i18n `E6329D49F669DB3FA4223CF5EE7CCCBAF5DA5F9B3102A8C8DDB1D7F009987617`。生成物 SHA-256：Card JSON `DDDC4CE73D93A3C40939EE096C2E1CA6CCDE82D187D8FEDAF9533CA39FEA0FDD`、Effect JSON `67A5865E17F803CCE614B617B207C407B42F20959F615B9FCD04C5B62FBD9868`、`EffectType.cs` `BA13A3CF7D0584C44A4C2AB74C3F3B5C4B4FEF5AF79F82CD8985923F1ED526FA`。
+- Luban 通过。首次 `Sync and Build All` 因 i18n 缺少 `{triggerDamage}` 被 validator 正确拒绝；只修复该占位符后重跑成功，Localization en/zh 更新于 05:25:02，Addressables 15.175 秒，BuildLayout SHA-256 `429C1CD806275B7095205307B67DAE71F39678C19E53E3C39B574193ACDAA769`。Runtime 静态编译 0 error / 6 warning，Editor 0 error / 12 warning；定向任务 `054b6bcd5d734f729a2f1f95c4e7a80d` 7/7（0.6658563 秒），完整 EditMode `d156b8e2537546ef9e83da0ef5dadd2a` 807/807（19.3037496 秒）。未单独重跑另一个 aggregate job，full 807/807 已包含本切片相关聚合范围。决定见 `CODE_DECISIONS.md` CD-109，完整证据见 `06_testing/2026-08-14-shared-settlement-trigger-juggernaut-unstoppable-runtime.md`。
+
+## 2026-08-14 共享触发出牌、Ironclad Havoc 与机枪兵 Opportunistic Strike（已完成 Unity 原生验证）
+
+- 新增 Queue-owned system-token continuation：触发卡不会递归直调 Turn，而是在当前命令提交后由 Queue 以内部令牌串行提交，沿用唯一命令、表现屏障与 fault 路径。`Havoc`（3108）抽出抽牌堆顶卡、免费打出并强制 Exhaust；`Opportunistic Strike`（3243）只在上一张成功牌为 Attack / Shoot 时，从当前手牌随机选一张 Attack 免费打出。
+- 3108 / 3243 基础态翻为 `Implemented`：全项目 168 张为 96/72，Ironclad 14/71，Marine 81/1（V1 63/1、V2 18/0），Effect 18。Havoc 升级费用 0 与 Opportunistic 升级改为选择攻击手牌仍仅为 metadata。
+- 正式工作簿 SHA-256：Enums `EA91547F88FBB05C74A8DFDBFA5864A36F72FC309F5B51421564AF3CEF8EB7CF`、Effect `2639CE5F87BAA6774D32C199CB4A31A82A0DE47EF4CD9E2B8E3BA419F74EE73D`、Card `D5ECD06EE838ED239E0BBB60D8449396F82EEF14662639B551DF8A9A51200DE1`、i18n `602005AA8DD5749BCB3BC9E5ACA917401B5C85A859CF487A137C7309F897477B`；生成 Card / Effect JSON 分别为 `E5152D0C…` / `F925AC30…`。04:03:07 BuildLayout 证明 GameData 由 `AssetBundleProvider` 进入物理 bundle。
+- 初次 full 暴露强枚举与“非展示 Effect 不应要求本地化”门禁不一致；修正后 Localization cleanup `be23e45bedbe430f87173f0e3e913a0c` 1/1、定向 `a35d7b7a38f64ad5936132655e7f5318` 8/8、完整 EditMode `dd5ba1f2b6004e0a85a3aee6de4256e4` 802/802（19.3797688 秒），静态 Editor build 0 error / 12 条既有 warning。未 commit、未 push。
+- 决定见 `CODE_DECISIONS.md` CD-108，完整证据见 `06_testing/2026-08-14-shared-triggered-play-havoc-opportunistic-strike-runtime.md`。
+
+## 2026-08-14 共享 Block 保留、Ironclad Barricade 与机枪兵 Garrison（已完成 Unity 原生验证）
+
+- 新增共享 `BattleBlockRetention`，永久与计时两类授权都使用一次性 Prepare / Validate / Commit：`Barricade`（3157）通过 Effect 4017 建立永久 Block 保留；`Garrison`（3246）获得 12 Block 与 2 层计时保留。玩家回合开始先按开始时层数决定是否跳过 Block 清除，再令计时层数 `2→1→0`；降为 0 的当次仍保留，下一次玩家回合开始才清 Block。
+- Garrison 基础态要求从来源以外的当前手牌精确选择 2 个不同实例；UI 会话在收齐 2 张前不提交，来源/右键取消。所选牌只跳过当前一次 `EndPlayerAction` 的弃牌，下一次行动结束恢复普通弃牌规则，不把“保留手牌”混入共享 Block 模块。Barricade 进入 PowerPile，Garrison 进入 DiscardPile。
+- 3157 / 3246 已由 `CatalogOnly` 翻为 `Implemented`：全项目 168 张为 94/74，Ironclad 13/72，Marine 80/2（V1 62/2、V2 18/0），Effect 17。Barricade 升级 2 Energy、Garrison 升级 15 Block / 选择 3 张仍只是作者表与本地化 metadata；升级实例运行时未实现。
+- 正式工作簿 SHA-256 / bytes：Enums `8fc42a27fced4998a3a72940bed75e32f09f3e8e0d5aff8e26369fabaa38e4b5` / 11084、Effect `c55948630183518cebf28e7516d782cceb388b02592410b6a3e71ebbd8e2eabb` / 4638、Card `2874c0df732f7aced41641437910beaca5bffdf3424c4d10895876f7a2f3e3c3` / 23210、i18n `7812301c2acdcadbf62e1cefc2c26ad56ad44879aab09e5afecc070d0e58a699` / 29098。
+- `Sync and Build All` 因两次域重载分阶段完成生成、Localization Import / Validate 与 Local Addressables；02:59:03 的 BuildLayout 证明 Card / Effect JSON 位于 `AssetBundleProvider` 的物理 GameData bundle。生成前 3/3 任务前缀 `006e…`、最终定向 `17e031…` 300/300、完整 EditMode `b4d970…` 798/798 均通过；静态 build 0 error / 12 条既有 warning。未 commit、未 push。
+- 共享契约与边界见 `CODE_DECISIONS.md` CD-107；完整证据见 `06_testing/2026-08-14-shared-block-retention-barricade-garrison-runtime.md`。
+
+## 2026-08-14 共享来源动态伤害、Ironclad Body Slam 与机枪兵 Secondhand Smoke / Poison（已完成 Unity 原生验证）
+
+- 公共 Effect 计划新增“来源当前 Block”数值来源：Prepare 冻结 source Block 作为普通攻击的 base magnitude，随后仍走 Strength、目标 Vulnerable、目标 Block / HP 与致死规则；来源 Block 不被消耗。`Body Slam`（3105）基础态据此造成动态伤害；正式基础与升级文本均为 EN `Deal {damage} damage, equal to your Block.`、ZH `造成 {damage} 点伤害，数值等同于你当前的格挡。`。`{damage}` 是 Localization validator 要求的绑定占位符，运行时显示来源当前 Block；升级行为仍只是 metadata。
+- 通用 Poison 由参与者权威事实持有，并以 Apply / Tick 的 Prepare、Validate、Commit 契约提交。正层 Poison 在行动开始绕过 Block 失去 `min(Poison, Health)` 点生命，并把层数减 1；致死同样减层，零层不写事实或 settlement。敌人非致死后继续行为与意图推进，致死则产生 source-not-alive skip、不推进意图并保留 Encounter continuation；玩家非致死后继续 Block / 资源 / 抽牌，致死则跳过这些重置并在状态机调用栈退出后结束战斗。
+- `Secondhand Smoke / 二手烟`（3270）Program 70 冻结来源当前 Smoke 并向显式目标施加同值 Poison，不消耗或改写来源 Smoke；Smoke 为 0 时仍成功支付与归宿，但不伪造 Poison settlement。普通来源牌归宿在 Poison 首写前冻结并于末尾一次提交，因此同步 Poison observer 改动卡区时仍以冻结布局收口；会 Draw / Replace 等改写卡区的程序继续使用各自深事务，不被普通归宿计划覆盖。升级“来源与目标烟雾总和”仍仅是 metadata，升级实例未实现。
+- 状态种类计数统一为 Strength、Vulnerable、通用 Poison 与 17 种机枪兵私有状态，最大 20 种；同种 Poison 不论层数只计一次。3277 按来源、3278 / 3279 按目标冻结该集合。Poison tick 表现只派生 `HealthLossNumber`，致死再追加 `DeathTransition`，不会伪造 Attack hit-shake 或 Block absorbed；本切片未获 Prefab 修改授权，因此没有常驻 Poison 图标、层数 HUD 或脉冲。
+- 已完成的运行时证据包括：公式与 3277 Poison 计数任务前缀 `419c…` 2/2、原子归宿与修复任务前缀 `b5f…` 8/8、行为聚合任务前缀 `79a…` 289/289。生成前完整 EditMode 任务前缀 `fd6…` 共 791 项，其中 7 项仅因 3105 / 3270 尚保持 `CatalogOnly` 的预期目录红灯；它不是发布完成证据。
+- 正式工作簿 SHA-256 / bytes 为 Enums `48aa59ec32cba63429678f34d2f88d8010d0ba2842865e021d3578b93ce2ef5e` / 10982、Effect `cac78b6069764a037275b3261125e379de9a8f75a358f34c9d430ac98dff6d14` / 4603、Card `01c1613de65ee7e9b6fb49a774fecb4e31c53535c2186cb0b5e9bbac03358be0` / 23197、i18n `0bb37d8ba79bff9c3d8853b95af7c436373893385c0c62055e5400be2fbd8d0b` / 29057。Luban、Localization Import / Validate 与 `TinySpire/Build/Sync and Build All` 均成功；Addressables 为 50.667 秒。生成后全项目为 92/76、Ironclad 12/73、Marine 79/3（V1 61/3、V2 18/0），Effect 16。
+- 生成 `EffectType.cs` 为 1083 bytes / `d901715fe9802566b137215d9b8d655d68c3bef60bd41c972885dce4c846b9b9`，Card JSON 为 123848 bytes / `5b84dcf7a0d1757fae7a901b5e8bab990b702c0a69cb1a9df8897811241984aa`，Effect JSON 为 1541 bytes / `7b435ce2cde44571c988f93dc1ef6c00668d2220519c52749062734eb919cabb`。Localization EN asset 为 93547 bytes / `2d717822eb9a32ef6374908d4c32c3508233b5f74e23d6df0c67638af5d2e32a`，ZH-CN asset 为 111579 bytes / `204bac90744eff72501a8f7b8b70de8fbcf0712ba3dcf2700a61cd8320c74b90`。BuildLayout `TinySpire/Library/com.unity.addressables/buildlayout.json` 为 134621 bytes / `74a51e87ebc1e938caca6eacd7e0f6cd8a7ccbd8f23ff4c4217f670ef79aff3`，证明两份 JSON 均由 `AssetBundleProvider` 进入 12201 bytes 的物理 bundle `tinyspiregamedata_assets_all_2779cc5206157ad3345f769bdba15759.bundle`（SHA-256 `5711d9ce71d7da896535340d2c843ff6faffcb12b38384f12375336814f33eea`）。
+- 最终定向任务 `88e36d2a5cbb47b7b4a67207dad00856` 为 9/9 passed（1.1633036 秒），完整 EditMode `9ca3d43a79d24b25a917fad7b6166584` 为 793/793 passed（20.0509052 秒）；两者是本切片最终权威门禁。移除生产、Queue 测试与 I3 的裸数值 7 后，精确任务 `40af8c25ba4442ffbe9e98451890f01c` 为 1/1 passed，静态 Editor build 为 0 error / 12 条既有 warning。最终资产屏障为 `refresh_triggered=true / compile=false / idle`，Console 再清理后 0 error，唯一 Editor、tests idle / null。
+- 已知 P2：玩家回合开始的 Poison 与其后整轮 reset 尚不是一个跨模块联合事务；敌人未来若开放 Regeneration，还需让其行动结束治疗计划读取 Poison 后投影生命。升级实例、默认 Deck、奖励、Run、多人、Scene / Prefab 与常驻 Poison HUD 不在本切片范围。决定见 `CODE_DECISIONS.md` CD-106，当前证据见 `06_testing/2026-08-14-shared-source-magnitude-poison-body-slam-secondhand-smoke-runtime.md`。
+
+## 2026-08-13 共享重复伤害、Ironclad Sword Boomerang 与机枪兵幻彩射击（已完成 Unity 原生验证）
+
+- 新增 concrete `BattlePreparedRepeatedDamagePlan` 与 `BattleRepeatedDamageExecutor`：Prepare 在首次写入前冻结来源、Encounter 全体敌人标量、每段目标/主伤 outcome/后效终态投影、卡牌目标随机流 before/after 与 settlement 数；Validate 拒绝 owner、标量、Encounter、RNG、顺序或一次性生命周期漂移；Commit 不再选目标或重算。当前只开放 `FixedEnemy` 与 `RandomLivingEnemyPerHit` 两个真实策略。
+- 通用 `BattleRepeatedDamageEffectAdapter` 只接受普通 `DealDamage / Attribute.None` grammar，并复用既有伤害 outcome 与内部写入口。机枪兵 `MachineGunnerRepeatedDamageHitSequence` 仅在职业侧冻结 Stim、IncendiaryAmmo、PortableHelper 与 17 种私有状态。共享 planner 只拥有目标、投影、随机和计划生命周期，没有卡牌 ID、名称、Program 79、Ammo 或职业后效分支。
+- 通用卡牌目标随机流的唯一可变 `GameRandom` 已归 `BattleTurnController` 所有；`BattleSession` 只保存由战斗种子复制的不可变 `CardTargetRandomSeed`，Queue 只读暴露当前状态。成功 Commit 才推进冻结 after；规则、费用、配置或快照失败保持 RNG 零推进。
+- `Sword Boomerang`（3116）基础态已翻为 `Implemented`：1 Energy、Common Attack、RandomEnemy、DiscardPile，三条绑定 `damage` / `damageRepeat1` / `damageRepeat2` 均引用 4015=`DealDamage / None / 3`。三击逐段从投影存活敌人重选，击杀目标从后续候选移除；没有存活敌人时停止尾段且不再取随机数。升级第 4 击仍只是元数据。
+- `Prismatic Shot / 幻彩射击`（3279）基础态已翻为 `Implemented`：0 Energy、Rare Attack、显式 Enemy、Program 79、基础 Ammo 1。目标起始状态种类 `S` 由 Strength 非零、Vulnerable 正层和 17 种职业私有状态正层各计一次；逻辑段为 `[6, 9 × S]`。Stim 为每个逻辑段追加紧邻同值复制，并把整卡 Ammo 冻结为 `1 + logicalCount`；每段严格执行 `main Damage → IncendiaryAmmo Burn → PortableHelper`，固定目标死亡即停止且不重定向。升级首段 9、重复段 9 仍仅为元数据。
+- 初次广义行为聚合 `14131e7fa23c4f14a3a08e2cad0da556` 完成 250 项但有 16 项失败；最小化后确认既有机枪兵复合卡区 Prepare 漏算稍后前置的 Energy/Ammo settlement，触发“settlement 顺序不连续”。修复在 `ExecutePlayerCard` 的本地 `settlements` 初始化时先放 `EnergySpent`，实际 Ammo 大于 0 时再放 `AmmoSpent`，所有深卡区计划随后自然以 `settlements.Count` 冻结顺序；首次权威写仍位于全部 Validate 之后。代表回归 `6ee679521f4c45d9a69b9984110c51bb` 5/5、最终行为聚合 `4ea4eff81b3c4ce786e318d0902c1ed4` 243/243 均通过。
+- 正式工作簿 SHA-256 为 Enums `DC35FC55DF7A4223347F81054C09DF88DDEA3B6EB88DA36DE41499562DD7618E`、Card `EA90C1A34FBDD9C54EBE2832C6CCC796DC4752A6B90C15F6A42BDB8C03A2CDF1`、Effect `35BF163D09E6F8AA6478C134D90A5FBAC304CC3135357D8237909DBC87ECAE64`、i18n `B80CD6EDCD0EAE2F52812B1CFF5DDAD96C1AB0507CD05E012C919DB05122215F`。Luban、Localization Import/Validate 与 `Sync and Build All` 成功；Addressables 13.962 秒，最新 BuildLayout `TinySpire/Library/com.unity.addressables/BuildReports/buildlayout_2026.08.13.21.31.49.json` 证明 Card/Effect JSON 由 `AssetBundleProvider` 写入 12182 bytes 物理 GameData bundle。
+- 全项目 168 张现为 **90/78**，Ironclad 为 **11/74**，Marine 为 **78/4**（V1 61/3、V2 17/1），Effect 为 **15**。Runtime 静态编译 0 error / 6 条既有 warning，Editor 0 error / 12 条既有 warning；双卡定向 `6932f72f288a477ca5869c21e3ac3996` 11/11、正式门禁 `908e5fb8b93e437d89533bb1b727231a` 53/53、完整 EditMode `3e0a091d891e4f918668b99cb4a20157` **776/776 passed**（77.7525946 秒），最终 Console 已清空。决策与证据见 `CODE_DECISIONS.md` CD-105 和 `06_testing/2026-08-13-shared-repeated-damage-sword-boomerang-prismatic-shot-runtime.md`。
+
+## 2026-08-13 共享 Heal、Ironclad Not Yet 与机枪兵战地手术（已完成 Unity 原生验证）
+
+- 公共 `EffectType.Heal = 6` 已接入普通 Effect 事务。`BattleHealthRestorationOutcomeResolver` 在首次写入前冻结请求量、目标前后生命、生命上限和实际恢复量；普通 Effect 与职业 Regeneration 共用 internal `BattleCombatantEffectOperations.ApplyPreparedHealthRestoration`，没有第二个 Health 写入口。`BattleHealthRestoredSettlement` 保留实际为 0 的治疗记录，表现只对正实际量显示 `+N`。
+- `Not Yet`（3171）基础态已从 `CatalogOnly` 翻为 `Implemented`：2 Energy、Rare Skill、Self、Hand→ExhaustPile，以 `heal:4014` 请求恢复 10。缺 7 HP 时实际恢复 7；满生命仍支付、记录 requested 10 / actual 0 并 Exhaust。Heal 后缺失后续 Effect 会在 Energy、Health、卡区、随机流、Turn 和 settlement 首写前整体失败。升级恢复 13 仍只是目录与本地化元数据。
+- `Field Surgery / 战地手术`（3231）基础态已翻为 `Implemented`：1 Energy、Rare Skill、Self、Hand→ExhaustPile，Program 31 出牌时只获得 Regeneration 5 与 Shackle 1，不立即治疗。Regeneration 作为追加的第 17 个职业私有状态保留旧枚举值，并进入 3277 / 3278 的状态种类计数；Shackle 的 Attack 拒绝规则不变，当前其余 16 种私有状态可进入成功计数。
+- 玩家回合末来源顺序已锁定为 `Shackle 清零 → LoseStrength 清零 → Heal → Regeneration -1 → Bomb → Burn`。顺序红灯 `c8d4aa4ddf7347dc8d6515f297c9ed90` 精确证明旧实现把 Heal 放在状态清理之前；修复后 `ed358fb765e74283848a28d40c9ae3ce` 为 1/1 passed。Field Surgery 出牌红灯/绿灯为 `32984ebfa0e14118a9f16f5ea3606c0a` / `5084062eb6b041e8a64512cfcde701dc`；Not Yet Heal 红灯/绿灯为 `4b1ef61209f749fe87138f6e9a767175` / `94d085dec3c74d2287831846b0baddba`。
+- 治疗表现除了 plan / factory 回归，还以 `BattleFloatingNumberViewTests.CreateTween_HealthRestoredNumber_UsesPositiveTextAndHealingGreen` 精确锁定视图输出；任务 `4d5e4253e93840bd849571512f5f0a43` 为 1/1 passed，文本为 `+7`，颜色为 RGBA `(105,235,185,255)`。补强后的最终聚合与完整任务已重新执行并收口。
+- 正式工作簿 SHA-256 为 Enums `dc35fc55df7a4223347f81054c09df88ddea3b6eb88da36de41499562dd7618e`、Effect `34eef4012c2b858e43fb0f7cb7c2417e1a3caa34d5afa3dcb46dfbd61c465af0`、Card `7c57c0a024d445d990ee275e7474a5460f7055504b1169f0b74dfd525d3665f3`、i18n `bd37b5660cbd5b1ceff8c07a58410c4f49e124acbdc3b97d893d4754b8551f5e`。Luban 于 19:31:59 成功；Card / Effect JSON SHA-256 为 `A47F249F2007ED80707354C263B3154313C96DD3C41FF58F743FB9494A7A1752` / `32036F53048206871D39C22A56CCDF74B3FA01976078AA49047E79DA4308986B`。全项目 168 张为 88/80，Ironclad 10/75，Marine 77/5（V1 61/3、V2 16/2），Effect 14 项。
+- Localization Import / Validate 与 `Sync and Build All` 成功，Addressables 子构建 11.968 秒；最新 BuildLayout 为 `TinySpire/Library/com.unity.addressables/BuildReports/buildlayout_2026.08.13.19.37.10.json`，真实 GameData bundle 为 `TinySpire/Library/com.unity.addressables/aa/Windows/StandaloneWindows64/tinyspiregamedata_assets_all_77a1973868c636fe147c61465e862169.bundle`。Runtime 静态编译 0 error / 6 warning，Editor 0 error / 12 warning；来源顺序修正后的最终精确行为 `b511f5ddcd2041a9b264c0f982c4b600` 为 9/9（0.3818676 秒）、正式目录 `c3e5c7dbcb534cd18a85b635761fb8d7` 为 50/50、含治疗视图与真实 AB 的最终聚合 `818f8283386b4d86aa625c6d95284245` 为 243/243（10.3679275 秒）、完整 EditMode `c6a86ba528804a13b1c84fe38c28b48b` 为 **766/766 passed**（18.1031754 秒）。升级 Not Yet 13 / Field Surgery 6、AnyAlly / 多玩家、默认 Deck、奖励、Run、Scene / Prefab 与其他目录卡均未实现；决策与证据见 `CODE_DECISIONS.md` CD-104 和 `06_testing/2026-08-13-shared-heal-not-yet-field-surgery-runtime.md`。
+
+## 2026-08-13 STS2 Ironclad Burning Pact 与通用选择消耗抽牌事务（已完成 Unity 原生验证）
+
+- `Burning Pact`（3125）基础态已从 `CatalogOnly` 翻为 `Implemented`：1 Energy、Skill、Self、Hand→DiscardPile，`Program.None` 通过有序绑定 `exhaustCards:4012,cards:4013` 表达“选择并消耗另一张手牌，然后抽 2 张”。若来源之外没有候选牌，则不创建选择请求、不产生 Exhaust，但仍支付 1 Energy、抽 2 张并将来源牌最后弃置；升级“抽 3 张”仍只是作者表与本地化元数据。
+- 公共 `EffectType.ExhaustSelectedHandCard = 5` 只承担选择 Effect；通用语法固定为首项 `ExhaustSelectedHandCard / Attribute.None / Value 1`，其后恰好一个合法 `DrawCards`，3125 的 4013 冻结为 `Attribute.None / Value 2`。规则层与执行层共同拒绝缺失、重复、乱序、夹入战斗 Effect 或非法 Attribute/Value 的绑定，且没有卡牌 ID、显示名或 Ironclad 分支。`BattleSingleOtherHandCardSelectionRules` 同时服务 Burning Pact 与 V2V Vent Heat，UI 继续复用 `SelectedCardIds`、`BattleHandCardSelectionRequest` 与 `HandCardSelectionSession`。
+- `BattlePreparedSelectedHandCardDrawAndPlayedCardDeparture` 在首次写入前冻结 owner、起始 Layout、洗牌 RNG 前后状态、最终 Layout、连续 settlements 与一次性提交。权威逻辑顺序为 `EnergySpent → optional selected HandToExhaust → optional reshuffle → DrawPileToHand（至多 2）→ source HandToDiscard`，最终只发布一次 Layout。抽牌投影期间来源牌仍占 Hand：命令开始为 Hand 10 时先消耗另一张、只能抽 1 张，来源最后弃置后 Hand 为 9；跨 owner、Layout/RNG 漂移或重复提交均拒绝且零写入。
+- TDD 精确红灯 `91544da77057452bba4004fda382a130` 唯一暴露 `UnsupportedEffectType`。基础事务与 CardZones、唯一来源/Hand10、规则与漂移、非法选择、非法语法、真实选择会话协议和表现链绿灯分别为 `1e10bdc85d3a4970a540378e8e9aa773`、`f161c8b0ffd549bd906dfb7da7715de2`、`a8246f19fdb24f8283430abf81022307`、`814665044dac4aea917a624ea969757f`、`08954580668f4d7588792cbb2898059e`、`1325defc95f644d69fd4f43cf50f289b` 与 `34146393c7f9466ba7f0faf285127094`。
+- 正式工作簿 SHA-256 为 Enums `D0984D35BE585D04C9C1E56B62B5C8AEFBB0F9760A38DBACF9477B3A685D0EC3`、Card `C3025BA774D84E24CAD679DEE057AA79F25A41F81AC83798E6263DDE8FAA22DB`、Effect `0B002B0C97820E7BF3F5DEFB54084F53CF94F1F224E77E15A8E8BCB62CC30173`、i18n `A05411C781FE20D3CFA99F0FD4AAD08F68E34F0A80571E425A5C2772E50B4C37`；候选/正式 artifact 对 7217 个单元格规范化样式与渲染一致，Effect C 列仅按内容由 15.625 调整为 21.13。Luban 于 2026-08-13 17:32:12 成功；Card/Effect JSON SHA-256 分别为 `23BCA0295418E949AC3CA752C26F2C23A56FBD569EEA88C784C65B8EC914BAF6` / `D06C67D9AF1B22733340706607AE2D95DD3E7E78FD12AC7D4AEFA79AB077D008`。全项目 168 张为 **86 `Implemented` / 82 `CatalogOnly`**，Ironclad 85 张为 **9/76**，Marine 82 张保持 **76/6**，Effect 共 13 项。
+- Localization 首轮因 Unity `AssetDatabase` 尚未看见新生成资源而失败，属于 stale 导入状态诊断，不是产品红灯；强制刷新后 Import 7.401 秒、Validate 6.161 秒、`Sync and Build All` 22.054 秒与 Addressables 13.551 秒均成功。BuildLayout `Library/com.unity.addressables/BuildReports/buildlayout_2026.08.13.17.40.23.json`（134622 bytes）证明 `tinyspiregamedata_assets_all_aa609eaff8569429297e832a2721d5a6.bundle`（12085 bytes）由 `AssetBundleProvider` 打入 Card/Effect JSON。Runtime 静态编译 0 error / 6 warning，Editor 0 error / 12 warning；并行静态构建曾出现输出文件争用 `CS2012`，串行重跑全绿。正式行为 `c1c48a5d4738462aa8a150d6e614f577` 为 9/9，目录 `5310c9f189044261922c4cdc2823ef31` 为 22/22，含真实 AB 的聚合 `54a914c2c66647879fe274dcc384b86d` 为 172/172，完整 EditMode `c708030e61834d7dbe3196c6d378f30f` 为 **754/754 passed**，Console 最终 0 error。决策与完整证据见 `CODE_DECISIONS.md` CD-103 和 `06_testing/2026-08-13-sts2-ironclad-burning-pact-runtime.md`。
+
+## 2026-08-13 Marine Game 机枪兵 V2V 排气散热与共享手牌单选协议（已完成 Unity 原生验证）
+
+- V2V 已为 `VentHeat` (3244) 注册可执行基础态：0 Energy、Skill、Self、Hand→DiscardPile。若手中存在另一张可选牌，命令必须精确携带一个其他手牌实例；被选牌先 Hand→ExhaustPile，随后只按上限记录实际 `Energy +1`，最后来源牌 Hand→DiscardPile。若来源是唯一手牌，则直接弃置且不获得能量；能量已满仍会消耗所选牌，但不会伪造 `EnergyGained`。
+- 权威结算顺序冻结为 `EnergySpent(0) → selected HandToExhaust → EnergyGained(仅实际增加时) → source HandToDiscard`。`BattlePreparedHandCardSelectionResolution` 在首次写入前联合冻结两张牌的归宿并只发布一次 `CardZones.Layout`；选择非法、重复、跨 owner，或 Layout / Turn / Queue 快照漂移时保持 Turn、资源、卡区与 settlement 零写入。已提交的非法命令仍由 Queue 发布 typed failure lifecycle；`BattleCommandQueue.Submit` 继续是唯一共享写入入口。
+- 新增的共享选择 seam 由 `PlayCardCommand.SelectedCardIds`、`BattleHandCardSelectionRequest`、`BattlePreparedHandCardSelectionResolution` 和 UI 局部 `HandCardSelectionSession` 组成。Hand UI 冻结 Layout / Turn / Queue：候选牌左键确认，来源牌左键或任意卡右键取消；选择中禁止拖拽、区分候选与非候选视觉，并在事实漂移、禁用或销毁时取消。双 transient 不创建伪 prelude，按 selected→Exhaust、source→Discard 的既定步骤依次清理。
+- TDD 历史保留了 Program 44 未支持、命令选择参数、卡区深事务、规则请求、纯选择会话、容器交互、视觉、生命周期与双 transient 的逐片红绿。历史中未保留完整任务号的记录只以明确前缀记载；关键最终绿灯为确认提交 `f1e74a5829d746f08fa456b737b04caf`、交互转发 `d6a01d920498443ab32518797b770fe0`、视觉 `e46df1b0bda846b09b67dabca1433770`、容器取消 `a92b6214657848d98776cae71fe8183f`、生命周期 `2902d4a46c9b4a1fbf3b54f914d8ec42` 与双 transient `78bcd00d468c4b19952bb935ba708a77`；完整红绿与 fixture/oracle 修正见测试页。
+- 正式作者表只把 Q134（3244）从 `CatalogOnly` 翻为 `Implemented`，`battle.card.xlsx` SHA-256 为 `B3BA678FBC0C021F49C3F9FEDE4190099960EE109FFC302D96C77F29D54F4A6D`；i18n 只修改 B/C404-405 四个文本单元格，SHA-256 为 `8833E99F546B2C1195C4F0317A1B9208535ED083743F1ABF183874EFFFD23D77`。Luban 于 2026-08-13 14:55:40 成功；生成 JSON SHA-256 为 `5988DA20801C8BF724EF0E471466A0A746A5E732DE3450BD7680F00A735F2615`，全项目 168 张为 85/83，Marine 82 为 **76 张 `Implemented` / 6 张 `CatalogOnly`**，V1 为 60/4、V2 为 16/2。
+- Localization Import / Validate 日志通过；`Sync and Build All` 成功，本地 Addressables 为 15.85 秒，BuildLayout 为 `Library/com.unity.addressables/BuildReports/buildlayout_2026.08.13.14.59.24.json`（134615 bytes）。Runtime 静态编译 0 error / 6 warning，Editor 0 error / 12 warning。行为任务 `86186ac62acd476188b1c67c75443582` 为 15/15，目录任务 `6f75f8955c944aae8290934cefe4dc45` 为 38/38，含真实 AB 的正式聚合 `55d24ae6959f48fbbfc96238b9c1ce16` 为 **306/306 passed**，完整 EditMode `0bf8b7bf3ffc40c986a55917993894f4` 为 **744/744 passed**。
+- 本切片只提供可复用的普通手牌单选 seam，未来可供 Ironclad `Burning Pact` 适配；本轮没有实现战士卡。3244 升级能量 +2 仍只是元数据；默认 Deck、奖励、Run、多人、Scene、Prefab 与其他剩余目录卡也未实现。决策与验证见 `CODE_DECISIONS.md` CD-102 和 `06_testing/2026-08-13-machine-gunner-v2v-vent-heat-runtime.md`。
+
+## 2026-08-13 Marine Game 机枪兵 V2U 不解释12连两波换弹射击（已完成 Unity 原生验证）
+
+- V2U 已为 `TwelveHits` (3257) 注册可执行基础态：3 Energy、Rare、Attack、自动锁定命令开始时最近敌人、Hand→DiscardPile。普通支付时第一波消耗当前 Ammo 最多射击 6 次，随后无条件补满 Ammo，再在第二波消耗最多 6 发；0 Ammo 也可出牌，此时第一波为 0 次、仍换弹并执行第二波。每段基础伤害为 5，目标死亡后停止剩余伤害且不重定向，但已冻结的换弹与第二波资源支付仍提交。
+- 机枪兵私有 `MachineGunnerReloadedVolleyResolver` 纯冻结首/次波 effect shot、actual Ammo、波间补满前后值、全卡唯一 Stim 段、Guerrilla nominal Ammo 与最终 Ammo；它不读写战斗对象。免费 Attack 仍执行两波与换弹，实际 Energy/Ammo 为 0，名义 Ammo 按两波上限计算，Stim 激活时为 13；成功归宿后消费 V2T 授权，费用、目标、Shackle 或快照失败保持授权与全部事实零写入。逐 hit 伤害继续复用既有命中后链，每个来源段按原顺序触发 IncendiaryAmmo，再触发 PortableHelper。
+- 精确 TDD 红灯 `5206873b56c84c27a462dd27edcaf375` 为 1/1 failed，锁定 Program 57 尚不受支持。六项逐片绿灯依次为 `ea81efa9f48c408da2e3f51573805b23`、`b0b40621fd3740798e9bd5dd91277507`、`968e6f6870d84ab58a6d61caf9aae44d`、`aa2f33f94df14b1a8913d299c325445c`、`b7eb8adef3de4e9f8b490093171de1c0`、`4605fc4c790940f5a5a2eb4169ac1d2e`，各为 1/1 passed。slice 4 首轮 `e2caeac9cbe1440598c3a2075de14075` 只暴露测试场景供能前提错误；修正测试后生产未改。
+- 正式作者表只把 Q147（3257）从 `CatalogOnly` 翻为 `Implemented`，`battle.card.xlsx` SHA-256 为 `7131597FD5F3D948921F54926C0205E24E31F747D7C9B1206B78902AE6BEF818`。Luban 于 2026-08-13 03:00:27 成功；生成 JSON SHA-256 为 `28324422913241FC627F5C3A0BCF715332E4F2B3DCDFA94E4B6E4FF3ED7A6306`，全项目 168 张，Marine 82 为 **75 张 `Implemented` / 7 张 `CatalogOnly`**，V1 为 59/5、V2 为 16/2；3257 为 status 0、Program 57、Attack/Rare、3E Fixed、upgraded cost 2、Enemy、DiscardPile、空 bindings 与非 Innate。
+- Localization import 7.350 秒、显式 validate 3.124 秒；`Sync and Build All` 端到端 18.482 秒，Addressables 12.173 秒，BuildLayout 为 `Library/com.unity.addressables/BuildReports/buildlayout_2026.08.13.03.02.34.json`。Runtime 静态编译 0 error / 6 warning，Editor 0 error / 12 warning。
+- Starter `9fec961053ae45ea869ad9aa211c13fa` 为 148/148，正式目录快照 `4f7cbbf8343c472f9e51e2f1862c2a3c` 为 37/37，正式聚合 `a7041271f4f343588b30e74edfd5b741` 为 **220/220 passed** 并包含真实 Addressables AB 加载，完整 EditMode `08565f2677824aff8e45043cdd8dc1eb` 为 **728/728 passed**。
+- 本切片不实现升级实例、升级 2 Energy / 6 伤、默认 Deck、奖励、Run、UI、多人、Scene/Prefab、自动免费攻击链或剩余 7 张目录卡；决策与验证见 `CODE_DECISIONS.md` CD-101 和 `06_testing/2026-08-13-machine-gunner-v2u-twelve-hits-runtime.md`。
+
+## 2026-08-13 Marine Game 机枪兵 V2T 战术推进二元免攻与共享费用冻结（已完成 Unity 原生验证）
+
+- V2T 已为 `TacticalAdvance` (3234) 注册可执行基础态：2 Energy、Skill、Self、Hand→DiscardPile；成功时先获得 10 Block，再刷新一份“下一张成功 Attack 免费”的二元授权。连续施放不叠加次数；授权跨回合保留，Skill、Shackle、目标/费用/计划或卡区失败均不消费，第一张成功 Attack（含致死）完成归宿后才消费，下一张恢复正常费用。Shackle 继续在费用解算前由上游 Attack 门禁拒绝。
+- 授权由职业运行时独立 `bool + revision` 持有，不加入 `MachineGunnerCombatantStatus`；私有状态身份继续是 16 种，3277 / 3278 的状态种类计数不变。当前 `README web.md`、正式表与 i18n 一致采用基础 10 Block / 升级 14 Block，历史 `HANDOFF.md` 的 12/16 已被当前来源覆盖；升级 14 仍只是元数据。
+- 新增共享 `BattleCardCostResolver`，为 Fixed / X 冻结实际支付、效果值与触发器名义值；通用 `BattleCardPlayRules` + `BattleTurnController` 的普通 Fixed 与机枪兵运行时是两个真实适配器，既有通用 X 未扩展。机枪兵在同一准备成本中分离 Energy、Ammo actual / effect / nominal 与 Stim：Waived 只把实际支付归零；Fixed / UpToLimit 的 Stim 段仍生效并计入 Guerrilla 名义耗弹，AllAvailable 保留既有免费 Stim 段；ComboElbow 分类不变。
+- 正式作者表只把 Q124（3234）从 `CatalogOnly` 翻为 `Implemented`，`battle.card.xlsx` SHA-256 为 `55D43141149D7A86D7957B1C43ED9303B9E9D091094E0CFAF2CF39FE2F73C569`。Luban 于 2026-08-13 01:44:15 成功生成全项目 168 个 Card JSON；Marine 82 模板为 **74 张 `Implemented` / 8 张 `CatalogOnly`**，V1 为 58/6、V2 为 16/2；3234 精确为 status 0、Program 34、空 bindings 与非 Innate。Localization import / validate 均通过。
+- `Sync and Build All` 端到端 16.852 秒，Addressables 14.762 秒，BuildLayout 为 `Library/com.unity.addressables/BuildReports/buildlayout_2026.08.13.01.45.29.json`；Runtime 静态编译 0 error / 6 warning，Editor 0 error / 12 warning。TDD 红灯 `5a0823dd6a2241e0818512b8855877a6` 为 1/1 failed 并精确暴露不支持 Program 34；最终 V2T `cddab7f295844f71999568465dc1f85e` 为 6/6，致死/溢出补强 `da3a7e7e7c6540eca8400e99ba5c0ca4` 为 1/1，Starter `e1dcce3dfc6c4078b769a921a98145b4` 为 142/142。
+- 正式目录快照 `d64c71abd6c2436a8f820efc976a9196` 为 36/36，正式聚合 `e4e6f701845547149384c1f6e792269e` 为 **213/213 passed** 并包含真实 Addressables AB 加载，完整 EditMode `fe108672fde44832a7fb4819116136c1` 为 **721/721 passed**。最终双轴 production / spec review 均为 0 blocker；Standards 指出的冗余 `CardTemplateId` 已删除。默认 Deck、奖励、Run、UI 专属提示、多人、Scene/Prefab、升级实例、自动免费攻击链与战士免攻策略均未实现；决策与验证见 `CODE_DECISIONS.md` CD-100 和 `06_testing/2026-08-13-machine-gunner-v2t-tactical-advance-runtime.md`。
+
+## 2026-08-13 STS2 Ironclad 首批四张基础卡与通用 DrawCards（已完成 Unity 原生验证）
+
+- 冻结 v0.107.1 Ironclad 目录已开放首批四张基础态：Pommel Strike（3113）为 1 Energy / Enemy / `Damage 9 → Draw 1 → Discard`，Shrug It Off（3115）为 1 Energy / Self / `Block 8 → Draw 1 → Discard`，Twin Strike（3120）为 1 Energy / Enemy / `Damage 5` 独立结算两次，Bludgeon（3123）为 3 Energy / Enemy / `Damage 32`。Twin 的有序绑定键固定为 `damage` / `damageRepeat`。
+- 公共数据层新增 Effect 4007～4011 与 `EffectType.DrawCards = 4`；普通卡 Effect 组合按绑定原序冻结 Draw 前战斗 Effect、至多一次 Draw 与 Draw 后战斗 Effect。全部子计划在首次权威写入前联合预构建和校验，Draw 后 Effect 延续 Draw 前完整战斗投影，多次引用同一伤害 Effect 仍保留独立逻辑段。
+- CardZones 的 `PrepareDraw` / `ValidatePreparedDraw` / `CommitPreparedDraw` 独占 Hand 10 上限、旧 DiscardPile 重洗、洗牌随机前后状态、连续 settlement 与最终布局。Draw 前致死仍执行已冻结抽牌；满 10 手牌时抽 0 且不推进随机，当前卡随后正常归宿；能量、目标、绑定或快照失败继续保持战斗事实、资源、卡区、随机与表现结果零写入。
+- 正式作者表 SHA-256 为 Card `54DA52D0C80885A2D55AEC8E260207E2D4E27AC8251304BF0710DB180EBC4EBB`、Effect `B616F993F5373AFF2DDD764E9C431A2C13F66CD3C5B2F39595B4A813FB7863BC`、Enums `B9F8DD24C77EE64FA36C6DC7FEA5C0D83229011F45463A99ABAE30B3A7870B26`、i18n `7E91C7F46AEBBBF20188690EC49B1B5C3F6C84C2EF3A9531D22D42E3E23644F8`。Luban 于 00:42:37 成功；Ironclad 85 张为 **8 `Implemented` / 77 `CatalogOnly`**。
+- Localization import / validate 通过。诊断保留两轮事实：先发现读取 stale config；刷新后才暴露参数规范不允许下划线，最终统一 `damageRepeat` 且没有放宽 validator。`Sync and Build All` 成功，Addressables 13.595 秒，BuildLayout 为 `buildlayout_2026.08.13.00.44.31.json`；Runtime 静态编译 0 error / 6 warning，Editor 0 error / 12 warning。
+- TDD 红灯 `2f8fa9d405e94893b9a0cc600faff777` 为 2 passed / 2 `UnsupportedEffectType`；后续单元任务前缀 `8e1a…`、`839889…`、`0f8efd…` 分别为 7/7、3/3、42/42。正式 smoke `49d34997a550459f98b80d6ee88deec0` 为 **20/20 passed**（1.0011866 秒），正式聚合 `c3281b04224845eaa4138ea5024904a0` 为 **67/67 passed**（26.3892428 秒），完整 EditMode `0856b63a9ad44ea08a8a37d0df803571` 为 **713/713 passed**（22.4028613 秒），均无 failed / skipped。
+- 升级实例与升级数值、其余 77 张目录卡、默认 Deck、奖励、Run、UI 与多人均未实现；本轮也不宣称 I5 的“每步独立目标”整体完成。需求摘要、决策与验证分别见 `01_requirements/2026-08-13-sts2-v01071-ironclad-first-four-runtime-digest.md`、`CODE_DECISIONS.md` CD-099 与 `06_testing/2026-08-13-sts2-ironclad-first-four-effect-runtime.md`。
+
+## 2026-08-12 Marine Game 机枪兵 V2S 先发制人按来源起始状态种类抽牌（已完成 Unity 原生验证）
+
+- V2S 已为 `PreemptiveStrike` (3277) 注册可执行基础态：0 Energy、1 Ammo、Uncommon、Attack、显式 Enemy、`Tags.None`、Hand→DiscardPile。成功时造成基础 8 点普通 Attack；Damage 与既有 post-hit 链完成后，按命令开始时来源的活跃状态种类冻结值执行普通抽牌，目标致死仍抽，最后把 3277 移入 DiscardPile。升级 12 点伤害仍只是作者表元数据。
+- 冻结数量 `N` 的项目口径为：来源 Strength 非零、Vulnerable 大于零，以及 16 种 `MachineGunnerCombatantStatus` 的每一种正层数各计一种，同种多层不重复；Power、Stim、scheduled effect、Block 与资源不计。Shackle 身份保留在精确集合中，但既有上游攻击门禁会在首次写入前拒绝带 Shackle 的来源施放 3277，测试锁定完整零写入；其余 15 种私有状态已逐项覆盖。这些集合、时点与排除项是受控实现决定，不伪称为来源逐字规则。
+- 普通抽牌复用 `BattleCardZonesData.PrepareDraw` / `ValidatePreparedDraw` / `CommitPreparedDraw` 深事务，在首次战斗写入前冻结数量、Hand 上限、DrawPile / DiscardPile、重洗随机状态、最终布局与移动 settlement；Damage / post-hit 后只提交该旧计划。目标、资源、Shackle 或计划校验失败继续保持 Energy、Ammo、伤害、状态、随机流、卡区与表现结果零写入，`BattleCommandQueue.Submit` 仍是唯一共享写入入口。
+- 正式作者表仅将 Q167（3277）的 `implementation_status` 翻为 `Implemented`，U167 `is_innate=false`，`battle.card.xlsx` SHA-256 为 `6C9120A317622F103F9A0DDEEEBB994B28F88230B679BA7E0B1D28201F8E2648`。Luban 于 2026-08-12 23:26:12 成功生成；全项目 Card JSON 168 个，Marine 82 个模板为 **73 张 `Implemented` / 9 张 `CatalogOnly`**，V1 为 57/7、V2 扩展为 16/2；3277 精确为 status 0、Program 77、DiscardPile 与非 Innate。
+- Localization import 与显式 validate 成功；Runtime 静态编译为 0 error / 6 warning，Editor 为 0 error / 12 warning。`Sync and Build All`、本地 Addressables 与 BuildLayout 均成功，Addressables 构建耗时 13.966 秒。正式聚合首轮 `629f7e51d61d4bb49a6bdb6232239ca6` 为 213/214，唯一红项是旧 Bully 操作名称 oracle，生产未改；最终任务 `ea21d256c5b840629a270eed7a10bd90` 为 **214/214 passed**（16.8155368 秒），完整 EditMode `1484317edb124dcdb6cb0f0862a8758a` 为 **702/702 passed**（25.5067985 秒）。
+- TDD 首轮 `634966a39d1a434886289cca3382e8f9` 为 3/5，两项红色分别来自重洗记录顺序 oracle 与忽略 Shackle 上游攻击门禁的测试前提；均只修测试。最终 V2S `73d5e79a25164857b48bb5b1fba5d92a` 为 **5/5 passed**（0.7261073 秒），production 审查无 blocker。默认 Deck、奖励、Run、升级实例、升级 12 伤、UI 与多人均未实现；验证记录见 `06_testing/2026-08-12-machine-gunner-v2s-preemptive-strike-runtime.md`。
+
+## 2026-08-12 Marine Game 机枪兵 V2R 霸凌按目标起始状态种类抽牌（已完成 Unity 原生验证）
+
+- V2R 已为 `Bully` (3278) 注册可执行基础态：0 Energy、Uncommon、Attack、显式 Enemy、Hand→DiscardPile。成功结算保留零费用事实，随后造成基础 6 点普通 Attack；伤害及既有非射击命中后链完成后，按命令开始时目标的活跃状态种类冻结值执行普通抽牌，最后把 3278 移入 DiscardPile。升级 9 点伤害仍只是作者表元数据。
+- 来源只明确“目标每有一种状态抽 1 张”，没有规定计数时点与状态集合；本切片把受控实现口径冻结为：通用 Strength 非零、Vulnerable 大于零，以及每一种 `MachineGunnerCombatantStatus` 正层数各计一种，同种状态不论层数只计一次。HP、Block、资源、PowerPile 卡实例、Stim 与延迟实例不计；伤害消费状态、命中后新增 Oil 或目标致死都不反向改变已冻结抽牌数。这些边界是项目实现决定，不伪称为来源逐字规则。
+- 普通抽牌复用 `BattleCardZonesData.PrepareDraw` / `ValidatePreparedDraw` / `CommitPreparedDraw` 深事务：在首次战斗写入前冻结手牌上限、DrawPile / DiscardPile、洗牌随机状态、最终布局与移动 settlement。0 种状态合法抽 0；Hand 已满 10 时不推进洗牌随机，当前牌最后离手后 Hand 为 9；目标错误、计划漂移或其他失败继续保持 Energy、伤害、状态、随机流、卡区与表现结果零写入。`BattleCommandQueue.Submit` 仍是唯一共享写入入口。
+- 正式作者表仅将 Q168（3278）的 `implementation_status` 翻为 `Implemented`，U168 `is_innate=false`，`battle.card.xlsx` SHA-256 为 `878812D99F68C8F9B9A7BC620E2794180F6E8A3F21B5252B16A12BDB70915499`。Luban 于 2026-08-12 22:48:16 成功生成；全项目 Card JSON 168 个，Marine 82 个模板为 **72 张 `Implemented` / 10 张 `CatalogOnly`**，V1 为 57/7、V2 扩展为 15/3；3278 精确为 status 0、Program 78、DiscardPile 与非 Innate。
+- Localization import 与显式 validate 成功；Runtime 静态编译为 0 error / 6 warning，Editor 为 0 error / 12 warning。`Sync and Build All` 与 BuildLayout 写入成功，Addressables 构建耗时 16.521 秒。正式聚合定向任务 `9d67623c6fcc445ebb658b8eea6709c0` 为 **209/209 passed**（0 failed/skipped，30.7641594 秒），包含 CardIllustration 真实 Addressables AssetBundle 加载；完整 EditMode 任务 `598d7b50593e463db922f1ad88472d99` 为 **697/697 passed**（0 failed/skipped，19.7357848 秒）。
+- TDD 任务 `36ffd31603d14de38de4912faf8fb4c1` 枚举 3 项、2 绿 1 红，唯一失败来自测试误把 Damage 当作 Order 0、遗漏生产一直保留的 `EnergySpent(0)`；本次只修测试预期，生产实现未改。补强任务 `8d099f89842e4024925465adf9b3e370` 为 **6/6 passed**（0.4367945 秒），非表格聚合 `94110e65e6b649ea99b901ad49ab4bdd` 为 **150/150 passed**（1.4560424 秒）。默认 Deck、奖励、Run、升级实例、升级 9 伤、多人、Scene 与 Prefab 均未实现；验证记录见 `06_testing/2026-08-12-machine-gunner-v2r-bully-runtime.md`。
+
+## 2026-08-12 Marine Game 机枪兵 V2Q 固定机枪与临时卡生产（已完成 Unity 原生验证）
+
+- V2Q 已冻结 `FixedMachinegun` (3261) 的基础态运行口径：2 Energy、Rare、Skill、Self、Hand→ExhaustPile。成功时先获得 10 Block，再让来源卡进入 ExhaustPile；随后把当时剩余 Hand 按原顺序全部移入 DiscardPile，并为每张被弃的旧手牌创建一张新的 `MachinegunBurst` (3263) 到 Hand。剩余 Hand 为空时创建 0 张；升级 15 Block 仍只是作者表元数据。
+- 该复合变化由 `BattleCardZonesData` 的单一 Prepare / Validate / Commit 深计划拥有：准备阶段冻结原布局、卡实例分配状态、来源归宿、剩余手牌原序、临时实例及最终布局；成功提交只发布一次最终 `Layout`。创建使用独立 `CardCreated` settlement，不伪装成 DrawPile→Hand，也不把临时实例写回 Deck、奖励或 Run。
+- 表现层按 settlement 身份区分既有 Hand→Discard、来源 `HandToExhaust` 与临时实例 `CreatedToHand`；动态 3263 模板依赖从职业程序 registry 传递到 `Session.AvailableCardTemplateIds`，再由 Hand 异步预载，因此不要求 3263 预先存在于本局 Deck 才能显示新实例。
+- 正式作者表只把 3261 的 `implementation_status` 翻为 `Implemented`，`battle.card.xlsx` SHA-256 为 `02F549502D14214C98B4BA97212962B05E58A9B768EF1D7E4CAD441E1DCD6FB7`，`is_innate` 保持 false。Luban 于 22:00:11 成功生成：全项目 Card JSON 168 个、Marine 82 个模板为 **71 张 `Implemented` / 11 张 `CatalogOnly`**，V1 为 57/7、V2 扩展为 14/4；3261 精确保持 status 0、Program 61、Exhaust 与非 Innate。
+- Runtime 静态编译为 0 error / 6 warning，Editor 静态编译为 0 error / 12 warning；Localization import 与显式 validate 成功。`Sync and Build All` 完成且 Addressables 构建耗时 13.42 秒；随后通过 force scripts 完成域重载。正式聚合定向任务 `ba19d1744f084167927568f5572f91e6` 为 **262/262 passed**（0 failed/skipped，30.1698095 秒），覆盖目录快照、CardIllustration、Session、Hand、Queue 与 UI；完整 EditMode 任务 `dc6a1453b602487c8bfbbe7e42c3968d` 为 **690/690 passed**（0 failed/skipped，20.8279366 秒）。
+- TDD 红测保留为诊断证据：任务前缀 `404d20…` 暴露多张 Hand→Discard 使旧 prelude 抛错，任务前缀 `2045cc…` 锁定 `CardCreated` 结果 guard；修复后核心任务前缀 `d6db34…` 为 12/12、非表格定向任务前缀 `f415877…` 为 195/195。最终审查另发现“Deck 不含 3263 时动态插画未预载”的 blocker；改为 registry→`Session.AvailableCardTemplateIds`→Hand async preload 后，动态精确任务前缀 `6bf4…` 为 2/2，最终 262/262 与 690/690 也覆盖该链路。升级实例、升级 15 Block、默认 Deck、奖励排除、Run、多人、Scene 与 Prefab 均未实现。验证记录见 `06_testing/2026-08-12-machine-gunner-v2q-fixed-machinegun-runtime.md`。
+
+## 2026-08-12 Marine Game 机枪兵 V2P 机枪扫射基础态（已完成 Unity 原生验证）
+
+- V2P 已为 Hero 1002 注册临时卡 `MachinegunBurst` (3263) 的可执行基础态：0 Energy、Attack、RandomEnemy、Hand→ExhaustPile、无升级。成功时进行两段独立的基础 5 点普通 Attack；每段开始都从当时仍存活的敌人中重新随机选择，因此首段击杀会改变第二段候选。
+- 3263 的实际 Ammo 成本固定为 0，出牌不会改变 Ammo，也不生成 `AmmoSpent`；只有游击战术读取名义弹耗覆盖值 2，故已有两层 Guerrilla 会在伤害完成后、当前卡离手前获得 4 Block。来源没有给 3263 声明 Shoot 标签，本项目冻结 `Tags.None`：不从名称推断射击，不使用 Stim、IncendiaryAmmo、FirePower 或 PortableHelper；同时通过单一分类属性显式退出 KungfuMech、AgedOil 与 `NonShootAttackRecent`，但伤害仍走普通 Attack 公式与生命周期。
+- 作者表只将 3263 的 `implementation_status` 翻为 `Implemented`，正式 `battle.card.xlsx` SHA-256 为 `B65D97253A43B2FF8575BCEE6F230B651EFD36FE84A10B7ACBFC0BCC62A0AB29`。Luban、Excel 本地化导入/校验与 `Sync and Build All` 均通过，本地 Addressables 构建耗时 11.757 秒；当前 82 模板为 **70 张 `Implemented` / 12 张 `CatalogOnly`**，V1 为 56/8，V2 扩展为 14/4。
+- Unity MCP 最终聚合定向任务 `0f60a2e799904069ab68ae6f13a91953` 为 **154/154 passed**（0 failed/skipped，2.698029 秒）；CardArt 域重载探针 `f87e7034664a4126bb0b32c2888751e9` 为 **1/1 passed**（10.3685051 秒）；完整 EditMode 任务 `a078688b69bd4f198bb736c6285ab5e7` 为 **678/678 passed**（0 failed/skipped，47.3413725 秒）。同一 Editor 重建 Addressables 后、域重载前的完整任务 `dd80e8747e394c7387f8c57497c88f7d` 与精确单测 `b4f20bc3f8364329a374df26c76925b6` 曾分别在同一 CardArt 加载处等待 180 秒；保持 bundle、timeout 与缓存不变并完成域重载后，探针及全量均通过，诊断为 Editor 内陈旧 Addressables 静态状态，不作为生产缺陷或绿色验收证据。
+- 3263 的直接程序与失败零写路径已验证，但来源声明它只能由 `FixedMachinegun` (3261) 创建，而 3261 仍为 `CatalogOnly` 且没有生产临时卡生成入口。因此本切片不把 3263 记为正常产品流程可获得，也没有实现奖励排除、默认 Deck、Run、升级、UI、多人、Scene 或 Prefab。验证记录见 `06_testing/2026-08-12-machine-gunner-v2p-machinegun-burst-runtime.md`。
+
+## 2026-08-12 Marine Game 机枪兵 V2O 隐秘行动与固有起手（已完成 Unity 原生验证）
+
+- V2O 已为 Hero 1002 完整接入 `StealthAction` (3275) 基础态，并把“固有”从卡名/程序特判提升为 `Card` 的强类型 `is_innate` / `IsInnate` 配置事实。作者表只把 3275 标记为固有和 `Implemented`，其余卡保持 `is_innate = false`；Luban 已生成对应 C# 与 JSON。当前目录为 **69 张 `Implemented` / 13 张 `CatalogOnly`**，V1 为 55/9，V2 扩展为 14/4。
+- `BattleTurnController` 在 `StartBattle` 的任何状态/资源/布局写入前，按生成配置的 `IsInnate` 为全部存活玩家收集固有实例并冻结起手计划，不按 ProgramId 或卡牌 ID 特判；CardZones 拥有具体选择与布局提交。固有实例按已经洗牌后的 DrawPile 抽取顺序进入 Hand：固有数不超过 5 时以普通牌补到默认起手 5；6～10 张时全部固有入手且不补普通牌；超过 Hand 上限 10 时返回 `InvalidOpeningHandConfiguration` 且零写入。成功只发布一次最终 `Layout`，不推进洗牌随机，移动 settlement 保持连续顺序。
+- 3275 的成功出牌顺序冻结为 `EnergySpent(1) → Invisible +1 → 普通 DrawCards(1) → 当前牌 Hand→DiscardPile`。抽牌沿用普通出牌时序，计算时 3275 仍在 Hand；因此满 10 手牌时本次抽牌为 0，随后弃置本卡后 Hand 为 9。显式目标或能量失败继续保持资源、状态、卡区与随机流零写入。
+- 正式 `battle.card.xlsx` SHA-256 为 `172FEB0A50DA4F3DC6A580F83C73C97266B6F70A72D1FA01CCDD3D15B1B9F6C9`，`__beans__.xlsx` 为 `A899AC4D58890C5E2B5D75C9AF09A9B0769078F5218FE11889AD3F8688C178FB`；Luban、Excel 本地化导入/校验、`Sync and Build All` 与本地 Addressables 均通过，Addressables 耗时 18.363 秒。正式目录快照任务 `8acfa22da51c4f2fb757bbe102fb945c` 为 21/21，最终聚合定向任务 `982a4f4c4af24ba78e678bf0e66f2ce1` 为 **237/237 passed**（0 failed/skipped，4.4515056 秒），完整 EditMode 任务 `91d060c915ff4dfea42608b7c22669ab` 为 **673/673 passed**（0 failed/skipped，123.9614109 秒）。
+- 本切片不修改默认 Deck 内容、奖励、Run、UI、多人、Scene 或 Prefab；升级的 Invisible +2 / Draw 2 仍只是作者表元数据。验证记录见 `06_testing/2026-08-12-machine-gunner-v2o-stealth-action-innate-runtime.md`。
+
+## 2026-08-12 Marine Game 机枪兵 V2N 极限过载基础态（已完成 Unity 原生验证）
+
+- Hero 1002 的同一职业运行时现已注册 `LimitOverload` (3260) 基础态：0 Energy、Rare、Skill、Self、Hand→DiscardPile。成功时先记录 0 费的 `BattleEnergySpentSettlement`，再即时获得 1 Energy（受 EnergyMaximum 裁剪，满能量不伪造获能记录），当前卡逻辑离手后抽至 10 张，最后累计 `NextRoundEnergyGainPenalty +3`。
+- `BattleCardZonesData` 新增离手抽至上限的 Prepare / Validate / Commit 深事务 seam：准备阶段基于当前卡成功归宿后的投影 Hand 冻结缺口、原布局、洗牌随机状态、最终布局和全部 settlement，且保持零写入；校验拒绝跨聚合、布局/随机漂移或重复提交；提交不再随机，只发布一次最终 `Layout`，不会暴露 11 张手牌的瞬时状态。
+- 联合顺序冻结为 `EnergySpent(0) → 可选 EnergyGained(1) → 当前牌 Hand→DiscardPile → 旧 DiscardPile→DrawPile/重洗/抽牌 → Penalty +3`。同次重洗只包含解算前已在弃牌堆的牌，3260 本身最后才进入弃牌堆，不会在同次解算中抽回。下一回合继续复用 V2J 的 `max(0, baseGain + bonus - penalty)`，再按 EnergyMaximum 裁剪并清除一次性状态。
+- 作者表仅将 Q150（3260）的 `implementation_status` 翻为 `Implemented`。Luban 后机枪兵 82 模板为 **68 张 `Implemented` / 14 张 `CatalogOnly`**，其中 V1 为 55/9，V2 扩展为 13/5；升级“+2 能量”仍只是作者表元数据。
+- Luban、Excel 本地化导入与校验、`Sync and Build All` 及本地 Addressables 构建均成功（15.828 秒）。Unity MCP 正式定向任务 `feda36c5daef4fffab34065ba5988686` 为 **169/169 passed**（0 failed/skipped，2.2836982 秒）；完整 EditMode 任务 `a84b5bb4f7dd4ca1b9791c81bb930973` 为 **659/659 passed**（0 failed/skipped，282.0044831 秒）。CardArt 与 Character Prefab 的 Addressables 冷加载较慢，但均在完整任务中通过。
+- 本切片未实现升级 `CardInstance`，未修改默认 Deck、奖励、Run、UI、多人、Scene 或 Prefab；也没有把 3260 分类为 Attack/Shoot，不消耗 Ammo、Stim，不触发 IncendiaryAmmo 或 PortableHelper。其余 14 张 `CatalogOnly` 继续由目录门禁拒绝。详见 `06_testing/2026-08-12-machine-gunner-v2n-limit-overload-runtime.md`。
+
+## 2026-08-12 Marine Game 机枪兵 V2M 天空之怒基础态（已完成 Unity 原生验证）
+
+- Hero 1002 的同一职业运行时现已注册 `SkyWrath` (3266) 基础态：1 Energy、Rare、Power、Self，成功后进入 PowerPile 并增加一层整场持续、可叠加的天空之怒 Power；卡本身不造成即时伤害，也不推进随机流。
+- 受限触发入口只位于当前 README 声明的四类原始 Support 逻辑段末尾：女妖打击每 hit、火力支援每 hit、燃烧轰炸每 wave、三连击延迟 Support 一次。燃烧轰炸必须先完成该波全部目标的 `Damage → 存活后 Burn → Oil`。旧 HANDOFF 把钢针纳入触发的描述不覆盖当前 README；Needle Delayed、Bomb、回合末 Burn、即时 Attack/Shoot、PortableHelper 与天空之怒自身均不触发。
+- 每一层在开始时重新读取投影中的存活敌人并调用一次随机流，候选只有 1 名时也推进 `NextInt(1)`；先对随机主目标造成基础 8 点 Support，再按该层开始时快照的 Encounter 顺序对其余目标各造成基础 4 点 Support。下一层看到前层致死后的新候选；没有存活敌人时停止且不推进随机流。天空之怒的 8/4 先受当前 Bombard 层数按既有 half-up 规则缩放，再进入目标 Smoke、Vulnerable 与 ArmorBreak 的 Support 管线；Bombard 4 层时为 11/6。
+- 作者表仅将 Q156（3266）的 `implementation_status` 翻为 `Implemented`。Luban 后机枪兵 82 模板为 **67 张 `Implemented` / 15 张 `CatalogOnly`**，其中 V1 为 54/10，V2 扩展为 13/5；升级列仍只是元数据。
+- Luban、Excel 本地化导入、`Sync and Build All` 与本地 Addressables 构建均成功（12.956 秒）。Unity MCP 翻表前运行时任务 `eefded85c7aa4a099d3b16ee4577e704` 为 **117/117 passed**；正式定向任务 `3a279411d63749abaf8eca64ec4236cc` 为 **139/139 passed**；完整 EditMode 任务 `a46a25a9da924131965130d6e2b07b8b` 为 **650/650 passed**（0 failed/skipped，174.2163423 秒）。CardArt 与 Character Prefab 的冷加载较慢，但均在完整任务中通过。
+- 开发中两轮红测均是测试前提错误：首版分层场景的 `2 × SkyWrath + TripleStrike` 总需 6 Energy，超过 fixture 的 5 Energy 上限，后改为总计 4 Energy 的 Banshee 场景；随后 oracle 把 raw random state 直接作为构造 seed，后改为与生产一致的初始化后赋 State。两次都只修测试，生产实现未改变。本切片未修改默认 Deck、奖励、Run、UI、多人、Scene 或 Prefab；其余 15 张 `CatalogOnly` 继续由目录门禁拒绝。详见 `06_testing/2026-08-12-machine-gunner-v2m-sky-wrath-runtime.md`。
+
+## 2026-08-12 Marine Game 机枪兵 V2L 狂轰滥炸基础态（组合验收完成，完整任务保留冷加载超时边界）
+
+- Hero 1002 的同一职业运行时现已注册 `Bombard` (3265) 基础态：1 Energy、Power、Self，成功后进入 PowerPile 并增加 4 层整场持续、可线性叠加的狂轰滥炸 Power。已创建的延迟效果不快照层数；女妖打击、火力支援、燃烧轰炸与三连击延迟 Support 在每次实际触发时读取当前 Power 层数。
+- 每层把声明的支援载荷提高 10%，正值使用 half-up：`floor((baseValue × (100 + 10 × stacks) + 50) / 100)`。这是来源没有规定小数处理时、经用户授权“脑补”后冻结的决定。缩放后的伤害再进入既有 Support 的目标 Smoke、Vulnerable 与 ArmorBreak 管线；燃烧轰炸还分别缩放 Damage、Burn、Oil，并保持 `Damage → 存活后 Burn → Oil`。
+- 该入口只允许上述四种 scheduled Support。GuidedNuke / FiveHundredPounder 的 Bomb、NeedleStorm 的 Delayed、回合末 Burn、即时攻击、便携帮手及其他非声明来源均不放大；命中数、波次数、倒计时、目标选择与既有生命周期 settlement 不变，也没有建立全局伤害事件。
+- 作者表仅将 Q155（3265）的 `implementation_status` 翻为 `Implemented`。Luban 后机枪兵 82 模板为 **66 张 `Implemented` / 16 张 `CatalogOnly`**，其中 V1 为 54/10，V2 扩展为 12/6；升级列仍只是元数据。
+- Luban、Excel 本地化导入、`Sync and Build All` 与本地 Addressables 构建均成功（12.963 秒）。Unity MCP 定向任务 `9c21aa7c79b94f1980988945d35636dd` 为 **134/134 passed**（1.4521749 秒）；精确重跑 `CardArtLogicalAddresses_LoadSprites` 的任务 `da1d1e3969014e81b06cb57a2392de13` 为 **1/1 passed**（106.8572486 秒）。
+- 两次完整任务 `828d66e749a54e66813b3e5d492d4d80`、`492466a3ac7240c29bb227a60945a3c0` 均完成 645 项枚举，但唯一非绿项都是上述素材真实加载用例的 180 秒 timeout；整类 `CardIllustrationConfigurationTests` 任务 `2f3a0ddf6a254a5ab7d8eff8ff5116d5` 完成 5 项枚举时也只保留同一 timeout。V2L 因而按“卡牌定向全绿 + 精确真实加载全绿”的组合门禁验收；不把当前证据写成完整 EditMode 单任务全绿。
+- 开发中曾修正一处测试前提：预置 Vulnerable 会在触发前的敌方行动衰减，因此夹具从 1 层改为 2 层，生产公式未变。本切片未实现升级实例，未修改默认 Deck、奖励、Run、UI、多人、Scene 或 Prefab；其余 16 张 `CatalogOnly` 继续由目录门禁拒绝。详见 `06_testing/2026-08-12-machine-gunner-v2l-bombard-runtime.md`。
+
+## 2026-08-12 Marine Game 机枪兵 V2K 便携帮手基础态（已完成 Unity 原生验证）
+
+- Hero 1002 的同一职业运行时现已注册 `PortableHelper` (3267) 基础态：1 Energy、Power、Self，成功后进入 PowerPile 并增加一层整场持续、可叠加的便携帮手 Power。每一段来自卡牌程序的即时 `IsShootCategory` 实际伤害，在来源伤害和既有命中后/全局效果全部完成后，只要原目标仍存活，就按帮手层数依序对同一目标各追加一次基础 1 点帮手伤害；来源段致死时不触发，某个帮手致死时停止剩余帮手，不重定向也不递归。
+- 帮手伤害使用独立伤害类型，只读取来源 `FirePower`、目标 `Vulnerable` 与 `ArmorBreak`，并正常经过 Block/HP；不读取 Strength、Weakness、双方 Smoke、目标 Invisible 或狙击倍率。帮手段没有卡牌标签，不触发 Stim、IncendiaryAmmo、AgedOil、KungfuMech、再次帮手、Ammo 支付或 Invisible 生命周期。来源射击原有的后置效果先完成；燃烧弹药的直接回归锁定顺序为 `来源 Damage → Burn → 帮手 Damage`。
+- 作者表仅将 3267 的 `implementation_status` 翻为 `Implemented`。Luban 后机枪兵 82 模板为 **65 张 `Implemented` / 17 张 `CatalogOnly`**，其中 V1 为 54/10，V2 扩展为 11/7；升级为 0 费仍只是作者表元数据。
+- Luban、Excel 本地化导入、`Sync and Build All` 与本地 Addressables 构建均成功（12.163 秒）。开发中 Starter 补强任务 `f4c3fc07550d4237b029a112b1ce2563` 为 98/98；最终 Unity MCP 定向 EditMode 任务 `95707f1918fa4633b671c6a10f9b0da3` 为 **120/120 passed**（0.918363 秒），完整 EditMode 任务 `8c0ce8f925e94a35b893f5b5892ef447` 为 **639/639 passed**（131.4561842 秒）。
+- Shotgun 通过 `IsShootCategory` 的共用分类在结构上会进入同一即时命中钩子，但当前没有 Shotgun 卡实例，因此本轮没有直接运行用例；延迟 Support/Bomb/Needle/TripleStrike 延迟段不经过即时卡牌命中入口，故不触发帮手，这同样是代码结构证据，不伪报为跨模块运行验收。本切片未实现升级实例，未修改默认 Deck、奖励、Run、UI、多人、Scene 或 Prefab；其余 17 张 `CatalogOnly` 继续由目录门禁拒绝。详见 `06_testing/2026-08-12-machine-gunner-v2k-portable-helper-runtime.md`。
+
+## 2026-08-12 Marine Game 机枪兵 V2J 回合能量修正基础态（已完成 Unity 原生验证）
+
+- Hero 1002 的同一职业运行时现已开放两张基础态能量卡：`Overload` (3213) 为 0 Energy / Self / Hand→DiscardPile，在当前回合即时获得 2 Energy、受 EnergyMaximum 硬上限裁剪，并累计一层 `NextRoundEnergyGainPenalty`；`DefensiveStance` (3271) 为 1 Energy / Self / Hand→DiscardPile，在同一出牌事务中先获得 8 Block，再累计一层 `NextRoundEnergyGainBonus`。
+- Bonus 与 Penalty 是两项独立、非负且可分别叠加的一次性职业私有状态。下一玩家回合开始时，能量补给使用 `max(0, baseGain + bonus - penalty)`，再按 EnergyMaximum 裁剪；补给结算后两项状态在同一次回合开始流程中分别清零。当前回合的主动获得使用 `BattleEnergyGainedSettlement`，回合开始的补给使用 `BattleEnergyRefilledSettlement`，两种事实不合并。
+- 作者表只将 3213 与 3271 翻为 `Implemented`。Luban 后机枪兵 82 模板为 **64 张 `Implemented` / 18 张 `CatalogOnly`**，其中 V1 为 54/10，V2 扩展为 10/8；升级列仍只是元数据。
+- Luban、Excel 本地化导入、`Sync and Build All` 与本地 Addressables 构建均成功（11.72 秒）。补强获能上限、净修正、补给下限、一次性清除顺序与零反馈表现契约后，Unity MCP 定向 EditMode 任务 `3e73f867e7404be8a3180660e4999d20` 为 **136/136 passed**；完整 EditMode 任务 `56274033527e4c78b50a78313bcc0f6c` 为 **631/631 passed**（17.642 秒）。
+- `LimitOverload` (3260) 明确延期且继续为 `CatalogOnly`：当前出牌流程在程序操作提交后才把本卡移出 Hand，若直接复用 `DrawCards(10)` 实现“抽到手牌满”，计算时会把 3260 自身仍计入手牌并少抽一张。它需要独立的“抽至满手”卡区预演/提交 seam，能够基于本卡成功归宿后的投影手牌冻结抽牌数量；V2J 不以固定抽牌数或提前移牌伪装实现。
+- 本切片未实现升级实例，未修改默认 Deck、奖励、Run、UI、多人、Scene 或 Prefab。详见 `06_testing/2026-08-12-machine-gunner-v2j-round-energy-runtime.md`。
+
+## 2026-08-12 Marine Game 机枪兵 V2I 充能爆射基础态（已完成 Unity 原生验证）
+
+- Hero 1002 的同一职业运行时现已注册 `ChargedBurst` (3282) 基础态：2 Energy、Attack、AllEnemies，成功后进入 DiscardPile；施放时按 Encounter 顺序快照全部存活敌人，基础 12 按序号线性增加 50%，前三段为 12/18/24。
+- 前段致死不会重排快照或降低后续段伤害。该程序只声明 `Sniper`，不吃 Stim 的额外段或 FirePower，逐目标读取 IncendiaryAmmo，并在成功攻击后保留 Invisible；显式 `TargetId` 和能量不足路径均保持参与者、资源、状态、随机流、卡区与表现结果零写入。
+- 作者表只将 3282 翻为 `Implemented`。Luban 后机枪兵 82 模板为 **62 张 `Implemented` / 20 张 `CatalogOnly`**，其中 V1 保持 53/11，V2 扩展为 9/9；升级列仍只是元数据。
+- Luban、Excel 本地化导入、`Sync and Build All` 与本地 Addressables 构建均成功（11.456 秒）。Unity MCP 定向 EditMode 任务 `1d5c9e1d96fe4ebcadd990fcc73fccdc` 为 **94/94 passed**；完整 EditMode 任务 `822d066bc54c43d78ac206072789f840` 为 **622/622 passed**（18.193 秒）。首次以 `bdaf0` 开头的任务在初始化阶段超时且实际执行 0 项，因此不计为失败回归；随后真实执行任务已全绿。
+- 本切片未实现升级实例，未修改默认 Deck、奖励、Run、UI、多人、Scene 或 Prefab，也未接入临时卡、选择、自动免费攻击、AnyAlly 或其他跨卡协议。详见 `06_testing/2026-08-12-machine-gunner-v2i-charged-burst-runtime.md`。
+
+## 2026-08-12 Marine Game 机枪兵 V2H 焚风基础态（已完成 Unity 原生验证）
+
+- Hero 1002 的同一职业运行时现已注册 `FoehnWind` (3276) 基础态：2 Energy、Skill、显式 Enemy，成功后进入 DiscardPile；结算时读取施放者当时的全部 Smoke，以该值向目标施加一次 Burn。
+- Smoke 大于 0 时，专用联合操作先按既有 `ApplyBurn` 规则把目标旧 Oil 计入 Burn 并减半 Oil，再把来源 Smoke 清零；settlement 顺序固定为目标 Burn → 可选目标 Oil → 来源 Smoke。Smoke 为 0 时仍正常支付费用并弃牌，但不产生私有状态写入。能量不足或目标规则错误继续保持资源、状态、随机流和卡区零写入。
+- 作者表只将 3276 翻为 `Implemented`。Luban 后机枪兵 82 模板为 **61 张 `Implemented` / 21 张 `CatalogOnly`**，其中 V1 保持 53/11，V2 扩展为 8/10；升级列仍只是元数据。
+- Luban、Excel 本地化导入、`Sync and Build All` 与本地 Addressables 构建均成功（12.164 秒）。Unity MCP 定向 EditMode 任务 `69b8ded02aaa46368cad35e620567fd2` 为 **89/89 passed**；完整 EditMode 任务 `4a90229794d24d3f8fd85154ab79c250` 为 **617/617 passed**（17.657 秒）。首次以 `902bbc` 开头的任务在初始化阶段超时且实际执行 0 项，因此不计为失败回归；随后真实执行任务已全绿。
+- 本切片未实现升级实例，未修改默认 Deck、奖励、Run、UI、多人、Scene 或 Prefab，也未接入临时卡、选择、自动免费攻击、AnyAlly 或其他跨卡协议。详见 `06_testing/2026-08-12-machine-gunner-v2h-foehn-wind-runtime.md`。
+
+## 2026-08-12 Marine Game 机枪兵 V2G 私人改装基础态（已完成 Unity 原生验证）
+
+- Hero 1002 的同一职业运行时现已注册 `PrivateMod` (3268) 基础态：1 Energy、Power、Self，成功后进入 PowerPile；在同一出牌事务中把 AmmoMaximum +1、保持当前 Ammo 不变，并增加 `FirePower +1` 与一层 PrivateMod Power。
+- 私人改装不新增射击事件或命中后钩子。既有 Shoot 伤害管线会让后续每一段射击读取 FirePower；装填则按已提高的新 AmmoMaximum 补充。能量不足仍在权威出牌门禁失败，资源、状态、Power 层数、随机流和卡区保持零写入。
+- 作者表只将 3268 翻为 `Implemented`。Luban 后机枪兵 82 模板为 **60 张 `Implemented` / 22 张 `CatalogOnly`**，其中 V1 保持 53/11，V2 扩展为 7/11；升级列仍只是元数据。
+- Luban 与 Excel 本地化导入成功。首轮 `Sync and Build All` 的 Addressables 构建为 11.092 秒；重新导入本地化后执行的最终同步构建为 4.376 秒。Unity MCP 定向 EditMode 任务 `cfcf49e9a16e447fb4033af6108c8dd9` 为 **85/85 passed**；完整 EditMode 任务 `0f17edd2f31d40d2aba328def4448f3c` 为 **613/613 passed**（18.617 秒）。首次以 `9e20` 开头的任务在初始化阶段超时且实际执行 0 项，因此不计为失败回归；随后真实执行任务已全绿。
+- 本切片未实现升级实例，未修改默认 Deck、奖励、Run、UI、多人、Scene 或 Prefab，也未接入临时卡、选择、自动免费攻击或其他跨卡协议。详见 `06_testing/2026-08-12-machine-gunner-v2g-private-mod-runtime.md`。
+
+## 2026-08-12 Marine Game 机枪兵 V2F 烟雾、防御与标记即时卡（已完成 Unity 原生验证）
+
+- Hero 1002 的同一职业运行时现已注册 3 张 V2 扩展基础态：`ChainSmoke` (3269) 支付 1 Energy、只为施放者增加 `Smoke +5`；`EmergencyCooling` (3272) 支付 1 Energy、严格先获得 8 Block 再增加 `Smoke +3`；`Mark` (3280) 支付 1 Ammo、对显式敌人造成 5 点普通 Attack，并仅在目标仍存活时追加 `ArmorBreak +2`。三张均成功进入 DiscardPile。
+- 3269 的本地化卡名即使含“抽”字也不构成抽牌协议，运行时只按 `ProgramId.ChainSmoke` 执行来源 Smoke 操作，不生成 Draw 或补牌。3280 显式声明 `MachineGunnerCardTag.None`，不会因 Attack 类型或 Ammo 成本被推断为射击；Stim、FirePower 与 IncendiaryAmmo 均不参与该卡基础态。
+- 作者表只将 3269、3272、3280 翻为 `Implemented`。Luban 后机枪兵 82 模板为 **59 张 `Implemented` / 23 张 `CatalogOnly`**，其中 V1 保持 53/11，V2 扩展为 6/12；升级列仍只是元数据。
+- Luban、Excel 本地化导入、唯一既有 Unity Editor 的 `Sync and Build All` 与本地 Addressables 构建均成功（Addressables 11.414 秒）。Unity MCP 定向 EditMode 任务 `054f72bc921749b5bad6d2efcc358b73` 为 **83/83 passed**；完整 EditMode 任务 `ba418ab34a6d44038dddddc0233a03f8` 为 **611/611 passed**（18.618 秒）。首次以 `056109` 开头的 MCP 任务在初始化阶段超时且实际执行 0 项，因此不计为失败回归；后续真实执行任务已全绿。
+- 本切片未实现升级实例，未修改默认 Deck、奖励、Run、UI、多人、Scene 或 Prefab，也未接入临时卡、选择、自动免费攻击或其他跨卡协议。详见 `06_testing/2026-08-12-machine-gunner-v2f-smoke-block-mark-runtime.md`。
+
+## 2026-08-12 Marine Game 机枪兵 V2E 延迟效果与支援链（已完成 Unity 原生验证）
+
+- Hero 1002 的职业运行时现已为 7 张卡注册基础态延迟程序：`GuidedNuke` (3237)、`BansheeStrike` (3238)、`FireSupport` (3239)、`FireBombardment` (3240)、`FiveHundredPounder` (3241)、`TripleStrike` (3264) 与 `NeedleStorm` (3274)。每次成功施放创建独立、按插入顺序结算的职业私有延迟实例；多实例不合并为 Power 层数。随机段在触发时从当前投影中的存活敌人逐段选择，并只随完整计划成功提交随机状态。
+- 回合开始的延迟计划位于最后一名敌人行动成功之后、敌方 Smoke 清理、玩家资源补充与抽牌之前；女妖每次触发先锁定当前最近敌人，火力支援逐段随机，燃烧轰炸逐目标执行 `Support → 存活后 Burn → Oil`，三连击延迟段选择当前最远敌人，钢针逐段执行 `Delayed → 存活后 ArmorBreak`。回合结束中，当前已接入顺序为弃牌、清除 Shackle/LoseStrength/既有临时状态、炸弹类延迟、Burn；来源中的恢复卡尚未实现，因此本切片没有伪造恢复结算。战斗已终局时不再执行后续延迟工作，遗留实例随 BattleEnded 清空。
+- 基础态冻结为：3237 支付 5 Energy、立即 `Shackle +1`、施放回合末开始倒计时并在第三个未来回合末对全体造成 99 Bomb；3241 支付 3 Energy，在第二个未来回合末对全体造成 60 Bomb；3238 支付 2 Energy，在后续两个玩家回合开始各执行最近目标 `Support 8×2`；3239 支付 1 Energy，在下回合开始执行 5 次随机 `Support 2`；3240 支付 2 Energy，在下回合开始执行两波全体 `Support 2 → Burn +4 → Oil +3`；3264 支付 4 Energy 与 3 Ammo、先得 Invisible +2 再对显式敌人执行两次 Sniper 12、进入 ExhaustPile，随后下回合对最远敌人造成 Support 20；3274 支付 1 Energy，下回合开始进行 4 次随机 Delayed 1，并仅在该段后目标存活时加 `ArmorBreak +1`。
+- 本批“脑补”已被冻结为项目实现事实：Support 只读取目标 Smoke、Vulnerable 与 ArmorBreak；Bomb 只读取目标 Smoke；钢针 Delayed 只读取目标 Smoke，不读取 Vulnerable、ArmorBreak 或来源修正；同阶段多实例按创建顺序处理，每个随机段从当时投影的存活敌人重新取候选。Shackle 只阻止 Attack，技能仍可使用，并在玩家当前行动结束清除。升级数值仍只是作者表元数据，未实现升级 CardInstance。
+- 作者表只将上述 7 个精确身份翻为 `Implemented`。Luban 后机枪兵 82 模板为 **56 张 `Implemented` / 26 张 `CatalogOnly`**，其中 V1 为 53/11、V2 扩展为 3/15；未把这些卡加入默认 Deck、奖励或 Run，也未修改 UI、多人或升级实例。
+- Luban、Excel 本地化导入、唯一既有 Unity Editor 的 `Sync and Build All` 与本地 Addressables 构建均成功（Addressables 14.252 秒）。Unity MCP 定向 EditMode 任务 `586264ec18e549d89d1a063aac4d7b93` 为 **101/101 passed**；完整 EditMode 任务 `89cfdfe8441b45d39d0cd57d939734c7` 为 **606/606 passed**（46.847 秒）。已知边界是：round-start 延迟阶段内部按单份投影计划联合准备/校验/提交，但它发生在最后一名敌人的行动事务已经提交之后，当前没有覆盖“敌人行动 + round-start 延迟阶段”的跨事务回滚；正常 Queue 串行路径已验证，异常提交故障下的完整跨域原子回滚仍未提供。详见 `06_testing/2026-08-12-machine-gunner-v2e-delayed-support-scheduler-runtime.md`。
+
+## 2026-08-12 Marine Game 机枪兵 V2D 击退射击与失去力量（已完成 Unity 原生验证）
+
+- `KnockbackShot` (3223) 已开放基础态运行时：支付 1 Ammo，不使用 `Shoot` / `Sniper` 标签；施放时按 Encounter 顺序快照前两名存活敌人，第一目标依次承受 7 点 Attack 与存活后 `LoseStrength +2`，第二目标依次承受 3 点 Attack 与存活后 `LoseStrength +2`。只有一名存活敌人时第二段跳过；第一段击杀不会从更后的敌人递补；该程序拒绝显式 `TargetId`，目标完全由职业运行时推导。
+- `LoseStrength` 是独立于 `Weakness`、`Vulnerable` 和永久 `Strength` 的职业私有非负状态。Attack 的来源力量项按 `max(0, baseDamage + Strength - LoseStrength)` 计算，Burn 不读取该状态。携带者在自己的行动结束时清零并写入私有状态 settlement；敌人按“行动 Effect / completion → 清除 LoseStrength → intent advance”结算，玩家则在自己的行动结束阶段、回合末 Burn 之前清除。预演、校验、提交和连续 Order 仍沿用既有 Queue 权威事务，没有新增第二条共享写入路径。
+- 作者表仅将 3223 的 `implementation_status` 翻为 `Implemented`；Luban 后机枪兵目录保持 82 项，当前为 **49 张 `Implemented` / 33 张 `CatalogOnly`**，其中 V1 为 47/17，V2 扩展为 2/16。当前没有升级 CardInstance，因此 9/5 伤害与 `LoseStrength +3` 仍只保留为作者表元数据；本轮未把卡加入默认 Deck、奖励或 Run。
+- `dotnet build TinySpire.sln --no-restore -v:minimal` 为 **0 errors / 12 warnings**。Luban、Excel 本地化导入、唯一既有 Unity Editor 的 `Sync and Build All` 与本地 Addressables 构建均成功（Addressables 13.783 秒）；Unity MCP 定向 EditMode 为 **10/10 passed**（0.3051449 秒），完整 EditMode 为 **597/597 passed**（17.8830785 秒）。详见 `06_testing/2026-08-12-machine-gunner-v2d-knockback-lost-strength-runtime.md`。
+
+## 2026-08-12 Marine Game 机枪兵 V2C 破甲即时卡（已完成 Unity 原生验证）
+
+- 在 V2 扩展目录中，仅将来源完整且复用既有结算链的两张基础态卡翻为可执行：`ThermiteBomb` (3273) 为 1 Energy / AllEnemies / Hand→DiscardPile，程序按操作顺序先对 Encounter 中每名存活敌人施加 `Burn +4`（沿用已有 Oil 消耗与减半），再施加持续的 `ArmorBreak +2`；`Crush` (3281) 为 1 Energy / 自动最近敌人 / Hand→DiscardPile，先进行 9 点普通 Attack，目标在该段后仍存活时才施加 `ArmorBreak +4`。两张的升级数值仅保留作者表元数据，当前没有升级 CardInstance。
+- `ArmorBreak`、全体 Burn、自动最近目标、攻击后置状态、私有状态 settlement 与 Burn 伤害规则均复用既有职业运行时；未增加新的状态、生命周期、Queue 写入口或表现通道。扩展目录门禁由“新身份全为 CatalogOnly”的录入期规则收敛为精确状态快照：只有 `MARINE_THERMITE_BOMB` 与 `MARINE_CRUSH` 为 `Implemented`，其余 16 张 V2 新身份仍为 `CatalogOnly`。机枪兵 82 模板当前为 **48 张 `Implemented` / 34 张 `CatalogOnly`**。
+- 作者工作簿仅将 3273 与 3281 的 `implementation_status` 翻为 `Implemented`；Luban 生成成功，Excel 本地化导入成功，唯一既有 Unity 6000.5.5f1 Editor 的 `Sync and Build All` 成功并完成本地 Addressables 内容构建（19.571 秒）。最终 Unity MCP 定向 EditMode `f60e712386064ac1b558bfc3f66a0c8f` 为 **81/81 passed**，完整 EditMode `65b4d39df04142409f9b8f0355a6d063` 为 **589/589 passed**。未暂存、提交或推送；详见 `06_testing/2026-08-12-machine-gunner-v2c-armor-break-instant-cards.md`。
+
+## 2026-08-12 Marine Game 机枪兵 V2B 82 模板目录扩展（已完成 Unity 原生验证）
+
+- V2 行为来源 `00_inbox/README web.md` 的目录目标现已完整落到作者表：5 张初始、76 张奖励、1 张临时，共 **82 个模板**。本批在 V2B 初始录入时新增 3265–3282 共 18 个 V2 奖励身份，并补齐其 Program 65–82、双语文本、升级元数据与占位插图键；当时新增身份统一保持 `CatalogOnly`，没有因“已经录入”而被误标为可战斗使用。
+- 构建门禁保留原 V1 64 模板快照，另以 `marine-game-v2-20260812-cards` 独立检查 18 个扩展身份、连续 ID/Program、精确实现状态、空 effect bindings、占位图与升级元数据。V2B 验收时目录为 **46 张 `Implemented` / 36 张 `CatalogOnly`**；随后 V2C 只打开 ThermiteBomb 和 Crush，余 16 张 V2 卡仍在运行时程序之前被状态门禁拒绝，也未加入默认 Deck、奖励或 Run。
+- Luban 和 Unity 本地化导入均成功；唯一既有 Unity 6000.5.5f1 Editor 的 `Sync and Build All` 成功，并完成本地 Addressables 内容构建（18.781 秒）。Unity MCP 定向 EditMode `40db6aacf30e4bfbbebfe725d734695f` 为 **112/112 passed**，完整 EditMode `a5646a7a960d43348acdf39083b23f95` 为 **586/586 passed**。未暂存、提交或推送；详见 `06_testing/2026-08-12-machine-gunner-v2b-catalog-extension.md`。
+
+## 2026-08-12 Marine Game 机枪兵 V2A 伤害语义、电磁增压与防御靶机（已完成 Unity 原生验证）
+
+- 用户指定 `00_inbox` 的当前 `README web.md` 为新版卡牌规则来源；同目录 `READ.md` 与 `HANDOFF.md` 中冲突的旧 Mod 说明不再参与行为裁决。新目标目录为 82 个模板，但现有作者表仍为 64 个；本批只更正可验证的既有卡和基础运行时，当前为 **46 张 `Implemented` / 18 张 `CatalogOnly`**，不把尚未录入的 18 张新奖励卡伪报为完成。
+- 伤害请求现在以 `MachineGunnerDamageKind` 与 `MachineGunnerCardTag` 声明。Pipeline 内部规则档案分别处理 Attack、Support、Bomb、Burn、Debuff；`Shoot` 才读取 Stim/FirePower，`Sniper` 读取燃烧弹药和狙击倍率但不读 FirePower，`SpikeShot` (3248) 显式为 `Shoot | Sniper`。这同步修正了 Spike 的新版射击/狙击双词条和易伤数值回归。
+- `ElectroBoost` (3236) 按新表更新为 1 Energy / Uncommon / Power / Hand→PowerPile，基础态 `FirePower +3` 可叠加并持续到战斗结束。`DefenseTarget` (3262) 以 2 Energy / Self / Hand→ExhaustPile 开放，最少 2、最多 9 弹，每实际 3 弹获得 1 层 Intangible；2 弹成功但不产生零值状态 settlement。
+- Intangible 只对正值 incoming Attack 在 Block 前封顶为 1，并在 Damage settlement 后消费一层、不随回合衰减。Effect 链在局部投影中预留 Buffer/Intangible 后效；同段两者并存时 Buffer 优先、完全抵挡不消费 Intangible，此组合优先级已记录为项目实现决定。Luban、从 Excel 导入本地化、唯一既有 Unity 6000.5.5f1 Editor 的 `Sync and Build All` 与本地 Addressables 均成功；最终 MCP 定向 EditMode `6426b623af174b908464886033acfda5` 为 **110/110 passed**，完整 EditMode `3e20086749f1423f99784361f0477cf5` 为 **584/584 passed**。未暂存、提交或推送；详见 `06_testing/2026-08-12-machine-gunner-v2a-damage-taxonomy-defense-target.md`。
+
+## 2026-08-12 Marine Game 机枪兵 MG14B 游击战术（已完成 Unity 原生验证）
+
+- Hero 1002 的同一 `MachineGunnerBattleRuntime` 已注册 `GuerrillaTactics` (3251) 的基础态程序：支付 1 Energy、Self、Hand→Power。每张成功归宿的能力牌声明 `PowerStackGain = 2`，因此 PowerPile 中的一张实体卡对应 2 层游击；两张实体卡保留为两个不同实例、总层数为 4。当前没有升级 CardInstance，作者表中的升级 3 层只保留为元数据。
+- `MachineGunnerCostResolution` 现在明确区分实际扣除的 `AmmoSpent` 与仅供游击触发读取的冻结名义值 `AmmoSpentForGuerrilla`。当前普通支付令两者相等：每张成功卡在原有操作后按“游击层数 × 名义弹耗”追加 Block；能力牌本身不耗弹，故不会立即给 Block。Stim 使射击实际/名义耗 2 弹时，2 层游击给 4 Block。该分离只为未来免费攻击和虚拟耗弹提供受控接缝，本轮未实现 TacticalAdvance、固定机枪或临时 MachinegunBurst。
+- 作者工作簿仅将 Q141（3251）的 `implementation_status` 从 `CatalogOnly` 翻为 `Implemented`；Luban 生成成功，生成目录核验为 **45 张 `Implemented` / 19 张 `CatalogOnly`**。`dotnet build TinySpire/Assembly-CSharp-Editor.csproj --no-restore -v:q` 为 **0 errors**（保留既有 12 条 `MSB3277` 警告）；唯一既有 Unity 6000.5.5f1 Editor 的 `TinySpire/Build/Sync and Build All` 成功，Console 记录本地 Addressables 内容构建和同步完成。
+- Unity MCP 定向 EditMode `02370c5357374fb1aaff48682cf22532` 为 **6/6 passed**，覆盖目录门禁、3251 元数据、两层叠加、Stim 的实际 2 弹→4 Block、失败零写入和 PowerPile 实例归宿；完整 EditMode `d3968d32a61f4a8cb9bf9c3396b905b0` 为 **574/574 passed，0 failed，0 skipped**（57.9375737 秒）。未暂存、提交或推送；详见 `06_testing/2026-08-12-machine-gunner-mg14b-guerrilla-tactics-runtime.md`。
+
+## 2026-08-12 Marine Game 机枪兵 MG14A 撤退与快速翻滚（已完成 Unity 原生验证）
+
+- Hero 1002 的同一 `MachineGunnerBattleRuntime` 已注册 `Retreat` (3216) 和 `QuickRoll` (3235) 的基础态程序。撤退支付 2 Energy 后获得 15 Block、预约下回合补满当前 Ammo 上限、Hand→DiscardPile，并请求结束本次玩家行动；快速翻滚支付 1 Energy 后获得 5 Block、叠加 5 层下挡、Hand→DiscardPile。当前没有升级 CardInstance，作者表的升级数值只保留为元数据。
+- `NextRoundBlock` 和 `ReloadAmmoAtNextPlayerRound` 是机枪兵私有战斗状态。下一玩家回合的冻结顺序为：清除既有 Block；清除下挡并给予其总值 Block；应用既有资源档案的普通补充；清除补满弹预约并将 Ammo 填至当前最大值；最后走既有抽牌。两张快速翻滚会把预约值累加为 10，且只在下次开始结算一次；撤退测试锁定 Ammo 0→1→5。
+- 撤退不从职业运行时嵌套提交命令：`BattleTurnOperationResult` 只携带请求结束的 actor，`BattleCommandQueue` 在成功 Play 后用 system token 冻结 `EndPlayerActionCommand` continuation；控制器在发布前设同 actor 的强制结束锁，普通 Play/End 重入零写入拒绝，系统结束完成后清锁。Queue 仍独占顺序、展示屏障、continuation 与 drain。
+- 作者工作簿仅把 Q106（3216）和 Q125（3235）的 `implementation_status` 从 `CatalogOnly` 翻为 `Implemented`；最终 `battle.card.xlsx` SHA-256 为 `DFDA339D3E1654176A75E6A8F7E3875B33021676477D37FE55CB7179D5128E05`。Luban 生成成功，生成目录核验为 **44 张 `Implemented` / 20 张 `CatalogOnly`**；3234 `TacticalAdvance` 未改，继续 CatalogOnly。
+- `TacticalAdvance` 的“下一张攻击免费”与 Stim 额外射击的弹药支付优先级、以及 Bound 前置规则尚未有可执行口径，因此本轮没有猜测或实现它。静态 `dotnet build TinySpire/Assembly-CSharp-Editor.csproj --no-restore` 为 **0 errors**（保留既有 12 条 `MSB3277` 警告）；唯一既有 Unity 6000.5.5f1 Editor 的 `TinySpire/Build/Sync and Build All` 成功。本轮定向 Unity MCP EditMode `534c896788734535bf40275aadf41083` 为 **7/7 passed**，收紧普通卡辅助断言后的完整任务 `352921ecce6246cda6cf792348a0c393` 为 **571/571 passed，0 failed，0 skipped**（221.6869278 秒）。未暂存、提交或推送；详见 `06_testing/2026-08-12-machine-gunner-mg14a-retreat-quick-roll-runtime.md`。
+
+## 2026-08-12 Marine Game 机枪兵 MG13 全息诱饵（已完成 Unity 原生验证）
+
+- Hero 1002 的同一 `MachineGunnerBattleRuntime` 为 `HoloDecoy` (3259) 注册基础值程序：支付 1 Energy、Self 输入、以既有私有状态 settlement 施加 `Buffer +1`，并从 Hand 移至 ExhaustPile。`Buffer` 是可叠层、无回合衰减的职业私有状态；它只对正值的 incoming Attack 生效，使本次伤害完全不改变 Block/HP，随后消费 1 层。零值攻击不消费 Buffer。基础卡以外的奖励/Run、HUD、Scene、Prefab、默认 Hero/Deck 与第二条写入链均不在本切片范围内。
+- 为避免 Effect 预演阶段写入真实战斗状态，通用伤害覆盖改为按单个 Effect 链创建局部 `IBattleDamageFormulaOverrideSequence`：它只在局部投影中预留 Buffer，并在提交时严格写出“原始 Damage settlement → Buffer 状态 settlement”。`BattlePreparedEffectPlan.PlannedSettlementCount` 统一包含这类后续 settlement，敌人意图和玩家卡牌的下一个 Order 均以该总数推进，因此同一 Effect 链的两段伤害只会消费一个 Buffer，且不会与下一段/下一敌人的 Order 重叠。
+- 作者工作簿仅把 Q149（3259）的 `implementation_status` 从 `CatalogOnly` 翻为 `Implemented`，值差异、重导入、渲染与公式错误扫描没有其他变化；最终 SHA-256 为 `926CE36A1E6190B4B1BFD1EF93AC6C396AFC1B37E37F840622437C89864BB57A`。Luban 生成成功并恢复其移除的 `game-config.json`；生成 JSON 核验为 **42 张 `Implemented` / 22 张 `CatalogOnly`**，3259 为 Program 59、Cost 1、Self、基础/升级均 ExhaustPile。
+- 来源存在一处明确未裁决冲突：`README web.md` 声称 3259 升级后“不消耗”，作者表的 `upgraded_play_destination` 仍是 ExhaustPile，且项目尚无 CardInstance 升级状态。本轮保持作者表字段、不伪造升级运行时，并将该问题留给升级实例/作者表裁决切片。
+- 静态 `dotnet build TinySpire/Assembly-CSharp-Editor.csproj --no-restore` 为 **0 errors**（保留 Unity 依赖图既有的 12 条 `MSB3277` 警告）。2026-08-12 在唯一既有 Unity 6000.5.5f1 `TinySpire` Editor 运行 `TinySpire/Build/Sync and Build All`；首次调用因资源导入域重载中断，重试后的 Console 明确记录 BuildLayout 写入、`Addressable content successfully built (duration : 0:00:21.093)` 与整体同步完成。最终 Unity MCP EditMode 任务 `dff6b79a8f4e486297d1cdd410c029a6` 为 **119/119 passed，0 failed，0 skipped**（0.5207738 秒），覆盖 Buffer 的施加/消耗/叠层/零写入、单链双段伤害、连续 Order、目录快照和构建门禁。未暂存、提交或推送；详见 `06_testing/2026-08-12-machine-gunner-mg13-holo-decoy-runtime.md`。
+
+## 2026-08-11 Marine Game 机枪兵 MG12 光学迷彩（已完成 Unity 原生验证）
+
+- Hero 1002 的同一 `MachineGunnerBattleRuntime` 为 `OpticalCamo` (3249) 注册基础值程序：支付 2 Energy、Self 输入、从 Hand 移至 DiscardPile，并以既有职业私有状态操作施加 `Invisible +2`。表内升级费用 1 继续只作为作者表元数据保留；项目尚无通用 CardInstance 升级态，未硬编码升级运行时数值。既有伤害管线的隐身受击减半语义保持不变，本切片不新增 HUD、角色半透明或场景表现。
+- 隐身生命周期收敛为调用方显式定义时机：玩家行动结束减少 1 层；普通攻击仅在整张卡已成功进入卡区归宿后减少 1 层，资源不足等失败路径不减少。`MachineGunnerCardProgram.PreservesInvisibleAfterSuccessfulAttack` 只允许攻击程序声明，3247 `SniperShot` 与 3248 `SpikeShot` 显式保留隐身。该字段不能复用 `IsSniper`：3248 是“射击 + 狙击/不破隐”语义，但现有伤害公式仍需保留其开火加成；本切片不假装解决双词条的更广伤害建模缺口。
+- 作者工作簿仅把 Q139（3249）的 `implementation_status` 从 `CatalogOnly` 翻为 `Implemented`，值差异、重导入、渲染与公式错误扫描均无额外变化；最终 SHA-256 为 `4F46A9D6D7F570686D898394AC0D249E4150BBD9BC3661204CDC11495546327F`。Luban 生成成功并恢复其移除的 `game-config.json`；生成 JSON 核验为 **41 张 `Implemented` / 23 张 `CatalogOnly`**，3249 为 Program 49、Cost 2、升级 Cost 1、Self、DiscardPile。
+- 静态 `dotnet build TinySpire/Assembly-CSharp-Editor.csproj --no-restore` 为 **0 errors**（保留 Unity 依赖图既有的 12 条 `MSB3277` 警告）。2026-08-11 已在唯一既有 Unity 6000.5.5f1 `TinySpire` Editor 重新执行 `TinySpire/Build/Sync and Build All`；Console 明确记录 BuildLayout 写入、`Addressable content successfully built (duration : 0:00:28.345)` 与整体同步完成。最终 Unity MCP EditMode 任务 `e2f9b873188a4ed7a12a2f073f90b492` 为 **75/75 passed，0 failed，0 skipped**（1.5422825 秒），覆盖机枪兵运行时、伤害管线、卡牌规则、目录快照与构建门禁，含四项 3249 行为回归。未修改升级实例、奖励/Run、Power HUD、Scene、Prefab、默认 Hero/Deck、ProjectSettings、asmdef、HybridCLR、启动 DI 或受保护美术路径；未暂存、提交或推送。详见 `06_testing/2026-08-11-machine-gunner-mg12-optical-camo-runtime.md`。
+
+## 2026-08-11 Marine Game 机枪兵 MG11 爆炸肘（已完成 Unity 原生验证）
+
+- Hero 1002 的同一 `MachineGunnerBattleRuntime` 为 `ExplosiveElbow` (3252) 增加基础值程序：自动选择最近存活敌人，支付 2 Energy 后先进行 10 点普通 Attack。若该次攻击后目标仍存活，运行时继续沿用既有逐段投影顺序：卡牌后置状态、`IncendiaryAmmo`、`AgedOil`，最后读取该时刻的 Burn 追加一次等值 Debuff 伤害。该立即触发不消耗或改写 Burn/Oil；Debuff 只使用 Block/HP 伤害路径，不读取 Weakness、Smoke 或 Vulnerable，且不消耗 Armor。普通攻击已致死则跳过后续 `AgedOil` 和立即 Burn；卡牌最终从 Hand 移至 DiscardPile，终局仍在整张卡提交后统一派生。
+- 需求来源继续遵循当前摘要的优先级：`marine-game/cards.json` / `battle.html` / `README.md` 的 2 Energy、基础攻击 10 和立即触发既有 Burn 被采用。`00_inbox/HANDOFF.md` 中未纳入该摘要来源链的 STS2 Mod “1 Energy / 8（升级 11）”历史说明未用于本卡，故未修改作者表已有的费用、`Enemy` 目录分类或 DiscardPile 归宿；`Enemy` 仍是目录输入映射，运行时最近目标由职业程序自动推导。
+- 作者工作簿仅把 Q142（3252）的 `implementation_status` 从 `CatalogOnly` 翻为 `Implemented`，并经值差异、重导入、渲染与公式错误扫描复核；最终 SHA-256 为 `47490664EFAFB9553BC80CD181301FE65F810B2B1F433734094A38346DF0B7D6`。Luban 生成成功并恢复其移除的 `game-config.json`；生成 JSON 核验为 **40 张 `Implemented` / 24 张 `CatalogOnly`**，3252 为 Program 52、Cost 2、Enemy、DiscardPile。
+- 静态 `dotnet build TinySpire/Assembly-CSharp-Editor.csproj --no-restore` 为 **0 errors**（保留 Unity 依赖图既有的 12 条 `MSB3277` 警告）。2026-08-11 已在唯一既有 Unity 6000.5.5f1 `TinySpire` Editor 执行 `TinySpire/Build/Sync and Build All`；首次传输因编辑器域重载断连，重连后的 Console 明确记录 `Addressable content successfully built (duration : 0:00:52.963)`、BuildLayout 写入和整体同步完成，未出现 Error。最终将“当前 Burn”读取收敛到同一操作的职业状态投影后，Unity MCP EditMode 任务 `e336ac7ff03548d6929571c4b9c5f803` 为 **70/70 passed，0 failed，0 skipped**（1.1632452 秒），覆盖机枪兵运行时、伤害管线、卡牌规则、目录快照和构建门禁；其中四项 3252 行为回归全部通过。未修改升级实例、奖励/Run、Power HUD、Scene、Prefab、默认 Hero/Deck、ProjectSettings、asmdef、HybridCLR、启动 DI 或受保护美术路径；未暂存、提交或推送。详见 `06_testing/2026-08-11-machine-gunner-mg11-explosive-elbow-runtime.md`。
+
+## 2026-08-11 Marine Game 机枪兵 MG10B 不充分爆燃（已完成 Unity 原生验证）
+
+- Hero 1002 的同一 `MachineGunnerBattleRuntime` 为 `IncompleteCombustion` (3222) 增加专用预演/提交操作：先按 Encounter 顺序冻结开始时“存活且 Burn > 0”的燃烧来源；每个冻结来源再对当时仍存活的敌人逐一造成等于其冻结 Burn 的 Debuff 伤害。来源即使已被前一来源杀死仍按快照继续造成伤害，死亡目标跳过；全部伤害完成后，才按 Encounter 顺序对仍存活敌人写入 `Smoke += Burn`、`Burn = 0`。伤害 settlement 的来源保持为该燃烧敌人，状态 settlement 的来源为玩家；全过程不读取、不写入 Oil，也不调用会消耗 Oil 的 `ApplyBurn`。
+- 已将职业程序的卡区归宿受限扩展为支持注册卡的 `ExhaustPile`：3222 不需要显式目标，支付 3 Energy 后从 Hand 移至 ExhaustPile；它的表内 `target_rule` 仍是 `Self`，全敌交叉目标只在此专用程序内部按 Encounter 顺序推导。所有共享写入仍经既有 `BattleCommandQueue.Submit` 事务，终局保持在整张卡提交后统一派生。
+- 作者工作簿仅把 Q112（3222）的 `implementation_status` 从 `CatalogOnly` 改为 `Implemented`，值差异、重导入、渲染与公式错误扫描均通过；最终 SHA-256 为 `1AEDDC31EF90888F8B37A4A4B69807E74B3E287E21E15C2E920351AA58347471`。Luban validation/生成成功并恢复其移除的 `game-config.json`；生成 JSON 核验为 **39 张 `Implemented` / 25 张 `CatalogOnly`**，3222 为 Program 22、Cost 3、Self、ExhaustPile。
+- 静态 `dotnet build TinySpire/Assembly-CSharp-Editor.csproj --no-restore` 为 **0 errors**（保留 Unity 依赖图既有的 12 条 `MSB3277` 警告）。2026-08-11 已绑定唯一已连接的 Unity 6000.5.5f1 `TinySpire` Editor，并执行 `TinySpire/Build/Sync and Build All`；菜单调用期间 MCP 传输断连，但重连后的 Console 明确记录 `Addressable content successfully built (duration : 0:00:25.627)`，且没有 Error。随后 Unity MCP EditMode 任务 `94b4d610258b4b05a896adfd20ca6428` 为 **65/65 passed，0 failed，0 skipped**，覆盖机枪兵运行时、伤害管线、卡牌规则、目录快照和构建门禁；其中四项 3222 行为回归全部通过。未修改升级实例、奖励/Run、Power HUD、Scene、Prefab、默认 Hero/Deck、ProjectSettings、asmdef、HybridCLR、启动 DI 或受保护美术路径；未暂存、提交或推送。详见 `06_testing/2026-08-08-machine-gunner-mg10b-incomplete-combustion-runtime.md`。
+
+## 2026-08-07 Marine Game 机枪兵 MG10A 烈火烹油回合末运行时（已完成）
+
+- Hero 1002 的同一 `MachineGunnerBattleRuntime` 为 `BurningOil` (3254) 增加独立的回合末预处理：最后一名存活玩家结束行动后，先按 Encounter 顺序扫描存活敌人；当该 Power 至少持有一张且敌人已有 Burn 时，写入 `Burn += 1 + Oil`，不减半、不消耗 Oil，也不作用于玩家。所有增长 settlement 先于既有 Burn Debuff 伤害；随后仍在原有 `EndPlayerAction` / `BattleCommandQueue.Submit` 单一命令内结算 Block、死亡与胜负收口。多张烈火烹油可累积 PowerPile 层数，但只启用一次固定增长。
+- 作者工作簿仅把 Q144（3254）的 `implementation_status` 从 `CatalogOnly` 改为 `Implemented`，并经值差异、重导入、公式错误扫描与前后渲染复核；最终 SHA-256 为 `E005A9548A02D79D67C1CF9F8EC848F66399B951C7B6A1FCE88F408DC57406F8`。Luban validation/生成成功并恢复其移除的 `game-config.json`，生成目录精确为 **38 张 `Implemented` / 26 张 `CatalogOnly`**；3254 为 Program 54、Cost 2 的 Power → PowerPile。
+- 单一已连接 Unity 6000.5.5f1 Editor 已执行 `TinySpire/Build/Sync and Build All`；Console 明确记录本地 Addressables 内容构建成功（10.402 秒）和 `TinySpire sync and local content build completed successfully.`。Unity MCP EditMode 任务 `4afefa7766cb454eb0aeb9b8da061afe` 为 **60/60 passed，0 failed，0 skipped**。未修改升级实例、奖励/Run、Power HUD、Scene、Prefab、默认 Hero/Deck、ProjectSettings、asmdef、HybridCLR、启动 DI 或受保护美术路径；未暂存、提交或推送。详见 `06_testing/2026-08-07-machine-gunner-mg10a-burning-oil-runtime.md`。
+
+## 2026-08-07 Marine Game 机枪兵 MG9 逐段命中后置状态运行时（已完成）
+
+- Hero 1002 的同一 `MachineGunnerBattleRuntime` 为攻击型程序新增受限的 `PostHitOperations`：每一段实际命中都在同一张卡的本地投影中按“伤害 → 程序命中后状态 → 全局命中钩子”预演，并随同原有 `BattleCommandQueue.Submit` 命令原子提交。目标在伤害后仍存活时才接收后置状态；被 Block 完全吸收但仍存活的命中仍会触发，致死命中则不会留下状态。`SpikeShot` (3248) 因此每段依次施加 `Weakness +1`、`Vulnerable +1` 和燃烧弹药的 Burn，Stim 追加命中完整重复该序列，前段易伤会影响后段伤害。
+- `IncendiaryAmmo` (3210) 进入 `PowerPile` 后可叠层，任何实际 `IsShoot` 命中（含狙击）均在伤害后、目标仍存活时施加“层数 × 1”的 Burn；它与 MG8 的开火保持独立，所以狙击仍不读取 `FirePower`，但会触发燃烧弹药。`AgedOil` (3253) 仅在非射击攻击的每一段存活命中后施加固定 `Oil +2`；多张牌只启用该钩子而不放大数值。`FlameElbow`、`KidneyShot`、`PainfulElbow` 和 `SniperShot` 的既有后置状态同步迁入此顺序，保证烈焰肘击先消耗旧 Oil 生成 Burn、再由陈年机油补 Oil。
+- 作者工作簿仅把 Q100、Q138、Q143（3210、3248、3253）的 `implementation_status` 从 `CatalogOnly` 改为 `Implemented`，值差异、重导入、渲染和 SHA-256 部署复核均通过；最终 SHA-256 为 `024B76E9E284B00247FD111EB5E0349CD988782C5CC281BB91C5808B54C1623E`。Luban validation/生成成功并恢复其移除的 `game-config.json`，快照为 **37 张 `Implemented` / 27 张 `CatalogOnly`**。单一已连接 Unity 6000.5.5f1 Editor 已调用 `TinySpire/Build/Sync and Build All`，MCP 返回调用成功；本轮 Console 未回传可存档的完成行，随后 Refresh 编译无产品错误。Unity MCP 定向任务 `2ec0afd4a36a46358aaba107ca8a5d2d` 为 **57/57 passed，0 failed，0 skipped**。未修改升级实例、奖励/Run、Power HUD、Scene、Prefab、默认 Hero/Deck、ProjectSettings、asmdef、HybridCLR、启动 DI 或受保护美术路径；未暂存、提交或推送。详见 `06_testing/2026-08-07-machine-gunner-mg9-per-hit-runtime.md`。
+
+## 2026-08-07 Marine Game 机枪兵 MG8 功夫机甲、开火与连肘运行时（已完成）
+
+- Hero 1002 的同一 `MachineGunnerBattleRuntime` 新增 `KungfuMech`、`ElectroBoost` 和 `ComboElbow` 三个基础值程序。功夫机甲进入既有 `PowerPile` 并叠加；每张成功完成的非射击攻击只在整张卡操作之后获得 `4 × 层数` Block，射击不触发。开火是玩家单场私有 `FirePower`，电磁增压每次 +2、可叠加、在玩家行动结束时清零；每段常规射击在 Weakness 前加开火，而更新包的可执行原型把狙击明确排除。连肘为最近敌人 10 点攻击，只有当前玩家回合紧邻上一张成功牌为非射击攻击时免费；成功连肘可续链，失败卡不污染事实，新玩家回合重置。
+- `BattleCardPlayRules` 与队首提交共用 `MachineGunnerBattleRuntime.TryPreviewCost` 的只读成本预览，因而剩余 0 Energy 的合格连肘不会被通用静态费用提前拒绝，也不会形成 UI 和执行使用不同费用语义的第二份规则。所有共享写入仍只由既有 `BattleCommandQueue.Submit` 链路完成。
+- 作者工作簿只把 Q102、Q126、Q132（3212、3236、3242）的 `implementation_status` 从 `CatalogOnly` 改为 `Implemented`。工作簿已用值差异、重新导入和前后渲染复核；部署后 SHA-256 为 `7956CD884E0C97585C60DA3C209E84761EEB4CA88421D7D9A0EDACB5DBA53D73`。Luban validation/生成成功并恢复 `game-config.json`；`marine-game-v1-20260807-cards` 精确为 **34 张 `Implemented` / 30 张 `CatalogOnly`**。
+- 单一已连接 Unity 6000.5.5f1 Editor 的 `TinySpire/Build/Sync and Build All` 成功完成本地 Addressables 内容构建（11.372 秒）。Unity MCP EditMode 任务 `760444327c1242a5b737f375eef4aaec` 为 **51/51 passed，0 failed，0 skipped**，覆盖职业运行时、伤害管线、卡牌合法性、生成目录快照与构建门禁；刷新编译的 error console 为 0。未修改升级实例、奖励/Run、Scene、Prefab、默认 Hero/Deck、ProjectSettings、asmdef、HybridCLR、启动 DI 或受保护美术路径；未暂存、提交或推送。详见 `06_testing/2026-08-07-machine-gunner-mg8-kungfu-firepower-combo-runtime.md`。
+
+## 2026-08-07 Marine Game 机枪兵 MG7 Burn/Oil 生命周期与首批依赖卡（已完成）
+
+- Hero 1002 的同一 `MachineGunnerBattleRuntime` 在最后一名存活玩家结束行动后、敌方行动前只结算一次 Burn：按 Encounter 顺序结算存活敌人，随后结算机枪兵玩家。Burn 使用既有 `Debuff` 管线，可被 Block 吸收，不读取 Weakness/Smoke/Vulnerable/Armor，且不衰减。结算仍在当前 `EndPlayerAction` 的单一 `BattleCommandQueue.Submit` 命令中，没有新增命令、队列或 UI 写入口。
+- 敌方 Burn 消灭最后一名敌人时立即结束本轮末结算并派生 Victory，跳过玩家自燃；玩家自燃死亡时同一命令派生 Defeat，不会继续敌人阶段。`ApplyBurn` 复用一条纯计算规则：只读取旧 Oil，`Burn += baseBurn + oldOil`，`Oil = floor(oldOil / 2)`；Napalm 先 Burn 后 Oil，故本次新增 Oil 不会自触发。
+- 本切片精确开放 `GasPump` (3217)、`Napalm` (3218)、`Molotov` (3219)、`FlameElbow` (3255) 的基础值程序。GasPump 为所有存活敌人 Oil +5；Napalm 对所有存活敌人 Burn 3 后 Oil +5；Molotov 对显式敌人 Burn +5；FlameElbow 对最近敌人先造成 6 点攻击伤害，再只对仍存活目标 Burn +3。致命肘击不会留下 Burn；升级数值未硬编码，因为项目尚无通用 CardInstance 升级态。
+- 工作簿只将四个 `implementation_status` 单元格从 `CatalogOnly` 翻为 `Implemented`，并经值差异、重新导入、渲染和 SHA-256 部署复核。Luban validation/生成成功并恢复其移除的 `game-config.json`；`marine-game-v1-20260807-cards` 精确为 **31 张 `Implemented` / 33 张 `CatalogOnly`**。唯一已连接 Unity 6000.5.5f1 Editor 的 `TinySpire/Build/Sync and Build All` 成功完成本地 Addressables 内容构建。
+- Unity MCP EditMode 任务 `5db8f11868324b7788a2ef822c9b0ec9` 为 **37/37 passed，0 failed，0 skipped**，覆盖当前机枪兵程序、Burn/Oil 生命周期、配置快照和目录门禁。只读复核后补充“前一敌人死亡但后续敌人与玩家仍继续结算”及“Oil 记录负向减半”两条回归，刷新编译无误后任务 `f2194e4553304b2892deca56de629f3e` 为 **28/28 passed，0 failed，0 skipped**。此前任务 `547990575054409ca86affd800563672` 因连接器 15 秒初始化时限失去回调，控制台显示 Test Runner 已启动/结束；不将其视为产品测试失败，后续成功任务是本切片验收事实。未修改奖励/Run、升级实例、Scene、Prefab、默认 Hero/Deck、ProjectSettings、asmdef、HybridCLR、启动 DI 或受保护美术路径；未暂存、提交或推送。详见 `06_testing/2026-08-07-machine-gunner-mg7-burn-oil-runtime.md`。
+
+## 2026-08-07 Marine Game 机枪兵 MG6 已有 Power 程序门禁开放（已完成）
+
+- 经 64 张机枪兵目录与运行时依赖审计确认，`CoreExpansion` (3206)、`OutputAdjust` (3207)、`BlastShield` (3208)、`MagExpansion` (3209)、`SmokePersist` (3211) 和 `PowerOverclock` (3245) 已在同一 `MachineGunnerBattleRuntime` 内具备注册、支付、Hand→PowerPile 归宿、资源/状态提交与回合读取接线；此前仅因作者表的 `implementation_status = CatalogOnly` 被门禁隔离。
+- 使用工作簿值差异、重新导入和前后渲染复核后，只将上述六个单元格翻为 `Implemented`；作者工作簿实际文件与已验证导出文件 SHA-256 一致。Luban 等价命令成功生成 `battle_tbcard.json`，并恢复其会删除的 `game-config.json` 基础设施清单。`marine-game-v1-20260807-cards` 当前精确为 **27 张 `Implemented` / 37 张 `CatalogOnly`**，不以连续 ID 推断可用集合。
+- 已在唯一已连接的 Unity 6000.5.5f1 Editor 内执行 `TinySpire/Build/Sync and Build All`，控制台记录本地 Addressables 内容构建成功（6.285 秒）及整体同步成功。Unity MCP 定向 EditMode 任务 `f46ca19e2cfe4785bbca0da4c1769487` 为 **3/3 passed，0 failed，0 skipped**：配置快照门禁、六种 Power 注册表和六张能力的资源/护甲/烟雾/额外抽牌行为均通过。
+- 未新增奖励、Run、Power HUD、升级实例、场景、Prefab、默认 Hero/Deck、ProjectSettings、asmdef、HybridCLR 或第二条命令写入链；其余 37 张仍保持 `CatalogOnly`。下一独立切片是回合末 Burn/Oil 生命周期及其胜负中断，随后才开放依赖该生命周期的燃烧卡；未暂存、提交或推送。
+
+## 2026-08-07 Marine Game 机枪兵 MG5 即时状态首批运行时（已完成）
+
+- Hero 1002 的同一 `MachineGunnerBattleRuntime` 新增“先预演、再校验、后提交”的状态程序操作：私有 `Weakness` / `Smoke` 使用职业结算记录保留权威顺序但不伪造通用 Effect；通用 `Vulnerable` 复用既有 `BattleStatusAppliedSettlement` 与图标脉冲，职业原生操作以 `EffectId = null` 表达来源。全部共享写入仍只经既有 `BattleCommandQueue.Submit` 链路完成。
+- 本切片精确开启 5 张卡：`StunGrenade` (3215) 对全体造成 8 点攻击伤害后仅给投影仍存活目标 `Weakness +1`；`SmokeBomb` (3221) 给自身 `Block +10` 并给自身与全体存活敌人 `Smoke +3`；`KidneyShot` (3228) 为 8 点攻击伤害后 `Weakness +1`；`PainfulElbow` (3229) 为 10 点攻击伤害后 `Vulnerable +2`；`SniperShot` (3247) 自动选择最远敌人、支付 1 Energy/2 Ammo、使用狙击倍率、不接收 Stim 额外命中，随后 `Vulnerable +1`。
+- `battle.card.xlsx` 已通过工作簿值差异、重新导入和渲染复核，仅把上述 5 个 `implementation_status` 单元格从 `CatalogOnly` 改为 `Implemented`；Luban validation/生成成功，快照 `marine-game-v1-20260807-cards` 现为 **21 张 `Implemented` / 43 张 `CatalogOnly`**。单一已连接 Unity Editor 执行 `TinySpire/Build/Sync and Build All` 成功，本地 Addressables 内容构建耗时 10.27 秒。
+- Unity 刷新编译无产品脚本错误。Unity MCP 的测试任务 `bd475e4578fe4572a6751c80e7f1cf47` 因回调未在 60 秒内上报而被连接器标为初始化失败，但同一次 Unity Test Runner 写入的 `TestResults.xml` 明确为 **2/2 passed，0 failed，0 skipped**，覆盖新增即时状态程序和目录快照门禁；唯一 error-filter 日志是 Test Framework 的“Saving results to TestResults.xml”输出。该 MCP 任务状态偏差作为连接器观察记录，不伪报为产品测试失败。
+- 未开启 `SpikeShot` 的逐段“伤害后立即上状态”语义；Burn 相关卡仍等待“玩家行动结束、敌人行动前”的燃烧结算及伤害可否被 Block 阻挡的口径；`IncompleteCombustion` 仍等待 Exhaust、燃烧者×存活目标动态交叉结算与 Burn→Smoke 转换。升级实例、奖励/Run、动态临时卡、选择协议、Scene/Prefab/ProjectSettings/asmdef/HybridCLR/启动 DI 与受保护美术路径均未修改；未暂存、提交或推送。详见 `06_testing/2026-08-07-machine-gunner-mg5-immediate-status-runtime.md`。
+
+## 2026-08-07 Marine Game 机枪兵 MG5 X 费与多段射击首批运行时（已完成）
+
+- Hero 1002 的同一 `MachineGunnerBattleRuntime` 现在支持 `CardCostKind.X`、固定/最多/全量弹药支付、Stim 的支付快照、随机多段攻击与逐命中投影。X 在执行前冻结为当前 Energy，允许为 0；随机程序每段只从投影存活敌人中选择，显式复制 `GameRandom.State`，只有整张卡成功完成资源、效果和卡区提交后才回写职业随机流，因此 X=0 和失败路径不会污染后续随机序列。
+- 生产配置精确开启 11 张经验证程序：3214、3220、3224--3227、3230、3232、3233、3256、3258。加上既有初始牌后，`marine-game-v1-20260807-cards` 快照为 16 张 `Implemented` / 48 张 `CatalogOnly`；`BattleCardCatalogBuildValidator` 从“连续前五张”改为外部 key 精确集合，防止非连续 ID 的后续卡被误开放。
+- `battle.card.xlsx` 已经值差异、重导入与渲染复核，随后 Luban validation/生成成功。单一已连接 Unity Editor 执行 `TinySpire/Build/Sync and Build All`，控制台记录本地 Addressables 内容构建成功（13.262 秒）。定向 EditMode 任务 `e7a502caaa4c4d738cb9a9a96ae6c6d7` 为 **15/15 passed，0 failed，0 skipped**；测试后出现的两条 `Saving results to TestResults.xml` Exception 为 Unity Test Framework 输出，任务结果本身通过且没有产品代码堆栈。
+- 未触碰默认 Hero、Hero/Deck 表、奖励/Run、Scene、Prefab、ProjectSettings、asmdef、HybridCLR、启动 DI 或受保护美术路径；未暂存、提交或推送。下一切片仅处理可在当前私有状态模型内闭环的即时状态卡，延迟/下回合资源/结束行动/选择/动态临时卡和超上限 Energy 语义继续分开处理。详见 `06_testing/2026-08-07-machine-gunner-mg5-x-multishot-runtime.md`。
+
+## 2026-08-07 Marine Game 机枪兵 MG4 职业私有状态与伤害链（已完成）
+
+- Hero 1002 的同一 `MachineGunnerBattleRuntime` 现在持有 `MachineGunnerCombatState`：Weakness、Smoke、Burn、Oil、Armor、Invisible 都是单场职业私有事实，不向默认 Hero 或通用 `CombatantData` 添加字段。攻击伤害在 Effect 预构建期冻结，严格按力量 → Weakness → 攻击者/受击者 Smoke → Vulnerable → Block → HP；Debuff 不吃攻击修正，Burn 施加只读取旧 Oil 后把 Oil 减半。敌方攻击同样使用该职业公式，Armor 只在真实穿透生命后消耗一层。
+- 玩家回合开始由职业运行时清空 Smoke，已有 SmokePersist 时改为减一；Weakness 在所属参与者行动结束时减一。通用 Block/Vulnerable 时机仍由既有 `BattleStatusTiming` 所有，Queue 仍是唯一共享写入口。默认 Hero 1001 的 Session 明确断言不装配职业运行时，仍复用共享补至 5 张手牌规则。
+- `BattleCardZonesData` 增加 `PowerPile`、职业手牌上限 10 和按原手牌顺序的 `DiscardHandExcept`。目前只有核心扩容、出力调整、防爆护盾、扩容弹夹、烟雾弥漫、动力强化六个具真实私有规则的能力程序可以进入该归宿；生产表内其余 59 张目录卡继续为 `CatalogOnly`，没有奖励、角色选择或 Power UI 路径将其暴露给玩家。Hand→Power 的事实结算暂不生成飞行动画。
+- 单一已连接 Unity Editor 刷新编译后 Console 产品错误为 0；定向 EditMode 任务 `d283762aa2ea454ab4638a8ff6165cde` 为 **33/33 passed、0 failed、0 skipped**，覆盖初始牌、敌方伤害/护甲、攻击与 Debuff 公式、Burn/Oil、Smoke、PowerPile/手牌上限/保留顺序、表现路由、随机事务及默认 Hero 回归。详细证据见 `06_testing/2026-08-07-machine-gunner-mg4-private-runtime.md`。
+- MG5 才处理 X 费、免费攻击、资源修饰、延迟伤害和结束行动；复杂 Power、临时卡、自动连锁出牌和驻防/排气散热等 PendingResolution 选择均未实现。未改 DataTables、生成 JSON、Localization、Addressables、Scene、Prefab、ProjectSettings、asmdef、HybridCLR、启动/DI、默认 Hero 或受保护美术路径；未暂存、提交或推送。
+
+## 2026-08-07 Marine Game 机枪兵 MG3 目标与卡牌随机流（已完成）
+
+- 在现有 Hero 1002 会话私有 `MachineGunnerBattleRuntime` 内完成稳定目标选择基础：显式敌人、最近、最远、全体、随机和自身均基于存活敌人的 Encounter 顺序解析；`TryGetLivingEnemyAt` 以同一只读快照提供第二近等可选后续目标。默认 Hero 1001、默认战斗和现有通用目标规则未改。
+- 职业随机流不再由目标解析直接写入。运行时先用当前 `CardRandomState` 创建本地 `GameRandom` 副本，只有程序完成资源/效果/卡区提交、当前卡成功离开手牌后，才把候选状态写回；目标非法、无存活敌人和提交前的普通失败均保持随机流不变。这为后续扫射、X 费随机多段等卡牌提供不污染失败路径的基础。
+- Unity 单一已连接 Editor 刷新编译后无产品错误；定向 EditMode `c9c735c3070342d6879a1d4d1d01b462` 为 **9/9 passed、0 failed、0 skipped**，覆盖原有初始牌 4 条队列用例以及目标选择的 Encounter 顺序、显式目标、固定种子重放、伪造随机目标、无活敌随机零推进。详细证据见 `06_testing/2026-08-07-machine-gunner-mg3-target-random.md`。
+- MG4 才处理 Weakness/Smoke/Vulnerable/Block/HP 的伤害顺序及 Burn/Oil/Armor 时机；未把 Weakness 映射为 Vulnerable，未翻转任何额外 CatalogOnly 卡，未改 DataTables、生成 JSON、Scene、Prefab、ProjectSettings、asmdef、HybridCLR、默认 Hero、受保护美术路径，也未暂存、提交或推送。
+
+## 2026-08-07 Marine Game 机枪兵 MG2B 初始牌运行时（已完成）
+
+- 用户要求在 Unity 内单独为机枪兵增加运行时支持，同时保持“只管卡牌部分”的范围：不改地图、敌人配置、奖励/Run、Scene、Prefab、角色选择、启动/DI 或受保护 Targeting/Candidates/Hermes 美术路径。当前只把首批 5 张初始牌翻为可玩；其余 59 张维持 `CatalogOnly`，不会被 Hero 1002 初始牌组或默认战斗引用。
+- `battle.Hero` 增加 `runtime_profile`，Hero 1002 标记为 `MachineGunner` 并使用独立初始牌组；`battle.Card` 增加 `program_id`。`BattleSession` 仅在该档案创建 `MachineGunnerBattleRuntime`，`BattleTurnController`、`BattleCardPlayRules` 与 `HandCardContainer` 使用同一私有实例；默认 Hero 1001 继续走 Legacy 路径。程序只根据生成的强类型 `MachineGunnerProgramId` 解释，不按模板 ID、外部 key、卡名或文本分支。
+- 初始程序经 `BattleCommandQueue.Submit` 的现有权威写链执行：射击显式选活敌并支付 Ammo，肘击自动取最近活敌，防御给自身 Block，装填补满 Ammo，兴奋剂抽 2 并在剩余 Ammo 足够时为射击追加一次命中。弹药不足返回 `InsufficientAmmo` 且不写入资源、参与者或卡区；自动/自身目标通过规则投影告知 Hand UI，不会被误判为必须选敌。
+- 生成的 `Card.Deserialize` / `Hero.Deserialize` 将 `program_id` / `runtime_profile` 作为必填字段，首次完整 EditMode 暴露旧测试 JSON 缺字段会抛 `ArgumentNullException`。已只在实际反序列化的手写夹具中补 `MachineGunnerProgramId.None` / Legacy `runtime_profile=0`，没有改动直接验证原始 `JObject` 的目录门禁测试。同步发现 `i18n.xlsx` 第 466 行 `smart` 被写为布尔值，已保持样式改为文本 `false` 并重导入/渲染复核。
+- `DataTables/gen.bat` 完成 Luban validation 和生成；单一已连接 Unity Editor 的 `TinySpire/Build/Sync and Build All` 成功完成 Localization 导入和 Local Addressables 内容重建。受生成字段影响的定向任务 `b4fe36bc267b43c09764075715c12f2c` 为 **58/58 passed**；完整 EditMode `36884b711939459f932297342218fddc` 为 **500/500 passed、0 failed、0 skipped**。详细验收见 `06_testing/2026-08-07-machine-gunner-mg2b-starter-runtime.md`。
+- MG3--MG7 仍未完成：稳定卡牌随机流、Weakness/Smoke/Burn/Oil/Armor 伤害链、抽牌上限/X 费/延迟效果、Power，以及驻防/排气散热的权威 PendingResolution 选择协议。它们不能由当前 UI 私有状态或第二个写入入口代替；未暂存、提交或推送。
+
+## 2026-08-07 Marine Game 机枪兵 MG2A 卡牌目录（已完成）
+
+- 用户将 `00_inbox/marine-game.zip` 的扩展需求收紧为“只管卡牌部分”：只接入机枪兵 64 个卡牌模板及其未来单场规则，不导入地图、敌人、奖励、篝火、事件、跨战斗状态、Run、Scene、Prefab、角色选择或 UI 流程。旧 JSON 摘要/计划已由 2026-08-07 Marine Game 需求摘要和卡牌实施计划替代；MG1 的首回合 Energy `3`、上限裁剪和共享补至 `5` 手牌继续有效。
+- `battle.card.xlsx` 已按快照 `marine-game-v1-20260807-cards` 录入 `3201`--`3264`：starter 5（12 个初始实例）、reward 58、temporary 1（仅 `MARINE_MACHINEGUN_BURST`）。64 张均为 `CatalogOnly`、空 `effect_bindings`、`art_placeholder`；63 张声明升级，唯一无升级的是临时机枪扫射。`BattleCardCatalogBuildValidator` 新增精确身份/ID/占位/空程序/升级门禁，阻止这些目录卡被误翻为可玩或被 Deck 引用；新增 `MachineGunnerCatalogSnapshotMG2ATests` 固定该快照。
+- `i18n.xlsx` 已增加 192 条 key。中文基础说明逐字保留压缩包 `cards.json.desc`，63 条升级说明保留 `known_upgrades.change`；源文件没有英文规则原文，en 列据同一压缩包的结构化字段与行为说明录入项目内英文翻译。中文来源仍是追溯依据，英文文案不表示玩法已实现或完成最终策划校对。卡牌的 CatalogOnly 状态继续由配置/规则门禁表达，而非用通用“未实现”文案替代规则。
+- 作者表经工作簿重导入、唯一性/Smart String/公式错误扫描及渲染检查；`DataTables/gen.bat` 成功完成 Luban validation 和 JSON 生成。生成 `battle_tbcard.json` 手工核对为 64 张、ID `3201`--`3264`、64 张 CatalogOnly、64 组空绑定、64 个占位图、63/1 升级拆分。`dotnet build TinySpire/TinySpire.sln --no-restore -m:1` 为 0 error、12 条既有程序集版本冲突 warning。
+- Unity MCP 随后恢复为单一可连接的 `TinySpire` 6000.5.5f1 实例，处于非 Play、idle 状态；只读连接/Console 探测成功。通过同一 Editor 执行 Refresh，生成 `MachineGunnerCatalogSnapshotMG2ATests.cs.meta` 且无产品编译错误；随后 `TinySpire/Build/Sync and Build All` 成功完成 Localization 导入与 Local Addressables 内容构建（约 8.341 秒），Console 明确记录整体成功。显式本地化验证也通过。
+- Unity EditMode 定向任务 `0098fec0e0204ade8ef8d22a6245709e` 为 **21/21 passed**：新增机枪兵快照 4/4、卡牌目录门禁 10/10、Ironclad 目录回归 7/7。第二个相关任务 `11741e4d623947c4b7335b1de013a048` 为 **19/19 passed**，覆盖 M10 黄金基线、Hero 资源档案、配置表清单、战斗本地化和牌面配置。Console error 过滤仅显示本地化“validation passed”与 Test Runner 保存 `TestResults.xml` 的已知日志分类项，没有产品编译、运行时或 InvalidKey 失败。
+- 未新增 Hero/Deck、未把卡牌放入默认战斗、未实现 Card Program、Ammo 支付、最近/随机目标、Weakness/Smoke/Burn/Oil/Power、升级实例、奖励或 Run；未修改 Queue 共享写入 seam、场景/Prefab/ProjectSettings/asmdef/HybridCLR/启动/DI，也未触碰 Targeting/Candidates/Hermes 受保护美术路径；未暂存、提交或推送。
+
+## 2026-08-06 机枪兵 MG1 Hero 资源档案（已完成）
+
+- 用户确认的资源规则已冻结：首个玩家回合的 Energy 为 3，不叠加当回合 `+3`；资源上限降低时当前值立即取 `min(current, max)`；默认抽牌数仍是共享的补至 5，不新增职业专属抽牌字段。
+- `battle.hero.xlsx` 现为每个 Hero 声明 `initial_energy`、`max_energy`、`energy_gain_per_round`、`initial_ammo`、`max_ammo`、`ammo_gain_per_round`。当前唯一生产 Hero `1001` 明确为 Energy `3/3/+3`、Ammo `0/0/+0`；未新增 Hero `1002` 或 Deck，未来机枪兵仅由同一档案形状预留。
+- `BattleSession` 在任何参与者/随机聚合前校验并冻结 `CombatantId → BattlePlayerResourceProfile`；`BattleTurnController` 是唯一重建 `PlayerTurnData` 资源事实的位置。首回合使用 `initial_*`，后续回合使用当前上限和增量的 capped 补充；`PlayerTurnData` 构造时立即裁剪当前值。回合结算顺序保持清 Block → Energy → Ammo → 卡区补至共享目标手牌数，Ammo 记录目前只供事实/后续机制读取，不制造可见 UI 步骤。
+- 保留 `GameConfig.EnergyPerRound` 供旧测试入口与当前仅有 Hero `1001` 的 HUD 基线使用；生产 `BattleLifetimeScope` 已改为传递 Hero 档案映射。敌人联合事务快照同步冻结全部资源标量，避免上限、增量或 Ammo 漂移绕过首写前验证。构建入口在本地化/Addressables 前校验生成 Hero JSON 的资源约束。
+- 验证：`dotnet build TinySpire/TinySpire.sln --no-restore -m:1` 为 0 error（12 条既有程序集版本冲突 warning）；Unity EditMode 新增档案/门禁 8/8、相关回归 93/93、受 Hero fixture 扩展影响的 UI 类集 27/27 均通过。`TinySpire/Build/Sync and Build All` 已完成 Luban、配置门禁、本地化导入与本地 Addressables 内容构建，Console 记录成功；详细证据见 `06_testing/2026-08-06-machine-gunner-mg1-hero-resource-profile.md`。
+- 未修改或新增机枪兵 Hero、Deck、卡牌、状态、Power、UI、Scene、Prefab、素材、角色选择、奖励/Run 或受保护 Targeting/Candidates/Hermes 路径；未暂存、提交或推送。下一停止点是仅在单独授权后才开始的 MG2。
+
+## 2026-08-06 机枪兵 MG0 设计归一化（已完成，等待玩法确认）
+
+- 新增需求摘要 `01_requirements/2026-08-06-machine-gunner-card-design-digest.md`，把 `00_inbox/卡牌设计-机枪兵.json` 的 5 个 starter 模板、12 张实例、23 张 reward 模板、7 类状态、5 个已声明奖励升级和 18 个未声明奖励升级归入单一矩阵；原始 JSON 保持 source-only 且未改写。
+- 代码/配置只读审计确认：Hero 表没有资源档案；当前每轮能量重置为全局 3、抽牌补至 5；参与者/效果只支持 Health/Strength/Block/Vulnerable；Self/Enemy 之外的目标规则、Power 归宿、Ammo、随机射击和机枪兵状态均未实现。`weakness` 已明确为独立于 `Vulnerable/易伤` 的攻击减伤状态，禁止映射到 `ApplyVulnerable`。
+- 上游 `Hermes_Pegasus` 的 P-004 是当前“基础抽牌数固定”的暂定结论；用户已确认默认抽牌数为 5，故机枪兵复用现有“补至 5”基线，不新增职业专属 `draw_per_turn` 字段。MG1 的生产前置据此收敛为 R1--R2：首回合 Energy、资源上限变动时的当前值裁剪；MG1 维持当前清 Block → 补 Energy/Ammo → 补至 5 的基础顺序，Power/状态时机留后续切片。默认 Hero 1001 与 M10 基线保持不变；未确认前不写 C#，不把未完成卡接入 Deck。
+- 本轮新增需求摘要并更新需求索引、实施计划和状态日志；未修改原始 JSON、C#、测试、DataTables、生成 JSON、Localization、Addressables、Scene、Prefab、ProjectSettings、asmdef、HybridCLR、DI 或受保护美术路径，未运行 Unity、Luban、Addressables、构建或测试，未暂存、提交或推送。
+
+## 2026-08-06 机枪兵单场战斗内容接入计划（计划就绪，未实施）
+
+- 新增 `plans/2026-08-06-machine-gunner-card-pool-integration.md`。它把 `00_inbox/卡牌设计-机枪兵.json` 明确标为 source-only：设计稿含 5 个初始牌模板（12 张实例）、23 张奖励卡、能量/弹药、7 类状态和部分升级信息，但不是可直接导入运行时的配置。
+- 计划先要求 MG0 把 28 个模板归一化为机制、时机、升级、文本、素材和未决项矩阵；机枪兵默认是新增候选 Hero，默认 Hero 1001、M10 的 3 能量/5 手牌黄金基线及当前 Deck 均不变。未完成卡不能引用进正式 Deck，也不能翻为 `Implemented`。
+- 已记录的关键口径：机枪兵 `weakness` 是造成攻击伤害 -25% 后再结算格挡、每回合 -1 层，不能映射到当前目标承伤 ×1.5 的 `Vulnerable/易伤`。最近/随机/全体选择器、弹药、Smoke、Burn/Oil、Armor、Stim、Power、X 费和奖励规则仍须在 MG0 由策划确认。
+- 后续 MG1--MG8 必须复用 Ironclad I5--I11 的通用执行器、目标选择、卡区、资源、升级和 Power 能力，保持 `BattleCommandQueue.Submit` 为唯一共享写入 seam；不复制卡牌执行链，不按卡名/ID分支，也不把奖励/Run/存档/角色选择提前塞进单场战斗。
+- 本轮只新增计划并更新计划索引/状态日志；未修改原始 JSON、C#、测试、DataTables、生成 JSON、Localization、Addressables、Scene、Prefab、ProjectSettings、asmdef、HybridCLR、DI 或任何受保护美术路径，未运行 Unity、Luban、Addressables、构建或测试，未暂存、提交或推送。下一独立停止点是仅文档的 MG0 需求矩阵，须先获得策划口径确认。
 
 ## 2026-08-06 STS2 v0.107.1 Ironclad 卡池 I4 成功归宿与 Tremble（已完成）
 

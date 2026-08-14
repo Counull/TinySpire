@@ -38,6 +38,8 @@ public sealed partial class Card : Luban.BeanBase
         ImplementationStatus = (battle.CardImplementationStatus)(int)_obj.GetValue("implementation_status");
         { var __json0 = _obj.GetValue("effect_bindings"); int _n0 = (__json0 as JArray).Count; EffectBindings = new battle.CardEffectBinding[_n0]; int __index0=0; foreach(JToken __e0 in __json0) { battle.CardEffectBinding __v0;  __v0 = global::cfg.battle.CardEffectBinding.DeserializeCardEffectBinding(__e0);  EffectBindings[__index0++] = __v0; }   }
         IllustrationKey = (string)_obj.GetValue("illustration_key");
+        ProgramId = (battle.MachineGunnerProgramId)(int)_obj.GetValue("program_id");
+        IsInnate = (bool)_obj.GetValue("is_innate");
     }
 
     public static Card DeserializeCard(JToken _buf)
@@ -117,6 +119,14 @@ public sealed partial class Card : Luban.BeanBase
     /// Unique card illustration key
     /// </summary>
     public readonly string IllustrationKey;
+    /// <summary>
+    /// Machine gunner card program
+    /// </summary>
+    public readonly battle.MachineGunnerProgramId ProgramId;
+    /// <summary>
+    /// Whether the card is innate
+    /// </summary>
+    public readonly bool IsInnate;
 
 
     public const int __ID__ = -796030298;
@@ -148,6 +158,8 @@ public sealed partial class Card : Luban.BeanBase
         + "implementationStatus:" + ImplementationStatus + ","
         + "effectBindings:" + Luban.StringUtil.CollectionToString(EffectBindings) + ","
         + "illustrationKey:" + IllustrationKey + ","
+        + "programId:" + ProgramId + ","
+        + "isInnate:" + IsInnate + ","
         + "}";
     }
 }

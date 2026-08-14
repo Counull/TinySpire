@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using cfg;
 using R3;
+using TinySpire.Core;
 
 namespace TinySpire.Battle
 {
@@ -16,6 +17,8 @@ namespace TinySpire.Battle
         private readonly BattleTurnController _turnController;
         private readonly BattleEnemyActionExecutor _enemyActionExecutor;
         private readonly BattleTerminalRules _terminalRules;
+        private readonly MachineGunnerBattleRuntime _machineGunnerRuntime;
+        private readonly BattleSettlementTriggerEngine _settlementTriggerEngine;
         private readonly ReactiveProperty<BattleCommandQueueData> _queue;
 
         /// <summary>权威命令顺序的只读响应式事实。</summary>
@@ -24,7 +27,13 @@ namespace TinySpire.Battle
         /// <summary>权威回合状态的只读响应式事实。</summary>
         public ReadOnlyReactiveProperty<BattleTurnData> Turn => _turnController.Turn;
 
-        /// <summary>以战斗事实、静态配置、表现适配器与唯一提交协调器创建命令队列。</summary>
+        /// <summary>返回队列执行时使用的同一出牌规则读取入口。</summary>
+        internal BattleCardPlayRules CardPlayRules => _turnController.CardPlayRules;
+
+        /// <summary>只读观察通用卡牌目标随机流状态，供事务与确定性测试使用。</summary>
+        internal uint CardTargetRandomState => _turnController.CardTargetRandomState;
+
+        /// <summary>兼容旧测试夹具的每回合能量构造入口，并映射为每玩家只读资源档案。</summary>
         public BattleCommandQueue(
             BattleCombatantsData combatants,
             IReadOnlyDictionary<CombatantId, BattleCardZonesData> playerCardZones,
@@ -34,7 +43,36 @@ namespace TinySpire.Battle
             int energyPerRound,
             int initialHandCount,
             IBattleCommandPresentation presentation,
-            BattleCommandSubmissionCoordinator coordinator)
+            BattleCommandSubmissionCoordinator coordinator,
+            uint cardTargetRandomSeed = 1u)
+            : this(
+                combatants,
+                playerCardZones,
+                enemyCombatantIdsInEncounterOrder,
+                enemyIntents,
+                tables,
+                BattlePlayerResourceProfile.CreateLegacyProfiles(combatants, energyPerRound),
+                initialHandCount,
+                presentation,
+                coordinator,
+                machineGunnerRuntime: null,
+                cardTargetRandomSeed: cardTargetRandomSeed)
+        {
+        }
+
+        /// <summary>以战斗事实、Hero 资源档案、静态配置、表现适配器与唯一提交协调器创建命令队列。</summary>
+        internal BattleCommandQueue(
+            BattleCombatantsData combatants,
+            IReadOnlyDictionary<CombatantId, BattleCardZonesData> playerCardZones,
+            IReadOnlyList<CombatantId> enemyCombatantIdsInEncounterOrder,
+            BattleEnemyIntentsData enemyIntents,
+            Tables tables,
+            IReadOnlyDictionary<CombatantId, BattlePlayerResourceProfile> playerResourceProfiles,
+            int initialHandCount,
+            IBattleCommandPresentation presentation,
+            BattleCommandSubmissionCoordinator coordinator,
+            MachineGunnerBattleRuntime machineGunnerRuntime = null,
+            uint cardTargetRandomSeed = 1u)
         {
             _presentation = presentation ?? throw new ArgumentNullException(nameof(presentation));
             _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
@@ -44,18 +82,29 @@ namespace TinySpire.Battle
             if (enemyIntents == null)
                 throw new ArgumentNullException(nameof(enemyIntents));
 
+            _machineGunnerRuntime = machineGunnerRuntime;
+            _settlementTriggerEngine = new BattleSettlementTriggerEngine(
+                combatants,
+                enemyCombatantIdsInEncounterOrder,
+                new GameRandom(cardTargetRandomSeed),
+                tables,
+                playerCardZones);
             _enemyActionExecutor = new BattleEnemyActionExecutor(
                 tables,
                 combatants,
-                enemyIntents);
+                enemyIntents,
+                machineGunnerRuntime);
             _terminalRules = new BattleTerminalRules(combatants);
             _turnController = new BattleTurnController(
                 combatants,
                 playerCardZones,
                 enemyCombatantIdsInEncounterOrder,
                 tables,
-                energyPerRound,
-                initialHandCount);
+                playerResourceProfiles,
+                initialHandCount,
+                machineGunnerRuntime,
+                cardTargetRandomSeed,
+                _settlementTriggerEngine);
             _queue = new ReactiveProperty<BattleCommandQueueData>(_scheduling.CreateQueueSnapshot());
             Queue = _queue.ToReadOnlyReactiveProperty();
         }
@@ -225,20 +274,50 @@ namespace TinySpire.Battle
             {
                 operationResult = _turnController.TryStartBattle();
             }
-            else if ((entry.Command is PlayCardCommand ||
-                      entry.Command is EndPlayerActionCommand) &&
-                     entry.SubmittedRoundNumber != turnBefore.RoundNumber)
+            else if (entry.Command is ResolveSettlementTriggersCommand triggerCommand)
+            {
+                if (!entry.RequiresSystemToken)
+                {
+                    operationResult = BattleTurnOperationResult.Failed(
+                        BattleCommandExecutionFailureReason.UnsupportedCommand);
+                }
+                else
+                {
+                    BattlePreparedSettlementTriggeredAction triggerPlan =
+                        _settlementTriggerEngine.PrepareAction(triggerCommand);
+                    _settlementTriggerEngine.ValidatePreparedAction(triggerPlan);
+                    BattleSettlementTriggeredActionResult triggerResult =
+                        _settlementTriggerEngine.CommitPreparedAction(triggerPlan);
+                    operationResult = new BattleTurnOperationResult(
+                        BattleCommandExecutionFailureReason.None,
+                        triggerResult.Settlements,
+                        triggeredCardPlayRequest: triggerResult.TriggeredCardPlayRequest);
+                    if (triggerResult.TriggeredCardPlayRequest == null)
+                    {
+                        hasFrozenContinuation = true;
+                        frozenContinuation = triggerCommand.CreateContinuation();
+                    }
+                }
+            }
+            else if (!entry.RequiresSystemToken &&
+                      (entry.Command is PlayCardCommand ||
+                       entry.Command is EndPlayerActionCommand) &&
+                      entry.SubmittedRoundNumber != turnBefore.RoundNumber)
             {
                 operationResult = BattleTurnOperationResult.Failed(
                     BattleCommandExecutionFailureReason.PlayerActionWindowExpired);
             }
             else if (entry.Command is PlayCardCommand playCardCommand)
             {
-                operationResult = _turnController.TryPlayCard(playCardCommand);
+                operationResult = _turnController.TryPlayCard(
+                    playCardCommand,
+                    entry.RequiresSystemToken);
             }
             else if (entry.Command is EndPlayerActionCommand endPlayerActionCommand)
             {
-                operationResult = _turnController.TryEndPlayerAction(endPlayerActionCommand);
+                operationResult = _turnController.TryEndPlayerAction(
+                    endPlayerActionCommand,
+                    entry.RequiresSystemToken);
             }
             else if (entry.Command is CompleteEnemyActionCommand completeEnemyActionCommand)
             {
@@ -267,10 +346,34 @@ namespace TinySpire.Battle
                     else
                     {
                         BattleTerminalOutcome terminalOutcome = _terminalRules.Evaluate();
+                        IReadOnlyList<BattleSettlementRecord> scheduledSettlements =
+                            Array.Empty<BattleSettlementRecord>();
+                        if (terminalOutcome == BattleTerminalOutcome.Ongoing &&
+                            plannedContinuation == null &&
+                            _machineGunnerRuntime != null)
+                        {
+                            MachineGunnerScheduledEffectLifecyclePlan scheduledRoundStartPlan =
+                                _machineGunnerRuntime.PreparePlayerRoundStartScheduledEffects();
+                            if (!_machineGunnerRuntime.ValidatePreparedScheduledEffects(
+                                    scheduledRoundStartPlan))
+                            {
+                                throw new InvalidOperationException(
+                                    "玩家回合开始延迟效果计划在提交前发生快照漂移。");
+                            }
+
+                            scheduledSettlements =
+                                _machineGunnerRuntime.CommitPreparedScheduledEffects(
+                                    scheduledRoundStartPlan,
+                                    enemyResult.Settlements.Count);
+                            terminalOutcome = _terminalRules.Evaluate();
+                        }
+
+                        int turnAdvanceStartingOrder = checked(
+                            enemyResult.Settlements.Count + scheduledSettlements.Count);
                         BattleTurnOperationResult turnAdvance =
                             _turnController.AdvanceAfterValidatedEnemyAction(
                                 terminalOutcome,
-                                enemyResult.Settlements.Count);
+                                turnAdvanceStartingOrder);
                         if (turnAdvance.FailureReason != BattleCommandExecutionFailureReason.None)
                         {
                             throw new InvalidOperationException(
@@ -278,8 +381,11 @@ namespace TinySpire.Battle
                         }
 
                         var settlements = new List<BattleSettlementRecord>(
-                            enemyResult.Settlements.Count + turnAdvance.Settlements.Count);
+                            enemyResult.Settlements.Count +
+                            scheduledSettlements.Count +
+                            turnAdvance.Settlements.Count);
                         settlements.AddRange(enemyResult.Settlements);
+                        settlements.AddRange(scheduledSettlements);
                         settlements.AddRange(turnAdvance.Settlements);
                         operationResult = new BattleTurnOperationResult(
                             BattleCommandExecutionFailureReason.None,
@@ -301,6 +407,10 @@ namespace TinySpire.Battle
                     BattleCommandExecutionFailureReason.UnsupportedCommand);
             }
 
+            CombatantId? requiredEndPlayerActionActorId =
+                operationResult.RequiredEndPlayerActionActorId;
+            BattleTriggeredCardPlayRequest triggeredCardPlayRequest =
+                operationResult.TriggeredCardPlayRequest;
             BattleTurnOperationResult visibleResult = AppendPhaseSettlement(
                 operationResult,
                 turnBefore,
@@ -311,9 +421,69 @@ namespace TinySpire.Battle
                 entry.Command.SubmitterId,
                 visibleResult.FailureReason,
                 visibleResult.Settlements);
+            if (!hasFrozenContinuation && requiredEndPlayerActionActorId.HasValue)
+            {
+                if (!(entry.Command is PlayCardCommand playCardCommand) ||
+                    playCardCommand.ActorId != requiredEndPlayerActionActorId.Value ||
+                    !executionResult.Succeeded ||
+                    Turn.CurrentValue.Phase != BattleTurnPhase.PlayerAction)
+                {
+                    throw new InvalidOperationException(
+                        "请求强制结束玩家行动的程序必须由同一玩家在玩家行动阶段成功打出。");
+                }
+
+                frozenContinuation = new EndPlayerActionCommand(
+                    requiredEndPlayerActionActorId.Value);
+                hasFrozenContinuation = true;
+            }
+            if (!hasFrozenContinuation && triggeredCardPlayRequest != null)
+            {
+                bool validSource =
+                    entry.Command is PlayCardCommand playCardCommand &&
+                    playCardCommand.ActorId == triggeredCardPlayRequest.ActorId ||
+                    entry.Command is ResolveSettlementTriggersCommand;
+                if (!validSource ||
+                    !executionResult.Succeeded ||
+                    Turn.CurrentValue.Phase != BattleTurnPhase.PlayerAction)
+                {
+                    throw new InvalidOperationException(
+                        "触发出牌请求必须来自同一玩家在玩家行动阶段成功完成的出牌命令。");
+                }
+
+                if (entry.Command is ResolveSettlementTriggersCommand triggerCommand)
+                {
+                    triggeredCardPlayRequest = triggeredCardPlayRequest.WithContinuation(
+                        triggerCommand.CreateContinuation(),
+                        triggerCommand.Batch.Intents[triggerCommand.Cursor].RegistrationId);
+                }
+                frozenContinuation = new PlayCardCommand(triggeredCardPlayRequest);
+                hasFrozenContinuation = true;
+            }
+
             BattleCommand continuation = hasFrozenContinuation
                 ? frozenContinuation
                 : CreateTurnContinuation(executionResult);
+            if (entry.Command is PlayCardCommand completedTriggeredPlay &&
+                completedTriggeredPlay.TriggeredPlayRequest?.ContinuationAfterPlay != null &&
+                continuation == null)
+            {
+                continuation = completedTriggeredPlay.TriggeredPlayRequest.ContinuationAfterPlay;
+            }
+            if (executionResult.Succeeded)
+            {
+                int? suppressedRegistrationId =
+                    (entry.Command as PlayCardCommand)?.TriggeredPlayRequest?
+                        .SuppressedSettlementTriggerRegistrationId;
+                if (entry.Command is ResolveSettlementTriggersCommand resolvingCommand)
+                {
+                    suppressedRegistrationId = resolvingCommand.Batch.Intents[
+                        resolvingCommand.Cursor].RegistrationId;
+                }
+                continuation = _settlementTriggerEngine.CreateTriggeredContinuation(
+                    visibleResult.Settlements,
+                    continuation,
+                    suppressedRegistrationId);
+            }
             return BattleQueueExecutionOutcome.Completed(
                 executionResult,
                 continuation);
@@ -368,7 +538,9 @@ namespace TinySpire.Battle
             };
             return new BattleTurnOperationResult(
                 BattleCommandExecutionFailureReason.None,
-                settlements);
+                settlements,
+                operationResult.RequiredEndPlayerActionActorId,
+                operationResult.TriggeredCardPlayRequest);
         }
 
         /// <summary>精确 completion 只解除所属屏障，随后尝试由新的外层 drain 继续。</summary>

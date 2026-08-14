@@ -206,6 +206,105 @@ public sealed class HandCardMotionTests
         }
     }
 
+    /// <summary>验证无出牌前奏的 Hand→Exhaust 仍使用已脱离手牌的 transient 飞向消耗锚点，并在 runner 收口时只清理一次。</summary>
+    [Test]
+    public void HandToExhaust_UsesDetachedTransientAndCleansExactlyOnceAtExhaustAnchor()
+    {
+        GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(CardPrefabPath);
+        GameObject containerObject = new GameObject("HandCardExhaustMotionPlaybackContainer");
+        GameObject cardObject = Object.Instantiate(prefab);
+        var zones = new BattleCardZonesData(new[] { 3261 }, shuffleSeed: 3579);
+        try
+        {
+            zones.Draw(1);
+            CardInstanceId cardId = zones.Hand[0];
+            HandCardVisual visual = cardObject.GetComponent<HandCardVisual>();
+            CanvasGroup canvasGroup = visual.CardContent.gameObject.AddComponent<CanvasGroup>();
+            visual.Initialize(Vector3.one * 0.36f, cardId, canvasGroup);
+            visual.SetBasePoseImmediately(new HandCardPose(new Vector2(0f, -320f), 0f, 0));
+            HandCardContainer container = containerObject.AddComponent<HandCardContainer>();
+            int transientDestroyCount = 0;
+            container.ConfigureTransientCardDestroyForTesting(_ => transientDestroyCount++);
+            typeof(HandCardContainer).GetField(
+                    "_cardZones",
+                    BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.SetValue(container, zones);
+            var interactiveCards = typeof(HandCardContainer).GetField(
+                    "_cards",
+                    BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.GetValue(container) as List<HandCardVisual>;
+            Assert.That(interactiveCards, Is.Not.Null);
+            interactiveCards.Add(visual);
+
+            zones.ExhaustFromHand(cardId);
+            MethodInfo rebuildCards = typeof(HandCardContainer).GetMethod(
+                "RebuildCards",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(rebuildCards, Is.Not.Null);
+            rebuildCards.Invoke(container, new object[] { false });
+            Vector2 originalScreenPosition = visual.GetScreenCenter();
+            Vector2 exhaustScreenPosition = originalScreenPosition + new Vector2(-320f, 120f);
+            var moved = new BattleCardMovedSettlement(
+                order: 0,
+                cardId,
+                BattleCardZone.Hand,
+                BattleCardZone.ExhaustPile);
+            var result = new BattleCommandExecutionResult(
+                authoritySequence: 22,
+                BattleCommandType.PlayCard,
+                new CombatantId(1001),
+                BattleCommandExecutionFailureReason.None,
+                new BattleSettlementRecord[] { moved });
+            BattleCommandPresentationPlan plan = BattleCommandPresentationPlan.Create(result);
+            var cardMotionFactory = new BattleCardMotionTweenFactory(cue =>
+                container.CreateTransientCardMotionTween(
+                    cue,
+                    exhaustScreenPosition,
+                    duration: 0.2f,
+                    ease: Ease.Linear));
+            using var runner = new BattleCommandPresentationRunner(
+                _ => CreateZeroDurationTween(),
+                step => cardMotionFactory.TryCreate(
+                    step,
+                    out BattleCommandPresentationTween tween)
+                        ? tween
+                        : CreateZeroDurationTween());
+            int completionCount = 0;
+
+            runner.Play(plan, () => completionCount++);
+            runner.Tick(0.1f);
+
+            Vector2 midpoint = visual.GetScreenCenter();
+            Assert.That(midpoint.x, Is.LessThan(originalScreenPosition.x));
+            Assert.That(midpoint.x, Is.GreaterThan(exhaustScreenPosition.x));
+            Assert.That(midpoint.y, Is.GreaterThan(originalScreenPosition.y));
+            Assert.That(midpoint.y, Is.LessThan(exhaustScreenPosition.y));
+            Assert.That(completionCount, Is.Zero);
+
+            runner.CompleteImmediately();
+
+            FieldInfo transientCardsField = typeof(HandCardContainer).GetField(
+                "_transientCards",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            var transientCards = transientCardsField?.GetValue(container)
+                as Dictionary<CardInstanceId, HandCardVisual>;
+            Assert.That(visual.GetScreenCenter().x, Is.EqualTo(exhaustScreenPosition.x).Within(0.01f));
+            Assert.That(visual.GetScreenCenter().y, Is.EqualTo(exhaustScreenPosition.y).Within(0.01f));
+            Assert.That(transientCards, Is.Empty);
+            Assert.That(transientDestroyCount, Is.EqualTo(1));
+            Assert.That(completionCount, Is.EqualTo(1));
+            Assert.That(zones.Hand, Is.Empty);
+            Assert.That(zones.ExhaustPile, Is.EqualTo(new[] { cardId }));
+        }
+        finally
+        {
+            zones.Dispose();
+            if (cardObject != null)
+                Object.DestroyImmediate(cardObject);
+            Object.DestroyImmediate(containerObject);
+        }
+    }
+
     /// <summary>验证后续 settlement cue 同步构造失败时，无位移的出牌前奏仍释放离手 transient。</summary>
     [Test]
     public void PlayCardPreludeHold_LaterCueBuildThrows_ReleasesDetachedTransient()

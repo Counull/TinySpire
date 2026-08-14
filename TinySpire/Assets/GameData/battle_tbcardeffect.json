@@ -34,5 +34,83 @@
     "effect_type": 3,
     "attribute": 0,
     "value": 3
+  },
+  "4007": {
+    "id": 4007,
+    "effect_type": 1,
+    "attribute": 0,
+    "value": 32
+  },
+  "4008": {
+    "id": 4008,
+    "effect_type": 1,
+    "attribute": 0,
+    "value": 5
+  },
+  "4009": {
+    "id": 4009,
+    "effect_type": 1,
+    "attribute": 0,
+    "value": 9
+  },
+  "4010": {
+    "id": 4010,
+    "effect_type": 4,
+    "attribute": 0,
+    "value": 1
+  },
+  "4011": {
+    "id": 4011,
+    "effect_type": 2,
+    "attribute": 0,
+    "value": 8
+  },
+  "4012": {
+    "id": 4012,
+    "effect_type": 5,
+    "attribute": 0,
+    "value": 1
+  },
+  "4013": {
+    "id": 4013,
+    "effect_type": 4,
+    "attribute": 0,
+    "value": 2
+  },
+  "4014": {
+    "id": 4014,
+    "effect_type": 6,
+    "attribute": 0,
+    "value": 10
+  },
+  "4015": {
+    "id": 4015,
+    "effect_type": 1,
+    "attribute": 0,
+    "value": 3
+  },
+  "4016": {
+    "id": 4016,
+    "effect_type": 7,
+    "attribute": 0,
+    "value": 0
+  },
+  "4017": {
+    "id": 4017,
+    "effect_type": 8,
+    "attribute": 0,
+    "value": 0
+  },
+  "4018": {
+    "id": 4018,
+    "effect_type": 9,
+    "attribute": 0,
+    "value": 0
+  },
+  "4019": {
+    "id": 4019,
+    "effect_type": 10,
+    "attribute": 0,
+    "value": 6
   }
 }

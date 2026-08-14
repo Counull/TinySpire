@@ -55,7 +55,7 @@ namespace TinySpire.Battle
 
     /// <summary>
     /// 单场战斗中实例化的参与者运行时数据。
-    /// 生命、力量、格挡与易伤是唯一可变事实，对外仅以只读 R3 属性暴露。
+    /// 生命、力量、格挡、易伤与中毒是唯一可变事实，对外仅以只读 R3 属性暴露。
     /// </summary>
     public abstract class CombatantData : IDisposable
     {
@@ -63,6 +63,7 @@ namespace TinySpire.Battle
         private readonly ReactiveProperty<int> _strength;
         private readonly ReactiveProperty<int> _block;
         private readonly ReactiveProperty<int> _vulnerable;
+        private readonly ReactiveProperty<int> _poison;
 
         /// <summary>本场战斗内的参与者标识。</summary>
         public CombatantId Id { get; }
@@ -85,6 +86,9 @@ namespace TinySpire.Battle
         /// <summary>当前易伤这一事实的只读响应式视图。</summary>
         public ReadOnlyReactiveProperty<int> Vulnerable { get; }
 
+        /// <summary>当前中毒层数这一事实的只读响应式视图。</summary>
+        public ReadOnlyReactiveProperty<int> Poison { get; }
+
         /// <summary>当前生命值的同步读取入口。</summary>
         public int CurrentHealth => Health.CurrentValue;
 
@@ -96,6 +100,9 @@ namespace TinySpire.Battle
 
         /// <summary>当前易伤值的同步读取入口。</summary>
         public int CurrentVulnerable => Vulnerable.CurrentValue;
+
+        /// <summary>当前中毒层数的同步读取入口。</summary>
+        public int CurrentPoison => Poison.CurrentValue;
 
         /// <summary>根据当前生命值派生的存活结果，不单独保存状态。</summary>
         public bool IsAlive => CurrentHealth > 0;
@@ -113,10 +120,12 @@ namespace TinySpire.Battle
             _strength = new ReactiveProperty<int>(strength);
             _block = new ReactiveProperty<int>(0);
             _vulnerable = new ReactiveProperty<int>(0);
+            _poison = new ReactiveProperty<int>(0);
             Health = _health.ToReadOnlyReactiveProperty();
             Strength = _strength.ToReadOnlyReactiveProperty();
             Block = _block.ToReadOnlyReactiveProperty();
             Vulnerable = _vulnerable.ToReadOnlyReactiveProperty();
+            Poison = _poison.ToReadOnlyReactiveProperty();
         }
 
         /// <summary>仅由内部 Effect 状态入口一次写入已计算的格挡与生命结果。</summary>
@@ -128,6 +137,19 @@ namespace TinySpire.Battle
             }
 
             _block.Value = outcome.BlockAfter;
+            _health.Value = outcome.HealthAfter;
+        }
+
+        /// <summary>仅由内部 Effect 状态入口一次写入已经冻结且受上限约束的治疗结果。</summary>
+        internal void ApplyHealthRestorationOutcome(BattleHealthRestorationOutcome outcome)
+        {
+            if (outcome.HealthBefore != CurrentHealth ||
+                outcome.HealthAfter < outcome.HealthBefore ||
+                outcome.HealthAfter > MaxHealth)
+            {
+                throw new InvalidOperationException("治疗推演与当前参与者事实或生命上限不一致。");
+            }
+
             _health.Value = outcome.HealthAfter;
         }
 
@@ -159,6 +181,38 @@ namespace TinySpire.Battle
             _vulnerable.Value = checked(CurrentVulnerable + amount);
         }
 
+        /// <summary>仅由通用中毒模块把已冻结的非负层数写回唯一权威事实。</summary>
+        internal void ApplyPoisonValue(int expectedBefore, int valueAfter)
+        {
+            if (expectedBefore < 0)
+                throw new ArgumentOutOfRangeException(nameof(expectedBefore));
+            if (valueAfter < 0)
+                throw new ArgumentOutOfRangeException(nameof(valueAfter));
+            if (CurrentPoison != expectedBefore)
+                throw new InvalidOperationException("中毒推演与当前参与者事实不一致。");
+
+            if (valueAfter != expectedBefore)
+                _poison.Value = valueAfter;
+        }
+
+        /// <summary>仅由通用中毒模块在一次权威入口内校验并写入回合开始的生命与中毒终局。</summary>
+        internal void ApplyPoisonTickOutcome(BattlePoisonTickOutcome outcome)
+        {
+            if (outcome.HealthBefore != CurrentHealth ||
+                outcome.BlockBefore != CurrentBlock ||
+                outcome.BlockAfter != CurrentBlock ||
+                outcome.PoisonBefore != CurrentPoison)
+            {
+                throw new InvalidOperationException("中毒触发推演与当前参与者事实不一致。");
+            }
+
+            if (!outcome.HasWrite)
+                return;
+
+            _poison.Value = outcome.PoisonAfter;
+            _health.Value = outcome.HealthAfter;
+        }
+
         /// <summary>仅由内部状态时机 module 提交已经完整预构建的 Block 与 Vulnerable 结果。</summary>
         internal void ApplyStatusTimingValues(int blockAfter, int vulnerableAfter)
         {
@@ -184,10 +238,12 @@ namespace TinySpire.Battle
             Strength.Dispose();
             Block.Dispose();
             Vulnerable.Dispose();
+            Poison.Dispose();
             _health.Dispose();
             _strength.Dispose();
             _block.Dispose();
             _vulnerable.Dispose();
+            _poison.Dispose();
         }
     }
 

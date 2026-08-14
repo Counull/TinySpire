@@ -3,6 +3,7 @@ title: M9B 参与者状态、Block 与既有意图 HUD
 page_type: testing
 lifecycle: active
 date: 2026-08-02
+updated: 2026-08-14
 status: passed
 scope: Participant HUD、正式状态资源、既有意图投影、Prefab、Addressables、Bootstrap 与范围审计
 plan: ../plans/2026-08-02-m9-sts-feedback-outcome-restart.md
@@ -15,7 +16,7 @@ status_source: ../SESSION_LOG.md
 
 M9B 已通过。玩家与敌人的 `ParticipantHudView` 现在从当前 `CombatantData` 即时派生非零 Block、Strength、Vulnerable 图标与层数；零值和死亡时隐藏对应状态行。敌人意图继续从当前权威 `BehaviorId`、静态 Effect 与共享 `BattleEffectValueCalculator` 派生，不保存 HUD 数值、意图或参与者镜像，也不推进 Intent RNG。
 
-本切片只在死亡时隐藏状态行和意图行；0 HP 生命 HUD、参与者 HUD 根节点及世界 View 继续保留，供 M9C 的 fatal 数字、抖动与死亡过渡消费。没有实现 Weak、Poison 或其他新状态。
+本切片只在死亡时隐藏状态行和意图行；0 HP 生命 HUD、参与者 HUD 根节点及世界 View 继续保留，供 M9C 的 fatal 数字、抖动与死亡过渡消费。M9B 当时没有实现 Weak、Poison 或其他新状态；Poison 的后续领域实现见本文末尾 2026-08-14 注。
 
 ## 测试先行与红绿证据
 
@@ -49,7 +50,7 @@ M9B 已通过。玩家与敌人的 `ParticipantHudView` 现在从当前 `Combata
   - `Assets/Arts/Runtime/UI/Battle/ui_battle_icon_strength.png`
   - `Assets/Arts/Runtime/UI/Battle/ui_battle_icon_vulnerable.png`
 - 三张资源均保持当前单 Sprite、mipmap 关闭的导入契约；BattleScene 递归依赖测试证明它们只经既有 Participant HUD Prefab 接入。
-- Prefab 内不存在 Weak / Poison 节点，生产 C# 也没有对应分支。
+- Prefab 内不存在 Weak / Poison 节点；M9B 发布时生产 C# 也没有对应分支。CD-106 后 Poison 已有领域 / 时序分支，但 Participant HUD 仍没有 Poison 分支。
 
 最终 Prefab 修订后重新执行 `TinySpire/Addressables/Build Local Content`；`catalog.bin` 与 `catalog.hash` 的最终时间为 **2026-08-02 19:15:12**，命令与 Console 均无构建错误。没有新增地址、修改 Addressables 配置或改动 Scene。
 
@@ -90,6 +91,10 @@ M9B authored 生产范围严格为：
 
 ## 停止点判定与后续
 
-玩家及 1～3 名敌人的 Block 增减/清零、Strength、Vulnerable 施加/衰减、View 重建、死亡行隐藏和 0 HP 保留均有自动证据；Weak / Poison 无生产分支，既有意图预测继续使用共享公式且不消费随机。定向/相关回归、串行 build、Prefab 合约、最终 Local Content、Bootstrap 静态 HUD、Console、范围审计和本文档同步均已完成。
+### 2026-08-14 Poison 运行时后续注
+
+CD-106 已在领域与时序层接入通用 Poison，并让 tick 只复用既有 `HealthLossNumber`、致死时再复用 `DeathTransition`；它不派生 Attack hit-shake、Block absorbed 或状态 pulse。本切片没有获得 Prefab 修改授权，因此本页“Prefab 没有 Poison 节点”的结论仍然成立：当前没有常驻 Poison 图标、层数文本或脉冲。不得把 tick 数字 / 死亡过渡的已有表现支持误写成 Poison HUD 已完成。
+
+玩家及 1～3 名敌人的 Block 增减/清零、Strength、Vulnerable 施加/衰减、View 重建、死亡行隐藏和 0 HP 保留均有自动证据；M9B 发布时 Weak / Poison 无生产分支，CD-106 后 Poison 只有领域 / tick 表现、仍无常驻 HUD。既有意图预测继续使用共享公式且不消费随机。定向/相关回归、串行 build、Prefab 合约、最终 Local Content、Bootstrap 静态 HUD、Console、范围审计和本文档同步均已完成。
 
 M9B 停止点完成。下一步只进入 M9C · 数字、格挡、受击与死亡过渡；M9D～M9G 仍保持待实施。

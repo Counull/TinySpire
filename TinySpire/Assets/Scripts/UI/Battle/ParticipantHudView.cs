@@ -137,6 +137,7 @@ namespace TinySpire.UI.Battle
             {
                 case BattleCommandPresentationStepKind.BlockAbsorbedNumber:
                 case BattleCommandPresentationStepKind.HealthLossNumber:
+                case BattleCommandPresentationStepKind.HealthRestoredNumber:
                 case BattleCommandPresentationStepKind.BlockGainedNumber:
                 {
                     BattleFloatingNumberView floatingNumber = null;

@@ -1103,6 +1103,994 @@ MonoBehaviour:
     m_Key: battle.card.sts2.corruption.upgrade_description
     m_Metadata:
       m_Items: []
+  - m_Id: 2940359064317952
+    m_Key: battle.card.marine.shoot.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843904
+    m_Key: battle.card.marine.shoot.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843905
+    m_Key: battle.card.marine.shoot.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843906
+    m_Key: battle.card.marine.elbow.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843907
+    m_Key: battle.card.marine.elbow.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843908
+    m_Key: battle.card.marine.elbow.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843909
+    m_Key: battle.card.marine.block.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843910
+    m_Key: battle.card.marine.block.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843911
+    m_Key: battle.card.marine.block.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843912
+    m_Key: battle.card.marine.reload.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843913
+    m_Key: battle.card.marine.reload.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843914
+    m_Key: battle.card.marine.reload.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843915
+    m_Key: battle.card.marine.stim.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843916
+    m_Key: battle.card.marine.stim.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843917
+    m_Key: battle.card.marine.stim.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843918
+    m_Key: battle.card.marine.core_expansion.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843919
+    m_Key: battle.card.marine.core_expansion.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843920
+    m_Key: battle.card.marine.core_expansion.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843921
+    m_Key: battle.card.marine.output_adjust.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843922
+    m_Key: battle.card.marine.output_adjust.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843923
+    m_Key: battle.card.marine.output_adjust.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843924
+    m_Key: battle.card.marine.blast_shield.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843925
+    m_Key: battle.card.marine.blast_shield.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843926
+    m_Key: battle.card.marine.blast_shield.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843927
+    m_Key: battle.card.marine.mag_expansion.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843928
+    m_Key: battle.card.marine.mag_expansion.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843929
+    m_Key: battle.card.marine.mag_expansion.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843930
+    m_Key: battle.card.marine.incendiary_ammo.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843931
+    m_Key: battle.card.marine.incendiary_ammo.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843932
+    m_Key: battle.card.marine.incendiary_ammo.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843933
+    m_Key: battle.card.marine.smoke_persist.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843934
+    m_Key: battle.card.marine.smoke_persist.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843935
+    m_Key: battle.card.marine.smoke_persist.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843936
+    m_Key: battle.card.marine.kungfu_mech.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843937
+    m_Key: battle.card.marine.kungfu_mech.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843938
+    m_Key: battle.card.marine.kungfu_mech.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843939
+    m_Key: battle.card.marine.overload.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843940
+    m_Key: battle.card.marine.overload.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843941
+    m_Key: battle.card.marine.overload.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843942
+    m_Key: battle.card.marine.tumble_reload.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843943
+    m_Key: battle.card.marine.tumble_reload.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843944
+    m_Key: battle.card.marine.tumble_reload.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843945
+    m_Key: battle.card.marine.stun_grenade.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843946
+    m_Key: battle.card.marine.stun_grenade.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843947
+    m_Key: battle.card.marine.stun_grenade.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843948
+    m_Key: battle.card.marine.retreat.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843949
+    m_Key: battle.card.marine.retreat.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843950
+    m_Key: battle.card.marine.retreat.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843951
+    m_Key: battle.card.marine.gas_pump.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843952
+    m_Key: battle.card.marine.gas_pump.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843953
+    m_Key: battle.card.marine.gas_pump.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232512
+    m_Key: battle.card.marine.napalm.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232513
+    m_Key: battle.card.marine.napalm.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232514
+    m_Key: battle.card.marine.napalm.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232515
+    m_Key: battle.card.marine.molotov.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232516
+    m_Key: battle.card.marine.molotov.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232517
+    m_Key: battle.card.marine.molotov.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232518
+    m_Key: battle.card.marine.hold_line.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232519
+    m_Key: battle.card.marine.hold_line.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232520
+    m_Key: battle.card.marine.hold_line.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232521
+    m_Key: battle.card.marine.smoke_bomb.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232522
+    m_Key: battle.card.marine.smoke_bomb.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232523
+    m_Key: battle.card.marine.smoke_bomb.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232524
+    m_Key: battle.card.marine.incomplete_combustion.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232525
+    m_Key: battle.card.marine.incomplete_combustion.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232526
+    m_Key: battle.card.marine.incomplete_combustion.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232527
+    m_Key: battle.card.marine.knockback_shot.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232528
+    m_Key: battle.card.marine.knockback_shot.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232529
+    m_Key: battle.card.marine.knockback_shot.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232530
+    m_Key: battle.card.marine.spray.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232531
+    m_Key: battle.card.marine.spray.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232532
+    m_Key: battle.card.marine.spray.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232533
+    m_Key: battle.card.marine.bayonet_parry.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232534
+    m_Key: battle.card.marine.bayonet_parry.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232535
+    m_Key: battle.card.marine.bayonet_parry.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232536
+    m_Key: battle.card.marine.wild_rampage.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232537
+    m_Key: battle.card.marine.wild_rampage.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232538
+    m_Key: battle.card.marine.wild_rampage.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232539
+    m_Key: battle.card.marine.quick_elbow.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232540
+    m_Key: battle.card.marine.quick_elbow.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232541
+    m_Key: battle.card.marine.quick_elbow.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232542
+    m_Key: battle.card.marine.kidney_shot.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232543
+    m_Key: battle.card.marine.kidney_shot.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232544
+    m_Key: battle.card.marine.kidney_shot.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232545
+    m_Key: battle.card.marine.painful_elbow.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232546
+    m_Key: battle.card.marine.painful_elbow.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232547
+    m_Key: battle.card.marine.painful_elbow.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232548
+    m_Key: battle.card.marine.heavy_elbow.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232549
+    m_Key: battle.card.marine.heavy_elbow.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232550
+    m_Key: battle.card.marine.heavy_elbow.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232551
+    m_Key: battle.card.marine.field_surgery.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232552
+    m_Key: battle.card.marine.field_surgery.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232553
+    m_Key: battle.card.marine.field_surgery.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232554
+    m_Key: battle.card.marine.hurricane_elbow.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232555
+    m_Key: battle.card.marine.hurricane_elbow.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232556
+    m_Key: battle.card.marine.hurricane_elbow.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232557
+    m_Key: battle.card.marine.precision_shot.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232558
+    m_Key: battle.card.marine.precision_shot.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232559
+    m_Key: battle.card.marine.precision_shot.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232560
+    m_Key: battle.card.marine.tactical_advance.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232561
+    m_Key: battle.card.marine.tactical_advance.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232562
+    m_Key: battle.card.marine.tactical_advance.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232563
+    m_Key: battle.card.marine.quick_roll.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232564
+    m_Key: battle.card.marine.quick_roll.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232565
+    m_Key: battle.card.marine.quick_roll.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232566
+    m_Key: battle.card.marine.electro_boost.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232567
+    m_Key: battle.card.marine.electro_boost.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232568
+    m_Key: battle.card.marine.electro_boost.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232569
+    m_Key: battle.card.marine.guided_nuke.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232570
+    m_Key: battle.card.marine.guided_nuke.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232571
+    m_Key: battle.card.marine.guided_nuke.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232572
+    m_Key: battle.card.marine.banshee_strike.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232573
+    m_Key: battle.card.marine.banshee_strike.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232574
+    m_Key: battle.card.marine.banshee_strike.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232575
+    m_Key: battle.card.marine.fire_support.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232576
+    m_Key: battle.card.marine.fire_support.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232577
+    m_Key: battle.card.marine.fire_support.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232578
+    m_Key: battle.card.marine.fire_bombardment.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232579
+    m_Key: battle.card.marine.fire_bombardment.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232580
+    m_Key: battle.card.marine.fire_bombardment.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232581
+    m_Key: battle.card.marine.five_hundred_pounder.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232582
+    m_Key: battle.card.marine.five_hundred_pounder.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232583
+    m_Key: battle.card.marine.five_hundred_pounder.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232584
+    m_Key: battle.card.marine.combo_elbow.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232585
+    m_Key: battle.card.marine.combo_elbow.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232586
+    m_Key: battle.card.marine.combo_elbow.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232587
+    m_Key: battle.card.marine.opportunistic_strike.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232588
+    m_Key: battle.card.marine.opportunistic_strike.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232589
+    m_Key: battle.card.marine.opportunistic_strike.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232590
+    m_Key: battle.card.marine.vent_heat.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232591
+    m_Key: battle.card.marine.vent_heat.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232592
+    m_Key: battle.card.marine.vent_heat.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232593
+    m_Key: battle.card.marine.power_overclock.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232594
+    m_Key: battle.card.marine.power_overclock.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232595
+    m_Key: battle.card.marine.power_overclock.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232596
+    m_Key: battle.card.marine.garrison.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232597
+    m_Key: battle.card.marine.garrison.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232598
+    m_Key: battle.card.marine.garrison.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232599
+    m_Key: battle.card.marine.sniper_shot.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232600
+    m_Key: battle.card.marine.sniper_shot.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232601
+    m_Key: battle.card.marine.sniper_shot.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232602
+    m_Key: battle.card.marine.spike_shot.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232603
+    m_Key: battle.card.marine.spike_shot.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232604
+    m_Key: battle.card.marine.spike_shot.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232605
+    m_Key: battle.card.marine.optical_camo.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232606
+    m_Key: battle.card.marine.optical_camo.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232607
+    m_Key: battle.card.marine.optical_camo.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232608
+    m_Key: battle.card.marine.unstoppable.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232609
+    m_Key: battle.card.marine.unstoppable.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232610
+    m_Key: battle.card.marine.unstoppable.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232611
+    m_Key: battle.card.marine.guerrilla_tactics.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232612
+    m_Key: battle.card.marine.guerrilla_tactics.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232613
+    m_Key: battle.card.marine.guerrilla_tactics.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232614
+    m_Key: battle.card.marine.explosive_elbow.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232615
+    m_Key: battle.card.marine.explosive_elbow.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232616
+    m_Key: battle.card.marine.explosive_elbow.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232617
+    m_Key: battle.card.marine.aged_oil.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232618
+    m_Key: battle.card.marine.aged_oil.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232619
+    m_Key: battle.card.marine.aged_oil.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232620
+    m_Key: battle.card.marine.burning_oil.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232621
+    m_Key: battle.card.marine.burning_oil.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232622
+    m_Key: battle.card.marine.burning_oil.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232623
+    m_Key: battle.card.marine.flame_elbow.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232624
+    m_Key: battle.card.marine.flame_elbow.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232625
+    m_Key: battle.card.marine.flame_elbow.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232626
+    m_Key: battle.card.marine.six_hits.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232627
+    m_Key: battle.card.marine.six_hits.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232628
+    m_Key: battle.card.marine.six_hits.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232629
+    m_Key: battle.card.marine.twelve_hits.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232630
+    m_Key: battle.card.marine.twelve_hits.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232631
+    m_Key: battle.card.marine.twelve_hits.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232632
+    m_Key: battle.card.marine.quick_maneuver.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232633
+    m_Key: battle.card.marine.quick_maneuver.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232634
+    m_Key: battle.card.marine.quick_maneuver.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232635
+    m_Key: battle.card.marine.holo_decoy.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232636
+    m_Key: battle.card.marine.holo_decoy.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232637
+    m_Key: battle.card.marine.holo_decoy.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232638
+    m_Key: battle.card.marine.limit_overload.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232639
+    m_Key: battle.card.marine.limit_overload.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232640
+    m_Key: battle.card.marine.limit_overload.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232641
+    m_Key: battle.card.marine.machinegun.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232642
+    m_Key: battle.card.marine.machinegun.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232643
+    m_Key: battle.card.marine.machinegun.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232644
+    m_Key: battle.card.marine.defense_target.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232645
+    m_Key: battle.card.marine.defense_target.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232646
+    m_Key: battle.card.marine.defense_target.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232647
+    m_Key: battle.card.marine.machinegun_burst.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232648
+    m_Key: battle.card.marine.machinegun_burst.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232649
+    m_Key: battle.card.marine.machinegun_burst.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232650
+    m_Key: battle.card.marine.triple_strike.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232651
+    m_Key: battle.card.marine.triple_strike.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232652
+    m_Key: battle.card.marine.triple_strike.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2977722553495552
+    m_Key: battle.hero.machine_gunner.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058028298240
+    m_Key: battle.card.marine.bombard.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184320
+    m_Key: battle.card.marine.bombard.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184321
+    m_Key: battle.card.marine.bombard.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184322
+    m_Key: battle.card.marine.sky_wrath.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184323
+    m_Key: battle.card.marine.sky_wrath.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184324
+    m_Key: battle.card.marine.sky_wrath.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184325
+    m_Key: battle.card.marine.portable_helper.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184326
+    m_Key: battle.card.marine.portable_helper.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184327
+    m_Key: battle.card.marine.portable_helper.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184328
+    m_Key: battle.card.marine.private_mod.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184329
+    m_Key: battle.card.marine.private_mod.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184330
+    m_Key: battle.card.marine.private_mod.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184331
+    m_Key: battle.card.marine.chain_smoke.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184332
+    m_Key: battle.card.marine.chain_smoke.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184333
+    m_Key: battle.card.marine.chain_smoke.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184334
+    m_Key: battle.card.marine.secondhand_smoke.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184335
+    m_Key: battle.card.marine.secondhand_smoke.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184336
+    m_Key: battle.card.marine.secondhand_smoke.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184337
+    m_Key: battle.card.marine.defensive_stance.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184338
+    m_Key: battle.card.marine.defensive_stance.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184339
+    m_Key: battle.card.marine.defensive_stance.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184340
+    m_Key: battle.card.marine.emergency_cooling.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184341
+    m_Key: battle.card.marine.emergency_cooling.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184342
+    m_Key: battle.card.marine.emergency_cooling.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184343
+    m_Key: battle.card.marine.thermite_bomb.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378624
+    m_Key: battle.card.marine.thermite_bomb.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378625
+    m_Key: battle.card.marine.thermite_bomb.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378626
+    m_Key: battle.card.marine.needle_storm.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378627
+    m_Key: battle.card.marine.needle_storm.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378628
+    m_Key: battle.card.marine.needle_storm.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378629
+    m_Key: battle.card.marine.stealth_action.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378630
+    m_Key: battle.card.marine.stealth_action.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378631
+    m_Key: battle.card.marine.stealth_action.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378632
+    m_Key: battle.card.marine.foehn_wind.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378633
+    m_Key: battle.card.marine.foehn_wind.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378634
+    m_Key: battle.card.marine.foehn_wind.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378635
+    m_Key: battle.card.marine.preemptive_strike.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378636
+    m_Key: battle.card.marine.preemptive_strike.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378637
+    m_Key: battle.card.marine.preemptive_strike.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378638
+    m_Key: battle.card.marine.bully.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378639
+    m_Key: battle.card.marine.bully.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378640
+    m_Key: battle.card.marine.bully.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378641
+    m_Key: battle.card.marine.prismatic_shot.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378642
+    m_Key: battle.card.marine.prismatic_shot.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378643
+    m_Key: battle.card.marine.prismatic_shot.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378644
+    m_Key: battle.card.marine.mark.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378645
+    m_Key: battle.card.marine.mark.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378646
+    m_Key: battle.card.marine.mark.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378647
+    m_Key: battle.card.marine.crush.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378648
+    m_Key: battle.card.marine.crush.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378649
+    m_Key: battle.card.marine.crush.upgrade_description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378650
+    m_Key: battle.card.marine.charged_burst.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378651
+    m_Key: battle.card.marine.charged_burst.description
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378652
+    m_Key: battle.card.marine.charged_burst.upgrade_description
+    m_Metadata:
+      m_Items: []
   m_Metadata:
     m_Items: []
   m_KeyGenerator:

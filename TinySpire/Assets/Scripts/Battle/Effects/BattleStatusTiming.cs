@@ -66,6 +66,9 @@ namespace TinySpire.Battle
         /// <summary>按真实状态写入顺序冻结的记录。</summary>
         internal IReadOnlyList<BattleSettlementRecord> Settlements { get; }
 
+        /// <summary>玩家新一轮时与标量计划共同冻结的格挡保留计划。</summary>
+        internal BattlePreparedBlockRetentionPlan BlockRetentionPlan { get; }
+
         /// <summary>计划是否已经提交，防止重复写入。</summary>
         internal bool IsConsumed { get; private set; }
 
@@ -83,7 +86,8 @@ namespace TinySpire.Battle
             int blockAfter,
             int vulnerableAfter,
             bool hasWrite,
-            IEnumerable<BattleSettlementRecord> settlements)
+            IEnumerable<BattleSettlementRecord> settlements,
+            BattlePreparedBlockRetentionPlan blockRetentionPlan)
         {
             Owner = owner ?? throw new ArgumentNullException(nameof(owner));
             if (combatant == null)
@@ -99,6 +103,7 @@ namespace TinySpire.Battle
             HasWrite = hasWrite;
             Settlements = new ReadOnlyCollection<BattleSettlementRecord>(
                 new List<BattleSettlementRecord>(settlements));
+            BlockRetentionPlan = blockRetentionPlan;
         }
 
         /// <summary>记录唯一校验结果；失败后也禁止重复校验。</summary>
@@ -152,11 +157,21 @@ namespace TinySpire.Battle
             Array.Empty<BattleSettlementRecord>();
 
         private readonly BattleCombatantsData _combatants;
+        private readonly BattleBlockRetention _blockRetention;
 
         /// <summary>绑定本场唯一参与者聚合。</summary>
         public BattleStatusTiming(BattleCombatantsData combatants)
+            : this(combatants, new BattleBlockRetention())
+        {
+        }
+
+        /// <summary>绑定参与者聚合与本场唯一格挡保留 module。</summary>
+        internal BattleStatusTiming(
+            BattleCombatantsData combatants,
+            BattleBlockRetention blockRetention)
         {
             _combatants = combatants ?? throw new ArgumentNullException(nameof(combatants));
+            _blockRetention = blockRetention ?? throw new ArgumentNullException(nameof(blockRetention));
         }
 
         /// <summary>在不可变标量上投影指定时点；死亡或零值输入保持不变。</summary>
@@ -255,7 +270,19 @@ namespace TinySpire.Battle
                     combatant.CurrentHealth,
                     combatant.CurrentBlock,
                     combatant.CurrentVulnerable);
+            BattlePreparedBlockRetentionPlan blockRetentionPlan =
+                timingPoint == BattleStatusTimingPoint.PlayerRoundStart
+                    ? _blockRetention.PreparePlayerRoundStart(combatantId)
+                    : null;
             BattleEffectTargetSnapshot projected = Project(timingPoint, initial);
+            if (blockRetentionPlan != null &&
+                blockRetentionPlan.Before.PreservesBlock)
+            {
+                projected = new BattleEffectTargetSnapshot(
+                    projected.Health,
+                    initial.Block,
+                    projected.Vulnerable);
+            }
             BattleSettlementRecord settlement = null;
             if (projected.Block != initial.Block)
             {
@@ -273,6 +300,17 @@ namespace TinySpire.Battle
                     initial.Vulnerable,
                     projected.Vulnerable);
             }
+            else if (blockRetentionPlan != null &&
+                     blockRetentionPlan.Before.TimedRounds !=
+                     blockRetentionPlan.After.TimedRounds)
+            {
+                settlement = new BattleStatusReducedSettlement(
+                    startingOrder,
+                    combatant.Id,
+                    BattleStatusType.Garrison,
+                    blockRetentionPlan.Before.TimedRounds,
+                    blockRetentionPlan.After.TimedRounds);
+            }
 
             return new BattleStatusTimingPreparationResult(
                 BattleCommandExecutionFailureReason.None,
@@ -285,7 +323,8 @@ namespace TinySpire.Battle
                     hasWrite: settlement != null,
                     settlement == null
                         ? NoSettlements
-                        : new[] { settlement }));
+                        : new[] { settlement },
+                    blockRetentionPlan));
         }
 
         /// <summary>只在联合事务首次写入前校验计划归属、未消费与初始四标量快照。</summary>
@@ -299,6 +338,8 @@ namespace TinySpire.Battle
             bool succeeded = !plan.IsConsumed &&
                 _combatants.TryGet(plan.CombatantId, out CombatantData combatant) &&
                 plan.InitialSnapshot.Matches(combatant);
+            if (succeeded && plan.BlockRetentionPlan != null)
+                succeeded = _blockRetention.ValidatePrepared(plan.BlockRetentionPlan);
             plan.MarkValidated(succeeded);
             return succeeded;
         }
@@ -312,6 +353,8 @@ namespace TinySpire.Battle
                 throw new InvalidOperationException("不能提交其他状态时机 module 创建的计划。");
 
             plan.MarkConsumed();
+            if (plan.BlockRetentionPlan != null)
+                _blockRetention.CommitPrepared(plan.BlockRetentionPlan);
             if (plan.HasWrite)
             {
                 if (!_combatants.TryGet(plan.CombatantId, out CombatantData combatant))

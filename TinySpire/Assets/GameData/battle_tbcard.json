@@ -22,7 +22,9 @@
         "effect_id": 4001
       }
     ],
-    "illustration_key": "card_art_strength"
+    "illustration_key": "card_art_strength",
+    "program_id": 0,
+    "is_innate": false
   },
   "3002": {
     "id": 3002,
@@ -47,7 +49,9 @@
         "effect_id": 4002
       }
     ],
-    "illustration_key": "card_art_strike"
+    "illustration_key": "card_art_strike",
+    "program_id": 0,
+    "is_innate": false
   },
   "3003": {
     "id": 3003,
@@ -72,7 +76,9 @@
         "effect_id": 4003
       }
     ],
-    "illustration_key": "card_art_defend"
+    "illustration_key": "card_art_defend",
+    "program_id": 0,
+    "is_innate": false
   },
   "3004": {
     "id": 3004,
@@ -101,7 +107,9 @@
         "effect_id": 4005
       }
     ],
-    "illustration_key": "card_art_bash"
+    "illustration_key": "card_art_bash",
+    "program_id": 0,
+    "is_innate": false
   },
   "3101": {
     "id": 3101,
@@ -121,7 +129,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3102": {
     "id": 3102,
@@ -141,7 +151,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3103": {
     "id": 3103,
@@ -161,7 +173,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3104": {
     "id": 3104,
@@ -181,7 +195,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3105": {
     "id": 3105,
@@ -199,9 +215,16 @@
     "play_destination": 0,
     "upgraded_play_destination": 0,
     "has_upgrade": true,
-    "implementation_status": 1,
-    "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "implementation_status": 0,
+    "effect_bindings": [
+      {
+        "argument_key": "damage",
+        "effect_id": 4016
+      }
+    ],
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3106": {
     "id": 3106,
@@ -221,7 +244,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3107": {
     "id": 3107,
@@ -241,7 +266,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3108": {
     "id": 3108,
@@ -259,9 +286,16 @@
     "play_destination": 0,
     "upgraded_play_destination": 0,
     "has_upgrade": true,
-    "implementation_status": 1,
-    "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "implementation_status": 0,
+    "effect_bindings": [
+      {
+        "argument_key": "triggeredPlay",
+        "effect_id": 4018
+      }
+    ],
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3109": {
     "id": 3109,
@@ -281,7 +315,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3110": {
     "id": 3110,
@@ -301,7 +337,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3111": {
     "id": 3111,
@@ -321,7 +359,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3112": {
     "id": 3112,
@@ -341,7 +381,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3113": {
     "id": 3113,
@@ -359,9 +401,20 @@
     "play_destination": 0,
     "upgraded_play_destination": 0,
     "has_upgrade": true,
-    "implementation_status": 1,
-    "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "implementation_status": 0,
+    "effect_bindings": [
+      {
+        "argument_key": "damage",
+        "effect_id": 4009
+      },
+      {
+        "argument_key": "cards",
+        "effect_id": 4010
+      }
+    ],
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3114": {
     "id": 3114,
@@ -381,7 +434,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3115": {
     "id": 3115,
@@ -399,9 +454,20 @@
     "play_destination": 0,
     "upgraded_play_destination": 0,
     "has_upgrade": true,
-    "implementation_status": 1,
-    "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "implementation_status": 0,
+    "effect_bindings": [
+      {
+        "argument_key": "block",
+        "effect_id": 4011
+      },
+      {
+        "argument_key": "cards",
+        "effect_id": 4010
+      }
+    ],
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3116": {
     "id": 3116,
@@ -419,9 +485,24 @@
     "play_destination": 0,
     "upgraded_play_destination": 0,
     "has_upgrade": true,
-    "implementation_status": 1,
-    "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "implementation_status": 0,
+    "effect_bindings": [
+      {
+        "argument_key": "damage",
+        "effect_id": 4015
+      },
+      {
+        "argument_key": "damageRepeat1",
+        "effect_id": 4015
+      },
+      {
+        "argument_key": "damageRepeat2",
+        "effect_id": 4015
+      }
+    ],
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3117": {
     "id": 3117,
@@ -441,7 +522,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3118": {
     "id": 3118,
@@ -466,7 +549,9 @@
         "effect_id": 4006
       }
     ],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3119": {
     "id": 3119,
@@ -486,7 +571,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3120": {
     "id": 3120,
@@ -504,9 +591,20 @@
     "play_destination": 0,
     "upgraded_play_destination": 0,
     "has_upgrade": true,
-    "implementation_status": 1,
-    "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "implementation_status": 0,
+    "effect_bindings": [
+      {
+        "argument_key": "damage",
+        "effect_id": 4008
+      },
+      {
+        "argument_key": "damageRepeat",
+        "effect_id": 4008
+      }
+    ],
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3121": {
     "id": 3121,
@@ -526,7 +624,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3122": {
     "id": 3122,
@@ -546,7 +646,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3123": {
     "id": 3123,
@@ -564,9 +666,16 @@
     "play_destination": 0,
     "upgraded_play_destination": 0,
     "has_upgrade": true,
-    "implementation_status": 1,
-    "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "implementation_status": 0,
+    "effect_bindings": [
+      {
+        "argument_key": "damage",
+        "effect_id": 4007
+      }
+    ],
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3124": {
     "id": 3124,
@@ -586,7 +695,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3125": {
     "id": 3125,
@@ -604,9 +715,20 @@
     "play_destination": 0,
     "upgraded_play_destination": 0,
     "has_upgrade": true,
-    "implementation_status": 1,
-    "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "implementation_status": 0,
+    "effect_bindings": [
+      {
+        "argument_key": "exhaustCards",
+        "effect_id": 4012
+      },
+      {
+        "argument_key": "cards",
+        "effect_id": 4013
+      }
+    ],
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3126": {
     "id": 3126,
@@ -626,7 +748,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3127": {
     "id": 3127,
@@ -646,7 +770,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3128": {
     "id": 3128,
@@ -666,7 +792,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3129": {
     "id": 3129,
@@ -686,7 +814,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3130": {
     "id": 3130,
@@ -706,7 +836,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3131": {
     "id": 3131,
@@ -726,7 +858,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3132": {
     "id": 3132,
@@ -746,7 +880,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3133": {
     "id": 3133,
@@ -766,7 +902,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3134": {
     "id": 3134,
@@ -786,7 +924,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3135": {
     "id": 3135,
@@ -806,7 +946,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3136": {
     "id": 3136,
@@ -826,7 +968,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3137": {
     "id": 3137,
@@ -846,7 +990,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3138": {
     "id": 3138,
@@ -866,7 +1012,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3139": {
     "id": 3139,
@@ -886,7 +1034,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3140": {
     "id": 3140,
@@ -906,7 +1056,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3141": {
     "id": 3141,
@@ -926,7 +1078,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3142": {
     "id": 3142,
@@ -946,7 +1100,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3143": {
     "id": 3143,
@@ -966,7 +1122,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3144": {
     "id": 3144,
@@ -986,7 +1144,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3145": {
     "id": 3145,
@@ -1006,7 +1166,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3146": {
     "id": 3146,
@@ -1026,7 +1188,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3147": {
     "id": 3147,
@@ -1046,7 +1210,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3148": {
     "id": 3148,
@@ -1066,7 +1232,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3149": {
     "id": 3149,
@@ -1086,7 +1254,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3150": {
     "id": 3150,
@@ -1106,7 +1276,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3151": {
     "id": 3151,
@@ -1126,7 +1298,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3152": {
     "id": 3152,
@@ -1146,7 +1320,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3153": {
     "id": 3153,
@@ -1166,7 +1342,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3154": {
     "id": 3154,
@@ -1186,7 +1364,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3155": {
     "id": 3155,
@@ -1206,7 +1386,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3156": {
     "id": 3156,
@@ -1226,7 +1408,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3157": {
     "id": 3157,
@@ -1244,9 +1428,16 @@
     "play_destination": 2,
     "upgraded_play_destination": 2,
     "has_upgrade": true,
-    "implementation_status": 1,
-    "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "implementation_status": 0,
+    "effect_bindings": [
+      {
+        "argument_key": "retention",
+        "effect_id": 4017
+      }
+    ],
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3158": {
     "id": 3158,
@@ -1266,7 +1457,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3159": {
     "id": 3159,
@@ -1286,7 +1479,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3160": {
     "id": 3160,
@@ -1306,7 +1501,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3161": {
     "id": 3161,
@@ -1326,7 +1523,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3162": {
     "id": 3162,
@@ -1346,7 +1545,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3163": {
     "id": 3163,
@@ -1366,7 +1567,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3164": {
     "id": 3164,
@@ -1386,7 +1589,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3165": {
     "id": 3165,
@@ -1406,7 +1611,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3166": {
     "id": 3166,
@@ -1426,7 +1633,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3167": {
     "id": 3167,
@@ -1446,7 +1655,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3168": {
     "id": 3168,
@@ -1466,7 +1677,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3169": {
     "id": 3169,
@@ -1484,9 +1697,16 @@
     "play_destination": 2,
     "upgraded_play_destination": 2,
     "has_upgrade": true,
-    "implementation_status": 1,
-    "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "implementation_status": 0,
+    "effect_bindings": [
+      {
+        "argument_key": "triggerDamage",
+        "effect_id": 4019
+      }
+    ],
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3170": {
     "id": 3170,
@@ -1506,7 +1726,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3171": {
     "id": 3171,
@@ -1524,9 +1746,16 @@
     "play_destination": 1,
     "upgraded_play_destination": 1,
     "has_upgrade": true,
-    "implementation_status": 1,
-    "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "implementation_status": 0,
+    "effect_bindings": [
+      {
+        "argument_key": "heal",
+        "effect_id": 4014
+      }
+    ],
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3172": {
     "id": 3172,
@@ -1546,7 +1775,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3173": {
     "id": 3173,
@@ -1566,7 +1797,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3174": {
     "id": 3174,
@@ -1586,7 +1819,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3175": {
     "id": 3175,
@@ -1606,7 +1841,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3176": {
     "id": 3176,
@@ -1626,7 +1863,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3177": {
     "id": 3177,
@@ -1646,7 +1885,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3178": {
     "id": 3178,
@@ -1666,7 +1907,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3179": {
     "id": 3179,
@@ -1686,7 +1929,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3180": {
     "id": 3180,
@@ -1706,7 +1951,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3181": {
     "id": 3181,
@@ -1726,7 +1973,9 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
   },
   "3182": {
     "id": 3182,
@@ -1746,6 +1995,1812 @@
     "has_upgrade": true,
     "implementation_status": 1,
     "effect_bindings": [],
-    "illustration_key": "art_placeholder"
+    "illustration_key": "art_placeholder",
+    "program_id": 0,
+    "is_innate": false
+  },
+  "3201": {
+    "id": 3201,
+    "external_key": "MARINE_SHOOT",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.shoot.name",
+    "description_i18n_key": "battle.card.marine.shoot.description",
+    "upgraded_description_i18n_key": "battle.card.marine.shoot.upgrade_description",
+    "card_type": 0,
+    "rarity": 0,
+    "cost": 0,
+    "cost_kind": 0,
+    "upgraded_cost": 0,
+    "target_rule": 1,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 1,
+    "is_innate": false
+  },
+  "3202": {
+    "id": 3202,
+    "external_key": "MARINE_ELBOW",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.elbow.name",
+    "description_i18n_key": "battle.card.marine.elbow.description",
+    "upgraded_description_i18n_key": "battle.card.marine.elbow.upgrade_description",
+    "card_type": 0,
+    "rarity": 0,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 1,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 2,
+    "is_innate": false
+  },
+  "3203": {
+    "id": 3203,
+    "external_key": "MARINE_BLOCK",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.block.name",
+    "description_i18n_key": "battle.card.marine.block.description",
+    "upgraded_description_i18n_key": "battle.card.marine.block.upgrade_description",
+    "card_type": 1,
+    "rarity": 0,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 3,
+    "is_innate": false
+  },
+  "3204": {
+    "id": 3204,
+    "external_key": "MARINE_RELOAD",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.reload.name",
+    "description_i18n_key": "battle.card.marine.reload.description",
+    "upgraded_description_i18n_key": "battle.card.marine.reload.upgrade_description",
+    "card_type": 1,
+    "rarity": 0,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 0,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 4,
+    "is_innate": false
+  },
+  "3205": {
+    "id": 3205,
+    "external_key": "MARINE_STIM",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.stim.name",
+    "description_i18n_key": "battle.card.marine.stim.description",
+    "upgraded_description_i18n_key": "battle.card.marine.stim.upgrade_description",
+    "card_type": 1,
+    "rarity": 0,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 5,
+    "is_innate": false
+  },
+  "3206": {
+    "id": 3206,
+    "external_key": "MARINE_CORE_EXPANSION",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.core_expansion.name",
+    "description_i18n_key": "battle.card.marine.core_expansion.description",
+    "upgraded_description_i18n_key": "battle.card.marine.core_expansion.upgrade_description",
+    "card_type": 2,
+    "rarity": 2,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 2,
+    "upgraded_play_destination": 2,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 6,
+    "is_innate": false
+  },
+  "3207": {
+    "id": 3207,
+    "external_key": "MARINE_OUTPUT_ADJUST",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.output_adjust.name",
+    "description_i18n_key": "battle.card.marine.output_adjust.description",
+    "upgraded_description_i18n_key": "battle.card.marine.output_adjust.upgrade_description",
+    "card_type": 2,
+    "rarity": 2,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 0,
+    "target_rule": 0,
+    "play_destination": 2,
+    "upgraded_play_destination": 2,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 7,
+    "is_innate": false
+  },
+  "3208": {
+    "id": 3208,
+    "external_key": "MARINE_BLAST_SHIELD",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.blast_shield.name",
+    "description_i18n_key": "battle.card.marine.blast_shield.description",
+    "upgraded_description_i18n_key": "battle.card.marine.blast_shield.upgrade_description",
+    "card_type": 2,
+    "rarity": 2,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 2,
+    "upgraded_play_destination": 2,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 8,
+    "is_innate": false
+  },
+  "3209": {
+    "id": 3209,
+    "external_key": "MARINE_MAG_EXPANSION",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.mag_expansion.name",
+    "description_i18n_key": "battle.card.marine.mag_expansion.description",
+    "upgraded_description_i18n_key": "battle.card.marine.mag_expansion.upgrade_description",
+    "card_type": 2,
+    "rarity": 3,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 2,
+    "upgraded_play_destination": 2,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 9,
+    "is_innate": false
+  },
+  "3210": {
+    "id": 3210,
+    "external_key": "MARINE_INCENDIARY_AMMO",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.incendiary_ammo.name",
+    "description_i18n_key": "battle.card.marine.incendiary_ammo.description",
+    "upgraded_description_i18n_key": "battle.card.marine.incendiary_ammo.upgrade_description",
+    "card_type": 2,
+    "rarity": 2,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 2,
+    "upgraded_play_destination": 2,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 10,
+    "is_innate": false
+  },
+  "3211": {
+    "id": 3211,
+    "external_key": "MARINE_SMOKE_PERSIST",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.smoke_persist.name",
+    "description_i18n_key": "battle.card.marine.smoke_persist.description",
+    "upgraded_description_i18n_key": "battle.card.marine.smoke_persist.upgrade_description",
+    "card_type": 2,
+    "rarity": 3,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 0,
+    "target_rule": 0,
+    "play_destination": 2,
+    "upgraded_play_destination": 2,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 11,
+    "is_innate": false
+  },
+  "3212": {
+    "id": 3212,
+    "external_key": "MARINE_KUNGFU_MECH",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.kungfu_mech.name",
+    "description_i18n_key": "battle.card.marine.kungfu_mech.description",
+    "upgraded_description_i18n_key": "battle.card.marine.kungfu_mech.upgrade_description",
+    "card_type": 2,
+    "rarity": 2,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 2,
+    "upgraded_play_destination": 2,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 12,
+    "is_innate": false
+  },
+  "3213": {
+    "id": 3213,
+    "external_key": "MARINE_OVERLOAD",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.overload.name",
+    "description_i18n_key": "battle.card.marine.overload.description",
+    "upgraded_description_i18n_key": "battle.card.marine.overload.upgrade_description",
+    "card_type": 1,
+    "rarity": 1,
+    "cost": 0,
+    "cost_kind": 0,
+    "upgraded_cost": 0,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 13,
+    "is_innate": false
+  },
+  "3214": {
+    "id": 3214,
+    "external_key": "MARINE_TUMBLE_RELOAD",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.tumble_reload.name",
+    "description_i18n_key": "battle.card.marine.tumble_reload.description",
+    "upgraded_description_i18n_key": "battle.card.marine.tumble_reload.upgrade_description",
+    "card_type": 1,
+    "rarity": 1,
+    "cost": 2,
+    "cost_kind": 0,
+    "upgraded_cost": 2,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 14,
+    "is_innate": false
+  },
+  "3215": {
+    "id": 3215,
+    "external_key": "MARINE_STUN_GRENADE",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.stun_grenade.name",
+    "description_i18n_key": "battle.card.marine.stun_grenade.description",
+    "upgraded_description_i18n_key": "battle.card.marine.stun_grenade.upgrade_description",
+    "card_type": 1,
+    "rarity": 2,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 15,
+    "is_innate": false
+  },
+  "3216": {
+    "id": 3216,
+    "external_key": "MARINE_RETREAT",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.retreat.name",
+    "description_i18n_key": "battle.card.marine.retreat.description",
+    "upgraded_description_i18n_key": "battle.card.marine.retreat.upgrade_description",
+    "card_type": 1,
+    "rarity": 2,
+    "cost": 2,
+    "cost_kind": 0,
+    "upgraded_cost": 2,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 16,
+    "is_innate": false
+  },
+  "3217": {
+    "id": 3217,
+    "external_key": "MARINE_GAS_PUMP",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.gas_pump.name",
+    "description_i18n_key": "battle.card.marine.gas_pump.description",
+    "upgraded_description_i18n_key": "battle.card.marine.gas_pump.upgrade_description",
+    "card_type": 1,
+    "rarity": 2,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 17,
+    "is_innate": false
+  },
+  "3218": {
+    "id": 3218,
+    "external_key": "MARINE_NAPALM",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.napalm.name",
+    "description_i18n_key": "battle.card.marine.napalm.description",
+    "upgraded_description_i18n_key": "battle.card.marine.napalm.upgrade_description",
+    "card_type": 1,
+    "rarity": 2,
+    "cost": 2,
+    "cost_kind": 0,
+    "upgraded_cost": 2,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 18,
+    "is_innate": false
+  },
+  "3219": {
+    "id": 3219,
+    "external_key": "MARINE_MOLOTOV",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.molotov.name",
+    "description_i18n_key": "battle.card.marine.molotov.description",
+    "upgraded_description_i18n_key": "battle.card.marine.molotov.upgrade_description",
+    "card_type": 1,
+    "rarity": 1,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 1,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 19,
+    "is_innate": false
+  },
+  "3220": {
+    "id": 3220,
+    "external_key": "MARINE_HOLD_LINE",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.hold_line.name",
+    "description_i18n_key": "battle.card.marine.hold_line.description",
+    "upgraded_description_i18n_key": "battle.card.marine.hold_line.upgrade_description",
+    "card_type": 1,
+    "rarity": 2,
+    "cost": 0,
+    "cost_kind": 1,
+    "upgraded_cost": 0,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 20,
+    "is_innate": false
+  },
+  "3221": {
+    "id": 3221,
+    "external_key": "MARINE_SMOKE_BOMB",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.smoke_bomb.name",
+    "description_i18n_key": "battle.card.marine.smoke_bomb.description",
+    "upgraded_description_i18n_key": "battle.card.marine.smoke_bomb.upgrade_description",
+    "card_type": 1,
+    "rarity": 1,
+    "cost": 2,
+    "cost_kind": 0,
+    "upgraded_cost": 2,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 21,
+    "is_innate": false
+  },
+  "3222": {
+    "id": 3222,
+    "external_key": "MARINE_INCOMPLETE_COMBUSTION",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.incomplete_combustion.name",
+    "description_i18n_key": "battle.card.marine.incomplete_combustion.description",
+    "upgraded_description_i18n_key": "battle.card.marine.incomplete_combustion.upgrade_description",
+    "card_type": 1,
+    "rarity": 3,
+    "cost": 3,
+    "cost_kind": 0,
+    "upgraded_cost": 2,
+    "target_rule": 0,
+    "play_destination": 1,
+    "upgraded_play_destination": 1,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 22,
+    "is_innate": false
+  },
+  "3223": {
+    "id": 3223,
+    "external_key": "MARINE_KNOCKBACK_SHOT",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.knockback_shot.name",
+    "description_i18n_key": "battle.card.marine.knockback_shot.description",
+    "upgraded_description_i18n_key": "battle.card.marine.knockback_shot.upgrade_description",
+    "card_type": 0,
+    "rarity": 1,
+    "cost": 0,
+    "cost_kind": 0,
+    "upgraded_cost": 0,
+    "target_rule": 1,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 23,
+    "is_innate": false
+  },
+  "3224": {
+    "id": 3224,
+    "external_key": "MARINE_SPRAY",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.spray.name",
+    "description_i18n_key": "battle.card.marine.spray.description",
+    "upgraded_description_i18n_key": "battle.card.marine.spray.upgrade_description",
+    "card_type": 0,
+    "rarity": 1,
+    "cost": 0,
+    "cost_kind": 0,
+    "upgraded_cost": 0,
+    "target_rule": 3,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 24,
+    "is_innate": false
+  },
+  "3225": {
+    "id": 3225,
+    "external_key": "MARINE_BAYONET_PARRY",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.bayonet_parry.name",
+    "description_i18n_key": "battle.card.marine.bayonet_parry.description",
+    "upgraded_description_i18n_key": "battle.card.marine.bayonet_parry.upgrade_description",
+    "card_type": 0,
+    "rarity": 1,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 1,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 25,
+    "is_innate": false
+  },
+  "3226": {
+    "id": 3226,
+    "external_key": "MARINE_WILD_RAMPAGE",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.wild_rampage.name",
+    "description_i18n_key": "battle.card.marine.wild_rampage.description",
+    "upgraded_description_i18n_key": "battle.card.marine.wild_rampage.upgrade_description",
+    "card_type": 0,
+    "rarity": 3,
+    "cost": 0,
+    "cost_kind": 1,
+    "upgraded_cost": 0,
+    "target_rule": 1,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 26,
+    "is_innate": false
+  },
+  "3227": {
+    "id": 3227,
+    "external_key": "MARINE_QUICK_ELBOW",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.quick_elbow.name",
+    "description_i18n_key": "battle.card.marine.quick_elbow.description",
+    "upgraded_description_i18n_key": "battle.card.marine.quick_elbow.upgrade_description",
+    "card_type": 0,
+    "rarity": 1,
+    "cost": 0,
+    "cost_kind": 0,
+    "upgraded_cost": 0,
+    "target_rule": 1,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 27,
+    "is_innate": false
+  },
+  "3228": {
+    "id": 3228,
+    "external_key": "MARINE_KIDNEY_SHOT",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.kidney_shot.name",
+    "description_i18n_key": "battle.card.marine.kidney_shot.description",
+    "upgraded_description_i18n_key": "battle.card.marine.kidney_shot.upgrade_description",
+    "card_type": 0,
+    "rarity": 1,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 1,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 28,
+    "is_innate": false
+  },
+  "3229": {
+    "id": 3229,
+    "external_key": "MARINE_PAINFUL_ELBOW",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.painful_elbow.name",
+    "description_i18n_key": "battle.card.marine.painful_elbow.description",
+    "upgraded_description_i18n_key": "battle.card.marine.painful_elbow.upgrade_description",
+    "card_type": 0,
+    "rarity": 1,
+    "cost": 2,
+    "cost_kind": 0,
+    "upgraded_cost": 2,
+    "target_rule": 1,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 29,
+    "is_innate": false
+  },
+  "3230": {
+    "id": 3230,
+    "external_key": "MARINE_HEAVY_ELBOW",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.heavy_elbow.name",
+    "description_i18n_key": "battle.card.marine.heavy_elbow.description",
+    "upgraded_description_i18n_key": "battle.card.marine.heavy_elbow.upgrade_description",
+    "card_type": 0,
+    "rarity": 3,
+    "cost": 3,
+    "cost_kind": 0,
+    "upgraded_cost": 3,
+    "target_rule": 1,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 30,
+    "is_innate": false
+  },
+  "3231": {
+    "id": 3231,
+    "external_key": "MARINE_FIELD_SURGERY",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.field_surgery.name",
+    "description_i18n_key": "battle.card.marine.field_surgery.description",
+    "upgraded_description_i18n_key": "battle.card.marine.field_surgery.upgrade_description",
+    "card_type": 1,
+    "rarity": 3,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 1,
+    "upgraded_play_destination": 1,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 31,
+    "is_innate": false
+  },
+  "3232": {
+    "id": 3232,
+    "external_key": "MARINE_HURRICANE_ELBOW",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.hurricane_elbow.name",
+    "description_i18n_key": "battle.card.marine.hurricane_elbow.description",
+    "upgraded_description_i18n_key": "battle.card.marine.hurricane_elbow.upgrade_description",
+    "card_type": 0,
+    "rarity": 2,
+    "cost": 0,
+    "cost_kind": 1,
+    "upgraded_cost": 0,
+    "target_rule": 3,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 32,
+    "is_innate": false
+  },
+  "3233": {
+    "id": 3233,
+    "external_key": "MARINE_PRECISION_SHOT",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.precision_shot.name",
+    "description_i18n_key": "battle.card.marine.precision_shot.description",
+    "upgraded_description_i18n_key": "battle.card.marine.precision_shot.upgrade_description",
+    "card_type": 0,
+    "rarity": 3,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 1,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 33,
+    "is_innate": false
+  },
+  "3234": {
+    "id": 3234,
+    "external_key": "MARINE_TACTICAL_ADVANCE",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.tactical_advance.name",
+    "description_i18n_key": "battle.card.marine.tactical_advance.description",
+    "upgraded_description_i18n_key": "battle.card.marine.tactical_advance.upgrade_description",
+    "card_type": 1,
+    "rarity": 2,
+    "cost": 2,
+    "cost_kind": 0,
+    "upgraded_cost": 2,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 34,
+    "is_innate": false
+  },
+  "3235": {
+    "id": 3235,
+    "external_key": "MARINE_QUICK_ROLL",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.quick_roll.name",
+    "description_i18n_key": "battle.card.marine.quick_roll.description",
+    "upgraded_description_i18n_key": "battle.card.marine.quick_roll.upgrade_description",
+    "card_type": 1,
+    "rarity": 1,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 35,
+    "is_innate": false
+  },
+  "3236": {
+    "id": 3236,
+    "external_key": "MARINE_ELECTRO_BOOST",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.electro_boost.name",
+    "description_i18n_key": "battle.card.marine.electro_boost.description",
+    "upgraded_description_i18n_key": "battle.card.marine.electro_boost.upgrade_description",
+    "card_type": 2,
+    "rarity": 2,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 2,
+    "upgraded_play_destination": 2,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 36,
+    "is_innate": false
+  },
+  "3237": {
+    "id": 3237,
+    "external_key": "MARINE_GUIDED_NUKE",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.guided_nuke.name",
+    "description_i18n_key": "battle.card.marine.guided_nuke.description",
+    "upgraded_description_i18n_key": "battle.card.marine.guided_nuke.upgrade_description",
+    "card_type": 1,
+    "rarity": 3,
+    "cost": 5,
+    "cost_kind": 0,
+    "upgraded_cost": 5,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 37,
+    "is_innate": false
+  },
+  "3238": {
+    "id": 3238,
+    "external_key": "MARINE_BANSHEE_STRIKE",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.banshee_strike.name",
+    "description_i18n_key": "battle.card.marine.banshee_strike.description",
+    "upgraded_description_i18n_key": "battle.card.marine.banshee_strike.upgrade_description",
+    "card_type": 1,
+    "rarity": 2,
+    "cost": 2,
+    "cost_kind": 0,
+    "upgraded_cost": 2,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 38,
+    "is_innate": false
+  },
+  "3239": {
+    "id": 3239,
+    "external_key": "MARINE_FIRE_SUPPORT",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.fire_support.name",
+    "description_i18n_key": "battle.card.marine.fire_support.description",
+    "upgraded_description_i18n_key": "battle.card.marine.fire_support.upgrade_description",
+    "card_type": 1,
+    "rarity": 1,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 39,
+    "is_innate": false
+  },
+  "3240": {
+    "id": 3240,
+    "external_key": "MARINE_FIRE_BOMBARDMENT",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.fire_bombardment.name",
+    "description_i18n_key": "battle.card.marine.fire_bombardment.description",
+    "upgraded_description_i18n_key": "battle.card.marine.fire_bombardment.upgrade_description",
+    "card_type": 1,
+    "rarity": 2,
+    "cost": 2,
+    "cost_kind": 0,
+    "upgraded_cost": 2,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 40,
+    "is_innate": false
+  },
+  "3241": {
+    "id": 3241,
+    "external_key": "MARINE_FIVE_HUNDRED_POUNDER",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.five_hundred_pounder.name",
+    "description_i18n_key": "battle.card.marine.five_hundred_pounder.description",
+    "upgraded_description_i18n_key": "battle.card.marine.five_hundred_pounder.upgrade_description",
+    "card_type": 1,
+    "rarity": 3,
+    "cost": 3,
+    "cost_kind": 0,
+    "upgraded_cost": 2,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 41,
+    "is_innate": false
+  },
+  "3242": {
+    "id": 3242,
+    "external_key": "MARINE_COMBO_ELBOW",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.combo_elbow.name",
+    "description_i18n_key": "battle.card.marine.combo_elbow.description",
+    "upgraded_description_i18n_key": "battle.card.marine.combo_elbow.upgrade_description",
+    "card_type": 0,
+    "rarity": 1,
+    "cost": 2,
+    "cost_kind": 0,
+    "upgraded_cost": 2,
+    "target_rule": 1,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 42,
+    "is_innate": false
+  },
+  "3243": {
+    "id": 3243,
+    "external_key": "MARINE_OPPORTUNISTIC_STRIKE",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.opportunistic_strike.name",
+    "description_i18n_key": "battle.card.marine.opportunistic_strike.description",
+    "upgraded_description_i18n_key": "battle.card.marine.opportunistic_strike.upgrade_description",
+    "card_type": 0,
+    "rarity": 2,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 1,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 43,
+    "is_innate": false
+  },
+  "3244": {
+    "id": 3244,
+    "external_key": "MARINE_VENT_HEAT",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.vent_heat.name",
+    "description_i18n_key": "battle.card.marine.vent_heat.description",
+    "upgraded_description_i18n_key": "battle.card.marine.vent_heat.upgrade_description",
+    "card_type": 1,
+    "rarity": 2,
+    "cost": 0,
+    "cost_kind": 0,
+    "upgraded_cost": 0,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 44,
+    "is_innate": false
+  },
+  "3245": {
+    "id": 3245,
+    "external_key": "MARINE_POWER_OVERCLOCK",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.power_overclock.name",
+    "description_i18n_key": "battle.card.marine.power_overclock.description",
+    "upgraded_description_i18n_key": "battle.card.marine.power_overclock.upgrade_description",
+    "card_type": 2,
+    "rarity": 2,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 0,
+    "target_rule": 0,
+    "play_destination": 2,
+    "upgraded_play_destination": 2,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 45,
+    "is_innate": false
+  },
+  "3246": {
+    "id": 3246,
+    "external_key": "MARINE_GARRISON",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.garrison.name",
+    "description_i18n_key": "battle.card.marine.garrison.description",
+    "upgraded_description_i18n_key": "battle.card.marine.garrison.upgrade_description",
+    "card_type": 1,
+    "rarity": 2,
+    "cost": 2,
+    "cost_kind": 0,
+    "upgraded_cost": 2,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 46,
+    "is_innate": false
+  },
+  "3247": {
+    "id": 3247,
+    "external_key": "MARINE_SNIPER_SHOT",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.sniper_shot.name",
+    "description_i18n_key": "battle.card.marine.sniper_shot.description",
+    "upgraded_description_i18n_key": "battle.card.marine.sniper_shot.upgrade_description",
+    "card_type": 0,
+    "rarity": 2,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 1,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 47,
+    "is_innate": false
+  },
+  "3248": {
+    "id": 3248,
+    "external_key": "MARINE_SPIKE_SHOT",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.spike_shot.name",
+    "description_i18n_key": "battle.card.marine.spike_shot.description",
+    "upgraded_description_i18n_key": "battle.card.marine.spike_shot.upgrade_description",
+    "card_type": 0,
+    "rarity": 1,
+    "cost": 0,
+    "cost_kind": 0,
+    "upgraded_cost": 0,
+    "target_rule": 1,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 48,
+    "is_innate": false
+  },
+  "3249": {
+    "id": 3249,
+    "external_key": "MARINE_OPTICAL_CAMO",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.optical_camo.name",
+    "description_i18n_key": "battle.card.marine.optical_camo.description",
+    "upgraded_description_i18n_key": "battle.card.marine.optical_camo.upgrade_description",
+    "card_type": 1,
+    "rarity": 2,
+    "cost": 2,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 49,
+    "is_innate": false
+  },
+  "3250": {
+    "id": 3250,
+    "external_key": "MARINE_UNSTOPPABLE",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.unstoppable.name",
+    "description_i18n_key": "battle.card.marine.unstoppable.description",
+    "upgraded_description_i18n_key": "battle.card.marine.unstoppable.upgrade_description",
+    "card_type": 2,
+    "rarity": 3,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 2,
+    "upgraded_play_destination": 2,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 50,
+    "is_innate": false
+  },
+  "3251": {
+    "id": 3251,
+    "external_key": "MARINE_GUERRILLA_TACTICS",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.guerrilla_tactics.name",
+    "description_i18n_key": "battle.card.marine.guerrilla_tactics.description",
+    "upgraded_description_i18n_key": "battle.card.marine.guerrilla_tactics.upgrade_description",
+    "card_type": 2,
+    "rarity": 2,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 2,
+    "upgraded_play_destination": 2,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 51,
+    "is_innate": false
+  },
+  "3252": {
+    "id": 3252,
+    "external_key": "MARINE_EXPLOSIVE_ELBOW",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.explosive_elbow.name",
+    "description_i18n_key": "battle.card.marine.explosive_elbow.description",
+    "upgraded_description_i18n_key": "battle.card.marine.explosive_elbow.upgrade_description",
+    "card_type": 0,
+    "rarity": 2,
+    "cost": 2,
+    "cost_kind": 0,
+    "upgraded_cost": 2,
+    "target_rule": 1,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 52,
+    "is_innate": false
+  },
+  "3253": {
+    "id": 3253,
+    "external_key": "MARINE_AGED_OIL",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.aged_oil.name",
+    "description_i18n_key": "battle.card.marine.aged_oil.description",
+    "upgraded_description_i18n_key": "battle.card.marine.aged_oil.upgrade_description",
+    "card_type": 2,
+    "rarity": 2,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 2,
+    "upgraded_play_destination": 2,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 53,
+    "is_innate": false
+  },
+  "3254": {
+    "id": 3254,
+    "external_key": "MARINE_BURNING_OIL",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.burning_oil.name",
+    "description_i18n_key": "battle.card.marine.burning_oil.description",
+    "upgraded_description_i18n_key": "battle.card.marine.burning_oil.upgrade_description",
+    "card_type": 2,
+    "rarity": 2,
+    "cost": 2,
+    "cost_kind": 0,
+    "upgraded_cost": 2,
+    "target_rule": 0,
+    "play_destination": 2,
+    "upgraded_play_destination": 2,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 54,
+    "is_innate": false
+  },
+  "3255": {
+    "id": 3255,
+    "external_key": "MARINE_FLAME_ELBOW",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.flame_elbow.name",
+    "description_i18n_key": "battle.card.marine.flame_elbow.description",
+    "upgraded_description_i18n_key": "battle.card.marine.flame_elbow.upgrade_description",
+    "card_type": 0,
+    "rarity": 1,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 1,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 55,
+    "is_innate": false
+  },
+  "3256": {
+    "id": 3256,
+    "external_key": "MARINE_SIX_HITS",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.six_hits.name",
+    "description_i18n_key": "battle.card.marine.six_hits.description",
+    "upgraded_description_i18n_key": "battle.card.marine.six_hits.upgrade_description",
+    "card_type": 0,
+    "rarity": 2,
+    "cost": 2,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 1,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 56,
+    "is_innate": false
+  },
+  "3257": {
+    "id": 3257,
+    "external_key": "MARINE_TWELVE_HITS",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.twelve_hits.name",
+    "description_i18n_key": "battle.card.marine.twelve_hits.description",
+    "upgraded_description_i18n_key": "battle.card.marine.twelve_hits.upgrade_description",
+    "card_type": 0,
+    "rarity": 3,
+    "cost": 3,
+    "cost_kind": 0,
+    "upgraded_cost": 2,
+    "target_rule": 1,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 57,
+    "is_innate": false
+  },
+  "3258": {
+    "id": 3258,
+    "external_key": "MARINE_QUICK_MANEUVER",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.quick_maneuver.name",
+    "description_i18n_key": "battle.card.marine.quick_maneuver.description",
+    "upgraded_description_i18n_key": "battle.card.marine.quick_maneuver.upgrade_description",
+    "card_type": 1,
+    "rarity": 1,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 58,
+    "is_innate": false
+  },
+  "3259": {
+    "id": 3259,
+    "external_key": "MARINE_HOLO_DECOY",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.holo_decoy.name",
+    "description_i18n_key": "battle.card.marine.holo_decoy.description",
+    "upgraded_description_i18n_key": "battle.card.marine.holo_decoy.upgrade_description",
+    "card_type": 1,
+    "rarity": 2,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 1,
+    "upgraded_play_destination": 1,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 59,
+    "is_innate": false
+  },
+  "3260": {
+    "id": 3260,
+    "external_key": "MARINE_LIMIT_OVERLOAD",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.limit_overload.name",
+    "description_i18n_key": "battle.card.marine.limit_overload.description",
+    "upgraded_description_i18n_key": "battle.card.marine.limit_overload.upgrade_description",
+    "card_type": 1,
+    "rarity": 3,
+    "cost": 0,
+    "cost_kind": 0,
+    "upgraded_cost": 0,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 60,
+    "is_innate": false
+  },
+  "3261": {
+    "id": 3261,
+    "external_key": "MARINE_MACHINEGUN",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.machinegun.name",
+    "description_i18n_key": "battle.card.marine.machinegun.description",
+    "upgraded_description_i18n_key": "battle.card.marine.machinegun.upgrade_description",
+    "card_type": 1,
+    "rarity": 3,
+    "cost": 2,
+    "cost_kind": 0,
+    "upgraded_cost": 2,
+    "target_rule": 0,
+    "play_destination": 1,
+    "upgraded_play_destination": 1,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 61,
+    "is_innate": false
+  },
+  "3262": {
+    "id": 3262,
+    "external_key": "MARINE_DEFENSE_TARGET",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.defense_target.name",
+    "description_i18n_key": "battle.card.marine.defense_target.description",
+    "upgraded_description_i18n_key": "battle.card.marine.defense_target.upgrade_description",
+    "card_type": 1,
+    "rarity": 3,
+    "cost": 2,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 1,
+    "upgraded_play_destination": 1,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 62,
+    "is_innate": false
+  },
+  "3263": {
+    "id": 3263,
+    "external_key": "MARINE_MACHINEGUN_BURST",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.machinegun_burst.name",
+    "description_i18n_key": "battle.card.marine.machinegun_burst.description",
+    "upgraded_description_i18n_key": "battle.card.marine.machinegun_burst.upgrade_description",
+    "card_type": 0,
+    "rarity": 1,
+    "cost": 0,
+    "cost_kind": 0,
+    "upgraded_cost": 0,
+    "target_rule": 3,
+    "play_destination": 1,
+    "upgraded_play_destination": 1,
+    "has_upgrade": false,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 63,
+    "is_innate": false
+  },
+  "3264": {
+    "id": 3264,
+    "external_key": "MARINE_TRIPLE_STRIKE",
+    "catalog_snapshot_key": "marine-game-v1-20260807-cards",
+    "name_i18n_key": "battle.card.marine.triple_strike.name",
+    "description_i18n_key": "battle.card.marine.triple_strike.description",
+    "upgraded_description_i18n_key": "battle.card.marine.triple_strike.upgrade_description",
+    "card_type": 0,
+    "rarity": 3,
+    "cost": 4,
+    "cost_kind": 0,
+    "upgraded_cost": 4,
+    "target_rule": 1,
+    "play_destination": 1,
+    "upgraded_play_destination": 1,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 64,
+    "is_innate": false
+  },
+  "3265": {
+    "id": 3265,
+    "external_key": "MARINE_BOMBARD",
+    "catalog_snapshot_key": "marine-game-v2-20260812-cards",
+    "name_i18n_key": "battle.card.marine.bombard.name",
+    "description_i18n_key": "battle.card.marine.bombard.description",
+    "upgraded_description_i18n_key": "battle.card.marine.bombard.upgrade_description",
+    "card_type": 2,
+    "rarity": 2,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 2,
+    "upgraded_play_destination": 2,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 65,
+    "is_innate": false
+  },
+  "3266": {
+    "id": 3266,
+    "external_key": "MARINE_SKY_WRATH",
+    "catalog_snapshot_key": "marine-game-v2-20260812-cards",
+    "name_i18n_key": "battle.card.marine.sky_wrath.name",
+    "description_i18n_key": "battle.card.marine.sky_wrath.description",
+    "upgraded_description_i18n_key": "battle.card.marine.sky_wrath.upgrade_description",
+    "card_type": 2,
+    "rarity": 3,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 0,
+    "target_rule": 0,
+    "play_destination": 2,
+    "upgraded_play_destination": 2,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 66,
+    "is_innate": false
+  },
+  "3267": {
+    "id": 3267,
+    "external_key": "MARINE_PORTABLE_HELPER",
+    "catalog_snapshot_key": "marine-game-v2-20260812-cards",
+    "name_i18n_key": "battle.card.marine.portable_helper.name",
+    "description_i18n_key": "battle.card.marine.portable_helper.description",
+    "upgraded_description_i18n_key": "battle.card.marine.portable_helper.upgrade_description",
+    "card_type": 2,
+    "rarity": 2,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 0,
+    "target_rule": 0,
+    "play_destination": 2,
+    "upgraded_play_destination": 2,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 67,
+    "is_innate": false
+  },
+  "3268": {
+    "id": 3268,
+    "external_key": "MARINE_PRIVATE_MOD",
+    "catalog_snapshot_key": "marine-game-v2-20260812-cards",
+    "name_i18n_key": "battle.card.marine.private_mod.name",
+    "description_i18n_key": "battle.card.marine.private_mod.description",
+    "upgraded_description_i18n_key": "battle.card.marine.private_mod.upgrade_description",
+    "card_type": 2,
+    "rarity": 2,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 2,
+    "upgraded_play_destination": 2,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 68,
+    "is_innate": false
+  },
+  "3269": {
+    "id": 3269,
+    "external_key": "MARINE_CHAIN_SMOKE",
+    "catalog_snapshot_key": "marine-game-v2-20260812-cards",
+    "name_i18n_key": "battle.card.marine.chain_smoke.name",
+    "description_i18n_key": "battle.card.marine.chain_smoke.description",
+    "upgraded_description_i18n_key": "battle.card.marine.chain_smoke.upgrade_description",
+    "card_type": 1,
+    "rarity": 1,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 69,
+    "is_innate": false
+  },
+  "3270": {
+    "id": 3270,
+    "external_key": "MARINE_SECONDHAND_SMOKE",
+    "catalog_snapshot_key": "marine-game-v2-20260812-cards",
+    "name_i18n_key": "battle.card.marine.secondhand_smoke.name",
+    "description_i18n_key": "battle.card.marine.secondhand_smoke.description",
+    "upgraded_description_i18n_key": "battle.card.marine.secondhand_smoke.upgrade_description",
+    "card_type": 1,
+    "rarity": 2,
+    "cost": 0,
+    "cost_kind": 0,
+    "upgraded_cost": 0,
+    "target_rule": 1,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 70,
+    "is_innate": false
+  },
+  "3271": {
+    "id": 3271,
+    "external_key": "MARINE_DEFENSIVE_STANCE",
+    "catalog_snapshot_key": "marine-game-v2-20260812-cards",
+    "name_i18n_key": "battle.card.marine.defensive_stance.name",
+    "description_i18n_key": "battle.card.marine.defensive_stance.description",
+    "upgraded_description_i18n_key": "battle.card.marine.defensive_stance.upgrade_description",
+    "card_type": 1,
+    "rarity": 2,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 71,
+    "is_innate": false
+  },
+  "3272": {
+    "id": 3272,
+    "external_key": "MARINE_EMERGENCY_COOLING",
+    "catalog_snapshot_key": "marine-game-v2-20260812-cards",
+    "name_i18n_key": "battle.card.marine.emergency_cooling.name",
+    "description_i18n_key": "battle.card.marine.emergency_cooling.description",
+    "upgraded_description_i18n_key": "battle.card.marine.emergency_cooling.upgrade_description",
+    "card_type": 1,
+    "rarity": 2,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 72,
+    "is_innate": false
+  },
+  "3273": {
+    "id": 3273,
+    "external_key": "MARINE_THERMITE_BOMB",
+    "catalog_snapshot_key": "marine-game-v2-20260812-cards",
+    "name_i18n_key": "battle.card.marine.thermite_bomb.name",
+    "description_i18n_key": "battle.card.marine.thermite_bomb.description",
+    "upgraded_description_i18n_key": "battle.card.marine.thermite_bomb.upgrade_description",
+    "card_type": 1,
+    "rarity": 2,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 2,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 73,
+    "is_innate": false
+  },
+  "3274": {
+    "id": 3274,
+    "external_key": "MARINE_NEEDLE_STORM",
+    "catalog_snapshot_key": "marine-game-v2-20260812-cards",
+    "name_i18n_key": "battle.card.marine.needle_storm.name",
+    "description_i18n_key": "battle.card.marine.needle_storm.description",
+    "upgraded_description_i18n_key": "battle.card.marine.needle_storm.upgrade_description",
+    "card_type": 1,
+    "rarity": 1,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 74,
+    "is_innate": false
+  },
+  "3275": {
+    "id": 3275,
+    "external_key": "MARINE_STEALTH_ACTION",
+    "catalog_snapshot_key": "marine-game-v2-20260812-cards",
+    "name_i18n_key": "battle.card.marine.stealth_action.name",
+    "description_i18n_key": "battle.card.marine.stealth_action.description",
+    "upgraded_description_i18n_key": "battle.card.marine.stealth_action.upgrade_description",
+    "card_type": 1,
+    "rarity": 2,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 0,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 75,
+    "is_innate": true
+  },
+  "3276": {
+    "id": 3276,
+    "external_key": "MARINE_FOEHN_WIND",
+    "catalog_snapshot_key": "marine-game-v2-20260812-cards",
+    "name_i18n_key": "battle.card.marine.foehn_wind.name",
+    "description_i18n_key": "battle.card.marine.foehn_wind.description",
+    "upgraded_description_i18n_key": "battle.card.marine.foehn_wind.upgrade_description",
+    "card_type": 1,
+    "rarity": 2,
+    "cost": 2,
+    "cost_kind": 0,
+    "upgraded_cost": 2,
+    "target_rule": 1,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 76,
+    "is_innate": false
+  },
+  "3277": {
+    "id": 3277,
+    "external_key": "MARINE_PREEMPTIVE_STRIKE",
+    "catalog_snapshot_key": "marine-game-v2-20260812-cards",
+    "name_i18n_key": "battle.card.marine.preemptive_strike.name",
+    "description_i18n_key": "battle.card.marine.preemptive_strike.description",
+    "upgraded_description_i18n_key": "battle.card.marine.preemptive_strike.upgrade_description",
+    "card_type": 0,
+    "rarity": 2,
+    "cost": 0,
+    "cost_kind": 0,
+    "upgraded_cost": 0,
+    "target_rule": 1,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 77,
+    "is_innate": false
+  },
+  "3278": {
+    "id": 3278,
+    "external_key": "MARINE_BULLY",
+    "catalog_snapshot_key": "marine-game-v2-20260812-cards",
+    "name_i18n_key": "battle.card.marine.bully.name",
+    "description_i18n_key": "battle.card.marine.bully.description",
+    "upgraded_description_i18n_key": "battle.card.marine.bully.upgrade_description",
+    "card_type": 0,
+    "rarity": 2,
+    "cost": 0,
+    "cost_kind": 0,
+    "upgraded_cost": 0,
+    "target_rule": 1,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 78,
+    "is_innate": false
+  },
+  "3279": {
+    "id": 3279,
+    "external_key": "MARINE_PRISMATIC_SHOT",
+    "catalog_snapshot_key": "marine-game-v2-20260812-cards",
+    "name_i18n_key": "battle.card.marine.prismatic_shot.name",
+    "description_i18n_key": "battle.card.marine.prismatic_shot.description",
+    "upgraded_description_i18n_key": "battle.card.marine.prismatic_shot.upgrade_description",
+    "card_type": 0,
+    "rarity": 3,
+    "cost": 0,
+    "cost_kind": 0,
+    "upgraded_cost": 0,
+    "target_rule": 1,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 79,
+    "is_innate": false
+  },
+  "3280": {
+    "id": 3280,
+    "external_key": "MARINE_MARK",
+    "catalog_snapshot_key": "marine-game-v2-20260812-cards",
+    "name_i18n_key": "battle.card.marine.mark.name",
+    "description_i18n_key": "battle.card.marine.mark.description",
+    "upgraded_description_i18n_key": "battle.card.marine.mark.upgrade_description",
+    "card_type": 0,
+    "rarity": 1,
+    "cost": 0,
+    "cost_kind": 0,
+    "upgraded_cost": 0,
+    "target_rule": 1,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 80,
+    "is_innate": false
+  },
+  "3281": {
+    "id": 3281,
+    "external_key": "MARINE_CRUSH",
+    "catalog_snapshot_key": "marine-game-v2-20260812-cards",
+    "name_i18n_key": "battle.card.marine.crush.name",
+    "description_i18n_key": "battle.card.marine.crush.description",
+    "upgraded_description_i18n_key": "battle.card.marine.crush.upgrade_description",
+    "card_type": 0,
+    "rarity": 2,
+    "cost": 1,
+    "cost_kind": 0,
+    "upgraded_cost": 1,
+    "target_rule": 1,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 81,
+    "is_innate": false
+  },
+  "3282": {
+    "id": 3282,
+    "external_key": "MARINE_CHARGED_BURST",
+    "catalog_snapshot_key": "marine-game-v2-20260812-cards",
+    "name_i18n_key": "battle.card.marine.charged_burst.name",
+    "description_i18n_key": "battle.card.marine.charged_burst.description",
+    "upgraded_description_i18n_key": "battle.card.marine.charged_burst.upgrade_description",
+    "card_type": 0,
+    "rarity": 2,
+    "cost": 2,
+    "cost_kind": 0,
+    "upgraded_cost": 2,
+    "target_rule": 2,
+    "play_destination": 0,
+    "upgraded_play_destination": 0,
+    "has_upgrade": true,
+    "implementation_status": 0,
+    "effect_bindings": [],
+    "illustration_key": "art_placeholder",
+    "program_id": 82,
+    "is_innate": false
   }
 }

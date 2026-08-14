@@ -342,12 +342,15 @@ public sealed class BattleCommandPresentationPlanTests
         Assert.That(result.Settlements.Select(item => item.Order), Is.EqualTo(new[] { 1, 0 }));
     }
 
-    /// <summary>确认出牌结果存在多条离手记录时同步拒绝歧义，而不是静默选择其中一张。</summary>
+    /// <summary>确认换手牌会保留多张弃牌与当前牌消耗事实，但不因无法唯一推导出牌前奏而抛错或伪造前奏。</summary>
     [Test]
-    public void Create_PlayCardWithMultipleHandToDiscard_ThrowsAmbiguousPrelude()
+    public void Create_PlayCardWithMultipleHandDiscardsAndExhaustedSource_DoesNotThrowOrFakePrelude()
     {
         var playerId = new CombatantId(1001);
-        var enemyId = new CombatantId(2001);
+        var firstDiscardedCardId = new CardInstanceId(15);
+        var secondDiscardedCardId = new CardInstanceId(16);
+        var thirdDiscardedCardId = new CardInstanceId(17);
+        var resolvingCardId = new CardInstanceId(18);
         var result = new BattleCommandExecutionResult(
             authoritySequence: 7,
             BattleCommandType.PlayCard,
@@ -355,31 +358,135 @@ public sealed class BattleCommandPresentationPlanTests
             BattleCommandExecutionFailureReason.None,
             new BattleSettlementRecord[]
             {
-                new BattleEnergySpentSettlement(0, playerId, 3, 2),
-                new BattleDamageAppliedSettlement(
+                new BattleEnergySpentSettlement(0, playerId, 3, 1),
+                new BattleBlockGainedSettlement(
                     1,
-                    new BattleEffectId(4301),
+                    effectId: null,
                     playerId,
-                    enemyId,
-                    6,
-                    0,
-                    0,
-                    20,
-                    14),
+                    playerId,
+                    blockBefore: 0,
+                    blockAfter: 10),
                 new BattleCardMovedSettlement(
                     2,
-                    new CardInstanceId(15),
+                    resolvingCardId,
+                    BattleCardZone.Hand,
+                    BattleCardZone.ExhaustPile),
+                new BattleCardMovedSettlement(
+                    3,
+                    firstDiscardedCardId,
                     BattleCardZone.Hand,
                     BattleCardZone.DiscardPile),
                 new BattleCardMovedSettlement(
-                    3,
-                    new CardInstanceId(16),
+                    4,
+                    secondDiscardedCardId,
+                    BattleCardZone.Hand,
+                    BattleCardZone.DiscardPile),
+                new BattleCardMovedSettlement(
+                    5,
+                    thirdDiscardedCardId,
                     BattleCardZone.Hand,
                     BattleCardZone.DiscardPile),
             });
 
-        Assert.Throws<System.ArgumentException>(
-            () => BattleCommandPresentationPlan.Create(result));
+        BattleCommandPresentationPlan plan = null;
+
+        Assert.DoesNotThrow(() => plan = BattleCommandPresentationPlan.Create(result));
+        Assert.That(plan.Prelude, Is.Null);
+        Assert.That(
+            plan.SettlementSteps.Select(item =>
+                (item.Kind, item.SettlementOrder, item.SubstepIndex)),
+            Is.EqualTo(new[]
+            {
+                (BattleCommandPresentationStepKind.BlockGainedNumber, 1, 0),
+                (BattleCommandPresentationStepKind.CardMoved, 2, 0),
+                (BattleCommandPresentationStepKind.CardMoved, 3, 0),
+                (BattleCommandPresentationStepKind.CardMoved, 4, 0),
+                (BattleCommandPresentationStepKind.CardMoved, 5, 0),
+            }));
+    }
+
+    /// <summary>确认临时卡创建事实派生独立的可见入手步骤，并保持多弃牌出牌没有伪造的抽牌移动或歧义前奏。</summary>
+    [Test]
+    public void Create_PlayCardWithCreatedCards_DerivesVisibleCreatedToHandStepsWithoutFakeDraw()
+    {
+        var playerId = new CombatantId(1001);
+        var resolvingCardId = new CardInstanceId(31);
+        var firstDiscardedCardId = new CardInstanceId(32);
+        var secondDiscardedCardId = new CardInstanceId(33);
+        var firstCreatedCardId = new CardInstanceId(34);
+        var secondCreatedCardId = new CardInstanceId(35);
+        var sourceExhausted = new BattleCardMovedSettlement(
+            2,
+            resolvingCardId,
+            BattleCardZone.Hand,
+            BattleCardZone.ExhaustPile);
+        var firstDiscarded = new BattleCardMovedSettlement(
+            3,
+            firstDiscardedCardId,
+            BattleCardZone.Hand,
+            BattleCardZone.DiscardPile);
+        var secondDiscarded = new BattleCardMovedSettlement(
+            4,
+            secondDiscardedCardId,
+            BattleCardZone.Hand,
+            BattleCardZone.DiscardPile);
+        var firstCreated = new BattleCardCreatedSettlement(
+            5,
+            firstCreatedCardId,
+            templateId: 3263,
+            BattleCardZone.Hand);
+        var secondCreated = new BattleCardCreatedSettlement(
+            6,
+            secondCreatedCardId,
+            templateId: 3263,
+            BattleCardZone.Hand);
+        var result = new BattleCommandExecutionResult(
+            authoritySequence: 71,
+            BattleCommandType.PlayCard,
+            playerId,
+            BattleCommandExecutionFailureReason.None,
+            new BattleSettlementRecord[]
+            {
+                new BattleEnergySpentSettlement(0, playerId, 2, 0),
+                new BattleBlockGainedSettlement(1, null, playerId, playerId, 0, 10),
+                sourceExhausted,
+                firstDiscarded,
+                secondDiscarded,
+                firstCreated,
+                secondCreated,
+            });
+
+        BattleCommandPresentationPlan plan = BattleCommandPresentationPlan.Create(result);
+
+        Assert.That(plan.Prelude, Is.Null);
+        Assert.That(plan.SettlementEntries.Select(item => item.Settlement),
+            Is.EqualTo(result.Settlements));
+        Assert.That(
+            plan.SettlementSteps.Select(item =>
+                (item.Kind, item.SettlementOrder, item.SubstepIndex, item.Settlement)),
+            Is.EqualTo(new[]
+            {
+                (BattleCommandPresentationStepKind.BlockGainedNumber, 1, 0,
+                    (BattleSettlementRecord)result.Settlements[1]),
+                (BattleCommandPresentationStepKind.CardMoved, 2, 0,
+                    (BattleSettlementRecord)sourceExhausted),
+                (BattleCommandPresentationStepKind.CardMoved, 3, 0,
+                    (BattleSettlementRecord)firstDiscarded),
+                (BattleCommandPresentationStepKind.CardMoved, 4, 0,
+                    (BattleSettlementRecord)secondDiscarded),
+                (BattleCommandPresentationStepKind.CardCreated, 5, 0,
+                    (BattleSettlementRecord)firstCreated),
+                (BattleCommandPresentationStepKind.CardCreated, 6, 0,
+                    (BattleSettlementRecord)secondCreated),
+            }));
+        Assert.That(plan.SettlementSteps
+            .Where(item => item.Kind == BattleCommandPresentationStepKind.CardCreated)
+            .Select(item => ((BattleCardCreatedSettlement)item.Settlement).CardId),
+            Is.EqualTo(new[] { firstCreatedCardId, secondCreatedCardId }));
+        Assert.That(plan.SettlementSteps
+            .Where(item => item.Kind == BattleCommandPresentationStepKind.CardMoved)
+            .Select(item => ((BattleCardMovedSettlement)item.Settlement).FromZone),
+            Is.All.EqualTo(BattleCardZone.Hand));
     }
 
     /// <summary>确认伤害记录只读实际吸收与生命损失，并以格挡字、生命字、抖动、死亡固定子序播放。</summary>
@@ -433,6 +540,127 @@ public sealed class BattleCommandPresentationPlanTests
         Assert.That(fatalOverflow.BlockAbsorbed, Is.EqualTo(3));
         Assert.That(fatalOverflow.HealthLoss, Is.EqualTo(5));
         Assert.That(fatalOverflow.WasFatal, Is.True);
+    }
+
+    /// <summary>确认中毒触发只派生生命飘字，且仅致命触发随后派生死亡，不伪造攻击抖动或格挡吸收。</summary>
+    [Test]
+    public void Create_PoisonTicks_DeriveOnlyHealthLossAndFatalDeathWithoutAttackFeedback()
+    {
+        var nonfatalTargetId = new CombatantId(2001);
+        var fatalTargetId = new CombatantId(2002);
+        var nonfatal = new BattlePoisonTickedSettlement(
+            order: 0,
+            nonfatalTargetId,
+            new BattlePoisonTickOutcome(
+                healthBefore: 10,
+                blockBefore: 5,
+                poisonBefore: 4));
+        var fatal = new BattlePoisonTickedSettlement(
+            order: 1,
+            fatalTargetId,
+            new BattlePoisonTickOutcome(
+                healthBefore: 3,
+                blockBefore: 7,
+                poisonBefore: 4));
+        var result = new BattleCommandExecutionResult(
+            authoritySequence: 83,
+            BattleCommandType.CompleteEnemyAction,
+            submitterId: null,
+            BattleCommandExecutionFailureReason.None,
+            new BattleSettlementRecord[] { nonfatal, fatal });
+
+        BattleCommandPresentationPlan plan = BattleCommandPresentationPlan.Create(result);
+
+        Assert.That(
+            plan.SettlementSteps.Select(item =>
+                (item.Kind, item.SettlementOrder, item.SubstepIndex, item.Settlement)),
+            Is.EqualTo(new[]
+            {
+                (BattleCommandPresentationStepKind.HealthLossNumber,
+                    0,
+                    0,
+                    (BattleSettlementRecord)nonfatal),
+                (BattleCommandPresentationStepKind.HealthLossNumber,
+                    1,
+                    0,
+                    (BattleSettlementRecord)fatal),
+                (BattleCommandPresentationStepKind.DeathTransition,
+                    1,
+                    1,
+                    (BattleSettlementRecord)fatal),
+            }));
+        Assert.That(
+            plan.SettlementSteps.Select(item => item.Kind),
+            Has.None.EqualTo(BattleCommandPresentationStepKind.HitShake));
+        Assert.That(
+            plan.SettlementSteps.Select(item => item.Kind),
+            Has.None.EqualTo(BattleCommandPresentationStepKind.BlockAbsorbedNumber));
+    }
+
+    /// <summary>确认治疗结算始终保留 entry，但只有实际恢复量为正时才派生一个治疗飘字步骤。</summary>
+    [Test]
+    public void Create_HealthRestored_DerivesNumberOnlyForPositiveActualAmount()
+    {
+        var playerId = new CombatantId(1001);
+        var healed = new BattleHealthRestoredSettlement(
+            order: 0,
+            new BattleEffectId(4411),
+            playerId,
+            playerId,
+            new BattleHealthRestorationOutcome(
+                requestedAmount: 10,
+                healthBefore: 23,
+                healthAfter: 30));
+        var cappedAtFullHealth = new BattleHealthRestoredSettlement(
+            order: 1,
+            new BattleEffectId(4412),
+            playerId,
+            playerId,
+            new BattleHealthRestorationOutcome(
+                requestedAmount: 10,
+                healthBefore: 30,
+                healthAfter: 30));
+        var result = new BattleCommandExecutionResult(
+            authoritySequence: 81,
+            BattleCommandType.EndPlayerAction,
+            playerId,
+            BattleCommandExecutionFailureReason.None,
+            new BattleSettlementRecord[] { healed, cappedAtFullHealth });
+
+        BattleCommandPresentationPlan plan = BattleCommandPresentationPlan.Create(result);
+
+        Assert.That(
+            plan.SettlementEntries.Select(item => (item.Order, item.Settlement)),
+            Is.EqualTo(new[]
+            {
+                (0, (BattleSettlementRecord)healed),
+                (1, (BattleSettlementRecord)cappedAtFullHealth),
+            }));
+        Assert.That(
+            plan.SettlementEntries[0].Steps.Select(item =>
+                (item.Kind, item.SettlementOrder, item.SubstepIndex, item.Settlement)),
+            Is.EqualTo(new[]
+            {
+                (BattleCommandPresentationStepKind.HealthRestoredNumber,
+                    0,
+                    0,
+                    (BattleSettlementRecord)healed),
+            }));
+        Assert.That(plan.SettlementEntries[1].Steps, Is.Empty);
+        Assert.That(
+            plan.SettlementSteps.Select(item =>
+                (item.Kind, item.SettlementOrder, item.SubstepIndex, item.Settlement)),
+            Is.EqualTo(new[]
+            {
+                (BattleCommandPresentationStepKind.HealthRestoredNumber,
+                    0,
+                    0,
+                    (BattleSettlementRecord)healed),
+            }));
+        Assert.That(healed.RequestedAmount, Is.EqualTo(10));
+        Assert.That(healed.Amount, Is.EqualTo(7));
+        Assert.That(cappedAtFullHealth.RequestedAmount, Is.EqualTo(10));
+        Assert.That(cappedAtFullHealth.Amount, Is.Zero);
     }
 
     /// <summary>确认格挡增加记录只派生实际增加量飘字，不重算或保存最终 Block。</summary>
@@ -548,7 +776,7 @@ public sealed class BattleCommandPresentationPlanTests
         Assert.That(expired.ValueAfter, Is.Zero);
     }
 
-    /// <summary>确认卡区只映射抽牌、离手和重洗，不为 Exhaust 或重洗内部搬运制造额外 cue。</summary>
+    /// <summary>确认卡区映射抽牌、弃牌、消耗和重洗，但不为重洗内部搬运制造额外 cue。</summary>
     [Test]
     public void Create_CardZoneSettlements_MapOnlyAuthorizedMotionRoutes()
     {
@@ -597,7 +825,7 @@ public sealed class BattleCommandPresentationPlanTests
 
         Assert.That(
             plan.SettlementEntries.Select(item => item.Steps.Count),
-            Is.EqualTo(new[] { 1, 1, 0, 0, 1 }));
+            Is.EqualTo(new[] { 1, 1, 0, 1, 1 }));
         Assert.That(
             plan.SettlementSteps.Select(item =>
                 (item.Kind, item.SettlementOrder, item.SubstepIndex)),
@@ -605,6 +833,7 @@ public sealed class BattleCommandPresentationPlanTests
             {
                 (BattleCommandPresentationStepKind.CardMoved, 0, 0),
                 (BattleCommandPresentationStepKind.CardMoved, 1, 0),
+                (BattleCommandPresentationStepKind.CardMoved, 3, 0),
                 (BattleCommandPresentationStepKind.CardsReshuffled, 4, 0),
             }));
         Assert.That(
@@ -703,7 +932,7 @@ public sealed class BattleCommandPresentationPlanTests
             }));
     }
 
-    /// <summary>确认五类仅更新最终 HUD 或明确 skip 的记录仍保留 entry，但不会制造可见步骤。</summary>
+    /// <summary>确认七类仅更新最终 HUD 或明确 skip 的记录仍保留 entry，但不会制造可见步骤。</summary>
     [Test]
     public void Create_ZeroFeedbackSettlementTypes_PreserveEntriesWithoutVisibleSteps()
     {
@@ -712,16 +941,18 @@ public sealed class BattleCommandPresentationPlanTests
         var settlements = new BattleSettlementRecord[]
         {
             new BattleEnergySpentSettlement(0, playerId, 3, 2),
+            new BattleEnergyGainedSettlement(1, playerId, 2, 4),
             new BattleOperationSkippedSettlement(
-                1,
+                2,
                 new BattleEffectId(4701),
                 playerId,
                 enemyId,
                 BattleOperationSkipReason.TargetNotAlive),
-            new BattleBlockClearedSettlement(2, enemyId, blockBefore: 4),
-            new BattleEnergyRefilledSettlement(3, playerId, 0, 3),
+            new BattleBlockClearedSettlement(3, enemyId, blockBefore: 4),
+            new BattleEnergyRefilledSettlement(4, playerId, 0, 3),
+            new BattleAmmoRefilledSettlement(5, playerId, 0, 5),
             new BattleEnemyActionSkippedSettlement(
-                4,
+                6,
                 enemyId,
                 BattleEnemyActionSkipReason.SourceNotAlive),
         };

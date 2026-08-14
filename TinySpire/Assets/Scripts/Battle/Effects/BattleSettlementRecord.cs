@@ -76,6 +76,78 @@ namespace TinySpire.Battle
         }
     }
 
+    /// <summary>卡牌效果即时获得能量的不可变记录，与回合开始的基础补给语义分离。</summary>
+    public sealed class BattleEnergyGainedSettlement : BattleSettlementRecord
+    {
+        /// <summary>获得前能量。</summary>
+        public int EnergyBefore { get; }
+
+        /// <summary>获得后能量。</summary>
+        public int EnergyAfter { get; }
+
+        /// <summary>本次实际获得量。</summary>
+        public int Amount { get; }
+
+        /// <summary>冻结一次受硬上限约束的即时能量获得结果。</summary>
+        internal BattleEnergyGainedSettlement(
+            int order,
+            CombatantId sourceId,
+            int energyBefore,
+            int energyAfter)
+            : base(
+                order,
+                BattleSettlementRecordType.EnergyGained,
+                null,
+                sourceId,
+                null)
+        {
+            if (energyBefore < 0)
+                throw new ArgumentOutOfRangeException(nameof(energyBefore));
+            if (energyAfter <= energyBefore)
+                throw new ArgumentOutOfRangeException(nameof(energyAfter));
+
+            EnergyBefore = energyBefore;
+            EnergyAfter = energyAfter;
+            Amount = energyAfter - energyBefore;
+        }
+    }
+
+    /// <summary>成功支付卡牌弹药消耗的不可变记录。</summary>
+    public sealed class BattleAmmoSpentSettlement : BattleSettlementRecord
+    {
+        /// <summary>支付前弹药。</summary>
+        public int AmmoBefore { get; }
+
+        /// <summary>支付后弹药。</summary>
+        public int AmmoAfter { get; }
+
+        /// <summary>实际支付量。</summary>
+        public int Amount { get; }
+
+        /// <summary>冻结一次弹药支付结果。</summary>
+        internal BattleAmmoSpentSettlement(
+            int order,
+            CombatantId sourceId,
+            int ammoBefore,
+            int ammoAfter)
+            : base(
+                order,
+                BattleSettlementRecordType.AmmoSpent,
+                null,
+                sourceId,
+                null)
+        {
+            if (ammoBefore < 0)
+                throw new ArgumentOutOfRangeException(nameof(ammoBefore));
+            if (ammoAfter < 0 || ammoAfter > ammoBefore)
+                throw new ArgumentOutOfRangeException(nameof(ammoAfter));
+
+            AmmoBefore = ammoBefore;
+            AmmoAfter = ammoAfter;
+            Amount = ammoBefore - ammoAfter;
+        }
+    }
+
     /// <summary>一次伤害对格挡与生命造成的不可变结果。</summary>
     public sealed class BattleDamageAppliedSettlement : BattleSettlementRecord
     {
@@ -106,7 +178,7 @@ namespace TinySpire.Battle
         /// <summary>冻结一次伤害对格挡和生命的完整结果。</summary>
         internal BattleDamageAppliedSettlement(
             int order,
-            BattleEffectId effectId,
+            BattleEffectId? effectId,
             CombatantId sourceId,
             CombatantId targetId,
             int attackValue,
@@ -132,6 +204,92 @@ namespace TinySpire.Battle
         }
     }
 
+    /// <summary>一次回合开始中毒触发产生的绕过格挡生命损失与层数衰减记录。</summary>
+    public sealed class BattlePoisonTickedSettlement : BattleSettlementRecord
+    {
+        /// <summary>触发前生命。</summary>
+        public int HealthBefore { get; }
+
+        /// <summary>触发后生命。</summary>
+        public int HealthAfter { get; }
+
+        /// <summary>本次实际损失的生命。</summary>
+        public int HealthLoss { get; }
+
+        /// <summary>触发前格挡。</summary>
+        public int BlockBefore { get; }
+
+        /// <summary>触发后格挡；中毒绕过格挡，因此与触发前相同。</summary>
+        public int BlockAfter { get; }
+
+        /// <summary>触发前中毒层数。</summary>
+        public int PoisonBefore { get; }
+
+        /// <summary>触发后中毒层数。</summary>
+        public int PoisonAfter { get; }
+
+        /// <summary>此次触发是否令原本存活的目标死亡。</summary>
+        public bool WasFatal { get; }
+
+        /// <summary>冻结一次中毒触发的生命、格挡与层数终局；来源和目标都归因于触发者自身。</summary>
+        internal BattlePoisonTickedSettlement(
+            int order,
+            CombatantId targetId,
+            BattlePoisonTickOutcome outcome)
+            : base(
+                order,
+                BattleSettlementRecordType.PoisonTicked,
+                effectId: null,
+                sourceId: targetId,
+                targetId: targetId)
+        {
+            HealthBefore = outcome.HealthBefore;
+            HealthAfter = outcome.HealthAfter;
+            HealthLoss = outcome.HealthLoss;
+            BlockBefore = outcome.BlockBefore;
+            BlockAfter = outcome.BlockAfter;
+            PoisonBefore = outcome.PoisonBefore;
+            PoisonAfter = outcome.PoisonAfter;
+            WasFatal = outcome.WasFatal;
+        }
+    }
+
+    /// <summary>一次受生命上限约束的治疗产生的不可变结果。</summary>
+    public sealed class BattleHealthRestoredSettlement : BattleSettlementRecord
+    {
+        /// <summary>归一化后请求恢复的非负生命量。</summary>
+        public int RequestedAmount { get; }
+
+        /// <summary>治疗前生命。</summary>
+        public int HealthBefore { get; }
+
+        /// <summary>治疗后生命。</summary>
+        public int HealthAfter { get; }
+
+        /// <summary>受生命上限约束后实际恢复的生命量，可为零。</summary>
+        public int Amount { get; }
+
+        /// <summary>冻结一次治疗的请求量、前后生命与实际恢复量。</summary>
+        internal BattleHealthRestoredSettlement(
+            int order,
+            BattleEffectId? effectId,
+            CombatantId sourceId,
+            CombatantId targetId,
+            BattleHealthRestorationOutcome outcome)
+            : base(
+                order,
+                BattleSettlementRecordType.HealthRestored,
+                effectId,
+                sourceId,
+                targetId)
+        {
+            RequestedAmount = outcome.RequestedAmount;
+            HealthBefore = outcome.HealthBefore;
+            HealthAfter = outcome.HealthAfter;
+            Amount = outcome.Amount;
+        }
+    }
+
     /// <summary>一次格挡累加的不可变结果。</summary>
     public sealed class BattleBlockGainedSettlement : BattleSettlementRecord
     {
@@ -147,7 +305,7 @@ namespace TinySpire.Battle
         /// <summary>冻结一次格挡累加结果。</summary>
         internal BattleBlockGainedSettlement(
             int order,
-            BattleEffectId effectId,
+            BattleEffectId? effectId,
             CombatantId sourceId,
             CombatantId targetId,
             int blockBefore,
@@ -221,7 +379,7 @@ namespace TinySpire.Battle
         /// <summary>冻结一次状态累加结果。</summary>
         internal BattleStatusAppliedSettlement(
             int order,
-            BattleEffectId effectId,
+            BattleEffectId? effectId,
             CombatantId sourceId,
             CombatantId targetId,
             BattleStatusType status,
@@ -268,6 +426,42 @@ namespace TinySpire.Battle
         {
             CardId = cardId;
             FromZone = fromZone;
+            ToZone = toZone;
+        }
+    }
+
+    /// <summary>一张战斗内临时卡牌实例被创建并直接进入指定权威卡区的不可变记录。</summary>
+    public sealed class BattleCardCreatedSettlement : BattleSettlementRecord
+    {
+        /// <summary>本次创建得到的战斗内卡牌实例。</summary>
+        public CardInstanceId CardId { get; }
+
+        /// <summary>新实例引用的静态卡牌模板。</summary>
+        public int TemplateId { get; }
+
+        /// <summary>新实例创建后直接进入的权威卡区。</summary>
+        public BattleCardZone ToZone { get; }
+
+        /// <summary>冻结一次不伪造成跨卡区移动的战斗内卡牌创建。</summary>
+        internal BattleCardCreatedSettlement(
+            int order,
+            CardInstanceId cardId,
+            int templateId,
+            BattleCardZone toZone)
+            : base(
+                order,
+                BattleSettlementRecordType.CardCreated,
+                null,
+                null,
+                null)
+        {
+            if (templateId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(templateId));
+            if (toZone != BattleCardZone.Hand)
+                throw new ArgumentOutOfRangeException(nameof(toZone));
+
+            CardId = cardId;
+            TemplateId = templateId;
             ToZone = toZone;
         }
     }
@@ -428,6 +622,42 @@ namespace TinySpire.Battle
             EnergyBefore = energyBefore;
             EnergyAfter = energyAfter;
             Amount = energyAfter - energyBefore;
+        }
+    }
+
+    /// <summary>玩家在新一轮补充基础弹药的不可变记录。</summary>
+    public sealed class BattleAmmoRefilledSettlement : BattleSettlementRecord
+    {
+        /// <summary>补充前弹药。</summary>
+        public int AmmoBefore { get; }
+
+        /// <summary>补充后弹药。</summary>
+        public int AmmoAfter { get; }
+
+        /// <summary>本次弹药的有符号变化量。</summary>
+        public int Amount { get; }
+
+        /// <summary>冻结一次基础弹药补充。</summary>
+        internal BattleAmmoRefilledSettlement(
+            int order,
+            CombatantId sourceId,
+            int ammoBefore,
+            int ammoAfter)
+            : base(
+                order,
+                BattleSettlementRecordType.AmmoRefilled,
+                null,
+                sourceId,
+                null)
+        {
+            if (ammoBefore < 0)
+                throw new ArgumentOutOfRangeException(nameof(ammoBefore));
+            if (ammoAfter < 0)
+                throw new ArgumentOutOfRangeException(nameof(ammoAfter));
+
+            AmmoBefore = ammoBefore;
+            AmmoAfter = ammoAfter;
+            Amount = ammoAfter - ammoBefore;
         }
     }
 

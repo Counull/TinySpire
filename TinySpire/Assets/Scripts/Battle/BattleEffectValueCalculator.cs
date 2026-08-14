@@ -18,9 +18,18 @@ namespace TinySpire.Battle
                 throw new ArgumentNullException(nameof(effect));
 
             int sourceStrength = source?.Strength.CurrentValue ?? 0;
+            int sourceBlock = source?.Block.CurrentValue ?? 0;
+            BattleEffectMagnitudeSource magnitudeSource =
+                BattleCardEffectTypeMapping.IsDealDamageFromSourceBlock(effect.EffectType)
+                    ? BattleEffectMagnitudeSource.SourceBlock
+                    : BattleEffectMagnitudeSource.ConfiguredValue;
+            int resolvedValue = BattleEffectMagnitudeResolver.Resolve(
+                magnitudeSource,
+                effect.Value,
+                sourceBlock);
             var context = new BattleEffectFormulaContext(
                 ToOperationType(effect.EffectType),
-                effect.Value,
+                resolvedValue,
                 sourceStrength,
                 target: null);
             return BattleEffectFormula.Calculate(context).Value;
@@ -30,6 +39,11 @@ namespace TinySpire.Battle
         private static BattleEffectOperationType ToOperationType(
             cfg.battle.EffectType effectType)
         {
+            if (BattleCardEffectTypeMapping.IsHeal(effectType))
+                return BattleEffectOperationType.Heal;
+            if (BattleCardEffectTypeMapping.IsDealDamageFromSourceBlock(effectType))
+                return BattleEffectOperationType.DealDamage;
+
             switch (effectType)
             {
                 case cfg.battle.EffectType.ModifyAttribute:

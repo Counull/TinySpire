@@ -4,6 +4,7 @@ namespace TinySpire.Battle
     public enum BattleSettlementRecordType
     {
         EnergySpent,
+        AmmoSpent,
         DamageApplied,
         BlockGained,
         AttributeModified,
@@ -14,9 +15,14 @@ namespace TinySpire.Battle
         BlockCleared,
         StatusReduced,
         EnergyRefilled,
+        AmmoRefilled,
         EnemyIntentAdvanced,
         EnemyActionSkipped,
         BattlePhaseChanged,
+        EnergyGained,
+        CardCreated,
+        HealthRestored,
+        PoisonTicked,
     }
 
     /// <summary>M7 可被 Effect 修改的参与者属性。</summary>
@@ -29,6 +35,11 @@ namespace TinySpire.Battle
     public enum BattleStatusType
     {
         Vulnerable,
+        Poison,
+        BlockRetention,
+        Garrison,
+        BlockGainDamageTrigger,
+        FatalOrBlockBreakCardTrigger,
     }
 
     /// <summary>卡牌移动记录使用的权威卡区名称。</summary>
@@ -38,6 +49,7 @@ namespace TinySpire.Battle
         Hand,
         DiscardPile,
         ExhaustPile,
+        PowerPile,
     }
 
     /// <summary>合法命令中跳过单个操作的明确原因。</summary>

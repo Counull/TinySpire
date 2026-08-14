@@ -182,7 +182,9 @@ namespace TinySpire.Battle
                 _coordinator.Cancel(handle);
                 return Rejected(BattleCommandSubmissionFailureReason.InvalidSubmissionHandle);
             }
-            if (command.Type == BattleCommandType.CompleteEnemyAction)
+            if (command.Type == BattleCommandType.CompleteEnemyAction ||
+                command.Type == BattleCommandType.ResolveSettlementTriggers ||
+                (command is PlayCardCommand playCardCommand && playCardCommand.IsTriggeredPlay))
             {
                 _coordinator.Cancel(handle);
                 return Rejected(BattleCommandSubmissionFailureReason.SystemCommandNotAuthorized);
@@ -262,10 +264,14 @@ namespace TinySpire.Battle
                 throw new ArgumentException("普通失败不能生成 continuation。", nameof(continuationCommand));
             }
             if (continuationCommand != null &&
-                continuationCommand.Type != BattleCommandType.CompleteEnemyAction)
+                continuationCommand.Type != BattleCommandType.CompleteEnemyAction &&
+                continuationCommand.Type != BattleCommandType.EndPlayerAction &&
+                continuationCommand.Type != BattleCommandType.ResolveSettlementTriggers &&
+                !(continuationCommand is PlayCardCommand playCardCommand &&
+                  playCardCommand.IsTriggeredPlay))
             {
                 throw new ArgumentException(
-                    "只有 Queue 生成的 CompleteEnemyAction 可以作为系统 continuation。",
+                    "只有 Queue 生成的敌方完成、结束行动或触发出牌可以作为系统 continuation。",
                     nameof(continuationCommand));
             }
             if (entry.RequiresSystemToken && !entry.IsSystemTokenConsumed)

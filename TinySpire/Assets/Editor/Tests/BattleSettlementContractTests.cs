@@ -83,6 +83,7 @@ public sealed class BattleSettlementContractTests
     [TestCase(typeof(BattleBlockClearedSettlement))]
     [TestCase(typeof(BattleStatusReducedSettlement))]
     [TestCase(typeof(BattleEnergyRefilledSettlement))]
+    [TestCase(typeof(BattleAmmoRefilledSettlement))]
     [TestCase(typeof(BattleEnemyIntentAdvancedSettlement))]
     [TestCase(typeof(BattleEnemyActionSkippedSettlement))]
     [TestCase(typeof(BattlePhaseChangedSettlement))]
@@ -141,6 +142,30 @@ public sealed class BattleSettlementContractTests
             Assert.That(settlement.EffectId, Is.Null);
             Assert.That(settlement.EnergyBefore, Is.EqualTo(1));
             Assert.That(settlement.EnergyAfter, Is.EqualTo(4));
+            Assert.That(settlement.Amount, Is.EqualTo(3));
+        }
+    }
+
+    /// <summary>验证基础弹药补充记录保留顺序、玩家来源和完整有符号变化量。</summary>
+    [Test]
+    public void AmmoRefilledSettlement_ExposesCompleteSourceOnlySemantics()
+    {
+        using (var combatants = new BattleCombatantsData())
+        {
+            PlayerCombatantData player = combatants.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
+            var settlement = new BattleAmmoRefilledSettlement(
+                order: 4,
+                sourceId: player.Id,
+                ammoBefore: 2,
+                ammoAfter: 5);
+
+            Assert.That(settlement.Order, Is.EqualTo(4));
+            Assert.That(settlement.RecordType, Is.EqualTo(BattleSettlementRecordType.AmmoRefilled));
+            Assert.That(settlement.SourceId, Is.EqualTo(player.Id));
+            Assert.That(settlement.TargetId, Is.Null);
+            Assert.That(settlement.EffectId, Is.Null);
+            Assert.That(settlement.AmmoBefore, Is.EqualTo(2));
+            Assert.That(settlement.AmmoAfter, Is.EqualTo(5));
             Assert.That(settlement.Amount, Is.EqualTo(3));
         }
     }

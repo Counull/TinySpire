@@ -1,10 +1,20 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using TinySpire.Battle;
+using TinySpire.Core;
 
 public sealed class BattleEffectExecutorTests
 {
+    /// <summary>列举 prepared repeated-damage 计划在首次提交前必须拒绝的两类漂移。</summary>
+    public enum RepeatedDamagePreparedPlanInvalidation
+    {
+        CrossOwner,
+        EnemyHealthDrift,
+    }
+
     /// <summary>验证 Effect 核心直接冻结强类型 ID 顺序，不依赖卡牌绑定结构。</summary>
     [Test]
     public void Execute_OrderedEffectIds_PreservesCoreOrderWithoutCardBindings()
@@ -588,6 +598,345 @@ public sealed class BattleEffectExecutorTests
                 Is.EqualTo(preparation.Plan.ProjectedTargetAfterEffect.Vulnerable));
             Assert.That(enemy.CurrentBlock, Is.Zero);
             Assert.That(enemy.CurrentVulnerable, Is.Zero);
+        }
+    }
+
+    /// <summary>验证同一条 Effect 链预演两段敌方伤害时只预约一层缓冲，预演零写入且提交记录连续。</summary>
+    [Test]
+    public void PrepareAndCommit_MachineGunnerBuffer_ReservesOnlyFirstDamageInSameEffectChain()
+    {
+        using (var combatants = new BattleCombatantsData())
+        {
+            PlayerCombatantData player = combatants.AddPlayer(101, 30, 0);
+            EnemyCombatantData enemy = combatants.AddEnemy(201, 20, 0);
+            cfg.Tables tables = CreateTables(
+                CreateEffect(5001, cfg.battle.EffectType.DealDamage, cfg.battle.Attribute.None, 6),
+                CreateEffect(5002, cfg.battle.EffectType.DealDamage, cfg.battle.Attribute.None, 6));
+            using var runtime = new MachineGunnerBattleRuntime(
+                combatants,
+                new[] { enemy.Id },
+                player.Id);
+            runtime.CombatState.Add(player.Id, MachineGunnerCombatantStatus.Buffer, 1);
+            var executor = new BattleEffectExecutor(tables, combatants, runtime);
+
+            BattleEffectPreparationResult preparation = executor.Prepare(
+                new BattleEffectExecutionRequest(
+                    enemy.Id,
+                    player.Id,
+                    new[] { CreateEffectId(5001), CreateEffectId(5002) }));
+
+            Assert.That(preparation.Succeeded, Is.True);
+            Assert.That(preparation.Plan.PlannedSettlementCount, Is.EqualTo(3));
+            Assert.That(player.CurrentHealth, Is.EqualTo(30));
+            Assert.That(
+                runtime.CombatState.Get(player.Id, MachineGunnerCombatantStatus.Buffer),
+                Is.EqualTo(1));
+            executor.ValidatePreparedExecution(preparation.Plan, startingOrder: 0);
+            BattleEffectExecutionResult result = executor.CommitPrepared(preparation.Plan);
+            BattleDamageAppliedSettlement firstDamage =
+                (BattleDamageAppliedSettlement)result.Settlements[0];
+            MachineGunnerPrivateStatusChangedSettlement consumed =
+                (MachineGunnerPrivateStatusChangedSettlement)result.Settlements[1];
+            BattleDamageAppliedSettlement secondDamage =
+                (BattleDamageAppliedSettlement)result.Settlements[2];
+
+            Assert.That(firstDamage.Order, Is.Zero);
+            Assert.That(firstDamage.AttackValue, Is.EqualTo(6));
+            Assert.That(firstDamage.HealthBefore, Is.EqualTo(30));
+            Assert.That(firstDamage.HealthAfter, Is.EqualTo(30));
+            Assert.That(consumed.Order, Is.EqualTo(1));
+            Assert.That(consumed.Status, Is.EqualTo(MachineGunnerCombatantStatus.Buffer));
+            Assert.That(consumed.ValueBefore, Is.EqualTo(1));
+            Assert.That(consumed.ValueAfter, Is.Zero);
+            Assert.That(secondDamage.Order, Is.EqualTo(2));
+            Assert.That(secondDamage.AttackValue, Is.EqualTo(6));
+            Assert.That(secondDamage.HealthBefore, Is.EqualTo(30));
+            Assert.That(secondDamage.HealthAfter, Is.EqualTo(24));
+            Assert.That(player.CurrentHealth, Is.EqualTo(24));
+            Assert.That(
+                runtime.CombatState.Get(player.Id, MachineGunnerCombatantStatus.Buffer),
+                Is.Zero);
+        }
+    }
+
+    /// <summary>验证无实体在同一条多段敌方攻击链中逐段预约、先把伤害封顶再过格挡，并在耗尽后恢复原伤害。</summary>
+    [Test]
+    public void PrepareAndCommit_MachineGunnerIntangible_CapsEachReservedAttackBeforeBlock()
+    {
+        using (var combatants = new BattleCombatantsData())
+        {
+            PlayerCombatantData player = combatants.AddPlayer(101, 30, 0);
+            EnemyCombatantData enemy = combatants.AddEnemy(201, 20, 0);
+            player.ApplyBlockGain(2);
+            cfg.Tables tables = CreateTables(
+                CreateEffect(5011, cfg.battle.EffectType.DealDamage, cfg.battle.Attribute.None, 6),
+                CreateEffect(5012, cfg.battle.EffectType.DealDamage, cfg.battle.Attribute.None, 6),
+                CreateEffect(5013, cfg.battle.EffectType.DealDamage, cfg.battle.Attribute.None, 6));
+            using var runtime = new MachineGunnerBattleRuntime(
+                combatants,
+                new[] { enemy.Id },
+                player.Id);
+            runtime.CombatState.Add(player.Id, MachineGunnerCombatantStatus.Intangible, 2);
+            var executor = new BattleEffectExecutor(tables, combatants, runtime);
+
+            BattleEffectPreparationResult preparation = executor.Prepare(
+                new BattleEffectExecutionRequest(
+                    enemy.Id,
+                    player.Id,
+                    new[] { CreateEffectId(5011), CreateEffectId(5012), CreateEffectId(5013) }));
+
+            Assert.That(preparation.Succeeded, Is.True);
+            Assert.That(preparation.Plan.PlannedSettlementCount, Is.EqualTo(5));
+            Assert.That(player.CurrentHealth, Is.EqualTo(30));
+            Assert.That(player.CurrentBlock, Is.EqualTo(2));
+            Assert.That(
+                runtime.CombatState.Get(player.Id, MachineGunnerCombatantStatus.Intangible),
+                Is.EqualTo(2));
+            executor.ValidatePreparedExecution(preparation.Plan, startingOrder: 0);
+            BattleEffectExecutionResult result = executor.CommitPrepared(preparation.Plan);
+
+            BattleDamageAppliedSettlement firstDamage =
+                (BattleDamageAppliedSettlement)result.Settlements[0];
+            MachineGunnerPrivateStatusChangedSettlement firstIntangible =
+                (MachineGunnerPrivateStatusChangedSettlement)result.Settlements[1];
+            BattleDamageAppliedSettlement secondDamage =
+                (BattleDamageAppliedSettlement)result.Settlements[2];
+            MachineGunnerPrivateStatusChangedSettlement secondIntangible =
+                (MachineGunnerPrivateStatusChangedSettlement)result.Settlements[3];
+            BattleDamageAppliedSettlement thirdDamage =
+                (BattleDamageAppliedSettlement)result.Settlements[4];
+
+            Assert.That(firstDamage.AttackValue, Is.EqualTo(1));
+            Assert.That(firstDamage.BlockBefore, Is.EqualTo(2));
+            Assert.That(firstDamage.BlockAfter, Is.EqualTo(1));
+            Assert.That(firstDamage.HealthAfter, Is.EqualTo(30));
+            Assert.That(firstIntangible.Status, Is.EqualTo(MachineGunnerCombatantStatus.Intangible));
+            Assert.That(firstIntangible.ValueBefore, Is.EqualTo(2));
+            Assert.That(firstIntangible.ValueAfter, Is.EqualTo(1));
+            Assert.That(secondDamage.AttackValue, Is.EqualTo(1));
+            Assert.That(secondDamage.BlockBefore, Is.EqualTo(1));
+            Assert.That(secondDamage.BlockAfter, Is.Zero);
+            Assert.That(secondDamage.HealthAfter, Is.EqualTo(30));
+            Assert.That(secondIntangible.ValueBefore, Is.EqualTo(1));
+            Assert.That(secondIntangible.ValueAfter, Is.Zero);
+            Assert.That(thirdDamage.AttackValue, Is.EqualTo(6));
+            Assert.That(thirdDamage.HealthAfter, Is.EqualTo(24));
+            Assert.That(player.CurrentHealth, Is.EqualTo(24));
+            Assert.That(player.CurrentBlock, Is.Zero);
+            Assert.That(
+                runtime.CombatState.Get(player.Id, MachineGunnerCombatantStatus.Intangible),
+                Is.Zero);
+        }
+    }
+
+    /// <summary>验证缓冲优先完全抵挡首段攻击且不消耗无实体，下一段才由无实体封顶并消费。</summary>
+    [Test]
+    public void PrepareAndCommit_MachineGunnerBuffer_PrioritizesOverIntangible()
+    {
+        using (var combatants = new BattleCombatantsData())
+        {
+            PlayerCombatantData player = combatants.AddPlayer(101, 30, 0);
+            EnemyCombatantData enemy = combatants.AddEnemy(201, 20, 0);
+            cfg.Tables tables = CreateTables(
+                CreateEffect(5021, cfg.battle.EffectType.DealDamage, cfg.battle.Attribute.None, 6),
+                CreateEffect(5022, cfg.battle.EffectType.DealDamage, cfg.battle.Attribute.None, 6));
+            using var runtime = new MachineGunnerBattleRuntime(
+                combatants,
+                new[] { enemy.Id },
+                player.Id);
+            runtime.CombatState.Add(player.Id, MachineGunnerCombatantStatus.Buffer, 1);
+            runtime.CombatState.Add(player.Id, MachineGunnerCombatantStatus.Intangible, 1);
+            var executor = new BattleEffectExecutor(tables, combatants, runtime);
+
+            BattleEffectPreparationResult preparation = executor.Prepare(
+                new BattleEffectExecutionRequest(
+                    enemy.Id,
+                    player.Id,
+                    new[] { CreateEffectId(5021), CreateEffectId(5022) }));
+
+            Assert.That(preparation.Succeeded, Is.True);
+            executor.ValidatePreparedExecution(preparation.Plan, startingOrder: 0);
+            BattleEffectExecutionResult result = executor.CommitPrepared(preparation.Plan);
+
+            BattleDamageAppliedSettlement firstDamage =
+                (BattleDamageAppliedSettlement)result.Settlements[0];
+            MachineGunnerPrivateStatusChangedSettlement buffer =
+                (MachineGunnerPrivateStatusChangedSettlement)result.Settlements[1];
+            BattleDamageAppliedSettlement secondDamage =
+                (BattleDamageAppliedSettlement)result.Settlements[2];
+            MachineGunnerPrivateStatusChangedSettlement intangible =
+                (MachineGunnerPrivateStatusChangedSettlement)result.Settlements[3];
+
+            Assert.That(firstDamage.AttackValue, Is.EqualTo(6));
+            Assert.That(firstDamage.HealthAfter, Is.EqualTo(30));
+            Assert.That(buffer.Status, Is.EqualTo(MachineGunnerCombatantStatus.Buffer));
+            Assert.That(buffer.ValueBefore, Is.EqualTo(1));
+            Assert.That(buffer.ValueAfter, Is.Zero);
+            Assert.That(secondDamage.AttackValue, Is.EqualTo(1));
+            Assert.That(secondDamage.HealthAfter, Is.EqualTo(29));
+            Assert.That(intangible.Status, Is.EqualTo(MachineGunnerCombatantStatus.Intangible));
+            Assert.That(intangible.ValueBefore, Is.EqualTo(1));
+            Assert.That(intangible.ValueAfter, Is.Zero);
+        }
+    }
+
+    /// <summary>验证随机逐段伤害只在提交时写入冻结目标并推进一次随机流，准备、校验和重复提交都保持原子性。</summary>
+    [Test]
+    public void RandomPlan_PrepareValidateCommitAndRepeat_PreservesAtomicRandomContract()
+    {
+        const uint expectedRandomBefore = 332584831u;
+        const uint expectedRandomAfter = 3348358578u;
+        using (var combatants = new BattleCombatantsData())
+        {
+            PlayerCombatantData source = combatants.AddPlayer(101, 30, 2);
+            EnemyCombatantData firstEnemy = combatants.AddEnemy(201, 5, 0);
+            EnemyCombatantData secondEnemy = combatants.AddEnemy(202, 5, 0);
+            EnemyCombatantData thirdEnemy = combatants.AddEnemy(203, 5, 0);
+            var enemies = new[] { firstEnemy, secondEnemy, thirdEnemy };
+            var random = new GameRandom(1234u);
+            var executor = new BattleRepeatedDamageExecutor(
+                combatants,
+                enemies.Select(enemy => enemy.Id).ToArray(),
+                random);
+            var request = new BattleRepeatedDamageRequest(
+                source.Id,
+                fixedTargetId: null,
+                BattleRepeatedDamageTargetPolicy.RandomLivingEnemyPerHit,
+                new[]
+                {
+                    new BattleRepeatedDamageHitRequest(new BattleEffectId(4407), 3),
+                    new BattleRepeatedDamageHitRequest(new BattleEffectId(4407), 3),
+                    new BattleRepeatedDamageHitRequest(new BattleEffectId(4407), 3),
+                });
+            var sourceBefore = new CombatantFactsSnapshot(source);
+            CombatantFactsSnapshot[] enemiesBefore = enemies
+                .Select(enemy => new CombatantFactsSnapshot(enemy))
+                .ToArray();
+
+            BattleRepeatedDamagePreparationResult preparation = executor.Prepare(request);
+
+            Assert.That(preparation.Succeeded, Is.True);
+            BattlePreparedRepeatedDamagePlan plan = preparation.Plan;
+            Assert.That(plan.RandomStateBefore, Is.EqualTo(expectedRandomBefore));
+            Assert.That(plan.RandomStateAfter, Is.EqualTo(expectedRandomAfter));
+            Assert.That(executor.RandomState, Is.EqualTo(expectedRandomBefore));
+            Assert.That(
+                plan.Segments.Select(segment => segment.TargetId),
+                Is.EqualTo(enemies.Select(enemy => enemy.Id)));
+            sourceBefore.AssertUnchanged();
+            foreach (CombatantFactsSnapshot snapshot in enemiesBefore)
+                snapshot.AssertUnchanged();
+
+            executor.ValidatePrepared(plan, startingOrder: 5);
+
+            Assert.That(plan.IsValidated, Is.True);
+            Assert.That(plan.IsConsumed, Is.False);
+            Assert.That(executor.RandomState, Is.EqualTo(expectedRandomBefore));
+            sourceBefore.AssertUnchanged();
+            foreach (CombatantFactsSnapshot snapshot in enemiesBefore)
+                snapshot.AssertUnchanged();
+
+            IReadOnlyList<BattleSettlementRecord> settlements = executor.CommitPrepared(plan);
+
+            Assert.That(plan.IsConsumed, Is.True);
+            Assert.That(settlements, Has.Count.EqualTo(3));
+            Assert.That(
+                settlements.Select(settlement => settlement.Order),
+                Is.EqualTo(new[] { 5, 6, 7 }));
+            Assert.That(
+                settlements.Cast<BattleDamageAppliedSettlement>()
+                    .Select(settlement => settlement.TargetId),
+                Is.EqualTo(enemies.Select(enemy => enemy.Id)));
+            Assert.That(
+                settlements.Cast<BattleDamageAppliedSettlement>()
+                    .Select(settlement =>
+                        (settlement.AttackValue, settlement.HealthBefore, settlement.HealthAfter)),
+                Is.EqualTo(new[] { (5, 5, 0), (5, 5, 0), (5, 5, 0) }));
+            Assert.That(executor.RandomState, Is.EqualTo(expectedRandomAfter));
+            Assert.That(enemies.Select(enemy => enemy.CurrentHealth), Is.EqualTo(new[] { 0, 0, 0 }));
+            sourceBefore.AssertUnchanged();
+            var sourceAfterCommit = new CombatantFactsSnapshot(source);
+            CombatantFactsSnapshot[] enemiesAfterCommit = enemies
+                .Select(enemy => new CombatantFactsSnapshot(enemy))
+                .ToArray();
+
+            Assert.Throws<InvalidOperationException>(() => executor.CommitPrepared(plan));
+
+            sourceAfterCommit.AssertUnchanged();
+            foreach (CombatantFactsSnapshot snapshot in enemiesAfterCommit)
+                snapshot.AssertUnchanged();
+            Assert.That(executor.RandomState, Is.EqualTo(expectedRandomAfter));
+        }
+    }
+
+    /// <summary>验证跨执行器计划与敌方生命漂移都在首次写入前被拒绝，且不推进随机流、不改其他事实或消费计划。</summary>
+    [TestCase(RepeatedDamagePreparedPlanInvalidation.CrossOwner)]
+    [TestCase(RepeatedDamagePreparedPlanInvalidation.EnemyHealthDrift)]
+    public void ValidatePrepared_CrossOwnerOrEnemyHealthDrift_RejectsWithoutWritesOrConsumption(
+        RepeatedDamagePreparedPlanInvalidation invalidation)
+    {
+        using (var combatants = new BattleCombatantsData())
+        {
+            PlayerCombatantData source = combatants.AddPlayer(101, 30, 2);
+            EnemyCombatantData firstEnemy = combatants.AddEnemy(201, 20, 0);
+            EnemyCombatantData secondEnemy = combatants.AddEnemy(202, 20, 0);
+            EnemyCombatantData thirdEnemy = combatants.AddEnemy(203, 20, 0);
+            var enemies = new[] { firstEnemy, secondEnemy, thirdEnemy };
+            CombatantId[] enemyIds = enemies.Select(enemy => enemy.Id).ToArray();
+            var owner = new BattleRepeatedDamageExecutor(
+                combatants,
+                enemyIds,
+                new GameRandom(1234u));
+            var foreignOwner = new BattleRepeatedDamageExecutor(
+                combatants,
+                enemyIds,
+                new GameRandom(4321u));
+            var request = new BattleRepeatedDamageRequest(
+                source.Id,
+                fixedTargetId: null,
+                BattleRepeatedDamageTargetPolicy.RandomLivingEnemyPerHit,
+                new[]
+                {
+                    new BattleRepeatedDamageHitRequest(new BattleEffectId(4407), 3),
+                    new BattleRepeatedDamageHitRequest(new BattleEffectId(4407), 3),
+                    new BattleRepeatedDamageHitRequest(new BattleEffectId(4407), 3),
+                });
+            BattleRepeatedDamagePreparationResult preparation = owner.Prepare(request);
+            Assert.That(preparation.Succeeded, Is.True);
+            BattlePreparedRepeatedDamagePlan plan = preparation.Plan;
+            if (invalidation == RepeatedDamagePreparedPlanInvalidation.EnemyHealthDrift)
+            {
+                BattleCombatantEffectOperationResult drift =
+                    new BattleCombatantEffectOperations(combatants).ApplyDamage(
+                        source.Id,
+                        firstEnemy.Id,
+                        configuredValue: 1);
+                Assert.That(drift.Status, Is.EqualTo(BattleCombatantEffectOperationStatus.Applied));
+                Assert.That(firstEnemy.CurrentHealth, Is.EqualTo(17));
+            }
+
+            var sourceBeforeValidation = new CombatantFactsSnapshot(source);
+            CombatantFactsSnapshot[] enemiesBeforeValidation = enemies
+                .Select(enemy => new CombatantFactsSnapshot(enemy))
+                .ToArray();
+            uint ownerRandomBeforeValidation = owner.RandomState;
+            uint foreignRandomBeforeValidation = foreignOwner.RandomState;
+
+            Assert.Throws<InvalidOperationException>(() =>
+            {
+                if (invalidation == RepeatedDamagePreparedPlanInvalidation.CrossOwner)
+                    foreignOwner.ValidatePrepared(plan, startingOrder: 5);
+                else
+                    owner.ValidatePrepared(plan, startingOrder: 5);
+            });
+
+            sourceBeforeValidation.AssertUnchanged();
+            foreach (CombatantFactsSnapshot snapshot in enemiesBeforeValidation)
+                snapshot.AssertUnchanged();
+            Assert.That(owner.RandomState, Is.EqualTo(ownerRandomBeforeValidation));
+            Assert.That(foreignOwner.RandomState, Is.EqualTo(foreignRandomBeforeValidation));
+            Assert.That(plan.IsValidated, Is.False);
+            Assert.That(plan.IsConsumed, Is.False);
         }
     }
 

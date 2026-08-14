@@ -87,7 +87,16 @@ namespace TinySpire.Battle
         UnsupportedEffectType,
         UnsupportedEffectAttribute,
         EffectValueOverflow,
-        CardNotImplemented
+        CardNotImplemented,
+        InsufficientAmmo,
+        AttackBlockedByShackle,
+        MachineGunnerRuntimeUnavailable,
+        UnsupportedMachineGunnerProgram,
+        InvalidOpeningHandConfiguration,
+        CardSelectionRequired,
+        InvalidCardSelectionCount,
+        SelectedCardNotEligible,
+        SelectedCardNotInHand,
     }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using DG.Tweening;
 using NUnit.Framework;
@@ -152,6 +153,119 @@ public sealed class BattleCombatFeedbackTweenFactoryTests
         Assert.That(captured, Has.Count.EqualTo(2));
         AssertCue(captured[0], targetId, BattleCommandPresentationStepKind.HealthLossNumber, 6);
         AssertCue(captured[1], targetId, BattleCommandPresentationStepKind.HitShake, 0);
+    }
+
+    /// <summary>确认中毒飘字与致命死亡精确路由冻结目标，并同步拒绝非致命中毒伪造的死亡步骤。</summary>
+    [Test]
+    public void TryCreate_PoisonTickSteps_UseFrozenTargetsAndLossAndRejectNonfatalDeath()
+    {
+        var nonfatalTargetId = new CombatantId(2001);
+        var fatalTargetId = new CombatantId(2002);
+        var nonfatal = new BattlePoisonTickedSettlement(
+            order: 0,
+            nonfatalTargetId,
+            new BattlePoisonTickOutcome(
+                healthBefore: 10,
+                blockBefore: 5,
+                poisonBefore: 4));
+        var fatal = new BattlePoisonTickedSettlement(
+            order: 1,
+            fatalTargetId,
+            new BattlePoisonTickOutcome(
+                healthBefore: 3,
+                blockBefore: 7,
+                poisonBefore: 4));
+        var result = new BattleCommandExecutionResult(
+            authoritySequence: 83,
+            BattleCommandType.CompleteEnemyAction,
+            submitterId: null,
+            BattleCommandExecutionFailureReason.None,
+            new BattleSettlementRecord[] { nonfatal, fatal });
+        BattleCommandPresentationPlan plan = BattleCommandPresentationPlan.Create(result);
+        var captured = new List<BattleCombatFeedbackCue>();
+        var factory = new BattleCombatFeedbackTweenFactory(cue =>
+        {
+            captured.Add(cue);
+            return new BattleCommandPresentationTween(
+                CreateTestSequence().AppendCallback(() => { }),
+                cleanup: null);
+        });
+
+        foreach (BattleCommandPresentationStep step in plan.SettlementSteps)
+            Assert.That(factory.TryCreate(step, out _), Is.True);
+
+        Assert.That(captured, Has.Count.EqualTo(3));
+        AssertCue(
+            captured[0],
+            nonfatalTargetId,
+            BattleCommandPresentationStepKind.HealthLossNumber,
+            expectedAmount: 4);
+        AssertCue(
+            captured[1],
+            fatalTargetId,
+            BattleCommandPresentationStepKind.HealthLossNumber,
+            expectedAmount: 3);
+        AssertCue(
+            captured[2],
+            fatalTargetId,
+            BattleCommandPresentationStepKind.DeathTransition,
+            expectedAmount: 0);
+
+        var fakeNonfatalDeath = new BattleCommandPresentationStep(
+            BattleCommandPresentationStepKind.DeathTransition,
+            nonfatal,
+            substepIndex: 1);
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => factory.TryCreate(fakeNonfatalDeath, out _));
+
+        StringAssert.Contains(nameof(BattlePoisonTickedSettlement), exception.Message);
+        Assert.That(captured, Has.Count.EqualTo(3));
+    }
+
+    /// <summary>确认治疗飘字只消费冻结的实际恢复量，并精确路由到结算目标。</summary>
+    [Test]
+    public void TryCreate_HealthRestoredNumber_UsesFrozenActualAmountAndExactTarget()
+    {
+        var sourceId = new CombatantId(1001);
+        var targetId = new CombatantId(2001);
+        var healed = new BattleHealthRestoredSettlement(
+            order: 0,
+            new BattleEffectId(4411),
+            sourceId,
+            targetId,
+            new BattleHealthRestorationOutcome(
+                requestedAmount: 10,
+                healthBefore: 23,
+                healthAfter: 30));
+        var result = new BattleCommandExecutionResult(
+            authoritySequence: 82,
+            BattleCommandType.EndPlayerAction,
+            sourceId,
+            BattleCommandExecutionFailureReason.None,
+            new BattleSettlementRecord[] { healed });
+        BattleCommandPresentationPlan plan = BattleCommandPresentationPlan.Create(result);
+        var captured = new List<BattleCombatFeedbackCue>();
+        var factory = new BattleCombatFeedbackTweenFactory(cue =>
+        {
+            captured.Add(cue);
+            return new BattleCommandPresentationTween(
+                CreateTestSequence().AppendCallback(() => { }),
+                cleanup: null);
+        });
+
+        Assert.That(plan.SettlementSteps, Has.Count.EqualTo(1));
+        Assert.That(
+            factory.TryCreate(plan.SettlementSteps[0], out BattleCommandPresentationTween tween),
+            Is.True);
+
+        Assert.That(tween, Is.Not.Null);
+        Assert.That(captured, Has.Count.EqualTo(1));
+        Assert.That(captured[0].TargetId, Is.EqualTo(targetId));
+        Assert.That(
+            captured[0].Kind,
+            Is.EqualTo(BattleCommandPresentationStepKind.HealthRestoredNumber));
+        Assert.That(captured[0].Amount, Is.EqualTo(7));
+        Assert.That(captured[0].FrozenValue, Is.Null);
     }
 
     /// <summary>确认格挡、力量、易伤和意图提示只路由到冻结记录指定的参与者。</summary>

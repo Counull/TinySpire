@@ -4,6 +4,7 @@ using System.Linq;
 using cfg;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
+using R3;
 using TinySpire.Battle;
 
 public sealed class BattleCommandQueueM8DTests
@@ -52,6 +53,45 @@ public sealed class BattleCommandQueueM8DTests
             Assert.That(scenario.Player.CurrentBlock, Is.Zero);
             Assert.That(scenario.Queue.Turn.CurrentValue.Players[scenario.Player.Id].Energy, Is.EqualTo(3));
             Assert.That(scenario.Zones.Hand, Has.Count.EqualTo(2));
+        }
+    }
+
+    /// <summary>验证未启用任何职业运行时的公共 Queue 仍共享十张固有牌上限，并在首个布局写入前明确失败。</summary>
+    [Test]
+    public void StartBattle_WithoutClassRuntimeElevenInnatesFailBeforeFirstWrite()
+    {
+        using (var scenario = new M8DQueueScenario(
+                   enemyCount: 1,
+                   deckTemplateIds: Enumerable.Repeat(M8DQueueScenario.LethalCardTemplateId, 11),
+                   initialHandCount: 5,
+                   cardIsInnate: true))
+        using (BattleCommandLifecycleExecutionRecorder lifecycle = scenario.Queue.RecordExecutionLifecycle())
+        {
+            BattleTurnData turnBefore = scenario.Queue.Turn.CurrentValue;
+            CardZoneLayoutData layoutBefore = scenario.Zones.Layout.CurrentValue;
+            uint shuffleRandomBefore = scenario.Zones.ShuffleRandomState;
+            int layoutPublicationCount = 0;
+            using IDisposable subscription = scenario.Zones.Layout
+                .Skip(1)
+                .Subscribe(_ => layoutPublicationCount++);
+
+            BattleCommandSubmissionResult submission =
+                scenario.Queue.SubmitRegistered(new StartBattleCommand());
+            BattleCommandLifecycleEvent terminal = lifecycle.RequireTerminal(submission);
+
+            Assert.That(submission.Accepted, Is.True);
+            Assert.That(terminal.Stage, Is.EqualTo(BattleCommandLifecycleStage.ExecutionFailed));
+            Assert.That(
+                terminal.FailureReason,
+                Is.EqualTo(BattleCommandExecutionFailureReason.InvalidOpeningHandConfiguration));
+            Assert.That(terminal.Settlements, Is.Empty);
+            Assert.That(scenario.Presentation.Results, Is.Empty);
+            Assert.That(layoutPublicationCount, Is.Zero);
+            Assert.That(scenario.Queue.Turn.CurrentValue, Is.SameAs(turnBefore));
+            Assert.That(scenario.Zones.Layout.CurrentValue, Is.SameAs(layoutBefore));
+            Assert.That(scenario.Zones.ShuffleRandomState, Is.EqualTo(shuffleRandomBefore));
+            Assert.That(scenario.Zones.Hand, Is.Empty);
+            Assert.That(scenario.Zones.DrawPile, Has.Count.EqualTo(11));
         }
     }
 
@@ -827,7 +867,8 @@ public sealed class BattleCommandQueueM8DTests
             int initialHandCount = 0,
             bool autoCompletePresentation = false,
             uint battleSeed = 2468,
-            bool includeSecondLivingPlayer = false)
+            bool includeSecondLivingPlayer = false,
+            bool cardIsInnate = false)
         {
             if (enemyCount < 1 || enemyCount > 2)
                 throw new ArgumentOutOfRangeException(nameof(enemyCount));
@@ -853,7 +894,7 @@ public sealed class BattleCommandQueueM8DTests
                     Array.Empty<int>(),
                     shuffleSeed: 9753);
             }
-            _tables = CreateTables(enemyCount, firstEnemyAttackValue);
+            _tables = CreateTables(enemyCount, firstEnemyAttackValue, cardIsInnate);
             Intents = new BattleEnemyIntentsData(
                 Combatants,
                 enemyIds,
@@ -951,7 +992,10 @@ public sealed class BattleCommandQueueM8DTests
         }
 
         /// <summary>创建单敌 attack 或双敌 attack/defend 以及一张致死测试卡所需的最小 Luban 表。</summary>
-        private static Tables CreateTables(int enemyCount, int firstEnemyAttackValue)
+        private static Tables CreateTables(
+            int enemyCount,
+            int firstEnemyAttackValue,
+            bool cardIsInnate)
         {
             var enemies = new JArray
             {
@@ -985,7 +1029,7 @@ public sealed class BattleCommandQueueM8DTests
                 ["battle_tbhero"] = new JArray(),
                 ["battle_tbenemy"] = enemies,
                 ["battle_tbdeck"] = new JArray(),
-                ["battle_tbcard"] = new JArray(CreateCard()),
+                ["battle_tbcard"] = new JArray(CreateCard(cardIsInnate)),
                 ["battle_tbcardeffect"] = new JArray(
                     CreateEffect(
                         FirstAttackEffectId,
@@ -1050,7 +1094,7 @@ public sealed class BattleCommandQueueM8DTests
         }
 
         /// <summary>创建一张零费、显式敌方目标并绑定致死 Damage Effect 的测试卡。</summary>
-        private static JObject CreateCard()
+        private static JObject CreateCard(bool isInnate)
         {
             return new JObject
             {
@@ -1070,6 +1114,8 @@ public sealed class BattleCommandQueueM8DTests
                 ["upgraded_play_destination"] = (int)cfg.battle.CardPlayDestination.DiscardPile,
                 ["has_upgrade"] = false,
                 ["implementation_status"] = (int)cfg.battle.CardImplementationStatus.Implemented,
+                ["program_id"] = (int)cfg.battle.MachineGunnerProgramId.None,
+                ["is_innate"] = isInnate,
                 ["effect_bindings"] = new JArray(new JObject
                 {
                     ["argument_key"] = string.Empty,

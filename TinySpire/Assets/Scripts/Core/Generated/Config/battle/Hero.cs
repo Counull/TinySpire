@@ -26,6 +26,13 @@ public sealed partial class Hero : Luban.BeanBase
         BaseStrength = (int)_obj.GetValue("base_strength");
         InitialDeckId = (int)_obj.GetValue("initial_deck_id");
         ViewPrefabKey = (string)_obj.GetValue("view_prefab_key");
+        InitialEnergy = (int)_obj.GetValue("initial_energy");
+        MaxEnergy = (int)_obj.GetValue("max_energy");
+        EnergyGainPerRound = (int)_obj.GetValue("energy_gain_per_round");
+        InitialAmmo = (int)_obj.GetValue("initial_ammo");
+        MaxAmmo = (int)_obj.GetValue("max_ammo");
+        AmmoGainPerRound = (int)_obj.GetValue("ammo_gain_per_round");
+        RuntimeProfile = (battle.HeroRuntimeProfile)(int)_obj.GetValue("runtime_profile");
     }
 
     public static Hero DeserializeHero(JToken _buf)
@@ -57,6 +64,34 @@ public sealed partial class Hero : Luban.BeanBase
     /// View Prefab Key
     /// </summary>
     public readonly string ViewPrefabKey;
+    /// <summary>
+    /// Initial Energy
+    /// </summary>
+    public readonly int InitialEnergy;
+    /// <summary>
+    /// Max Energy
+    /// </summary>
+    public readonly int MaxEnergy;
+    /// <summary>
+    /// Energy Gain Per Round
+    /// </summary>
+    public readonly int EnergyGainPerRound;
+    /// <summary>
+    /// Initial Ammo
+    /// </summary>
+    public readonly int InitialAmmo;
+    /// <summary>
+    /// Max Ammo
+    /// </summary>
+    public readonly int MaxAmmo;
+    /// <summary>
+    /// Ammo Gain Per Round
+    /// </summary>
+    public readonly int AmmoGainPerRound;
+    /// <summary>
+    /// Battle runtime profile
+    /// </summary>
+    public readonly battle.HeroRuntimeProfile RuntimeProfile;
 
 
     public const int __ID__ = -795877488;
@@ -75,6 +110,13 @@ public sealed partial class Hero : Luban.BeanBase
         + "baseStrength:" + BaseStrength + ","
         + "initialDeckId:" + InitialDeckId + ","
         + "viewPrefabKey:" + ViewPrefabKey + ","
+        + "initialEnergy:" + InitialEnergy + ","
+        + "maxEnergy:" + MaxEnergy + ","
+        + "energyGainPerRound:" + EnergyGainPerRound + ","
+        + "initialAmmo:" + InitialAmmo + ","
+        + "maxAmmo:" + MaxAmmo + ","
+        + "ammoGainPerRound:" + AmmoGainPerRound + ","
+        + "runtimeProfile:" + RuntimeProfile + ","
         + "}";
     }
 }

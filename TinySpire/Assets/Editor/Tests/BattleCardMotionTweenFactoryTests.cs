@@ -97,9 +97,9 @@ public sealed class BattleCardMotionTweenFactoryTests
         Assert.That(completionCount, Is.EqualTo(1));
     }
 
-    /// <summary>确认工厂只按冻结路线区分抽牌入手与离手弃牌，不为重洗内部搬运或 Exhaust 制造 cue。</summary>
+    /// <summary>确认工厂只按冻结路线区分抽牌入手、离手弃牌与离手消耗，不为重洗内部搬运制造 cue。</summary>
     [Test]
-    public void TryCreate_CardMoved_RoutesOnlyDrawToHandAndHandToDiscard()
+    public void TryCreate_CardMoved_RoutesDrawDiscardAndExhaustWithoutInternalReshuffleMoves()
     {
         var drawnCardId = new CardInstanceId(21);
         var discardedCardId = new CardInstanceId(22);
@@ -163,15 +163,54 @@ public sealed class BattleCardMotionTweenFactoryTests
                     handToExhaust,
                     substepIndex: 0),
                 out _),
-            Is.False);
+            Is.True);
 
-        Assert.That(captured, Has.Count.EqualTo(2));
+        Assert.That(captured, Has.Count.EqualTo(3));
         Assert.That(captured[0].Kind, Is.EqualTo(BattleCardMotionCueKind.DrawToHand));
         Assert.That(captured[0].CardId, Is.EqualTo(drawnCardId));
         Assert.That(captured[0].SettlementOrder, Is.EqualTo(0));
         Assert.That(captured[1].Kind, Is.EqualTo(BattleCardMotionCueKind.HandToDiscard));
         Assert.That(captured[1].CardId, Is.EqualTo(discardedCardId));
         Assert.That(captured[1].SettlementOrder, Is.EqualTo(1));
+        Assert.That(captured[2].Kind, Is.EqualTo(BattleCardMotionCueKind.HandToExhaust));
+        Assert.That(captured[2].CardId, Is.EqualTo(exhaustedCardId));
+        Assert.That(captured[2].SettlementOrder, Is.EqualTo(3));
+    }
+
+    /// <summary>确认临时卡创建使用独立 CreatedToHand 提示并携带真实新实例，不伪造 DrawPile 到 Hand 的移动事实。</summary>
+    [Test]
+    public void TryCreate_CardCreated_RoutesExplicitCreatedToHandCue()
+    {
+        var createdCardId = new CardInstanceId(25);
+        var created = new BattleCardCreatedSettlement(
+            order: 6,
+            createdCardId,
+            templateId: 3263,
+            BattleCardZone.Hand);
+        BattleCardMotionCue captured = null;
+        var factory = new BattleCardMotionTweenFactory(cue =>
+        {
+            captured = cue;
+            return CreateCallbackTween(() => { });
+        });
+
+        bool handled = factory.TryCreate(
+            new BattleCommandPresentationStep(
+                BattleCommandPresentationStepKind.CardCreated,
+                created,
+                substepIndex: 0),
+            out BattleCommandPresentationTween tween);
+
+        Assert.That(handled, Is.True);
+        Assert.That(tween, Is.Not.Null);
+        Assert.That(captured, Is.Not.Null);
+        Assert.That(captured.Kind, Is.EqualTo(BattleCardMotionCueKind.CreatedToHand));
+        Assert.That(captured.CardId, Is.EqualTo(createdCardId));
+        Assert.That(captured.SettlementOrder, Is.EqualTo(6));
+        Assert.That(captured.NewDrawPileOrder, Is.Empty);
+        Assert.That(created.RecordType, Is.EqualTo(BattleSettlementRecordType.CardCreated));
+        Assert.That(created.TemplateId, Is.EqualTo(3263));
+        Assert.That(created.ToZone, Is.EqualTo(BattleCardZone.Hand));
     }
 
     /// <summary>确认重洗只形成一条消费冻结新抽牌堆顺序的提示，不展开逐卡 Discard→Draw 动画。</summary>

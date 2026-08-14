@@ -193,6 +193,46 @@ public sealed class BattleCommandSchedulingContractTests
         scheduling.ExitDrain();
     }
 
+    /// <summary>验证 Queue 可为成功卡牌签发一次结束玩家行动续延，并仍以系统 token 限制其唯一消费。</summary>
+    [Test]
+    public void CompleteCurrent_AllowsEndPlayerActionAsSystemContinuation()
+    {
+        var coordinator = new BattleCommandSubmissionCoordinator();
+        var scheduling = new BattleCommandSchedulingCore(coordinator);
+        BattleCommandSchedulingAcceptance accepted = Accept(
+            scheduling,
+            coordinator,
+            new StartBattleCommand());
+        var continuation = new EndPlayerActionCommand(new CombatantId(1001));
+
+        Assert.That(scheduling.TryEnterDrain(), Is.True);
+        Assert.That(scheduling.TryBeginNext(out BattleCommandSchedulingEntry current), Is.True);
+        BattleCommandSchedulingCompletion completion = scheduling.CompleteCurrent(
+            current,
+            BattleCommandExecutionFailureReason.None,
+            Array.Empty<BattleSettlementRecord>(),
+            continuation,
+            continuationSubmittedRoundNumber: 1);
+
+        Assert.That(accepted.AuthoritySequence(), Is.EqualTo(1));
+        Assert.That(completion.ContinuationQueuedLifecycle, Is.Not.Null);
+        Assert.That(
+            completion.ContinuationQueuedLifecycle.CommandType,
+            Is.EqualTo(BattleCommandType.EndPlayerAction));
+        Assert.That(scheduling.TryBeginNext(out BattleCommandSchedulingEntry continuationEntry), Is.True);
+        Assert.That(continuationEntry.AuthoritySequence, Is.EqualTo(2));
+        Assert.That(continuationEntry.RequiresSystemToken, Is.True);
+        Assert.That(continuationEntry.IsSystemTokenConsumed, Is.True);
+        Assert.That(continuationEntry.TryConsumeSystemToken(scheduling), Is.False);
+        scheduling.CompleteCurrent(
+            continuationEntry,
+            BattleCommandExecutionFailureReason.None,
+            Array.Empty<BattleSettlementRecord>(),
+            continuationCommand: null,
+            continuationSubmittedRoundNumber: 0);
+        scheduling.ExitDrain();
+    }
+
     /// <summary>验证 system token 只认签发核心且只能消费一次。</summary>
     [Test]
     public void SystemToken_RejectsCrossOwnerAndSecondConsumption()

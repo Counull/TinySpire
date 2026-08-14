@@ -58,6 +58,38 @@ public sealed class BattleFloatingNumberViewTests
         }
     }
 
+    /// <summary>确认生命恢复飘字使用正号文本与既有正向绿色。</summary>
+    [Test]
+    public void CreateTween_HealthRestoredNumber_UsesPositiveTextAndHealingGreen()
+    {
+        var viewObject = new GameObject(
+            "BattleFloatingNumberViewTests_HealthRestoredView",
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(Text),
+            typeof(CanvasGroup),
+            typeof(BattleFloatingNumberView));
+        Text text = viewObject.GetComponent<Text>();
+        CanvasGroup canvasGroup = viewObject.GetComponent<CanvasGroup>();
+        BattleFloatingNumberView view = viewObject.GetComponent<BattleFloatingNumberView>();
+        try
+        {
+            Tween healthRestored = view.CreateTween(
+                BattleCommandPresentationStepKind.HealthRestoredNumber,
+                amount: 7);
+            AssertStyle(
+                text,
+                canvasGroup,
+                "+7",
+                new Color32(105, 235, 185, 255));
+            healthRestored.Complete(withCallbacks: false);
+        }
+        finally
+        {
+            Object.DestroyImmediate(viewObject);
+        }
+    }
+
     /// <summary>确认当前纯字符样式及预构建隐藏、非交互约束。</summary>
     private static void AssertStyle(
         Text text,

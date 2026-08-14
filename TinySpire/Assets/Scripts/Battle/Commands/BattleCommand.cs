@@ -1,7 +1,92 @@
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 
 namespace TinySpire.Battle
 {
+    /// <summary>Queue 内部触发的免费出牌请求；冻结来源卡区、强制归宿和递归深度。</summary>
+    internal sealed class BattleTriggeredCardPlayRequest
+    {
+        internal const int MaximumDepth = 32;
+
+        internal CombatantId ActorId { get; }
+        internal CardInstanceId CardId { get; }
+        internal CombatantId? TargetId { get; }
+        internal BattleCardZone SourceZone { get; }
+        internal BattleCardPaymentMode PaymentMode { get; }
+        internal BattleCardZone Destination { get; }
+        internal int Depth { get; }
+        internal BattleCommand ContinuationAfterPlay { get; }
+        internal int? SuppressedSettlementTriggerRegistrationId { get; }
+
+        /// <summary>冻结一次只能由 Queue 消费的触发出牌请求，并拒绝无效身份、模式或深度。</summary>
+        internal BattleTriggeredCardPlayRequest(
+            CombatantId actorId,
+            CardInstanceId cardId,
+            CombatantId? targetId,
+            BattleCardZone sourceZone,
+            BattleCardPaymentMode paymentMode,
+            BattleCardZone destination,
+            int depth,
+            BattleCommand continuationAfterPlay = null,
+            int? suppressedSettlementTriggerRegistrationId = null)
+        {
+            if (actorId.Value <= 0)
+                throw new ArgumentOutOfRangeException(nameof(actorId));
+            if (cardId.Value <= 0)
+                throw new ArgumentOutOfRangeException(nameof(cardId));
+            if (targetId.HasValue && targetId.Value.Value <= 0)
+                throw new ArgumentOutOfRangeException(nameof(targetId));
+            if (sourceZone != BattleCardZone.Hand && sourceZone != BattleCardZone.DrawPile)
+                throw new ArgumentOutOfRangeException(nameof(sourceZone));
+            if (paymentMode != BattleCardPaymentMode.Waived)
+                throw new ArgumentOutOfRangeException(nameof(paymentMode));
+            if (destination != BattleCardZone.DiscardPile &&
+                destination != BattleCardZone.ExhaustPile &&
+                destination != BattleCardZone.PowerPile)
+            {
+                throw new ArgumentOutOfRangeException(nameof(destination));
+            }
+            if (depth <= 0 || depth > MaximumDepth)
+                throw new ArgumentOutOfRangeException(nameof(depth));
+            if (suppressedSettlementTriggerRegistrationId.HasValue &&
+                suppressedSettlementTriggerRegistrationId.Value <= 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(suppressedSettlementTriggerRegistrationId));
+            }
+
+            ActorId = actorId;
+            CardId = cardId;
+            TargetId = targetId;
+            SourceZone = sourceZone;
+            PaymentMode = paymentMode;
+            Destination = destination;
+            Depth = depth;
+            ContinuationAfterPlay = continuationAfterPlay;
+            SuppressedSettlementTriggerRegistrationId =
+                suppressedSettlementTriggerRegistrationId;
+        }
+
+        /// <summary>复制冻结请求并附加父触发批次的后续命令与递归抑制身份。</summary>
+        internal BattleTriggeredCardPlayRequest WithContinuation(
+            BattleCommand continuationAfterPlay,
+            int? suppressedSettlementTriggerRegistrationId)
+        {
+            return new BattleTriggeredCardPlayRequest(
+                ActorId,
+                CardId,
+                TargetId,
+                SourceZone,
+                PaymentMode,
+                Destination,
+                Depth,
+                continuationAfterPlay,
+                suppressedSettlementTriggerRegistrationId ??
+                    SuppressedSettlementTriggerRegistrationId);
+        }
+    }
+
     /// <summary>
     /// 战斗命令的稳定类型；调用方只表达意图，不携带执行期规则结果。
     /// </summary>
@@ -10,7 +95,8 @@ namespace TinySpire.Battle
         StartBattle,
         PlayCard,
         EndPlayerAction,
-        CompleteEnemyAction
+        CompleteEnemyAction,
+        ResolveSettlementTriggers,
     }
 
     /// <summary>
@@ -51,6 +137,15 @@ namespace TinySpire.Battle
         /// <summary>调用方选择的单个运行时目标；缺失目标由执行期规则明确拒绝。</summary>
         public CombatantId? TargetId { get; }
 
+        /// <summary>调用方为当前卡牌效果选择的手牌实例快照。</summary>
+        public IReadOnlyList<CardInstanceId> SelectedCardIds { get; }
+
+        /// <summary>仅 Queue 内部 continuation 可携带的冻结触发出牌请求。</summary>
+        internal BattleTriggeredCardPlayRequest TriggeredPlayRequest { get; }
+
+        /// <summary>指示本命令是否由 Queue 从冻结触发请求构造。</summary>
+        internal bool IsTriggeredPlay => TriggeredPlayRequest != null;
+
         /// <summary>返回出牌命令类型。</summary>
         public override BattleCommandType Type => BattleCommandType.PlayCard;
 
@@ -62,6 +157,38 @@ namespace TinySpire.Battle
             CombatantId actorId,
             CardInstanceId cardId,
             CombatantId? targetId)
+            : this(actorId, cardId, targetId, Array.Empty<CardInstanceId>())
+        {
+        }
+
+        /// <summary>创建带不可变手牌选择快照的出牌意图，并防御性复制调用方集合。</summary>
+        public PlayCardCommand(
+            CombatantId actorId,
+            CardInstanceId cardId,
+            CombatantId? targetId,
+            IEnumerable<CardInstanceId> selectedCardIds)
+            : this(actorId, cardId, targetId, selectedCardIds, triggeredPlayRequest: null)
+        {
+        }
+
+        /// <summary>把冻结触发请求转换为只能凭系统 token 执行的内部出牌命令。</summary>
+        internal PlayCardCommand(BattleTriggeredCardPlayRequest triggeredPlayRequest)
+            : this(
+                triggeredPlayRequest?.ActorId ?? default,
+                triggeredPlayRequest?.CardId ?? default,
+                triggeredPlayRequest?.TargetId,
+                Array.Empty<CardInstanceId>(),
+                triggeredPlayRequest)
+        {
+        }
+
+        /// <summary>统一冻结外部普通出牌或 Queue 内部触发出牌的不可变字段。</summary>
+        private PlayCardCommand(
+            CombatantId actorId,
+            CardInstanceId cardId,
+            CombatantId? targetId,
+            IEnumerable<CardInstanceId> selectedCardIds,
+            BattleTriggeredCardPlayRequest triggeredPlayRequest)
         {
             if (actorId.Value <= 0)
                 throw new ArgumentOutOfRangeException(nameof(actorId));
@@ -69,10 +196,21 @@ namespace TinySpire.Battle
                 throw new ArgumentOutOfRangeException(nameof(cardId));
             if (targetId.HasValue && targetId.Value.Value <= 0)
                 throw new ArgumentOutOfRangeException(nameof(targetId));
+            if (selectedCardIds == null)
+                throw new ArgumentNullException(nameof(selectedCardIds));
+
+            var frozenSelectedCardIds = new List<CardInstanceId>(selectedCardIds);
+            foreach (CardInstanceId selectedCardId in frozenSelectedCardIds)
+            {
+                if (selectedCardId.Value <= 0)
+                    throw new ArgumentOutOfRangeException(nameof(selectedCardIds));
+            }
 
             ActorId = actorId;
             CardId = cardId;
             TargetId = targetId;
+            SelectedCardIds = new ReadOnlyCollection<CardInstanceId>(frozenSelectedCardIds);
+            TriggeredPlayRequest = triggeredPlayRequest;
         }
     }
 

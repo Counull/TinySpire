@@ -10,6 +10,21 @@ namespace TinySpire.Battle
         /// <summary>预构建时的当前能量。</summary>
         internal int Energy { get; }
 
+        /// <summary>预构建时的能量上限。</summary>
+        internal int EnergyMaximum { get; }
+
+        /// <summary>预构建时的每回合能量补充。</summary>
+        internal int EnergyGainPerRound { get; }
+
+        /// <summary>预构建时的当前弹药。</summary>
+        internal int Ammo { get; }
+
+        /// <summary>预构建时的弹药上限。</summary>
+        internal int AmmoMaximum { get; }
+
+        /// <summary>预构建时的每回合弹药补充。</summary>
+        internal int AmmoGainPerRound { get; }
+
         /// <summary>预构建时是否已经结束行动。</summary>
         internal bool HasEndedAction { get; }
 
@@ -20,6 +35,11 @@ namespace TinySpire.Battle
                 throw new ArgumentNullException(nameof(player));
 
             Energy = player.Energy;
+            EnergyMaximum = player.EnergyMaximum;
+            EnergyGainPerRound = player.EnergyGainPerRound;
+            Ammo = player.Ammo;
+            AmmoMaximum = player.AmmoMaximum;
+            AmmoGainPerRound = player.AmmoGainPerRound;
             HasEndedAction = player.HasEndedAction;
         }
 
@@ -28,6 +48,11 @@ namespace TinySpire.Battle
         {
             return player != null &&
                    player.Energy == Energy &&
+                   player.EnergyMaximum == EnergyMaximum &&
+                   player.EnergyGainPerRound == EnergyGainPerRound &&
+                   player.Ammo == Ammo &&
+                   player.AmmoMaximum == AmmoMaximum &&
+                   player.AmmoGainPerRound == AmmoGainPerRound &&
                    player.HasEndedAction == HasEndedAction;
         }
     }
@@ -120,7 +145,7 @@ namespace TinySpire.Battle
 
     /// <summary>
     /// 敌人行动首次写入前的联合权威快照。
-    /// 同时冻结 source、target、Turn、Intent 与预定 continuation，并提供状态投影事实。
+    /// 同时冻结 source、可选 target、Turn、Intent 与预定 continuation，并提供状态投影事实。
     /// </summary>
     internal sealed class BattleEnemyActionJointInitialSnapshot
     {
@@ -129,6 +154,9 @@ namespace TinySpire.Battle
 
         /// <summary>显式 target 的初始四标量快照。</summary>
         internal BattleCombatantScalarSnapshot Target { get; }
+
+        /// <summary>指示本计划是否包含行为解析后才会出现的显式 target。</summary>
+        internal bool HasTarget { get; }
 
         /// <summary>完整回合权威快照。</summary>
         internal BattleTurnAuthoritySnapshot Turn { get; }
@@ -216,6 +244,36 @@ namespace TinySpire.Battle
                     Source.Block,
                     Source.Vulnerable));
             Continuation = new BattleEnemyActionContinuationSnapshot(continuation);
+            HasTarget = true;
+        }
+
+        /// <summary>只冻结中毒致死分支需要的 source、Turn、Intent 与 continuation，不解析行为或 target。</summary>
+        internal BattleEnemyActionJointInitialSnapshot(
+            EnemyCombatantData source,
+            BattleTurnData turn,
+            BattleEnemyIntentAuthoritySnapshot intent,
+            BattleCommand continuation)
+        {
+            if (source == null)
+                throw new ArgumentNullException(nameof(source));
+            if (turn == null)
+                throw new ArgumentNullException(nameof(turn));
+            if (intent == null)
+                throw new ArgumentNullException(nameof(intent));
+            if (intent.EnemyId != source.Id)
+                throw new ArgumentException("Intent 快照必须属于当前敌人 source。", nameof(intent));
+
+            Source = new BattleCombatantScalarSnapshot(source);
+            Target = default;
+            HasTarget = false;
+            Turn = new BattleTurnAuthoritySnapshot(turn);
+            Intent = intent;
+            EffectIds = Array.Empty<BattleEffectId>();
+            SourceBeforeEffect = new BattleEffectTargetSnapshot(
+                Source.Health,
+                Source.Block,
+                Source.Vulnerable);
+            Continuation = new BattleEnemyActionContinuationSnapshot(continuation);
         }
 
         /// <summary>从 Effect 后 source 事实投影本次行动结束时的 Vulnerable 衰减。</summary>
@@ -227,7 +285,7 @@ namespace TinySpire.Battle
                 sourceAfterEffect);
         }
 
-        /// <summary>一次性比较 source、target、Turn 与 Intent 的全部初始权威事实。</summary>
+        /// <summary>一次性比较 source、可选 target、Turn 与 Intent 的全部初始权威事实。</summary>
         internal bool Matches(
             CombatantData source,
             CombatantData target,
@@ -237,14 +295,14 @@ namespace TinySpire.Battle
             return MatchesWithoutIntent(source, target, turn) && Intent.Matches(intents);
         }
 
-        /// <summary>比较联合 source、target 与 Turn，让同一 Intent 快照由三段式 validator 唯一消费。</summary>
+        /// <summary>比较联合 source、可选 target 与 Turn，让同一 Intent 快照由三段式 validator 唯一消费。</summary>
         internal bool MatchesWithoutIntent(
             CombatantData source,
             CombatantData target,
             BattleTurnData turn)
         {
             return Source.Matches(source) &&
-                   Target.Matches(target) &&
+                   (!HasTarget || Target.Matches(target)) &&
                    Turn.Matches(turn);
         }
     }

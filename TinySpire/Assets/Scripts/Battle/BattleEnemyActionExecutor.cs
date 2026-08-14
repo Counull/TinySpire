@@ -220,7 +220,7 @@ namespace TinySpire.Battle
         }
     }
 
-    /// <summary>联合冻结状态、Effect、下一意图与 continuation 的一次性敌人行动计划。</summary>
+    /// <summary>联合冻结中毒触发、可选行为组件与 continuation 的一次性敌人行动计划。</summary>
     internal sealed class BattlePreparedEnemyActionPlan
     {
         /// <summary>创建计划的唯一联合 executor。</summary>
@@ -229,6 +229,18 @@ namespace TinySpire.Battle
         /// <summary>联合初始快照与一次性 guard。</summary>
         internal BattleEnemyActionJointInitialSnapshot InitialSnapshot { get; }
         internal BattleEnemyActionJointCommitGuard Guard { get; }
+
+        /// <summary>行动最开始执行的通用中毒触发计划。</summary>
+        internal BattlePreparedPoisonTick PoisonTickPlan { get; }
+
+        /// <summary>中毒触发记录在完整联合事务中的冻结起始序号。</summary>
+        internal int PoisonTickStartingOrder { get; }
+
+        /// <summary>指示中毒是否会令 source 死亡并切换到 source-only 跳过分支。</summary>
+        internal bool IsPoisonFatal => PoisonTickPlan.WasFatal;
+
+        /// <summary>中毒致死后 SourceNotAlive 跳过记录的冻结序号；非致死分支为空。</summary>
+        internal int? FatalSkipOrder { get; }
 
         /// <summary>行动前 Block 时机计划。</summary>
         internal BattlePreparedStatusTimingPlan StartStatusPlan { get; }
@@ -242,6 +254,12 @@ namespace TinySpire.Battle
         /// <summary>以 Effect 后 source 投影预构建的 Vulnerable 时机计划。</summary>
         internal BattlePreparedStatusTimingPlan CompletionStatusPlan { get; }
 
+        /// <summary>敌人行动结束时清除职业私有临时状态的冻结计划；本场无职业运行时时为空。</summary>
+        internal MachineGunnerActorActionEndPlan ActorActionEndPlan { get; }
+
+        /// <summary>职业行动结束记录在联合事务中的冻结起始序号。</summary>
+        internal int ActorActionEndStartingOrder { get; }
+
         /// <summary>同一初始 Intent 快照预构建的下一意图计划。</summary>
         internal BattlePreparedEnemyIntentCompletion IntentPlan { get; }
 
@@ -249,24 +267,65 @@ namespace TinySpire.Battle
         internal BattleEnemyActionContinuationSnapshot Continuation =>
             InitialSnapshot.Continuation;
 
-        /// <summary>冻结一次完整联合计划及其所有 component plan。</summary>
+        /// <summary>冻结一次非致死或致死中毒分支，并拒绝互相矛盾的 component 组合。</summary>
         internal BattlePreparedEnemyActionPlan(
             BattleEnemyActionExecutor owner,
             BattleEnemyActionJointInitialSnapshot initialSnapshot,
+            BattlePreparedPoisonTick poisonTickPlan,
+            int poisonTickStartingOrder,
+            int? fatalSkipOrder,
             BattlePreparedStatusTimingPlan startStatusPlan,
             BattlePreparedEffectPlan effectPlan,
             int effectStartingOrder,
             BattlePreparedStatusTimingPlan completionStatusPlan,
+            MachineGunnerActorActionEndPlan actorActionEndPlan,
+            int actorActionEndStartingOrder,
             BattlePreparedEnemyIntentCompletion intentPlan)
         {
             Owner = owner ?? throw new ArgumentNullException(nameof(owner));
             InitialSnapshot = initialSnapshot ?? throw new ArgumentNullException(nameof(initialSnapshot));
-            StartStatusPlan = startStatusPlan ?? throw new ArgumentNullException(nameof(startStatusPlan));
-            EffectPlan = effectPlan ?? throw new ArgumentNullException(nameof(effectPlan));
+            PoisonTickPlan = poisonTickPlan ?? throw new ArgumentNullException(nameof(poisonTickPlan));
+            if (poisonTickStartingOrder < 0)
+                throw new ArgumentOutOfRangeException(nameof(poisonTickStartingOrder));
+            if (poisonTickPlan.TargetId != initialSnapshot.Source.Id)
+                throw new ArgumentException("中毒触发目标必须是本次行动的敌人 source。", nameof(poisonTickPlan));
+
+            bool hasNormalComponents = startStatusPlan != null &&
+                effectPlan != null &&
+                completionStatusPlan != null &&
+                intentPlan != null;
+            bool hasAnyNormalComponent = startStatusPlan != null ||
+                effectPlan != null ||
+                completionStatusPlan != null ||
+                actorActionEndPlan != null ||
+                intentPlan != null;
+            if (poisonTickPlan.WasFatal)
+            {
+                long expectedFatalSkipOrder = (long)poisonTickStartingOrder +
+                    (poisonTickPlan.HasWrite ? 1 : 0);
+                if (expectedFatalSkipOrder > int.MaxValue ||
+                    initialSnapshot.HasTarget ||
+                    hasAnyNormalComponent ||
+                    !fatalSkipOrder.HasValue ||
+                    fatalSkipOrder.Value != expectedFatalSkipOrder)
+                {
+                    throw new ArgumentException("中毒致死计划只能包含 source-only 快照、触发与跳过记录。", nameof(initialSnapshot));
+                }
+            }
+            else if (!initialSnapshot.HasTarget || !hasNormalComponents || fatalSkipOrder.HasValue)
+            {
+                throw new ArgumentException("非致死敌人行动计划必须包含完整行为组件且不能包含致死跳过记录。", nameof(initialSnapshot));
+            }
+
+            PoisonTickStartingOrder = poisonTickStartingOrder;
+            FatalSkipOrder = fatalSkipOrder;
+            StartStatusPlan = startStatusPlan;
+            EffectPlan = effectPlan;
             EffectStartingOrder = effectStartingOrder;
-            CompletionStatusPlan = completionStatusPlan
-                ?? throw new ArgumentNullException(nameof(completionStatusPlan));
-            IntentPlan = intentPlan ?? throw new ArgumentNullException(nameof(intentPlan));
+            CompletionStatusPlan = completionStatusPlan;
+            ActorActionEndPlan = actorActionEndPlan;
+            ActorActionEndStartingOrder = actorActionEndStartingOrder;
+            IntentPlan = intentPlan;
             Guard = new BattleEnemyActionJointCommitGuard(initialSnapshot);
         }
     }
@@ -283,19 +342,27 @@ namespace TinySpire.Battle
         private readonly BattleEnemyActionTargetResolver _targetResolver;
         private readonly BattleStatusTiming _statusTiming;
         private readonly BattleEffectExecutor _effectExecutor;
+        private readonly BattlePoisonApplication _poisonApplication;
+        private readonly MachineGunnerBattleRuntime _machineGunnerRuntime;
 
         /// <summary>绑定本场唯一参与者、意图和同一静态配置。</summary>
         internal BattleEnemyActionExecutor(
             cfg.Tables tables,
             BattleCombatantsData combatants,
-            BattleEnemyIntentsData intents)
+            BattleEnemyIntentsData intents,
+            MachineGunnerBattleRuntime machineGunnerRuntime = null)
         {
             _tables = tables ?? throw new ArgumentNullException(nameof(tables));
             _combatants = combatants ?? throw new ArgumentNullException(nameof(combatants));
             _intents = intents ?? throw new ArgumentNullException(nameof(intents));
             _targetResolver = new BattleEnemyActionTargetResolver(combatants);
             _statusTiming = new BattleStatusTiming(combatants);
-            _effectExecutor = new BattleEffectExecutor(tables, combatants);
+            _poisonApplication = new BattlePoisonApplication(combatants);
+            _machineGunnerRuntime = machineGunnerRuntime;
+            _effectExecutor = new BattleEffectExecutor(
+                tables,
+                combatants,
+                _machineGunnerRuntime?.DamageFormulaOverride);
         }
 
         /// <summary>完成联合 prepare、唯一 validate 与无普通失败 commit 的深入口。</summary>
@@ -381,16 +448,21 @@ namespace TinySpire.Battle
                     continuation);
             }
 
-            BattleEnemyActionTargetEvaluation playerPreflight = _targetResolver.Resolve(
-                source.Id,
-                cfg.battle.TargetRule.Self,
-                startingOrder);
-            if (playerPreflight.Kind == BattleEnemyActionTargetResolutionKind.BattleEnded)
-                return BattleEnemyActionPreparationResult.Ended();
-            if (playerPreflight.Kind == BattleEnemyActionTargetResolutionKind.Faulted)
+            int poisonTickStartingOrder = startingOrder;
+            BattlePoisonTickPreparationResult poisonTick =
+                _poisonApplication.PrepareTick(source.Id);
+            if (!poisonTick.Succeeded)
             {
                 return BattleEnemyActionPreparationResult.Faulted(
-                    playerPreflight.FaultReason.Value);
+                    BattleCommandQueueFaultReason.PreparedInvariantViolation);
+            }
+
+            long orderAfterPoisonTick = (long)poisonTickStartingOrder +
+                (poisonTick.Plan.HasWrite ? 1 : 0);
+            if (orderAfterPoisonTick > int.MaxValue)
+            {
+                return BattleEnemyActionPreparationResult.Faulted(
+                    BattleCommandQueueFaultReason.PreparedInvariantViolation);
             }
 
             BattleEnemyIntentAuthoritySnapshot intentSnapshot;
@@ -402,6 +474,49 @@ namespace TinySpire.Battle
             {
                 return BattleEnemyActionPreparationResult.Faulted(
                     BattleCommandQueueFaultReason.MissingEnemyBehavior);
+            }
+
+            int nextOrder = (int)orderAfterPoisonTick;
+            if (poisonTick.Plan.WasFatal)
+            {
+                long orderAfterFatalSkip = (long)nextOrder + 1;
+                if (orderAfterFatalSkip > int.MaxValue)
+                {
+                    return BattleEnemyActionPreparationResult.Faulted(
+                        BattleCommandQueueFaultReason.PreparedInvariantViolation);
+                }
+
+                var sourceOnlySnapshot = new BattleEnemyActionJointInitialSnapshot(
+                    source,
+                    currentTurn,
+                    intentSnapshot,
+                    plannedContinuation);
+                return BattleEnemyActionPreparationResult.Prepared(
+                    new BattlePreparedEnemyActionPlan(
+                        this,
+                        sourceOnlySnapshot,
+                        poisonTick.Plan,
+                        poisonTickStartingOrder,
+                        fatalSkipOrder: nextOrder,
+                        startStatusPlan: null,
+                        effectPlan: null,
+                        effectStartingOrder: 0,
+                        completionStatusPlan: null,
+                        actorActionEndPlan: null,
+                        actorActionEndStartingOrder: 0,
+                        intentPlan: null));
+            }
+
+            BattleEnemyActionTargetEvaluation playerPreflight = _targetResolver.Resolve(
+                source.Id,
+                cfg.battle.TargetRule.Self,
+                nextOrder);
+            if (playerPreflight.Kind == BattleEnemyActionTargetResolutionKind.BattleEnded)
+                return BattleEnemyActionPreparationResult.Ended();
+            if (playerPreflight.Kind == BattleEnemyActionTargetResolutionKind.Faulted)
+            {
+                return BattleEnemyActionPreparationResult.Faulted(
+                    playerPreflight.FaultReason.Value);
             }
 
             cfg.battle.EnemyBehavior behavior =
@@ -445,16 +560,18 @@ namespace TinySpire.Battle
             var effectIds = new[] { effectId };
             var sourceSnapshot = new BattleCombatantScalarSnapshot(source);
             var targetSnapshot = new BattleCombatantScalarSnapshot(target);
+            BattleEffectTargetSnapshot sourceAfterPoisonTick =
+                new BattleEffectTargetSnapshot(
+                    poisonTick.Plan.HealthAfter,
+                    poisonTick.Plan.BlockAfter,
+                    sourceSnapshot.Vulnerable);
             BattleEffectTargetSnapshot sourceBeforeEffect = BattleStatusTiming.Project(
                 BattleStatusTimingPoint.EnemyActionStarted,
-                new BattleEffectTargetSnapshot(
-                    sourceSnapshot.Health,
-                    sourceSnapshot.Block,
-                    sourceSnapshot.Vulnerable));
-            int nextOrder = startingOrder;
-            BattleStatusTimingPreparationResult startStatus = _statusTiming.Prepare(
+                sourceAfterPoisonTick);
+            BattleStatusTimingPreparationResult startStatus = _statusTiming.PrepareProjected(
                 BattleStatusTimingPoint.EnemyActionStarted,
                 source.Id,
+                sourceAfterPoisonTick,
                 nextOrder);
             if (!startStatus.Succeeded)
             {
@@ -501,7 +618,7 @@ namespace TinySpire.Battle
                 effectIds,
                 resolvedContinuation);
 
-            long orderAfterEffect = (long)nextOrder + effect.Plan.Operations.Count;
+            long orderAfterEffect = (long)nextOrder + effect.Plan.PlannedSettlementCount;
             if (orderAfterEffect > int.MaxValue)
             {
                 return BattleEnemyActionPreparationResult.Faulted(
@@ -529,6 +646,18 @@ namespace TinySpire.Battle
             }
 
             nextOrder = (int)orderAfterCompletion;
+            MachineGunnerActorActionEndPlan actorActionEndPlan =
+                _machineGunnerRuntime?.PrepareActorActionEnd(source.Id);
+            int actorActionEndStartingOrder = nextOrder;
+            long orderAfterActorActionEnd = (long)nextOrder +
+                (actorActionEndPlan?.SettlementCount ?? 0);
+            if (orderAfterActorActionEnd > int.MaxValue)
+            {
+                return BattleEnemyActionPreparationResult.Faulted(
+                    BattleCommandQueueFaultReason.PreparedInvariantViolation);
+            }
+
+            nextOrder = (int)orderAfterActorActionEnd;
             BattleEnemyIntentCompletionPreparationResult intent =
                 _intents.PrepareCompletion(initialSnapshot.Intent, nextOrder);
             if (!intent.Succeeded)
@@ -538,14 +667,19 @@ namespace TinySpire.Battle
                 new BattlePreparedEnemyActionPlan(
                     this,
                     initialSnapshot,
+                    poisonTick.Plan,
+                    poisonTickStartingOrder,
+                    null,
                     startStatus.Plan,
                     effect.Plan,
                     effectStartingOrder,
                     completionStatus.Plan,
+                    actorActionEndPlan,
+                    actorActionEndStartingOrder,
                     intent.Plan));
         }
 
-        /// <summary>首次写入前只执行一次联合 source/target/Turn/Intent/component 校验。</summary>
+        /// <summary>首次写入前只执行一次联合 source/可选 target/Turn/Intent/component 校验。</summary>
         internal bool ValidatePrepared(
             BattlePreparedEnemyActionPlan plan,
             BattleTurnData currentTurn)
@@ -559,15 +693,23 @@ namespace TinySpire.Battle
             _combatants.TryGet(
                 plan.InitialSnapshot.Source.Id,
                 out CombatantData source);
-            _combatants.TryGet(
-                plan.InitialSnapshot.Target.Id,
-                out CombatantData target);
+            CombatantData target = null;
+            if (plan.InitialSnapshot.HasTarget)
+            {
+                _combatants.TryGet(
+                    plan.InitialSnapshot.Target.Id,
+                    out target);
+            }
             return plan.Guard.ValidateInitial(
                 source,
                 target,
                 currentTurn,
                 () =>
                 {
+                    if (!_poisonApplication.ValidatePreparedTick(plan.PoisonTickPlan))
+                        return false;
+                    if (plan.IsPoisonFatal)
+                        return plan.InitialSnapshot.Intent.Matches(_intents);
                     if (!_intents.ValidatePreparedCompletion(plan.IntentPlan) ||
                         !_statusTiming.ValidatePrepared(plan.StartStatusPlan))
                     {
@@ -577,11 +719,16 @@ namespace TinySpire.Battle
                     _effectExecutor.ValidatePreparedExecution(
                         plan.EffectPlan,
                         plan.EffectStartingOrder);
-                    return _statusTiming.ValidatePrepared(plan.CompletionStatusPlan);
+                    if (!_statusTiming.ValidatePrepared(plan.CompletionStatusPlan))
+                        return false;
+                    return plan.ActorActionEndPlan == null ||
+                        (_machineGunnerRuntime != null &&
+                         _machineGunnerRuntime.ValidatePreparedActorActionEnd(
+                             plan.ActorActionEndPlan));
                 });
         }
 
-        /// <summary>按 Block → Effect → Vulnerable → Intent 提交已验证计划，期间不复验或返回普通失败。</summary>
+        /// <summary>先提交中毒；非致死再提交行为组件，致死则只追加 source 跳过，期间不复验。</summary>
         internal BattleEnemyActionExecutionResult CommitPrepared(
             BattlePreparedEnemyActionPlan plan)
         {
@@ -593,6 +740,20 @@ namespace TinySpire.Battle
             var settlements = new List<BattleSettlementRecord>();
             plan.Guard.Commit(() =>
             {
+                settlements.AddRange(
+                    _poisonApplication.CommitPreparedTick(
+                        plan.PoisonTickPlan,
+                        plan.PoisonTickStartingOrder));
+                if (plan.IsPoisonFatal)
+                {
+                    settlements.Add(
+                        new BattleEnemyActionSkippedSettlement(
+                            plan.FatalSkipOrder.Value,
+                            plan.InitialSnapshot.Source.Id,
+                            BattleEnemyActionSkipReason.SourceNotAlive));
+                    return;
+                }
+
                 BattleStatusTimingResult start =
                     _statusTiming.CommitPrepared(plan.StartStatusPlan);
                 settlements.AddRange(start.Settlements);
@@ -602,6 +763,15 @@ namespace TinySpire.Battle
                 BattleStatusTimingResult completion =
                     _statusTiming.CommitPrepared(plan.CompletionStatusPlan);
                 settlements.AddRange(completion.Settlements);
+                if (plan.ActorActionEndPlan != null)
+                {
+                    if (_machineGunnerRuntime == null)
+                        throw new InvalidOperationException("敌人行动计划缺少机枪兵运行时。");
+                    settlements.AddRange(
+                        _machineGunnerRuntime.CommitPreparedActorActionEnd(
+                            plan.ActorActionEndPlan,
+                            plan.ActorActionEndStartingOrder));
+                }
                 BattleEnemyIntentCompletionResult intent =
                     _intents.CommitPreparedCompletion(plan.IntentPlan);
                 settlements.AddRange(intent.Settlements);

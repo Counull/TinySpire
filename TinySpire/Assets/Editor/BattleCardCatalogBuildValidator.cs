@@ -15,6 +15,12 @@ internal static class BattleCardCatalogBuildValidator
     private const string CardTableJsonPath = "Assets/GameData/battle_tbcard.json";
     private const string EffectTableJsonPath = "Assets/GameData/battle_tbcardeffect.json";
     private const string IroncladSnapshotKey = "sts2-v0.107.1-23811903-59260271";
+    private const string MarineSnapshotKey = "marine-game-v1-20260807-cards";
+    private const string MarineV2ExtensionSnapshotKey = "marine-game-v2-20260812-cards";
+    private const int FirstMarineCardId = 3201;
+    private const int FirstMarineV2ExtensionCardId = 3265;
+    private const int FirstMarineV2ExtensionProgramId = 65;
+    private const int OpeningHandLimit = 10;
     internal const string CatalogPlaceholderIllustrationKey = "art_placeholder";
 
     private static readonly HashSet<string> ExpectedIroncladExternalKeys =
@@ -110,10 +116,209 @@ internal static class BattleCardCatalogBuildValidator
     private static readonly HashSet<string> ExpectedIroncladImplementedExternalKeys =
         new HashSet<string>(StringComparer.Ordinal)
         {
+            "BARRICADE",
             "BASH",
+            "BLUDGEON",
+            "BODY_SLAM",
+            "BURNING_PACT",
             "DEFEND_IRONCLAD",
+            "HAVOC",
+            "JUGGERNAUT",
+            "NOT_YET",
+            "POMMEL_STRIKE",
+            "SHRUG_IT_OFF",
             "STRIKE_IRONCLAD",
-            "TREMBLE"
+            "SWORD_BOOMERANG",
+            "TREMBLE",
+            "TWIN_STRIKE"
+        };
+
+    private static readonly HashSet<string> ExpectedMarineImplementedExternalKeys =
+        new HashSet<string>(StringComparer.Ordinal)
+        {
+            "MARINE_SHOOT",
+            "MARINE_ELBOW",
+            "MARINE_BLOCK",
+            "MARINE_RELOAD",
+            "MARINE_STIM",
+            "MARINE_CORE_EXPANSION",
+            "MARINE_OUTPUT_ADJUST",
+            "MARINE_BLAST_SHIELD",
+            "MARINE_MAG_EXPANSION",
+            "MARINE_INCENDIARY_AMMO",
+            "MARINE_SMOKE_PERSIST",
+            "MARINE_KUNGFU_MECH",
+            "MARINE_OVERLOAD",
+            "MARINE_TUMBLE_RELOAD",
+            "MARINE_RETREAT",
+            "MARINE_GAS_PUMP",
+            "MARINE_NAPALM",
+            "MARINE_MOLOTOV",
+            "MARINE_STUN_GRENADE",
+            "MARINE_HOLD_LINE",
+            "MARINE_SMOKE_BOMB",
+            "MARINE_INCOMPLETE_COMBUSTION",
+            "MARINE_KNOCKBACK_SHOT",
+            "MARINE_SPRAY",
+            "MARINE_BAYONET_PARRY",
+            "MARINE_WILD_RAMPAGE",
+            "MARINE_QUICK_ELBOW",
+            "MARINE_KIDNEY_SHOT",
+            "MARINE_PAINFUL_ELBOW",
+            "MARINE_HEAVY_ELBOW",
+            "MARINE_FIELD_SURGERY",
+            "MARINE_GARRISON",
+            "MARINE_HURRICANE_ELBOW",
+            "MARINE_PRECISION_SHOT",
+            "MARINE_TACTICAL_ADVANCE",
+            "MARINE_QUICK_ROLL",
+            "MARINE_ELECTRO_BOOST",
+            "MARINE_GUIDED_NUKE",
+            "MARINE_BANSHEE_STRIKE",
+            "MARINE_FIRE_SUPPORT",
+            "MARINE_FIRE_BOMBARDMENT",
+            "MARINE_FIVE_HUNDRED_POUNDER",
+            "MARINE_COMBO_ELBOW",
+            "MARINE_OPPORTUNISTIC_STRIKE",
+            "MARINE_VENT_HEAT",
+            "MARINE_POWER_OVERCLOCK",
+            "MARINE_SNIPER_SHOT",
+            "MARINE_SPIKE_SHOT",
+            "MARINE_OPTICAL_CAMO",
+            "MARINE_UNSTOPPABLE",
+            "MARINE_GUERRILLA_TACTICS",
+            "MARINE_EXPLOSIVE_ELBOW",
+            "MARINE_AGED_OIL",
+            "MARINE_BURNING_OIL",
+            "MARINE_FLAME_ELBOW",
+            "MARINE_SIX_HITS",
+            "MARINE_TWELVE_HITS",
+            "MARINE_QUICK_MANEUVER",
+            "MARINE_HOLO_DECOY",
+            "MARINE_LIMIT_OVERLOAD",
+            "MARINE_MACHINEGUN",
+            "MARINE_DEFENSE_TARGET",
+            "MARINE_MACHINEGUN_BURST",
+            "MARINE_TRIPLE_STRIKE"
+        };
+
+    private static readonly string[] ExpectedMarineExternalKeysInIdOrder =
+    {
+        "MARINE_SHOOT",
+        "MARINE_ELBOW",
+        "MARINE_BLOCK",
+        "MARINE_RELOAD",
+        "MARINE_STIM",
+        "MARINE_CORE_EXPANSION",
+        "MARINE_OUTPUT_ADJUST",
+        "MARINE_BLAST_SHIELD",
+        "MARINE_MAG_EXPANSION",
+        "MARINE_INCENDIARY_AMMO",
+        "MARINE_SMOKE_PERSIST",
+        "MARINE_KUNGFU_MECH",
+        "MARINE_OVERLOAD",
+        "MARINE_TUMBLE_RELOAD",
+        "MARINE_STUN_GRENADE",
+        "MARINE_RETREAT",
+        "MARINE_GAS_PUMP",
+        "MARINE_NAPALM",
+        "MARINE_MOLOTOV",
+        "MARINE_HOLD_LINE",
+        "MARINE_SMOKE_BOMB",
+        "MARINE_INCOMPLETE_COMBUSTION",
+        "MARINE_KNOCKBACK_SHOT",
+        "MARINE_SPRAY",
+        "MARINE_BAYONET_PARRY",
+        "MARINE_WILD_RAMPAGE",
+        "MARINE_QUICK_ELBOW",
+        "MARINE_KIDNEY_SHOT",
+        "MARINE_PAINFUL_ELBOW",
+        "MARINE_HEAVY_ELBOW",
+        "MARINE_FIELD_SURGERY",
+        "MARINE_HURRICANE_ELBOW",
+        "MARINE_PRECISION_SHOT",
+        "MARINE_TACTICAL_ADVANCE",
+        "MARINE_QUICK_ROLL",
+        "MARINE_ELECTRO_BOOST",
+        "MARINE_GUIDED_NUKE",
+        "MARINE_BANSHEE_STRIKE",
+        "MARINE_FIRE_SUPPORT",
+        "MARINE_FIRE_BOMBARDMENT",
+        "MARINE_FIVE_HUNDRED_POUNDER",
+        "MARINE_COMBO_ELBOW",
+        "MARINE_OPPORTUNISTIC_STRIKE",
+        "MARINE_VENT_HEAT",
+        "MARINE_POWER_OVERCLOCK",
+        "MARINE_GARRISON",
+        "MARINE_SNIPER_SHOT",
+        "MARINE_SPIKE_SHOT",
+        "MARINE_OPTICAL_CAMO",
+        "MARINE_UNSTOPPABLE",
+        "MARINE_GUERRILLA_TACTICS",
+        "MARINE_EXPLOSIVE_ELBOW",
+        "MARINE_AGED_OIL",
+        "MARINE_BURNING_OIL",
+        "MARINE_FLAME_ELBOW",
+        "MARINE_SIX_HITS",
+        "MARINE_TWELVE_HITS",
+        "MARINE_QUICK_MANEUVER",
+        "MARINE_HOLO_DECOY",
+        "MARINE_LIMIT_OVERLOAD",
+        "MARINE_MACHINEGUN",
+        "MARINE_DEFENSE_TARGET",
+        "MARINE_MACHINEGUN_BURST",
+        "MARINE_TRIPLE_STRIKE",
+    };
+
+    private static readonly string[] ExpectedMarineV2ExtensionExternalKeysInIdOrder =
+    {
+        "MARINE_BOMBARD",
+        "MARINE_SKY_WRATH",
+        "MARINE_PORTABLE_HELPER",
+        "MARINE_PRIVATE_MOD",
+        "MARINE_CHAIN_SMOKE",
+        "MARINE_SECONDHAND_SMOKE",
+        "MARINE_DEFENSIVE_STANCE",
+        "MARINE_EMERGENCY_COOLING",
+        "MARINE_THERMITE_BOMB",
+        "MARINE_NEEDLE_STORM",
+        "MARINE_STEALTH_ACTION",
+        "MARINE_FOEHN_WIND",
+        "MARINE_PREEMPTIVE_STRIKE",
+        "MARINE_BULLY",
+        "MARINE_PRISMATIC_SHOT",
+        "MARINE_MARK",
+        "MARINE_CRUSH",
+        "MARINE_CHARGED_BURST",
+    };
+
+    private static readonly HashSet<string> ExpectedMarineV2ExtensionImplementedExternalKeys =
+        new HashSet<string>(StringComparer.Ordinal)
+        {
+            "MARINE_BOMBARD",
+            "MARINE_SKY_WRATH",
+            "MARINE_PORTABLE_HELPER",
+            "MARINE_PRIVATE_MOD",
+            "MARINE_CHAIN_SMOKE",
+            "MARINE_SECONDHAND_SMOKE",
+            "MARINE_DEFENSIVE_STANCE",
+            "MARINE_EMERGENCY_COOLING",
+            "MARINE_THERMITE_BOMB",
+            "MARINE_NEEDLE_STORM",
+            "MARINE_STEALTH_ACTION",
+            "MARINE_FOEHN_WIND",
+            "MARINE_PREEMPTIVE_STRIKE",
+            "MARINE_BULLY",
+            "MARINE_PRISMATIC_SHOT",
+            "MARINE_MARK",
+            "MARINE_CRUSH",
+            "MARINE_CHARGED_BURST",
+        };
+
+    private static readonly HashSet<string> ExpectedMarineV2ExtensionInnateExternalKeys =
+        new HashSet<string>(StringComparer.Ordinal)
+        {
+            "MARINE_STEALTH_ACTION",
         };
 
     /// <summary>读取当前生成表并在任何本地化或 Addressables 写入前完成目录校验。</summary>
@@ -124,7 +329,220 @@ internal static class BattleCardCatalogBuildValidator
         JObject effects = ReadRequiredTable(EffectTableJsonPath);
         Validate(decks, cards, effects);
         ValidateIroncladV01071Snapshot(cards);
+        ValidateMarineGameV1CardSnapshot(cards);
+        ValidateMarineGameV2ExtensionSnapshot(cards);
         AddressablesBuildTools.ValidateCardIllustrations(cards);
+    }
+
+    /// <summary>校验 Marine Game v1 的 64 张机枪兵目录身份、稳定 ID、程序绑定与分阶段开放门禁。</summary>
+    internal static void ValidateMarineGameV1CardSnapshot(JObject cards)
+    {
+        if (cards == null)
+            throw new ArgumentNullException(nameof(cards));
+
+        var expectedExternalKeys = new HashSet<string>(
+            ExpectedMarineExternalKeysInIdOrder,
+            StringComparer.Ordinal);
+        var snapshotCards = new Dictionary<string, JObject>(StringComparer.Ordinal);
+        foreach (JProperty property in cards.Properties())
+        {
+            JObject card = property.Value as JObject
+                ?? throw new InvalidOperationException($"Card record '{property.Name}' must be an object.");
+            string snapshotKey = ReadRequiredString(card, "catalog_snapshot_key", property.Name);
+            if (!string.Equals(snapshotKey, MarineSnapshotKey, StringComparison.Ordinal))
+                continue;
+
+            string externalKey = ReadRequiredString(card, "external_key", property.Name);
+            if (!expectedExternalKeys.Contains(externalKey))
+                throw new InvalidOperationException($"Unexpected Marine external_key '{externalKey}'.");
+            if (snapshotCards.ContainsKey(externalKey))
+                throw new InvalidOperationException($"Duplicate Marine external_key '{externalKey}'.");
+            snapshotCards.Add(externalKey, card);
+        }
+
+        var actualExternalKeys = new HashSet<string>(snapshotCards.Keys, StringComparer.Ordinal);
+        if (!actualExternalKeys.SetEquals(expectedExternalKeys))
+        {
+            string missing = string.Join(
+                ", ",
+                expectedExternalKeys.Except(snapshotCards.Keys).OrderBy(key => key, StringComparer.Ordinal));
+            string unexpected = string.Join(
+                ", ",
+                snapshotCards.Keys.Except(expectedExternalKeys).OrderBy(key => key, StringComparer.Ordinal));
+            throw new InvalidOperationException(
+                $"Marine snapshot identities drifted: missing [{missing}]; unexpected [{unexpected}].");
+        }
+
+        for (int index = 0; index < ExpectedMarineExternalKeysInIdOrder.Length; index++)
+        {
+            string externalKey = ExpectedMarineExternalKeysInIdOrder[index];
+            JObject card = snapshotCards[externalKey];
+            int expectedId = FirstMarineCardId + index;
+            int actualId = ReadRequiredInt(card, "id", externalKey);
+            if (actualId != expectedId)
+            {
+                throw new InvalidOperationException(
+                    $"Marine card '{externalKey}' must keep id {expectedId}, but found {actualId}.");
+            }
+
+            int expectedProgramId = index + 1;
+            int actualProgramId = ReadRequiredInt(card, "program_id", externalKey);
+            if (actualProgramId != expectedProgramId)
+            {
+                throw new InvalidOperationException(
+                    $"Marine card '{externalKey}' must bind program {expectedProgramId}, but found {actualProgramId}.");
+            }
+
+            if (ReadRequiredBool(card, "is_innate", externalKey))
+            {
+                throw new InvalidOperationException(
+                    $"Marine card '{externalKey}' must keep is_innate=false.");
+            }
+
+            bool isImplemented = ExpectedMarineImplementedExternalKeys.Contains(externalKey);
+            int expectedImplementationStatus = isImplemented
+                ? (int)cfg.battle.CardImplementationStatus.Implemented
+                : (int)cfg.battle.CardImplementationStatus.CatalogOnly;
+            if (ReadRequiredInt(card, "implementation_status", externalKey) != expectedImplementationStatus)
+            {
+                string expectedStatus = isImplemented
+                    ? "Implemented"
+                    : "CatalogOnly";
+                throw new InvalidOperationException(
+                    $"Marine card '{externalKey}' must remain {expectedStatus} in the current runtime slice.");
+            }
+            if (!string.Equals(
+                    ReadRequiredString(card, "illustration_key", externalKey),
+                    CatalogPlaceholderIllustrationKey,
+                    StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Marine card '{externalKey}' must use placeholder illustration_key " +
+                    $"'{CatalogPlaceholderIllustrationKey}'.");
+            }
+
+            if (!(card["effect_bindings"] is JArray bindings) || bindings.Count != 0)
+            {
+                throw new InvalidOperationException(
+                    $"Marine card '{externalKey}' must have empty effect_bindings during catalog intake.");
+            }
+
+            bool expectedHasUpgrade = !string.Equals(
+                externalKey,
+                "MARINE_MACHINEGUN_BURST",
+                StringComparison.Ordinal);
+            if (card["has_upgrade"]?.Type != JTokenType.Boolean ||
+                card.Value<bool>("has_upgrade") != expectedHasUpgrade)
+            {
+                throw new InvalidOperationException(
+                    $"Marine card '{externalKey}' has unexpected has_upgrade value.");
+            }
+        }
+    }
+
+    /// <summary>校验 V2 新增的 18 张机枪兵目录卡保持独立快照、连续身份与精确实现状态门禁，不改写既有 V1 的 64 张冻结身份。</summary>
+    internal static void ValidateMarineGameV2ExtensionSnapshot(JObject cards)
+    {
+        if (cards == null)
+            throw new ArgumentNullException(nameof(cards));
+
+        var expectedExternalKeys = new HashSet<string>(
+            ExpectedMarineV2ExtensionExternalKeysInIdOrder,
+            StringComparer.Ordinal);
+        var snapshotCards = new Dictionary<string, JObject>(StringComparer.Ordinal);
+        foreach (JProperty property in cards.Properties())
+        {
+            JObject card = property.Value as JObject
+                ?? throw new InvalidOperationException($"Card record '{property.Name}' must be an object.");
+            string snapshotKey = ReadRequiredString(card, "catalog_snapshot_key", property.Name);
+            if (!string.Equals(snapshotKey, MarineV2ExtensionSnapshotKey, StringComparison.Ordinal))
+                continue;
+
+            string externalKey = ReadRequiredString(card, "external_key", property.Name);
+            if (!expectedExternalKeys.Contains(externalKey))
+            {
+                throw new InvalidOperationException(
+                    $"Unexpected Marine Game V2 extension external_key '{externalKey}'.");
+            }
+            if (snapshotCards.ContainsKey(externalKey))
+            {
+                throw new InvalidOperationException(
+                    $"Duplicate Marine Game V2 extension external_key '{externalKey}'.");
+            }
+            snapshotCards.Add(externalKey, card);
+        }
+
+        var actualExternalKeys = new HashSet<string>(snapshotCards.Keys, StringComparer.Ordinal);
+        if (!actualExternalKeys.SetEquals(expectedExternalKeys))
+        {
+            string missing = string.Join(
+                ", ",
+                expectedExternalKeys.Except(snapshotCards.Keys).OrderBy(key => key, StringComparer.Ordinal));
+            string unexpected = string.Join(
+                ", ",
+                snapshotCards.Keys.Except(expectedExternalKeys).OrderBy(key => key, StringComparer.Ordinal));
+            throw new InvalidOperationException(
+                $"Marine Game V2 extension snapshot identities drifted: missing [{missing}]; unexpected [{unexpected}].");
+        }
+
+        for (int index = 0; index < ExpectedMarineV2ExtensionExternalKeysInIdOrder.Length; index++)
+        {
+            string externalKey = ExpectedMarineV2ExtensionExternalKeysInIdOrder[index];
+            JObject card = snapshotCards[externalKey];
+            int expectedId = FirstMarineV2ExtensionCardId + index;
+            int actualId = ReadRequiredInt(card, "id", externalKey);
+            if (actualId != expectedId)
+            {
+                throw new InvalidOperationException(
+                    $"Marine Game V2 extension card '{externalKey}' must keep id {expectedId}, but found {actualId}.");
+            }
+
+            int expectedProgramId = FirstMarineV2ExtensionProgramId + index;
+            int actualProgramId = ReadRequiredInt(card, "program_id", externalKey);
+            if (actualProgramId != expectedProgramId)
+            {
+                throw new InvalidOperationException(
+                    $"Marine Game V2 extension card '{externalKey}' must bind program {expectedProgramId}, but found {actualProgramId}.");
+            }
+
+            bool isImplemented = ExpectedMarineV2ExtensionImplementedExternalKeys.Contains(externalKey);
+            int expectedImplementationStatus = isImplemented
+                ? (int)cfg.battle.CardImplementationStatus.Implemented
+                : (int)cfg.battle.CardImplementationStatus.CatalogOnly;
+            if (ReadRequiredInt(card, "implementation_status", externalKey) != expectedImplementationStatus)
+            {
+                string expectedStatus = isImplemented ? "Implemented" : "CatalogOnly";
+                throw new InvalidOperationException(
+                    $"Marine Game V2 extension card '{externalKey}' must remain {expectedStatus} in the current runtime slice.");
+            }
+            bool expectedInnate =
+                ExpectedMarineV2ExtensionInnateExternalKeys.Contains(externalKey);
+            if (ReadRequiredBool(card, "is_innate", externalKey) != expectedInnate)
+            {
+                throw new InvalidOperationException(
+                    $"Marine Game V2 extension card '{externalKey}' must keep " +
+                    $"is_innate={expectedInnate.ToString().ToLowerInvariant()}.");
+            }
+            if (!string.Equals(
+                    ReadRequiredString(card, "illustration_key", externalKey),
+                    CatalogPlaceholderIllustrationKey,
+                    StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Marine Game V2 extension card '{externalKey}' must use placeholder illustration_key " +
+                    $"'{CatalogPlaceholderIllustrationKey}'.");
+            }
+            if (!(card["effect_bindings"] is JArray bindings) || bindings.Count != 0)
+            {
+                throw new InvalidOperationException(
+                    $"Marine Game V2 extension card '{externalKey}' must have empty effect_bindings during catalog intake.");
+            }
+            if (card["has_upgrade"]?.Type != JTokenType.Boolean || !card.Value<bool>("has_upgrade"))
+            {
+                throw new InvalidOperationException(
+                    $"Marine Game V2 extension card '{externalKey}' must preserve has_upgrade=true metadata.");
+            }
+        }
     }
 
     /// <summary>校验冻结的 STS2 v0.107.1 战士单人目录身份、元数据聚合与不可玩隔离。</summary>
@@ -241,10 +659,10 @@ internal static class BattleCardCatalogBuildValidator
             throw new InvalidOperationException(
                 $"Ironclad X-cost external keys drifted: {string.Join(", ", xCostExternalKeys.OrderBy(key => key, StringComparer.Ordinal))}");
         }
-        if (implementedCount != 4 || catalogOnlyCount != 81)
+        if (implementedCount != 15 || catalogOnlyCount != 70)
         {
             throw new InvalidOperationException(
-                $"Ironclad implementation split must be 4 Implemented / 81 CatalogOnly, " +
+                $"Ironclad implementation split must be 15 Implemented / 70 CatalogOnly, " +
                 $"but was {implementedCount} / {catalogOnlyCount}.");
         }
         if (!implementedExternalKeys.SetEquals(ExpectedIroncladImplementedExternalKeys))
@@ -282,6 +700,7 @@ internal static class BattleCardCatalogBuildValidator
         foreach (JProperty card in cards.Properties())
         {
             int cardId = (int)card.Value["id"];
+            ReadRequiredBool((JObject)card.Value, "is_innate", cardId.ToString());
             string illustrationKey = (string)card.Value["illustration_key"];
             try
             {
@@ -316,7 +735,20 @@ internal static class BattleCardCatalogBuildValidator
                 continue;
             }
 
+            int programId = card.Value["program_id"]?.Type == JTokenType.Integer
+                ? (int)card.Value["program_id"]
+                : 0;
             var bindings = card.Value["effect_bindings"] as JArray;
+            if (programId != 0)
+            {
+                if (bindings == null || bindings.Count != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Implemented program card {cardId} must have empty effect_bindings.");
+                }
+
+                continue;
+            }
             if (bindings == null || bindings.Count == 0)
             {
                 throw new InvalidOperationException(
@@ -350,10 +782,11 @@ internal static class BattleCardCatalogBuildValidator
         foreach (JProperty deck in decks.Properties())
         {
             int deckId = (int)deck.Value["id"];
+            int innateCardCount = 0;
             foreach (JToken cardIdToken in (JArray)deck.Value["card_template_ids"])
             {
                 int cardId = (int)cardIdToken;
-                JToken card = cards[cardId.ToString()];
+                JObject card = cards[cardId.ToString()] as JObject;
                 if (card == null)
                     throw new InvalidOperationException($"Deck {deckId} references missing card {cardId}.");
 
@@ -363,6 +796,15 @@ internal static class BattleCardCatalogBuildValidator
                     throw new InvalidOperationException(
                         $"Deck {deckId} references CatalogOnly card {cardId}.");
                 }
+                if (ReadRequiredBool(card, "is_innate", cardId.ToString()))
+                    innateCardCount++;
+            }
+
+            if (innateCardCount > OpeningHandLimit)
+            {
+                throw new InvalidOperationException(
+                    $"Deck {deckId} contains {innateCardCount} innate cards, " +
+                    $"exceeding opening hand limit {OpeningHandLimit}.");
             }
         }
     }
@@ -386,6 +828,16 @@ internal static class BattleCardCatalogBuildValidator
             throw new InvalidOperationException($"Card {recordName} has no integer {fieldName}.");
 
         return (int)token;
+    }
+
+    /// <summary>读取目录记录的必填布尔字段，拒绝缺失、数字或字符串代替。</summary>
+    private static bool ReadRequiredBool(JObject record, string fieldName, string recordName)
+    {
+        JToken token = record[fieldName];
+        if (token == null || token.Type != JTokenType.Boolean)
+            throw new InvalidOperationException($"Card {recordName} has no boolean {fieldName}.");
+
+        return (bool)token;
     }
 
     /// <summary>累加已知枚举值，并在越界时报告卡牌身份。</summary>

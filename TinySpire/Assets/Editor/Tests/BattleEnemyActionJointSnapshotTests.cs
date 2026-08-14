@@ -104,6 +104,11 @@ public sealed class BattleEnemyActionJointSnapshotTests
             Assert.That(snapshot.Matches(fixture.CreateTurn(roundNumber: 3)), Is.False);
             Assert.That(snapshot.Matches(fixture.CreateTurn(hasCurrentEnemy: false)), Is.False);
             Assert.That(snapshot.Matches(fixture.CreateTurn(energy: 2)), Is.False);
+            Assert.That(snapshot.Matches(fixture.CreateTurn(energyMaximum: 2)), Is.False);
+            Assert.That(snapshot.Matches(fixture.CreateTurn(energyGainPerRound: 2)), Is.False);
+            Assert.That(snapshot.Matches(fixture.CreateTurn(ammo: 1)), Is.False);
+            Assert.That(snapshot.Matches(fixture.CreateTurn(ammoMaximum: 1)), Is.False);
+            Assert.That(snapshot.Matches(fixture.CreateTurn(ammoGainPerRound: 1)), Is.False);
             Assert.That(snapshot.Matches(fixture.CreateTurn(hasEndedAction: false)), Is.False);
             Assert.That(snapshot.Matches(new BattleTurnData(
                 BattleTurnPhase.EnemyAction,
@@ -266,6 +271,11 @@ public sealed class BattleEnemyActionJointSnapshotTests
             BattleTurnPhase phase = BattleTurnPhase.EnemyAction,
             int roundNumber = 2,
             int energy = 3,
+            int energyMaximum = 3,
+            int energyGainPerRound = 3,
+            int ammo = 0,
+            int ammoMaximum = 5,
+            int ammoGainPerRound = 0,
             bool hasEndedAction = true,
             bool hasCurrentEnemy = true)
         {
@@ -274,7 +284,14 @@ public sealed class BattleEnemyActionJointSnapshotTests
                 roundNumber,
                 new Dictionary<CombatantId, PlayerTurnData>
                 {
-                    [Player.Id] = new PlayerTurnData(energy, hasEndedAction)
+                    [Player.Id] = new PlayerTurnData(
+                        energy,
+                        energyMaximum,
+                        energyGainPerRound,
+                        ammo,
+                        ammoMaximum,
+                        ammoGainPerRound,
+                        hasEndedAction)
                 },
                 hasCurrentEnemy ? Enemy.Id : (CombatantId?)null);
         }

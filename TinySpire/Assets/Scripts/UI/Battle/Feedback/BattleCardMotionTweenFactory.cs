@@ -10,7 +10,9 @@ namespace TinySpire.UI.Battle
     {
         PlayCardTransientHold,
         HandToDiscard,
+        HandToExhaust,
         DrawToHand,
+        CreatedToHand,
         CardsReshuffled,
     }
 
@@ -81,7 +83,7 @@ namespace TinySpire.UI.Battle
             return true;
         }
 
-        /// <summary>只消费冻结的 Hand→Discard CardMoved；其他步骤仍交给同一 adapter 分派。</summary>
+        /// <summary>消费冻结的手牌离场、抽牌入手与临时创建入手事实；其他步骤仍交给同一 adapter 分派。</summary>
         internal bool TryCreate(
             BattleCommandPresentationStep step,
             out BattleCommandPresentationTween tween)
@@ -101,6 +103,11 @@ namespace TinySpire.UI.Battle
                 {
                     kind = BattleCardMotionCueKind.HandToDiscard;
                 }
+                else if (moved.FromZone == BattleCardZone.Hand &&
+                         moved.ToZone == BattleCardZone.ExhaustPile)
+                {
+                    kind = BattleCardMotionCueKind.HandToExhaust;
+                }
                 else if (moved.FromZone == BattleCardZone.DrawPile &&
                          moved.ToZone == BattleCardZone.Hand)
                 {
@@ -115,6 +122,21 @@ namespace TinySpire.UI.Battle
                     moved.CardId,
                     settlementOrder: step.SettlementOrder);
                 tween = CreateTween(movedCue);
+                return true;
+            }
+
+            if (step.Kind == BattleCommandPresentationStepKind.CardCreated)
+            {
+                if (!(step.Settlement is BattleCardCreatedSettlement created))
+                    throw CreateSettlementMismatch(step);
+                if (created.ToZone != BattleCardZone.Hand)
+                    return false;
+
+                var createdCue = new BattleCardMotionCue(
+                    BattleCardMotionCueKind.CreatedToHand,
+                    created.CardId,
+                    settlementOrder: step.SettlementOrder);
+                tween = CreateTween(createdCue);
                 return true;
             }
 

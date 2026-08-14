@@ -55,6 +55,12 @@ public sealed class BattleGoldenBaselineM10BTests
         Assert.That(ReadAuthoringCell("battle.card_effect.xlsx", "E8"), Is.EqualTo("8"));
         Assert.That(ReadAuthoringCell("battle.card_effect.xlsx", "E9"), Is.EqualTo("2"));
         Assert.That(ReadAuthoringCell("battle.hero.xlsx", "D5"), Is.EqualTo("30"));
+        Assert.That(ReadAuthoringCell("battle.hero.xlsx", "H5"), Is.EqualTo("3"));
+        Assert.That(ReadAuthoringCell("battle.hero.xlsx", "I5"), Is.EqualTo("3"));
+        Assert.That(ReadAuthoringCell("battle.hero.xlsx", "J5"), Is.EqualTo("3"));
+        Assert.That(ReadAuthoringCell("battle.hero.xlsx", "K5"), Is.EqualTo("0"));
+        Assert.That(ReadAuthoringCell("battle.hero.xlsx", "L5"), Is.EqualTo("0"));
+        Assert.That(ReadAuthoringCell("battle.hero.xlsx", "M5"), Is.EqualTo("0"));
         Assert.That(ReadAuthoringCell("battle.enemy.xlsx", "D5"), Is.EqualTo("20"));
 
         JObject gameConfig = LoadGeneratedObject(GameConfigPath);
@@ -72,6 +78,12 @@ public sealed class BattleGoldenBaselineM10BTests
         Assert.That(effects["4004"].Value<int>("value"), Is.EqualTo(8));
         Assert.That(effects["4005"].Value<int>("value"), Is.EqualTo(2));
         Assert.That(heroes["1001"].Value<int>("max_health"), Is.EqualTo(30));
+        Assert.That(heroes["1001"].Value<int>("initial_energy"), Is.EqualTo(3));
+        Assert.That(heroes["1001"].Value<int>("max_energy"), Is.EqualTo(3));
+        Assert.That(heroes["1001"].Value<int>("energy_gain_per_round"), Is.EqualTo(3));
+        Assert.That(heroes["1001"].Value<int>("initial_ammo"), Is.Zero);
+        Assert.That(heroes["1001"].Value<int>("max_ammo"), Is.Zero);
+        Assert.That(heroes["1001"].Value<int>("ammo_gain_per_round"), Is.Zero);
         Assert.That(enemies["2001"].Value<int>("max_health"), Is.EqualTo(20));
 
         IReadOnlyList<I18nExcelEntry> sourceEntries = I18nExcelReader.Read(

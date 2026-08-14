@@ -62,6 +62,35 @@ namespace TinySpire.Battle
         }
     }
 
+    /// <summary>为一个 Session 注入纯伤害计算覆盖的内部边界；默认 Effect executor 不持有该覆盖。</summary>
+    internal interface IBattleDamageFormulaOverride
+    {
+        /// <summary>为一条 Effect 链创建只服务于本次预演和提交的职业伤害序列，禁止把预演中的私有状态预约写回战斗事实。</summary>
+        IBattleDamageFormulaOverrideSequence CreateSequence();
+    }
+
+    /// <summary>职业伤害覆盖在单条 Effect 链中的局部预演状态；它只冻结伤害和后效计划，实际写入仍由已验证计划统一提交。</summary>
+    internal interface IBattleDamageFormulaOverrideSequence
+    {
+        /// <summary>从冻结来源和目标标量预演一段可提交伤害，并推进仅属于当前 Effect 链的局部状态。</summary>
+        BattleDamageFormulaOutcome Calculate(
+            CombatantData source,
+            int sourceStrength,
+            CombatantId targetId,
+            int configuredValue,
+            BattleEffectTargetSnapshot target);
+
+        /// <summary>返回这条 Effect 链在伤害主记录之后还会写出的职业私有后效记录数量，用于首写前的顺序范围验证。</summary>
+        int PlannedAftermathSettlementCount { get; }
+
+        /// <summary>在对应伤害主记录已提交后写入已预演的职业私有后效，并返回顺序连续的补充结算记录。</summary>
+        IReadOnlyList<BattleSettlementRecord> CommitDamageAftermath(
+            CombatantId sourceId,
+            CombatantId targetId,
+            BattleDamageFormulaOutcome damageOutcome,
+            int startingOrder);
+    }
+
     /// <summary>首次写入前完成解析和顺序模拟的单个内部 Effect 操作。</summary>
     internal readonly struct BattlePreparedEffectOperation
     {
@@ -80,19 +109,70 @@ namespace TinySpire.Battle
         /// <summary>前序操作已令目标死亡时，此操作只产生 skipped 记录。</summary>
         internal bool ShouldSkipTargetNotAlive { get; }
 
+        /// <summary>伤害操作在预构建时冻结的推演结果；非伤害或已跳过操作为空。</summary>
+        internal BattleDamageFormulaOutcome? PreparedDamageOutcome { get; }
+
+        /// <summary>治疗操作在预构建时冻结的推演结果；非治疗或已跳过操作为空。</summary>
+        internal BattleHealthRestorationOutcome? PreparedHealthRestorationOutcome { get; }
+
+        /// <summary>格挡保留操作在预构建时冻结的一次性写入计划。</summary>
+        internal BattlePreparedBlockRetentionPlan PreparedBlockRetention { get; }
+
+        /// <summary>结算触发注册在预构建时冻结的一次性写入计划。</summary>
+        internal BattlePreparedSettlementTriggerRegistration PreparedSettlementTriggerRegistration { get; }
+
         /// <summary>冻结一个已经完整验证的内部 Effect 操作。</summary>
         internal BattlePreparedEffectOperation(
             BattleEffectId effectId,
             BattleEffectOperationType operationType,
             int configuredValue,
             BattleAttributeType? attribute,
-            bool shouldSkipTargetNotAlive)
+            bool shouldSkipTargetNotAlive,
+            BattleDamageFormulaOutcome? preparedDamageOutcome = null,
+            BattleHealthRestorationOutcome? preparedHealthRestorationOutcome = null,
+            BattlePreparedBlockRetentionPlan preparedBlockRetention = null,
+            BattlePreparedSettlementTriggerRegistration preparedSettlementTriggerRegistration = null)
         {
+            if (operationType == BattleEffectOperationType.DealDamage &&
+                !shouldSkipTargetNotAlive &&
+                !preparedDamageOutcome.HasValue)
+            {
+                throw new ArgumentException("可执行伤害操作必须携带预构建的伤害结果。", nameof(preparedDamageOutcome));
+            }
+            if (operationType == BattleEffectOperationType.Heal &&
+                !shouldSkipTargetNotAlive &&
+                !preparedHealthRestorationOutcome.HasValue)
+            {
+                throw new ArgumentException(
+                    "可执行治疗操作必须携带预构建的治疗结果。",
+                    nameof(preparedHealthRestorationOutcome));
+            }
+            if (operationType == BattleEffectOperationType.RetainBlock &&
+                !shouldSkipTargetNotAlive &&
+                preparedBlockRetention == null)
+            {
+                throw new ArgumentException(
+                    "可执行格挡保留操作必须携带预构建计划。",
+                    nameof(preparedBlockRetention));
+            }
+            if (operationType == BattleEffectOperationType.RegisterBlockGainRandomEnemyDamage &&
+                !shouldSkipTargetNotAlive &&
+                preparedSettlementTriggerRegistration == null)
+            {
+                throw new ArgumentException(
+                    "可执行结算触发注册必须携带预构建计划。",
+                    nameof(preparedSettlementTriggerRegistration));
+            }
+
             EffectId = effectId;
             OperationType = operationType;
             ConfiguredValue = configuredValue;
             Attribute = attribute;
             ShouldSkipTargetNotAlive = shouldSkipTargetNotAlive;
+            PreparedDamageOutcome = preparedDamageOutcome;
+            PreparedHealthRestorationOutcome = preparedHealthRestorationOutcome;
+            PreparedBlockRetention = preparedBlockRetention;
+            PreparedSettlementTriggerRegistration = preparedSettlementTriggerRegistration;
         }
     }
 
@@ -168,6 +248,28 @@ namespace TinySpire.Battle
         /// <summary>全部已验证操作完成后的显式 target 投影，用于联合计划在首写前派生终局。</summary>
         internal BattleEffectTargetSnapshot ProjectedTargetAfterEffect { get; }
 
+        /// <summary>全部已验证操作完成后的 source 力量投影。</summary>
+        internal int ProjectedSourceStrengthAfterEffect { get; }
+
+        /// <summary>全部已验证操作完成后的显式 target 力量投影。</summary>
+        internal int ProjectedTargetStrengthAfterEffect { get; }
+
+        /// <summary>本计划独占的职业伤害序列；未注入职业覆盖时保持为空。</summary>
+        internal IBattleDamageFormulaOverrideSequence DamageFormulaSequence { get; }
+
+        /// <summary>返回本计划提交时会写入的全部结算记录数，包含每段伤害主记录之后已冻结的职业私有后效。</summary>
+        internal int PlannedSettlementCount
+        {
+            get
+            {
+                int aftermathCount = DamageFormulaSequence?.PlannedAftermathSettlementCount ?? 0;
+                if (aftermathCount < 0)
+                    throw new InvalidOperationException("职业伤害序列不能声明负数后效记录。");
+
+                return checked(Operations.Count + aftermathCount);
+            }
+        }
+
         /// <summary>计划是否已经在首次写入前通过快照校验。</summary>
         internal bool IsValidated { get; private set; }
 
@@ -183,8 +285,11 @@ namespace TinySpire.Battle
             CombatantData source,
             CombatantData target,
             IEnumerable<BattlePreparedEffectOperation> operations,
+            IBattleDamageFormulaOverrideSequence damageFormulaSequence,
             BattleEffectTargetSnapshot projectedSourceAfterEffect,
-            BattleEffectTargetSnapshot projectedTargetAfterEffect)
+            BattleEffectTargetSnapshot projectedTargetAfterEffect,
+            int projectedSourceStrengthAfterEffect,
+            int projectedTargetStrengthAfterEffect)
         {
             Owner = owner ?? throw new ArgumentNullException(nameof(owner));
             SourceId = source.Id;
@@ -193,6 +298,9 @@ namespace TinySpire.Battle
             TargetSnapshot = new BattleCombatantScalarSnapshot(target);
             ProjectedSourceAfterEffect = projectedSourceAfterEffect;
             ProjectedTargetAfterEffect = projectedTargetAfterEffect;
+            ProjectedSourceStrengthAfterEffect = projectedSourceStrengthAfterEffect;
+            ProjectedTargetStrengthAfterEffect = projectedTargetStrengthAfterEffect;
+            DamageFormulaSequence = damageFormulaSequence;
             Operations = new ReadOnlyCollection<BattlePreparedEffectOperation>(
                 new List<BattlePreparedEffectOperation>(operations));
         }

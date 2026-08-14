@@ -5,6 +5,17 @@ using TinySpire.UI.Battle;
 using UnityEngine;
 using UnityEngine.UI;
 
+namespace TinySpire.UI.Battle
+{
+    /// <summary>描述一张手牌在额外选牌阶段是合法候选、非候选，或不参与选牌。</summary>
+    public enum HandCardSelectionPresentationRole
+    {
+        None = 0,
+        Candidate = 1,
+        NonCandidate = 2,
+    }
+}
+
 [DisallowMultipleComponent]
 public sealed class HandCardVisual : MonoBehaviour
 {
@@ -31,6 +42,8 @@ public sealed class HandCardVisual : MonoBehaviour
     private readonly object _targetFocusBreathTweenId = new object();
     private bool _hasPlayFeedback;
     private bool _isPlayerInputEnabled = true;
+    private bool _showDisabledOverlay;
+    private HandCardSelectionPresentationRole _selectionPresentationRole;
     private BattleCommandHandle _pendingCommandHandle;
     private Color _normalCostColor;
     private bool _hasNormalCostColor;
@@ -42,6 +55,8 @@ public sealed class HandCardVisual : MonoBehaviour
     public float CurrentAnchoredY => _cardContent.anchoredPosition.y;
     public RectTransform CardContent => _cardContent;
     public bool IsCommandPending => _pendingCommandHandle != null;
+    internal HandCardSelectionPresentationRole SelectionPresentationRole =>
+        _selectionPresentationRole;
     internal bool IsIncomingCardMotionActive => _isIncomingCardMotionActive;
     internal bool IsIncomingCardMotionPending => _isIncomingCardMotionPending;
 
@@ -202,6 +217,8 @@ public sealed class HandCardVisual : MonoBehaviour
         _isIncomingCardMotionPending = false;
         _canvas.enabled = true;
         _isPlayerInputEnabled = false;
+        _showDisabledOverlay = false;
+        _selectionPresentationRole = HandCardSelectionPresentationRole.None;
         if (_dragFeedbackCanvasGroup != null)
             _dragFeedbackCanvasGroup.alpha = 1f;
         if (_disabledOverlayImage != null)
@@ -369,22 +386,35 @@ public sealed class HandCardVisual : MonoBehaviour
         HandCardInteractionMode mode,
         Color insufficientCostColor)
     {
+        SetInteractionPresentation(
+            mode,
+            insufficientCostColor,
+            HandCardSelectionPresentationRole.None);
+    }
+
+    /// <summary>把普通交互事实与额外选牌角色合并为唯一灰化、费用和射线投影。</summary>
+    public void SetInteractionPresentation(
+        HandCardInteractionMode mode,
+        Color insufficientCostColor,
+        HandCardSelectionPresentationRole selectionRole)
+    {
         EnsureReferences();
         EnsureDisabledOverlay();
+        _selectionPresentationRole = selectionRole;
         switch (mode)
         {
             case HandCardInteractionMode.Disabled:
-                _disabledOverlayImage.gameObject.SetActive(true);
+                _showDisabledOverlay = true;
                 _isPlayerInputEnabled = false;
                 SetCostPaymentFeedback(canPayCost: true, insufficientCostColor);
                 break;
             case HandCardInteractionMode.VisualOnly:
-                _disabledOverlayImage.gameObject.SetActive(false);
+                _showDisabledOverlay = false;
                 _isPlayerInputEnabled = true;
                 SetCostPaymentFeedback(canPayCost: false, insufficientCostColor);
                 break;
             case HandCardInteractionMode.Playable:
-                _disabledOverlayImage.gameObject.SetActive(false);
+                _showDisabledOverlay = false;
                 _isPlayerInputEnabled = true;
                 SetCostPaymentFeedback(canPayCost: true, insufficientCostColor);
                 break;
@@ -392,6 +422,7 @@ public sealed class HandCardVisual : MonoBehaviour
                 throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported hand interaction mode.");
         }
 
+        RefreshInteractionOverlay();
         RefreshInteractionState();
     }
 
@@ -413,6 +444,7 @@ public sealed class HandCardVisual : MonoBehaviour
                 .SetEase(Ease.OutQuad);
         }
 
+        RefreshInteractionOverlay();
         RefreshInteractionState();
     }
 
@@ -424,6 +456,7 @@ public sealed class HandCardVisual : MonoBehaviour
 
         _pendingCommandHandle = null;
         _hasPlayFeedback = false;
+        RefreshInteractionOverlay();
         RefreshInteractionState();
         KillFeedbackTween();
         if (_dragFeedbackCanvasGroup != null)
@@ -442,6 +475,7 @@ public sealed class HandCardVisual : MonoBehaviour
 
         _pendingCommandHandle = null;
         _hasPlayFeedback = false;
+        RefreshInteractionOverlay();
         RefreshInteractionState();
         KillFeedbackTween();
         if (_dragFeedbackCanvasGroup == null)
@@ -509,9 +543,35 @@ public sealed class HandCardVisual : MonoBehaviour
         if (_dragFeedbackCanvasGroup == null)
             return;
 
-        bool canInteract = _isPlayerInputEnabled && !IsCommandPending;
-        _dragFeedbackCanvasGroup.interactable = canInteract;
-        _dragFeedbackCanvasGroup.blocksRaycasts = canInteract;
+        bool isPending = IsCommandPending;
+        bool isCandidate =
+            _selectionPresentationRole == HandCardSelectionPresentationRole.Candidate;
+        bool participatesInSelection =
+            _selectionPresentationRole != HandCardSelectionPresentationRole.None;
+        _dragFeedbackCanvasGroup.interactable = !isPending &&
+            (isCandidate || (!participatesInSelection && _isPlayerInputEnabled));
+        _dragFeedbackCanvasGroup.blocksRaycasts = !isPending &&
+            (participatesInSelection || _isPlayerInputEnabled);
+    }
+
+    /// <summary>让选牌高亮覆盖普通禁用灰罩，并让待定命令始终优先隐藏选牌提示。</summary>
+    private void RefreshInteractionOverlay()
+    {
+        if (_disabledOverlayImage == null)
+            return;
+
+        bool showOverlay = !IsCommandPending &&
+            _selectionPresentationRole switch
+            {
+                HandCardSelectionPresentationRole.Candidate => false,
+                HandCardSelectionPresentationRole.NonCandidate => true,
+                HandCardSelectionPresentationRole.None => _showDisabledOverlay,
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(_selectionPresentationRole),
+                    _selectionPresentationRole,
+                    "Unsupported hand-card selection presentation role."),
+            };
+        _disabledOverlayImage.gameObject.SetActive(showOverlay);
     }
 
     /// <summary>懒创建独立灰色覆盖层，避免与越线、待定和失败反馈共用透明度通道。</summary>

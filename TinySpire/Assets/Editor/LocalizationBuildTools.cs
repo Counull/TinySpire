@@ -160,19 +160,29 @@ public static class LocalizationBuildTools
                         $"'{table.LocaleIdentifier.Code}' must be a Smart String.");
                 }
 
+                var bindingArguments = new HashSet<string>(StringComparer.Ordinal);
                 var expectedArguments = new HashSet<string>(StringComparer.Ordinal);
                 foreach (JObject binding in card.Value<JArray>("effect_bindings"))
                 {
                     string argumentKey = binding.Value<string>("argument_key");
-                    if (!expectedArguments.Add(argumentKey))
+                    if (!bindingArguments.Add(argumentKey))
                         throw new InvalidOperationException(
                             $"Card {cardProperty.Name} has duplicate effect argument '{argumentKey}'.");
 
                     int effectId = binding.Value<int>("effect_id");
-                    if (effects.Property(effectId.ToString()) == null)
+                    JObject effect = effects[effectId.ToString()] as JObject;
+                    if (effect == null)
                     {
                         throw new InvalidOperationException(
                             $"Card {cardProperty.Name} references missing effect {effectId}.");
+                    }
+
+                    // 非展示规则声明不应为了满足绑定校验而在正文显示无意义的“0”。
+                    int effectType = effect.Value<int>("effect_type");
+                    if (effectType != (int)cfg.battle.EffectType.RetainBlock &&
+                        effectType != (int)cfg.battle.EffectType.PlayTopDrawCardAndExhaust)
+                    {
+                        expectedArguments.Add(argumentKey);
                     }
                 }
 

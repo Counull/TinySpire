@@ -65,10 +65,26 @@ namespace TinySpire.UI.Battle
                     amount = blockDamage.BlockAbsorbed;
                     break;
                 case BattleCommandPresentationStepKind.HealthLossNumber:
-                    if (!(step.Settlement is BattleDamageAppliedSettlement healthDamage))
+                    if (step.Settlement is BattleDamageAppliedSettlement healthDamage)
+                    {
+                        targetId = healthDamage.TargetId;
+                        amount = healthDamage.HealthLoss;
+                    }
+                    else if (step.Settlement is BattlePoisonTickedSettlement poisonTick)
+                    {
+                        targetId = poisonTick.TargetId;
+                        amount = poisonTick.HealthLoss;
+                    }
+                    else
+                    {
                         throw CreateSettlementMismatch(step);
-                    targetId = healthDamage.TargetId;
-                    amount = healthDamage.HealthLoss;
+                    }
+                    break;
+                case BattleCommandPresentationStepKind.HealthRestoredNumber:
+                    if (!(step.Settlement is BattleHealthRestoredSettlement healthRestored))
+                        throw CreateSettlementMismatch(step);
+                    targetId = healthRestored.TargetId;
+                    amount = healthRestored.Amount;
                     break;
                 case BattleCommandPresentationStepKind.HitShake:
                     if (!(step.Settlement is BattleDamageAppliedSettlement shakeDamage))
@@ -77,12 +93,20 @@ namespace TinySpire.UI.Battle
                     amount = 0;
                     break;
                 case BattleCommandPresentationStepKind.DeathTransition:
-                    if (!(step.Settlement is BattleDamageAppliedSettlement fatalDamage)
-                        || !fatalDamage.WasFatal)
+                    if (step.Settlement is BattleDamageAppliedSettlement fatalDamage &&
+                        fatalDamage.WasFatal)
+                    {
+                        targetId = fatalDamage.TargetId;
+                    }
+                    else if (step.Settlement is BattlePoisonTickedSettlement fatalPoison &&
+                             fatalPoison.WasFatal)
+                    {
+                        targetId = fatalPoison.TargetId;
+                    }
+                    else
                     {
                         throw CreateSettlementMismatch(step);
                     }
-                    targetId = fatalDamage.TargetId;
                     amount = 0;
                     break;
                 case BattleCommandPresentationStepKind.BlockGainedNumber:

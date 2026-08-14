@@ -22,8 +22,6 @@ public sealed class BattleCardPlayRulesTests
         PlayerCombatantData player = combatants.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
         EnemyCombatantData enemy = combatants.AddEnemy(templateId: 201, maxHealth: 20, strength: 0);
         var zones = new BattleCardZonesData(new[] { 3001 }, shuffleSeed: 1234);
-        zones.Draw(1);
-        CardInstanceId cardId = zones.Hand[0];
         var cardZones = new Dictionary<CombatantId, BattleCardZonesData> { [player.Id] = zones };
         Tables tables = CreateTables(cardCost: 1, targetRule: cfg.battle.TargetRule.Self);
         var presentation = new ControllableBattleCommandPresentation();
@@ -32,8 +30,10 @@ public sealed class BattleCardPlayRulesTests
             presentation,
             cardZones,
             enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
+            initialHandCount: 1,
             tables: tables);
         queue.SubmitRegistered(new StartBattleCommand());
+        CardInstanceId cardId = zones.Hand[0];
         BattleTurnData turnBeforeEvaluation = queue.Turn.CurrentValue;
         CardZoneLayoutData layoutBeforeEvaluation = zones.Layout.CurrentValue;
         uint shuffleRandomBeforeEvaluation = zones.ShuffleRandomState;
@@ -76,8 +76,6 @@ public sealed class BattleCardPlayRulesTests
         BattleEffectStateTestDriver.Kill(combatants, player.Id, deadEnemy.Id);
         var enemyIds = new[] { secondEnemy.Id, deadEnemy.Id, firstEnemy.Id };
         var zones = new BattleCardZonesData(new[] { 3001 }, shuffleSeed: 1234);
-        zones.Draw(1);
-        CardInstanceId cardId = zones.Hand[0];
         var cardZones = new Dictionary<CombatantId, BattleCardZonesData> { [player.Id] = zones };
         Tables tables = CreateTables(cardCost: 1, targetRule: cfg.battle.TargetRule.Enemy);
         var enemyIntents = new BattleEnemyIntentsData(combatants, enemyIds, tables, battleSeed: 77);
@@ -87,9 +85,11 @@ public sealed class BattleCardPlayRulesTests
             presentation,
             cardZones,
             enemyCombatantIdsInEncounterOrder: enemyIds,
+            initialHandCount: 1,
             enemyIntents: enemyIntents,
             tables: tables);
         queue.SubmitRegistered(new StartBattleCommand());
+        CardInstanceId cardId = zones.Hand[0];
         BattleTurnData turnBeforeEvaluation = queue.Turn.CurrentValue;
         CardZoneLayoutData layoutBeforeEvaluation = zones.Layout.CurrentValue;
         uint intentRandomBeforeEvaluation = enemyIntents.RandomState;
@@ -312,7 +312,9 @@ public sealed class BattleCardPlayRulesTests
                     ["has_upgrade"] = false,
                     ["implementation_status"] = (int)cfg.battle.CardImplementationStatus.Implemented,
                     ["effect_bindings"] = new JArray(),
-                    ["illustration_key"] = string.Empty
+                    ["illustration_key"] = string.Empty,
+                    ["program_id"] = (int)cfg.battle.MachineGunnerProgramId.None,
+                    ["is_innate"] = false,
                 }
             },
             ["battle_tbcardeffect"] = JArray.Parse(
@@ -362,8 +364,6 @@ public sealed class BattleCardPlayRulesTests
             SecondEnemy = Combatants.AddEnemy(templateId: 202, maxHealth: 22, strength: 0);
             var enemyIds = new[] { FirstEnemy.Id, SecondEnemy.Id };
             Zones = new BattleCardZonesData(new[] { 3001 }, shuffleSeed: 1234);
-            Zones.Draw(1);
-            CardId = Zones.Hand[0];
             var cardZones = new Dictionary<CombatantId, BattleCardZonesData> { [Player.Id] = Zones };
             Tables tables = CreateTables(cardCost, targetRule);
             var presentation = new ControllableBattleCommandPresentation();
@@ -372,8 +372,10 @@ public sealed class BattleCardPlayRulesTests
                 presentation,
                 cardZones,
                 enemyCombatantIdsInEncounterOrder: enemyIds,
+                initialHandCount: 1,
                 tables: tables);
             Queue.SubmitRegistered(new StartBattleCommand());
+            CardId = Zones.Hand[0];
             Rules = new BattleCardPlayRules(Combatants, cardZones, enemyIds, tables);
         }
 

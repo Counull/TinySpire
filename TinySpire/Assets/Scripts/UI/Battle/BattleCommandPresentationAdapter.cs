@@ -385,20 +385,36 @@ namespace TinySpire.UI.Battle
                         CardZoneMotionDurationSeconds,
                         Ease.InCubic);
 
-                case BattleCardMotionCueKind.DrawToHand:
+                case BattleCardMotionCueKind.HandToExhaust:
                     if (!_cardPileHudView.TryGetPileScreenAnchor(
-                            BattleCardZone.DrawPile,
-                            out Vector2 drawScreenPosition))
+                            BattleCardZone.ExhaustPile,
+                            out Vector2 exhaustScreenPosition))
                     {
                         throw new InvalidOperationException(
-                            "Draw pile has no current presentation anchor.");
+                            "Exhaust pile has no current presentation anchor.");
+                    }
+
+                    return ResolveHandCardContainer().CreateTransientCardMotionTween(
+                        cue,
+                        exhaustScreenPosition,
+                        CardZoneMotionDurationSeconds,
+                        Ease.InCubic);
+
+                case BattleCardMotionCueKind.DrawToHand:
+                case BattleCardMotionCueKind.CreatedToHand:
+                    if (!_cardPileHudView.TryGetPileScreenAnchor(
+                            BattleCardZone.DrawPile,
+                            out Vector2 incomingSourceScreenPosition))
+                    {
+                        throw new InvalidOperationException(
+                            "Incoming card motion has no current presentation source anchor.");
                     }
 
                     HandCardContainer handCardContainer = ResolveHandCardContainer();
                     BattleCommandPresentationTween incomingLease = null;
                     incomingLease = handCardContainer.CreateIncomingCardMotionTween(
                         cue,
-                        drawScreenPosition,
+                        incomingSourceScreenPosition,
                         CardZoneMotionDurationSeconds,
                         Ease.OutCubic,
                         requestFastForward: () => _runner.TryCompleteCue(incomingLease));

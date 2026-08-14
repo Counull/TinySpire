@@ -60,6 +60,7 @@ public sealed class HandCardContainer : MonoBehaviour
     private readonly Dictionary<int, AsyncOperationHandle<Sprite>> _illustrationHandles = new();
     private readonly Dictionary<BattleCommandHandle, CardInstanceId> _pendingPlayCards = new();
     private HandCardVisual _draggingCard;
+    private HandCardSelectionSession _activeHandCardSelection;
     private BattleCardZonesData _cardZones;
     private PlayerCombatantData _player;
     private bool _isDestroyed;
@@ -70,6 +71,9 @@ public sealed class HandCardContainer : MonoBehaviour
     private Action<GameObject> _destroyTransientCardForTesting;
 
     private int CurrentHandCount => _cardZones.Hand.Count;
+
+    /// <summary>只读公开当前等待补齐选牌意图的不可变 UI 会话；没有活动会话时为空。</summary>
+    internal HandCardSelectionSession ActiveHandCardSelection => _activeHandCardSelection;
 
     /// <summary>只读确认真实 Hand View 已按当前权威顺序建好，可安全构造 Draw→Hand cue。</summary>
     internal bool IsCardMotionReady
@@ -164,7 +168,8 @@ public sealed class HandCardContainer : MonoBehaviour
             _session.Combatants,
             playerCardZones,
             _session.EnemyCombatantIdsInEncounterOrder,
-            _configs.Tables);
+            _configs.Tables,
+            _session.MachineGunnerRuntime);
         _lastParticipantPresentationReady = IsParticipantPresentationReady();
         _targetingArrow.PrepareAsScreenOverlay();
         try
@@ -189,7 +194,7 @@ public sealed class HandCardContainer : MonoBehaviour
         _cardZones.Layout
             .Select(layout => layout.Hand)
             .Skip(1)
-            .Subscribe(_ => RebuildCards(immediate: false))
+            .Subscribe(HandleCardZoneLayoutChanged)
             .AddTo(this);
         _player.Strength
             .Skip(1)
@@ -197,7 +202,7 @@ public sealed class HandCardContainer : MonoBehaviour
             .AddTo(this);
         _localization.LocaleChanged.Subscribe(_ => RefreshCardTexts()).AddTo(this);
         _commandQueue.Turn.Subscribe(HandleTurnChanged).AddTo(this);
-        _commandQueue.Queue.Subscribe(_ => RefreshCardPlayPresentation()).AddTo(this);
+        _commandQueue.Queue.Subscribe(HandleQueueChanged).AddTo(this);
         _commandCoordinator.Lifecycle.Subscribe(HandleCommandLifecycle).AddTo(this);
         foreach (CombatantData combatant in _session.Combatants.All.Values)
         {
@@ -261,6 +266,74 @@ public sealed class HandCardContainer : MonoBehaviour
         card.PlayBasePose(hoverDuration, Ease.OutBack);
     }
 
+    /// <summary>用右键取消活动选牌，并只让左键在重验三份权威快照后确认候选。</summary>
+    public void HandlePointerClick(HandCardVisual card, PointerEventData eventData)
+    {
+        if (card == null ||
+            eventData == null ||
+            _activeHandCardSelection == null)
+        {
+            return;
+        }
+
+        if (eventData.button == PointerEventData.InputButton.Right)
+        {
+            CancelHandCardSelection(reflow: true);
+            return;
+        }
+        if (eventData.button != PointerEventData.InputButton.Left)
+            return;
+
+        HandCardSelectionSession selection = _activeHandCardSelection;
+        if (!selection.MatchesSnapshots(
+                _cardZones.Layout.CurrentValue,
+                _commandQueue.Turn.CurrentValue,
+                _commandQueue.Queue.CurrentValue))
+        {
+            CancelHandCardSelection(reflow: true);
+            return;
+        }
+
+        HandCardSelectionClickResolution resolution = selection.ResolveClick(card.CardId);
+        switch (resolution.Action)
+        {
+            case HandCardSelectionClickAction.Ignore:
+                return;
+            case HandCardSelectionClickAction.Cancel:
+                CancelHandCardSelection(reflow: true);
+                return;
+            case HandCardSelectionClickAction.Continue:
+                RefreshCardPlayPresentation();
+                return;
+            case HandCardSelectionClickAction.Confirm:
+                if (resolution.SelectedCardIds.Count != selection.RequiredCount)
+                {
+                    throw new InvalidOperationException(
+                        "A confirmed hand-card selection must carry the required target count.");
+                }
+
+                _activeHandCardSelection = null;
+                HandCardVisual sourceCard = FindCardById(selection.SourceCardId);
+                if (sourceCard == null)
+                {
+                    LayoutCards(immediate: false);
+                    RefreshCardPlayPresentation();
+                    return;
+                }
+
+                SubmitPlayCard(
+                    sourceCard,
+                    selection.PlayTargetId,
+                    resolution.SelectedCardIds);
+                return;
+            default:
+                throw new ArgumentOutOfRangeException(
+                    nameof(resolution),
+                    resolution.Action,
+                    "Unsupported hand-card selection click action.");
+        }
+    }
+
     /// <summary>
     /// 开始拖拽一张手牌，并使其脱离当前手牌排布。
     /// </summary>
@@ -311,7 +384,7 @@ public sealed class HandCardContainer : MonoBehaviour
         card.SetDragPlayFeedback(isPastPlayLine && evaluation.CanStartInteraction);
         if (isPastPlayLine
             && evaluation.CanStartInteraction
-            && evaluation.TargetRule == cfg.battle.TargetRule.Enemy)
+            && evaluation.RequiresExplicitTargetInput)
         {
             EnterEnemyTargeting(card, evaluation, eventData.position);
         }
@@ -333,7 +406,7 @@ public sealed class HandCardContainer : MonoBehaviour
 
         BattleCardPlayEvaluation evaluation = EvaluateCard(card, targetId: null);
         CombatantId? hoveredTargetId = null;
-        if (evaluation.TargetRule == cfg.battle.TargetRule.Enemy
+        if (evaluation.RequiresExplicitTargetInput
             && IsPastPlayLine(card)
             && evaluation.CanStartInteraction
             && eventData != null)
@@ -360,12 +433,27 @@ public sealed class HandCardContainer : MonoBehaviour
         card.SetDragPlayFeedback(false);
         ClearTargetingPresentation();
 
-        if (targetId.HasValue)
+        bool canSubmitWithoutExplicitTarget =
+            IsPastPlayLine(card) &&
+            evaluation.CanStartInteraction &&
+            !evaluation.RequiresExplicitTargetInput;
+        if (targetId.HasValue || canSubmitWithoutExplicitTarget)
         {
-            BattleCardPlayEvaluation finalEvaluation = EvaluateCard(card, targetId.Value);
+            BattleCardPlayEvaluation finalEvaluation = EvaluateCard(card, targetId);
             if (finalEvaluation.Succeeded)
             {
-                SubmitPlayCard(card, targetId.Value);
+                SubmitPlayCard(card, targetId);
+                return;
+            }
+
+            if (finalEvaluation.FailureReason ==
+                    BattleCommandExecutionFailureReason.CardSelectionRequired &&
+                finalEvaluation.HandCardSelectionRequest != null)
+            {
+                BeginHandCardSelection(
+                    card,
+                    targetId,
+                    finalEvaluation.HandCardSelectionRequest);
                 return;
             }
         }
@@ -374,11 +462,49 @@ public sealed class HandCardContainer : MonoBehaviour
         RefreshCardPlayPresentation();
     }
 
-    /// <summary>先登记不透明句柄与待定视觉，再通过唯一 Queue seam 提交出牌意图。</summary>
-    private void SubmitPlayCard(HandCardVisual card, CombatantId targetId)
+    /// <summary>冻结精确数量的手牌选择请求与当前三份权威快照，并让源牌回到普通手牌布局。</summary>
+    private void BeginHandCardSelection(
+        HandCardVisual sourceCard,
+        CombatantId? playTargetId,
+        BattleHandCardSelectionRequest request)
     {
+        if (sourceCard == null)
+            throw new ArgumentNullException(nameof(sourceCard));
+        if (request == null)
+            throw new ArgumentNullException(nameof(request));
+        _activeHandCardSelection = HandCardSelectionSession.Begin(
+            sourceCard.CardId,
+            playTargetId,
+            request.LegalCardIds,
+            request.RequiredCount,
+            _cardZones.Layout.CurrentValue,
+            _commandQueue.Turn.CurrentValue,
+            _commandQueue.Queue.CurrentValue);
+        LayoutCards(immediate: false);
+        RefreshCardPlayPresentation();
+    }
+
+    /// <summary>以空选牌集合兼容普通出牌，并委托统一的选牌命令提交路径。</summary>
+    private void SubmitPlayCard(HandCardVisual card, CombatantId? targetId)
+    {
+        SubmitPlayCard(card, targetId, Array.Empty<CardInstanceId>());
+    }
+
+    /// <summary>冻结显式选牌实例并先重验规则，再通过唯一 Queue seam 提交出牌意图。</summary>
+    private void SubmitPlayCard(
+        HandCardVisual card,
+        CombatantId? targetId,
+        IReadOnlyList<CardInstanceId> selectedCardIds)
+    {
+        if (selectedCardIds == null)
+            throw new ArgumentNullException(nameof(selectedCardIds));
+
         CardInstanceId cardId = card.CardId;
-        var command = new PlayCardCommand(_player.Id, cardId, targetId);
+        var command = new PlayCardCommand(
+            _player.Id,
+            cardId,
+            targetId,
+            selectedCardIds);
         BattleCardPlayEvaluation evaluation = _cardPlayRules.Evaluate(
             _commandQueue.Turn.CurrentValue,
             command);
@@ -439,7 +565,22 @@ public sealed class HandCardContainer : MonoBehaviour
     /// <summary>阶段或当前玩家结束事实变化时，立即派生全部手牌的输入可用性。</summary>
     private void HandleTurnChanged(BattleTurnData _)
     {
+        ClearStaleHandCardSelection();
         RefreshActiveDragFromCurrentFacts();
+        RefreshCardPlayPresentation();
+    }
+
+    /// <summary>手牌布局发布时先清除已经失配的本地选牌会话，再按新布局重建牌面。</summary>
+    private void HandleCardZoneLayoutChanged(IReadOnlyList<CardInstanceId> _)
+    {
+        ClearStaleHandCardSelection();
+        RebuildCards(immediate: false);
+    }
+
+    /// <summary>队列权威快照发布时清除已经失配的本地选牌会话，并刷新手牌输入表现。</summary>
+    private void HandleQueueChanged(BattleCommandQueueData _)
+    {
+        ClearStaleHandCardSelection();
         RefreshCardPlayPresentation();
     }
 
@@ -506,6 +647,14 @@ public sealed class HandCardContainer : MonoBehaviour
 
         bool queueAcceptsInput = !_commandQueue.Queue.CurrentValue.IsFaulted;
         bool presentationReady = IsParticipantPresentationReady();
+        HandCardSelectionSession selection = _activeHandCardSelection;
+        bool selectionFactsMatch = selection != null &&
+            queueAcceptsInput &&
+            presentationReady &&
+            selection.MatchesSnapshots(
+                _cardZones.Layout.CurrentValue,
+                _commandQueue.Turn.CurrentValue,
+                _commandQueue.Queue.CurrentValue);
         foreach (HandCardVisual card in _cards)
         {
             BattleCardPlayEvaluation evaluation = EvaluateCard(card, targetId: null);
@@ -516,7 +665,15 @@ public sealed class HandCardContainer : MonoBehaviour
             if (!queueAcceptsInput || !presentationReady)
                 interactionMode = HandCardInteractionMode.Disabled;
 
-            card.SetInteractionPresentation(interactionMode, _insufficientCostColor);
+            HandCardSelectionPresentationRole selectionRole = selectionFactsMatch
+                ? ContainsCardId(selection.LegalTargetCardIds, card.CardId)
+                    ? HandCardSelectionPresentationRole.Candidate
+                    : HandCardSelectionPresentationRole.NonCandidate
+                : HandCardSelectionPresentationRole.None;
+            card.SetInteractionPresentation(
+                interactionMode,
+                _insufficientCostColor,
+                selectionRole);
         }
     }
 
@@ -622,6 +779,54 @@ public sealed class HandCardContainer : MonoBehaviour
         ClearTargetingPresentation();
         if (reflow && _cardZones != null)
             LayoutCards(immediate: false);
+    }
+
+    /// <summary>清除当前选牌会话，并按需让仍在 Hand 中的卡牌回流后刷新输入表现。</summary>
+    private void CancelHandCardSelection(bool reflow)
+    {
+        if (!ClearHandCardSelection())
+            return;
+
+        if (reflow && _cardZones != null)
+            LayoutCards(immediate: false);
+        RefreshCardPlayPresentation();
+    }
+
+    /// <summary>按当前三份权威快照重验活动选牌会话，失配时零写清理并按需回流牌面。</summary>
+    internal void RefreshHandCardSelectionFromCurrentFacts(bool reflow)
+    {
+        if (!ClearStaleHandCardSelection())
+            return;
+
+        if (reflow && _cardZones != null)
+            LayoutCards(immediate: false);
+        RefreshCardPlayPresentation();
+    }
+
+    /// <summary>仅在活动选牌会话的布局、回合或队列引用已经漂移时清除本地会话。</summary>
+    private bool ClearStaleHandCardSelection()
+    {
+        HandCardSelectionSession selection = _activeHandCardSelection;
+        if (selection == null ||
+            selection.MatchesSnapshots(
+                _cardZones.Layout.CurrentValue,
+                _commandQueue.Turn.CurrentValue,
+                _commandQueue.Queue.CurrentValue))
+        {
+            return false;
+        }
+
+        return ClearHandCardSelection();
+    }
+
+    /// <summary>只清除本地选牌会话，不发布布局、回合、队列或其他权威战斗事实。</summary>
+    private bool ClearHandCardSelection()
+    {
+        if (_activeHandCardSelection == null)
+            return false;
+
+        _activeHandCardSelection = null;
+        return true;
     }
 
     /// <summary>清除目标选择的全部瞬时表现，不修改手牌、能量、参与者或回合事实。</summary>
@@ -730,12 +935,11 @@ public sealed class HandCardContainer : MonoBehaviour
         visual.Bind(text, cardTemplate.Cost, handle.Result);
     }
 
-    /// <summary>按当前牌组中的唯一模板预加载牌面 Sprite，并持有其 Addressables 句柄。</summary>
+    /// <summary>按本局初始牌组及职业程序可能创建的唯一模板预加载牌面 Sprite，并持有其 Addressables 句柄。</summary>
     private async UniTask LoadCardIllustrationsAsync()
     {
-        foreach (CardInstanceData cardState in _cardZones.Cards.Values)
+        foreach (int templateId in _session.AvailableCardTemplateIds)
         {
-            int templateId = cardState.TemplateId;
             if (_illustrationHandles.ContainsKey(templateId))
                 continue;
 
@@ -860,7 +1064,7 @@ public sealed class HandCardContainer : MonoBehaviour
         return new BattleCommandPresentationTween(tween, cleanup);
     }
 
-    /// <summary>为同一离手 transient 创建原 Order 的弃牌轨迹，并让任一已建 lease 都能幂等收口。</summary>
+    /// <summary>为同一离手 transient 创建原 Order 的弃牌或消耗轨迹，并让任一已建 lease 都能幂等收口。</summary>
     internal BattleCommandPresentationTween CreateTransientCardMotionTween(
         BattleCardMotionCue cue,
         Vector2 discardScreenPosition,
@@ -873,7 +1077,8 @@ public sealed class HandCardContainer : MonoBehaviour
             throw new InvalidOperationException("Transient card motion requires a frozen CardId.");
         if (duration < 0f)
             throw new ArgumentOutOfRangeException(nameof(duration));
-        if (cue.Kind != BattleCardMotionCueKind.HandToDiscard)
+        if (cue.Kind != BattleCardMotionCueKind.HandToDiscard &&
+            cue.Kind != BattleCardMotionCueKind.HandToExhaust)
         {
             throw new InvalidOperationException(
                 $"Transient card motion cannot consume {cue.Kind}.");
@@ -895,20 +1100,22 @@ public sealed class HandCardContainer : MonoBehaviour
         return new BattleCommandPresentationTween(tween, cleanup);
     }
 
-    /// <summary>为当前权威 Hand 中的新牌创建 Draw→Hand 入场 cue，取消时恢复最新 base pose。</summary>
+    /// <summary>为当前权威 Hand 中抽取或临时创建的新牌建立统一入场 cue，取消时恢复最新 base pose。</summary>
     internal BattleCommandPresentationTween CreateIncomingCardMotionTween(
         BattleCardMotionCue cue,
-        Vector2 drawScreenPosition,
+        Vector2 incomingSourceScreenPosition,
         float duration,
         Ease ease,
         Action requestFastForward)
     {
         if (cue == null)
             throw new ArgumentNullException(nameof(cue));
-        if (cue.Kind != BattleCardMotionCueKind.DrawToHand || !cue.CardId.HasValue)
+        bool isSupportedIncomingCue = cue.Kind == BattleCardMotionCueKind.DrawToHand ||
+            cue.Kind == BattleCardMotionCueKind.CreatedToHand;
+        if (!isSupportedIncomingCue || !cue.CardId.HasValue)
         {
             throw new InvalidOperationException(
-                "Incoming card motion requires a frozen DrawToHand CardId.");
+                "Incoming card motion requires a frozen DrawToHand or CreatedToHand CardId.");
         }
         if (duration < 0f)
             throw new ArgumentOutOfRangeException(nameof(duration));
@@ -924,7 +1131,7 @@ public sealed class HandCardContainer : MonoBehaviour
 
         _visibleHandCards.Add(cue.CardId.Value);
         Tween tween = card.CreateIncomingScreenMotionTween(
-            drawScreenPosition,
+            incomingSourceScreenPosition,
             duration,
             ease,
             requestFastForward);
@@ -1020,6 +1227,7 @@ public sealed class HandCardContainer : MonoBehaviour
     {
         if (card == null ||
             card.IsCommandPending ||
+            _activeHandCardSelection != null ||
             _cardPlayRules == null ||
             _commandQueue.Queue.CurrentValue.IsFaulted)
             return false;
@@ -1041,12 +1249,14 @@ public sealed class HandCardContainer : MonoBehaviour
     private void OnDisable()
     {
         CancelActiveDrag(reflow: false);
+        CancelHandCardSelection(reflow: false);
     }
 
     /// <summary>容器销毁时停止异步落地，并释放其持有的牌面资源。</summary>
     private void OnDestroy()
     {
         _isDestroyed = true;
+        ClearHandCardSelection();
         CancelActiveDrag(reflow: false);
         DestroyTransientCards();
         ReleaseCardIllustrations();

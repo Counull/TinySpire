@@ -152,13 +152,12 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 2603194639872007
-    m_Localized: 'Catalog entry: Common Attack, energy cost 1, target one enemy.
-      Gameplay effects are not implemented.'
+    m_Localized: Deal {damage} damage, equal to your Block.
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
   - m_Id: 2603194639872008
-    m_Localized: 'Upgrade metadata: energy cost becomes 0.'
+    m_Localized: Deal {damage} damage, equal to your Block.
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
@@ -258,14 +257,12 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 2603194639872028
-    m_Localized: 'Catalog entry: Common Attack, energy cost 1, target one enemy.
-      Gameplay effects are not implemented.'
+    m_Localized: Deal {damage} damage. Draw {cards} card(s).
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
   - m_Id: 2603194639872029
-    m_Localized: 'Upgrade metadata: damage parameter changes by +1; card-draw parameter
-      changes by +1.'
+    m_Localized: Deal 10 damage. Draw 2 cards.
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
@@ -290,13 +287,14 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 2603194639872034
-    m_Localized: 'Catalog entry: Common Attack, energy cost 1, target a random enemy.
-      Gameplay effects are not implemented.'
+    m_Localized: Choose a random enemy independently for each hit. Deal {damage}
+      damage, then {damageRepeat1} damage, then {damageRepeat2} damage.
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
   - m_Id: 2603194639872035
-    m_Localized: 'Upgrade metadata: repeat parameter changes by +1.'
+    m_Localized: Choose a random enemy independently for each hit. Deal 3 damage
+      4 times.
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
@@ -320,13 +318,12 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 2603194639872040
-    m_Localized: 'Catalog entry: Common Attack, energy cost 1, target one enemy.
-      Gameplay effects are not implemented.'
+    m_Localized: Deal {damage} damage, then deal {damageRepeat} damage.
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
   - m_Id: 2603194639872041
-    m_Localized: 'Upgrade metadata: damage parameter changes by +2.'
+    m_Localized: Deal 7 damage twice.
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
@@ -380,13 +377,12 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 2603194639872052
-    m_Localized: 'Catalog entry: Common Skill, energy cost 1, target self. Gameplay
-      effects are not implemented.'
+    m_Localized: Play the top card of your Draw Pile and Exhaust it.
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
   - m_Id: 2603194639872053
-    m_Localized: 'Upgrade metadata: energy cost becomes 0.'
+    m_Localized: Play the top card of your Draw Pile and Exhaust it.
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
@@ -395,13 +391,12 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 2603194639872055
-    m_Localized: 'Catalog entry: Common Skill, energy cost 1, target self. Gameplay
-      effects are not implemented.'
+    m_Localized: Gain {block} Block. Draw {cards} card(s).
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
   - m_Id: 2603194639872056
-    m_Localized: 'Upgrade metadata: Block parameter changes by +3.'
+    m_Localized: Gain 11 Block. Draw 1 card.
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
@@ -455,13 +450,12 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 2603194644066311
-    m_Localized: 'Catalog entry: Uncommon Attack, energy cost 3, target one enemy.
-      Gameplay effects are not implemented.'
+    m_Localized: Deal {damage} damage.
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
   - m_Id: 2603194644066312
-    m_Localized: 'Upgrade metadata: damage parameter changes by +10.'
+    m_Localized: Deal 42 damage.
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
@@ -666,13 +660,12 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 2603194644066353
-    m_Localized: 'Catalog entry: Uncommon Skill, energy cost 1, target self. Gameplay
-      effects are not implemented.'
+    m_Localized: Exhaust {exhaustCards} card(s). Draw {cards} card(s).
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
   - m_Id: 2603194644066354
-    m_Localized: 'Upgrade metadata: card-draw parameter changes by +1.'
+    m_Localized: Exhaust 1 card. Draw 3 cards.
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
@@ -1120,13 +1113,12 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 2603194644066443
-    m_Localized: 'Catalog entry: Rare Skill, energy cost 2, target self. Gameplay
-      effects are not implemented.'
+    m_Localized: Heal {heal} HP. Exhaust.
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
   - m_Id: 2603194644066444
-    m_Localized: 'Upgrade metadata: healing parameter changes by +3.'
+    m_Localized: Heal 13 HP. Exhaust.
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
@@ -1210,13 +1202,12 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 2603194644066461
-    m_Localized: 'Catalog entry: Rare Power, energy cost 3, target self. Gameplay
-      effects are not implemented.'
+    m_Localized: Block is not removed at the start of your turn.
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
   - m_Id: 2603194644066462
-    m_Localized: 'Upgrade metadata: energy cost becomes 2.'
+    m_Localized: Block is not removed at the start of your turn.
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
@@ -1300,13 +1291,13 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 2603194644066479
-    m_Localized: 'Catalog entry: Rare Power, energy cost 2, target self. Gameplay
-      effects are not implemented.'
+    m_Localized: Whenever you gain Block, deal {triggerDamage} damage to a random
+      enemy.
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
   - m_Id: 2603194644066480
-    m_Localized: 'Upgrade metadata: Juggernaut parameter changes by +2.'
+    m_Localized: Whenever you gain Block, deal 8 damage to a random enemy.
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
@@ -1368,6 +1359,1289 @@ MonoBehaviour:
       - rid: 3318493899348770842
   - m_Id: 2603194644066492
     m_Localized: 'Upgrade metadata: energy cost becomes 2.'
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359064317952
+    m_Localized: Shoot
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843904
+    m_Localized: Spend 1 Ammo. Deal 6 damage to an enemy.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843905
+    m_Localized: Spend 1 Ammo. Deal 9 damage to an enemy.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843906
+    m_Localized: Elbow
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843907
+    m_Localized: Deal 6 damage to the nearest enemy.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843908
+    m_Localized: Deal 9 damage to the nearest enemy.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843909
+    m_Localized: Block
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843910
+    m_Localized: Gain 5 Block.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843911
+    m_Localized: Gain 8 Block.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843912
+    m_Localized: Reload
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843913
+    m_Localized: Refill Ammo to its maximum.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843914
+    m_Localized: Refill Ammo to its maximum.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843915
+    m_Localized: Stim
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843916
+    m_Localized: Draw 2 cards. For 1 turn, Shooting cards fire one additional time,
+      spending 1 additional Ammo. Stacks extend duration with no limit.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843917
+    m_Localized: Draw 2 cards. For 2 turns, Shooting cards fire one additional time,
+      spending 1 additional Ammo. Stacks extend duration with no limit.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843918
+    m_Localized: Core Expansion
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843919
+    m_Localized: Increase your maximum Energy by 1.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843920
+    m_Localized: Increase your maximum Energy by 2.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843921
+    m_Localized: Output Adjust
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843922
+    m_Localized: At the start of each turn, gain 1 Energy. Reduce your maximum Energy
+      by 1.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843923
+    m_Localized: At the start of each turn, gain 1 Energy. Reduce your maximum Energy
+      by 1.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843924
+    m_Localized: Blast Shield
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843925
+    m_Localized: Gain 6 Armor. At the start of each turn, gain Block equal to your
+      Armor. Each damage segment that breaks through Block reduces Armor by 1.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843926
+    m_Localized: Gain 9 Armor. At the start of each turn, gain Block equal to your
+      Armor. Each damage segment that breaks through Block reduces Armor by 1.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843927
+    m_Localized: Mag Expansion
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843928
+    m_Localized: Increase your maximum Ammo by 3.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843929
+    m_Localized: Increase your maximum Ammo by 5.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843930
+    m_Localized: Incendiary Ammo
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843931
+    m_Localized: Whenever shooting damage hits, apply 1 Burn. This triggers Oil.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843932
+    m_Localized: Whenever shooting damage hits, apply 2 Burn. This triggers Oil.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843933
+    m_Localized: Smoke Persist
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843934
+    m_Localized: Smoke no longer clears each turn; instead, it decreases by 1 each
+      turn.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843935
+    m_Localized: Smoke no longer clears each turn; instead, it decreases by 1 each
+      turn.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843936
+    m_Localized: Kungfu Mech
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843937
+    m_Localized: Whenever you play a non-Shooting Attack, gain 4 Block. An X-cost
+      melee Attack counts once.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843938
+    m_Localized: Whenever you play a non-Shooting Attack, gain 6 Block. An X-cost
+      melee Attack counts once.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843939
+    m_Localized: Overload
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843940
+    m_Localized: Gain 2 Energy. Gain 1 less Energy next turn.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843941
+    m_Localized: Gain 3 Energy. Gain 1 less Energy next turn.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843942
+    m_Localized: Tumble Reload
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843943
+    m_Localized: Gain 10 Block. Refill Ammo to its maximum.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843944
+    m_Localized: Gain 14 Block. Refill Ammo to its maximum.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843945
+    m_Localized: Stun Grenade
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843946
+    m_Localized: Deal 8 damage to all enemies. Apply 1 Weak.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843947
+    m_Localized: Deal 12 damage to all enemies. Apply 1 Weak.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843948
+    m_Localized: Retreat
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843949
+    m_Localized: Gain 15 Block. At the start of your next turn, refill Ammo to its
+      maximum. End your turn.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843950
+    m_Localized: Gain 20 Block. At the start of your next turn, refill Ammo to its
+      maximum. End your turn.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843951
+    m_Localized: Gas Pump
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359118843952
+    m_Localized: Apply 5 Oil to all enemies.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359118843953
+    m_Localized: Apply 8 Oil to all enemies.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232512
+    m_Localized: Napalm
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232513
+    m_Localized: Apply 3 Burn and 5 Oil to all enemies. Resolve Burn first, triggering
+      existing Oil; Oil applied by this card does not trigger this time.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232514
+    m_Localized: Apply 3 Burn and 7 Oil to all enemies. Resolve Burn first, triggering
+      existing Oil; Oil applied by this card does not trigger this time.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232515
+    m_Localized: Molotov
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232516
+    m_Localized: Apply 5 Burn to an enemy.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232517
+    m_Localized: Apply 7 Burn to an enemy.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232518
+    m_Localized: Hold Line
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232519
+    m_Localized: 'Repeat X times: gain 5 Block and 1 Ammo. At X = 0, do nothing.'
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232520
+    m_Localized: 'Repeat X + 1 times: gain 5 Block and 1 Ammo.'
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232521
+    m_Localized: Smoke Bomb
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232522
+    m_Localized: Gain 10 Block. Apply 3 Smoke to all enemies and yourself.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232523
+    m_Localized: Gain 12 Block. Apply 4 Smoke to all enemies and yourself.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232524
+    m_Localized: Incomplete Combustion
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232525
+    m_Localized: Each enemy with Burn deals damage equal to its Burn to all enemies,
+      including itself. Then convert Burn to Smoke 1:1. Does not trigger Oil. Exhaust.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232526
+    m_Localized: Each enemy with Burn deals damage equal to its Burn to all enemies,
+      including itself. Then convert Burn to Smoke 1:1. Does not trigger Oil. Exhaust.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232527
+    m_Localized: Knockback Shot
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232528
+    m_Localized: Spend 1 Ammo. Deal 7 damage to the nearest enemy and 3 damage to
+      the second-nearest enemy. Apply 2 Lose Strength to each; it clears at the end
+      of the enemy turn.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232529
+    m_Localized: Spend 1 Ammo. Deal 9 damage to the nearest enemy and 5 damage to
+      the second-nearest enemy. Apply 3 Lose Strength to each; it clears at the end
+      of the enemy turn.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232530
+    m_Localized: Spray
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232531
+    m_Localized: Spend 2 Ammo. Hit random enemies 2 times for 7 damage each.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232532
+    m_Localized: Spend 2 Ammo. Hit random enemies 3 times for 7 damage each.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232533
+    m_Localized: Bayonet Parry
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232534
+    m_Localized: Deal 7 damage to the nearest enemy. Gain 7 Block.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232535
+    m_Localized: Deal 9 damage to the nearest enemy. Gain 9 Block.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232536
+    m_Localized: Wild Rampage
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232537
+    m_Localized: Fire all Ammo at random enemies for 5 damage per Ammo. Then fire
+      X additional shots for free. Can be played with 0 Ammo and 0 Energy, doing
+      nothing. With Stim, fire 1 free Stim shot.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232538
+    m_Localized: Fire all Ammo at random enemies for 5 damage per Ammo. Then fire
+      X + 1 additional shots for free. Can be played with 0 Ammo and 0 Energy, doing
+      nothing. With Stim, fire 1 free Stim shot.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232539
+    m_Localized: Quick Elbow
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232540
+    m_Localized: Deal 6 damage to the nearest enemy.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232541
+    m_Localized: Deal 8 damage to the nearest enemy.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232542
+    m_Localized: Kidney Shot
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232543
+    m_Localized: Deal 8 damage to an enemy. Apply 1 Weak.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232544
+    m_Localized: Deal 10 damage to an enemy. Apply 2 Weak.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232545
+    m_Localized: Painful Elbow
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232546
+    m_Localized: Deal 10 damage to an enemy. Apply 2 Vulnerable.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232547
+    m_Localized: Deal 14 damage to an enemy. Apply 3 Vulnerable.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232548
+    m_Localized: Heavy Elbow
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232549
+    m_Localized: Deal 33 damage to an enemy.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232550
+    m_Localized: Deal 44 damage to an enemy.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232551
+    m_Localized: Field Surgery
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232552
+    m_Localized: Gain 5 Regeneration and 1 Shackle. Regeneration heals equal to its
+      stacks at end of turn, then loses 1. Shackle prevents playing Attacks this
+      turn. Exhaust.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232553
+    m_Localized: Gain 6 Regeneration and 1 Shackle. Regeneration heals equal to its
+      stacks at end of turn, then loses 1. Shackle prevents playing Attacks this
+      turn. Exhaust.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232554
+    m_Localized: Hurricane Elbow
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232555
+    m_Localized: Deal 7 damage to random enemies X times. At X = 0, do nothing.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232556
+    m_Localized: Deal 7 damage to random enemies X + 1 times.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232557
+    m_Localized: Precision Shot
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232558
+    m_Localized: Spend up to 3 Ammo. For each Ammo spent, shoot an enemy for 7 damage.
+      Cannot be played with 0 Ammo.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232559
+    m_Localized: Spend up to 4 Ammo. For each Ammo spent, shoot an enemy for 10 damage.
+      Cannot be played with 0 Ammo.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232560
+    m_Localized: Tactical Advance
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232561
+    m_Localized: Gain 10 Block. Your next Attack is free and costs no Energy or Ammo.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232562
+    m_Localized: Gain 14 Block. Your next Attack is free and costs no Energy or Ammo.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232563
+    m_Localized: Quick Roll
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232564
+    m_Localized: Gain 5 Block. Gain 5 Next-turn Block.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232565
+    m_Localized: Gain 8 Block. Gain 8 Next-turn Block.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232566
+    m_Localized: Electro Boost
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232567
+    m_Localized: Gain 3 Firepower. Shooting damage gains +1 per Firepower. Stacks
+      and persists for the battle.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232568
+    m_Localized: Gain 4 Firepower. Shooting damage gains +1 per Firepower. Stacks
+      and persists for the battle.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232569
+    m_Localized: Guided Nuke
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232570
+    m_Localized: Gain 1 Shackle and a Bomb with 4 countdown. It loses 1 countdown
+      each turn and, when it reaches 0, deals 99 damage to all enemies. Each use
+      creates an independent Bomb.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232571
+    m_Localized: Gain 1 Shackle and a Bomb with 4 countdown. It loses 1 countdown
+      each turn and, when it reaches 0, deals 133 damage to all enemies. Each use
+      creates an independent Bomb.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232572
+    m_Localized: Banshee Strike
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232573
+    m_Localized: "Gain a Banshee for 2 turns. At the start of each turn, it deals
+      8 \xD7 2 damage to the frontmost enemy. This damage is affected only by Block,
+      not Strength. Multiple Banshees coexist independently."
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232574
+    m_Localized: "Gain an Elite Banshee for 3 turns. At the start of each turn, it
+      deals 8 \xD7 2 damage to the frontmost enemy and 4 \xD7 2 damage to the second
+      enemy. This damage is affected only by Block, not Strength. Multiple Banshees
+      coexist independently."
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232575
+    m_Localized: Fire Support
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232576
+    m_Localized: At the start of your next turn, deal 5 hits of 2 damage to a random
+      enemy. This damage is affected only by Block, not Strength. One-time.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232577
+    m_Localized: At the start of your next turn, deal 5 hits of 3 damage to a random
+      enemy. This damage is affected only by Block, not Strength. One-time.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232578
+    m_Localized: Fire Bombardment
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232579
+    m_Localized: At the start of your next turn, bombard all enemies 2 times. Each
+      bombardment deals 2 damage and applies 4 Burn. Damage is affected only by Block,
+      not Strength. One-time.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232580
+    m_Localized: At the start of your next turn, bombard all enemies 2 times. Each
+      bombardment deals 3 damage and applies 5 Burn. Damage is affected only by Block,
+      not Strength. One-time.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232581
+    m_Localized: Five Hundred Pounder
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232582
+    m_Localized: Gain a Bomb with 3 countdown. It loses 1 countdown each turn and,
+      when it reaches 0, deals 40 damage to all enemies. Each use creates an independent
+      Bomb.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232583
+    m_Localized: Gain a Bomb with 3 countdown. It loses 1 countdown each turn and,
+      when it reaches 0, deals 55 damage to all enemies. Each use creates an independent
+      Bomb.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232584
+    m_Localized: Combo Elbow
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232585
+    m_Localized: Deal 10 damage to the nearest enemy. If the last played card was
+      a non-Shooting Attack, play this for free.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232586
+    m_Localized: Deal 13 damage to the nearest enemy. If the last played card was
+      a non-Shooting Attack, play this for free.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232587
+    m_Localized: Opportunistic Strike
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232588
+    m_Localized: Deal 6 damage to the nearest enemy. If the last played card was
+      an Attack or Shooting card, play a random Attack in your hand for free.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232589
+    m_Localized: Deal 6 damage to the nearest enemy. If the last played card was
+      an Attack or Shooting card, choose an Attack in your hand to play for free.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232590
+    m_Localized: Vent Heat
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232591
+    m_Localized: Exhaust a card. Gain 1 Energy. If no card can be exhausted, do nothing.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232592
+    m_Localized: Exhaust a card. Gain 2 Energy. If no card can be exhausted, do nothing.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232593
+    m_Localized: Power Overclock
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232594
+    m_Localized: Draw 1 additional card each turn.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232595
+    m_Localized: Draw 1 additional card each turn.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232596
+    m_Localized: Garrison
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232597
+    m_Localized: Gain 12 Block and 2 Garrison. While Garrison lasts, Block does not
+      clear between turns; Garrison loses 1 per turn and stacks to extend duration.
+      Choose 2 cards in your hand to retain.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232598
+    m_Localized: Gain 15 Block and 2 Garrison. While Garrison lasts, Block does not
+      clear between turns; Garrison loses 1 per turn and stacks to extend duration.
+      Choose 3 cards in your hand to retain.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232599
+    m_Localized: Sniper Shot
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232600
+    m_Localized: Spend 2 Ammo. Deal 13 damage to the farthest enemy and apply 1 Vulnerable.
+      Against a Vulnerable enemy, deal 100% extra damage instead of the standard
+      50%. Triggers Incendiary Ammo but not Stim.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232601
+    m_Localized: Spend 2 Ammo. Deal 15 damage to the farthest enemy and apply 2 Vulnerable.
+      Against a Vulnerable enemy, deal 100% extra damage instead of the standard
+      50%. Triggers Incendiary Ammo but not Stim.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232602
+    m_Localized: Spike Shot
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232603
+    m_Localized: Spend 1 Ammo. Deal 1 damage to an enemy. Apply 1 Weak and 1 Vulnerable.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232604
+    m_Localized: Spend 1 Ammo. Deal 2 damage to an enemy. Apply 2 Weak and 2 Vulnerable.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232605
+    m_Localized: Optical Camo
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232606
+    m_Localized: Gain 2 Invisibility. Take half damage while Invisible, and Sniper
+      treats enemies as Vulnerable. Lose 1 Invisibility at end of turn and whenever
+      you play an Attack; Sniper does not reduce it.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232607
+    m_Localized: Gain 2 Invisibility. Take half damage while Invisible, and Sniper
+      treats enemies as Vulnerable. Lose 1 Invisibility at end of turn and whenever
+      you play an Attack; Sniper does not reduce it.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232608
+    m_Localized: Unstoppable
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232609
+    m_Localized: Whenever you kill an enemy or break through an enemy's Block, randomly
+      play a non-Shooting Attack from the entire card pool for free. The auto-played
+      card Exhausts and does not enter your discard pile, deck, or persist beyond
+      battle.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232610
+    m_Localized: Whenever you kill an enemy or break through an enemy's Block, randomly
+      play an upgraded non-Shooting Attack from the entire card pool for free. The
+      auto-played card Exhausts and does not enter your discard pile, deck, or persist
+      beyond battle.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232611
+    m_Localized: Guerrilla Tactics
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232612
+    m_Localized: Gain 2 Guerrilla Tactics. It does not expire and stacks. For each
+      Ammo spent, gain 1 Block per stack. A free play counts its normal Ammo cost,
+      including free X-cost cards.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232613
+    m_Localized: Gain 3 Guerrilla Tactics. It does not expire and stacks. For each
+      Ammo spent, gain 1 Block per stack. A free play counts its normal Ammo cost,
+      including free X-cost cards.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232614
+    m_Localized: Explosive Elbow
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232615
+    m_Localized: Deal 10 damage to the nearest enemy, then immediately trigger its
+      Burn damage once. Burn is not consumed and still resolves normally at end of
+      turn.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232616
+    m_Localized: Deal 13 damage to the nearest enemy, then immediately trigger its
+      Burn damage once. Burn is not consumed and still resolves normally at end of
+      turn.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232617
+    m_Localized: Aged Oil
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232618
+    m_Localized: Whenever a non-Shooting Attack hits, apply 2 Oil.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232619
+    m_Localized: Whenever a non-Shooting Attack hits, apply 3 Oil.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232620
+    m_Localized: Burning Oil
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232621
+    m_Localized: 'At end of each turn, each enemy with Burn gains 1 Burn and receives
+      one Oil bonus: add its Oil stacks to Burn without consuming Oil.'
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232622
+    m_Localized: 'At end of each turn, each enemy with Burn gains 2 Burn and receives
+      one Oil bonus: add its Oil stacks to Burn without consuming Oil.'
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232623
+    m_Localized: Flame Elbow
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232624
+    m_Localized: Deal 6 damage to the nearest enemy. Apply 3 Burn.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232625
+    m_Localized: Deal 9 damage to the nearest enemy. Apply 4 Burn.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232626
+    m_Localized: Six Hits
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232627
+    m_Localized: Spend as much Ammo as possible, up to 6, to shoot the nearest enemy
+      once per Ammo for 5 damage each. Requires at least 1 Ammo. Triggers Stim and
+      Incendiary Ammo.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232628
+    m_Localized: Spend as much Ammo as possible, up to 6, to shoot the nearest enemy
+      once per Ammo for 6 damage each. Requires at least 1 Ammo. Triggers Stim and
+      Incendiary Ammo.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232629
+    m_Localized: Twelve Hits
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232630
+    m_Localized: Fire up to 6 shots at the nearest enemy for 5 damage each, then
+      immediately refill Ammo and fire up to 6 more shots for 5 damage each. Can
+      be played with 0 Ammo. A free play still reloads and counts as maximum Ammo
+      spent. Triggers Stim and Incendiary Ammo.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232631
+    m_Localized: Fire up to 6 shots at the nearest enemy for 6 damage each, then
+      immediately refill Ammo and fire up to 6 more shots for 6 damage each. Can
+      be played with 0 Ammo. A free play still reloads and counts as maximum Ammo
+      spent. Triggers Stim and Incendiary Ammo.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232632
+    m_Localized: Quick Maneuver
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232633
+    m_Localized: Gain 5 Block. Draw 1 card.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232634
+    m_Localized: Gain 7 Block. Draw 2 cards.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232635
+    m_Localized: Holo Decoy
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232636
+    m_Localized: 'Exhaust. Create a translucent Hologram Decoy in front of you with
+      1 HP. It shares your Block: if damage is at least twice the Block, it absorbs
+      the hit without spending Block; otherwise it absorbs damage remaining after
+      Block breaks, without passing it to you. Subsequent hits target you after it
+      dies.'
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232637
+    m_Localized: 'Create a translucent Hologram Decoy in front of you with 1 HP.
+      It shares your Block: if damage is at least twice the Block, it absorbs the
+      hit without spending Block; otherwise it absorbs damage remaining after Block
+      breaks, without passing it to you. Subsequent hits target you after it dies.'
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232638
+    m_Localized: Limit Overload
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232639
+    m_Localized: Gain 1 Energy. Draw until your hand is full. Gain 3 less Energy
+      next turn.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232640
+    m_Localized: Gain 2 Energy. Draw until your hand is full. Gain 3 less Energy
+      next turn.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232641
+    m_Localized: Machinegun
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232642
+    m_Localized: Gain 10 Block. Discard your entire hand; for each discarded card,
+      add a Machinegun Burst to your hand. Exhaust.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232643
+    m_Localized: Gain 15 Block. Discard your entire hand; for each discarded card,
+      add a Machinegun Burst to your hand. Exhaust.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232644
+    m_Localized: Defense Target
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232645
+    m_Localized: Exhaust. Spend up to 9 Ammo, but at least 2. Gain 1 Intangible for
+      every 3 Ammo spent. Intangible reduces attack damage to 1, loses 1 when hit,
+      does not decay, and stacks.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232646
+    m_Localized: "Upgrade: Energy cost 2 \u2192 1. Exhaust. Spend up to 9 Ammo, but
+      at least 2. Gain 1 Intangible for every 3 Ammo spent."
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232647
+    m_Localized: Machinegun Burst
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232648
+    m_Localized: 'Temporary card, created only by Machinegun and excluded from rewards:
+      deal 5 damage to random enemies twice. Spend no Ammo but count as spending
+      2 Ammo. Exhaust.'
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232649
+    m_Localized: 'Temporary card, created only by Machinegun and excluded from rewards:
+      deal 5 damage to random enemies twice. Spend no Ammo but count as spending
+      2 Ammo. Exhaust.'
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232650
+    m_Localized: Triple Strike
+    m_Metadata:
+      m_Items: []
+  - m_Id: 2940359127232651
+    m_Localized: 'Sniper: Spend 4 Energy and 3 Ammo. Gain 2 Invisibility, then snipe
+      a target twice for 12 damage each. While Invisible or against a Vulnerable
+      enemy, it deals bonus damage. At the start of next turn, snipe the farthest
+      enemy for 20 damage; this is affected by Strength, Vulnerable, and still-active
+      Invisibility. Triggers Incendiary Ammo but not Stim. Exhaust.'
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2940359127232652
+    m_Localized: 'Sniper: Spend 4 Energy and 3 Ammo. Gain 2 Invisibility, then snipe
+      a target twice for 15 damage each. While Invisible or against a Vulnerable
+      enemy, it deals bonus damage. At the start of next turn, snipe the farthest
+      enemy for 25 damage; this is affected by Strength, Vulnerable, and still-active
+      Invisibility. Triggers Incendiary Ammo but not Stim. Exhaust.'
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 2977722553495552
+    m_Localized: Machine Gunner
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058028298240
+    m_Localized: Bombardment
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184320
+    m_Localized: Gain 4 Bombardment. Each stack increases Support-effect damage and
+      applied status stacks by 10%. Stacks and persists for the battle.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058112184321
+    m_Localized: "Upgrade: Bombardment 4 \u2192 6."
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058112184322
+    m_Localized: Sky Wrath
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184323
+    m_Localized: Gain 1 Sky Wrath. Each time a Support strike triggers, deal 8 damage
+      to one random enemy and 4 damage to every other enemy. Each stack triggers
+      once and does not recursively trigger.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058112184324
+    m_Localized: "Upgrade: Energy cost 1 \u2192 0."
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058112184325
+    m_Localized: Portable Helper
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184326
+    m_Localized: Gain 1 Portable Helper. Whenever you shoot an enemy, it attacks
+      that target for 1 damage. It benefits from Vulnerable, Armor Break, and Firepower.
+      Multiple Helpers coexist and persist for the battle.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058112184327
+    m_Localized: "Upgrade: Energy cost 1 \u2192 0."
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058112184328
+    m_Localized: Private Modification
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184329
+    m_Localized: Gain +1 Ammo Maximum and 1 Firepower.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058112184330
+    m_Localized: 'Upgrade: Gain +2 Ammo Maximum and 2 Firepower.'
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058112184331
+    m_Localized: Chain Smoke
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184332
+    m_Localized: Gain 5 Smoke.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058112184333
+    m_Localized: "Upgrade: Smoke 5 \u2192 7."
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058112184334
+    m_Localized: Secondhand Smoke
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184335
+    m_Localized: Apply Poison to an enemy equal to your Smoke.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058112184336
+    m_Localized: 'Upgrade: Apply Poison equal to your combined Smoke and the target''s
+      Smoke.'
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058112184337
+    m_Localized: Defensive Stance
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184338
+    m_Localized: Gain 8 Block. Gain 1 additional Energy next turn.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058112184339
+    m_Localized: "Upgrade: Block 8 \u2192 12."
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058112184340
+    m_Localized: Emergency Cooling
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058112184341
+    m_Localized: Gain 8 Block and 3 Smoke.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058112184342
+    m_Localized: "Upgrade: Block 8 \u2192 12; Smoke 3 \u2192 4."
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058112184343
+    m_Localized: Thermite Bomb
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378624
+    m_Localized: Apply 4 Burn and 2 Armor Break to all enemies.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058116378625
+    m_Localized: "Upgrade: Burn 4 \u2192 6; Armor Break 2 \u2192 3."
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058116378626
+    m_Localized: Needle Storm
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378627
+    m_Localized: Gain 1 Needle. At the start of each turn, strike random enemies
+      4 times; each hit deals 1 damage and applies 1 Armor Break. Lose 1 Needle each
+      turn. Multiple Needles coexist.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058116378628
+    m_Localized: 'Upgrade: Gain 2 Needles.'
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058116378629
+    m_Localized: Stealth Action
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378630
+    m_Localized: Innate. Gain 1 Invisible and draw 1 card.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058116378631
+    m_Localized: 'Upgrade: Gain 2 Invisible and draw 2 cards.'
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058116378632
+    m_Localized: Foehn Wind
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378633
+    m_Localized: Apply Burn to an enemy equal to your Smoke, then consume all your
+      Smoke.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058116378634
+    m_Localized: 'Upgrade: Apply the Burn to all enemies instead.'
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058116378635
+    m_Localized: Preemptive Strike
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378636
+    m_Localized: Spend 1 Ammo. Deal 8 damage. Draw 1 card for each distinct status
+      on yourself.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058116378637
+    m_Localized: "Upgrade: Damage 8 \u2192 12."
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058116378638
+    m_Localized: Bully
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378639
+    m_Localized: Deal 6 damage. Draw 1 card for each distinct status on the target.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058116378640
+    m_Localized: "Upgrade: Damage 6 \u2192 9."
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058116378641
+    m_Localized: Prismatic Shot
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378642
+    m_Localized: 'Spend 1 Ammo. First hit: 6 damage. Per distinct target status:
+      repeat once for 9 damage.'
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058116378643
+    m_Localized: "Upgrade: First-hit damage 6 \u2192 9; repeat damage remains 9."
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058116378644
+    m_Localized: Mark
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378645
+    m_Localized: Spend 1 Ammo. Deal 5 damage and apply 2 Armor Break.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058116378646
+    m_Localized: "Upgrade: Damage 5 \u2192 7; Armor Break 2 \u2192 3."
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058116378647
+    m_Localized: Crush
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378648
+    m_Localized: Deal 9 damage to the nearest enemy and apply 4 Armor Break.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058116378649
+    m_Localized: "Upgrade: Damage 9 \u2192 12; Armor Break 4 \u2192 5."
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058116378650
+    m_Localized: Charged Burst
+    m_Metadata:
+      m_Items: []
+  - m_Id: 4654058116378651
+    m_Localized: Snipe all enemies. Deal 12 damage to the first enemy; damage increases
+      by 50% for each enemy pierced. Receives Vulnerable amplification.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 4654058116378652
+    m_Localized: "Upgrade: First-target damage 12 \u2192 16."
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
@@ -1551,3 +2825,167 @@ MonoBehaviour:
         - id: 2603194644066489
         - id: 2603194644066491
         - id: 2603194644066492
+        - id: 2940359118843904
+        - id: 2940359118843905
+        - id: 2940359118843907
+        - id: 2940359118843908
+        - id: 2940359118843910
+        - id: 2940359118843911
+        - id: 2940359118843913
+        - id: 2940359118843914
+        - id: 2940359118843916
+        - id: 2940359118843917
+        - id: 2940359118843919
+        - id: 2940359118843920
+        - id: 2940359118843922
+        - id: 2940359118843923
+        - id: 2940359118843925
+        - id: 2940359118843926
+        - id: 2940359118843928
+        - id: 2940359118843929
+        - id: 2940359118843931
+        - id: 2940359118843932
+        - id: 2940359118843934
+        - id: 2940359118843935
+        - id: 2940359118843937
+        - id: 2940359118843938
+        - id: 2940359118843940
+        - id: 2940359118843941
+        - id: 2940359118843943
+        - id: 2940359118843944
+        - id: 2940359118843946
+        - id: 2940359118843947
+        - id: 2940359118843949
+        - id: 2940359118843950
+        - id: 2940359118843952
+        - id: 2940359118843953
+        - id: 2940359127232513
+        - id: 2940359127232514
+        - id: 2940359127232516
+        - id: 2940359127232517
+        - id: 2940359127232519
+        - id: 2940359127232520
+        - id: 2940359127232522
+        - id: 2940359127232523
+        - id: 2940359127232525
+        - id: 2940359127232526
+        - id: 2940359127232528
+        - id: 2940359127232529
+        - id: 2940359127232531
+        - id: 2940359127232532
+        - id: 2940359127232534
+        - id: 2940359127232535
+        - id: 2940359127232537
+        - id: 2940359127232538
+        - id: 2940359127232540
+        - id: 2940359127232541
+        - id: 2940359127232543
+        - id: 2940359127232544
+        - id: 2940359127232546
+        - id: 2940359127232547
+        - id: 2940359127232549
+        - id: 2940359127232550
+        - id: 2940359127232552
+        - id: 2940359127232553
+        - id: 2940359127232555
+        - id: 2940359127232556
+        - id: 2940359127232558
+        - id: 2940359127232559
+        - id: 2940359127232561
+        - id: 2940359127232562
+        - id: 2940359127232564
+        - id: 2940359127232565
+        - id: 2940359127232567
+        - id: 2940359127232568
+        - id: 2940359127232570
+        - id: 2940359127232571
+        - id: 2940359127232573
+        - id: 2940359127232574
+        - id: 2940359127232576
+        - id: 2940359127232577
+        - id: 2940359127232579
+        - id: 2940359127232580
+        - id: 2940359127232582
+        - id: 2940359127232583
+        - id: 2940359127232585
+        - id: 2940359127232586
+        - id: 2940359127232588
+        - id: 2940359127232589
+        - id: 2940359127232591
+        - id: 2940359127232592
+        - id: 2940359127232594
+        - id: 2940359127232595
+        - id: 2940359127232597
+        - id: 2940359127232598
+        - id: 2940359127232600
+        - id: 2940359127232601
+        - id: 2940359127232603
+        - id: 2940359127232604
+        - id: 2940359127232606
+        - id: 2940359127232607
+        - id: 2940359127232609
+        - id: 2940359127232610
+        - id: 2940359127232612
+        - id: 2940359127232613
+        - id: 2940359127232615
+        - id: 2940359127232616
+        - id: 2940359127232618
+        - id: 2940359127232619
+        - id: 2940359127232621
+        - id: 2940359127232622
+        - id: 2940359127232624
+        - id: 2940359127232625
+        - id: 2940359127232627
+        - id: 2940359127232628
+        - id: 2940359127232630
+        - id: 2940359127232631
+        - id: 2940359127232633
+        - id: 2940359127232634
+        - id: 2940359127232636
+        - id: 2940359127232637
+        - id: 2940359127232639
+        - id: 2940359127232640
+        - id: 2940359127232642
+        - id: 2940359127232643
+        - id: 2940359127232645
+        - id: 2940359127232646
+        - id: 2940359127232648
+        - id: 2940359127232649
+        - id: 2940359127232651
+        - id: 2940359127232652
+        - id: 4654058112184320
+        - id: 4654058112184321
+        - id: 4654058112184323
+        - id: 4654058112184324
+        - id: 4654058112184326
+        - id: 4654058112184327
+        - id: 4654058112184329
+        - id: 4654058112184330
+        - id: 4654058112184332
+        - id: 4654058112184333
+        - id: 4654058112184335
+        - id: 4654058112184336
+        - id: 4654058112184338
+        - id: 4654058112184339
+        - id: 4654058112184341
+        - id: 4654058112184342
+        - id: 4654058116378624
+        - id: 4654058116378625
+        - id: 4654058116378627
+        - id: 4654058116378628
+        - id: 4654058116378630
+        - id: 4654058116378631
+        - id: 4654058116378633
+        - id: 4654058116378634
+        - id: 4654058116378636
+        - id: 4654058116378637
+        - id: 4654058116378639
+        - id: 4654058116378640
+        - id: 4654058116378642
+        - id: 4654058116378643
+        - id: 4654058116378645
+        - id: 4654058116378646
+        - id: 4654058116378648
+        - id: 4654058116378649
+        - id: 4654058116378651
+        - id: 4654058116378652

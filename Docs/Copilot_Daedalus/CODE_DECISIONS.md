@@ -1,6 +1,6 @@
 ---
 created: 2026-07-06
-updated: 2026-08-06
+updated: 2026-08-14
 ---
 
 # Daedalus · 代码决策记录
@@ -672,3 +672,549 @@ Tremble 作为 I4 的真实生产代表：1 费、Enemy、`ApplyVulnerable 3`、
 **理由**：归宿是一次成功出牌事务的末端路由，不是新的权威状态；在首写前冻结可以保持现有原子顺序，并让 Queue 与通用 CardMoved settlement 无需感知具体卡牌。用真实 Tremble 覆盖 Effect 后 Exhaust，能同时验证配置、命令顺序和 CardZones 事实。
 
 **影响**：只修改 Turn 内部成功路径、I4 构建门禁、Tremble 作者表/生成数据/双语内容与测试。Hand→Exhaust 会更新 ExhaustPile 事实和 HUD 计数，但既有表现计划仍不创建飞行动画；I4 按用户边界明确不包含该动画。Queue、settlement、CardZones 公共契约、默认 Deck、Scene、Prefab、ProjectSettings、asmdef、HybridCLR、DI 与启动流程不变。验证见 `06_testing/2026-08-06-sts2-ironclad-i4-success-destination.md`。
+
+## CD-061：Hero 静态资源档案只装配每玩家事实，回合控制器独占补充与裁剪
+
+**问题**：机枪兵需要与默认战士不同的 Energy/Ammo 初值、上限和后续回合补充，但全局 `GameConfig.EnergyPerRound` 无法表达角色差异。若把当前资源写回 Hero 表、HUD 或公开字典，会形成第二份可变事实；若首回合误叠加 `+3`，会把已确认的 3 Energy 变成满 5；若降上限后允许当前值超限，后续卡牌机制会读取非法状态。
+
+**选择**：在 `battle.hero.xlsx` 为每个 Hero 增加六个静态字段：Energy/Ammo 的初值、上限和后续回合增量。`BattleSession.FromConfig` 在创建战斗聚合前校验这些值，并把 `CombatantId → BattlePlayerResourceProfile` 冻结后交给生产 Queue；`PlayerTurnData` 只保存当前值、当前上限和当前增量，`BattleTurnController` 是唯一重建它的位置。首回合使用静态 `initial_*`，后续回合只按当前事实执行 `min(current + gain, max)`；任意重建后的低上限立即以 `min(current, max)` 裁剪。
+
+`max_ammo = 0` 表示该 Hero 未启用 Ammo，且要求其初值和增量都为零。Ammo 补充仍产生 source-only settlement，供未来机制和事务事实读取；当前表现计划显式忽略它，不提前创建 HUD 或动画。共享 `GameConfig.InitialHandCount` 继续决定补至 5；`GameConfig.EnergyPerRound` 暂保留给旧测试入口和当前只有 Hero `1001` 的 HUD 基线，生产路径不再把它作为战斗资源权威。
+
+**理由**：静态档案与当前事实分层后，Hero 差异不需要全局资源字典或 UI 镜像，未来卡牌在同一 `PlayerTurnData` 事实上改变上限/增量也能被后续回合保留。首写前档案校验和敌人联合快照的完整资源比较保持 `BattleCommandQueue.Submit` 的原子性与既有权威边界。
+
+**影响**：当前 Hero `1001` 明确为 Energy `3/3/+3`、Ammo `0/0/+0`，M10 的 3 Energy / 补至 5 基线不变。MG1 不创建机枪兵 Hero、Deck、卡牌、状态、UI、Prefab 或素材；真正可选择机枪兵时，HUD 必须在独立切片改为投影 `PlayerTurnData`，不能继续借全局能量值。验证见 `06_testing/2026-08-06-machine-gunner-mg1-hero-resource-profile.md`。
+
+## CD-062：卡牌目录说明保留来源规则，CatalogOnly 仍由独立状态隔离
+
+**问题**：Marine Game 压缩包的 64 张卡牌包含时机、触发、目标与升级等无法从现有 `Card` 元数据恢复的语义。若目录文本只显示“尚未实现”，作者表将失去回查 `cards.json` 的能力，也会把未来 Card Program 的行为差异隐藏在通用占位文案中；反过来，若因为文本已录入就把卡标为可玩，又会绕过 CD-057 的零写入隔离。
+
+**选择**：以 `marine-game-v1-20260807-cards` 固定每张目录身份。`i18n.xlsx` 的 zh-CN 基础说明保留 `cards.json.desc`，升级说明保留 `known_upgrades.change`；源文件未提供英文规则原文，en 列以同一压缩包的结构化字段与行为说明录入项目内英文翻译。中文来源继续是规则追溯依据，英文文案不伪装为最终策划裁决。`implementation_status = CatalogOnly`、空 `effect_bindings`、Deck 门禁和占位图继续作为唯一的“尚未可玩”事实，牌面说明不承担该状态。
+
+**理由**：把来源规则与可执行程序分开，既能让策划/实现人员从作者表追溯每张卡的原始语义，又能让当前运行时在任何费用、卡区或参与者写入前拒绝目录卡。后续 Card Program 将以这些说明和结构化源码为验收参照，但不能从自然语言直接执行或按卡名/ID 分支。
+
+**影响**：影响 `battle.card.xlsx`、`i18n.xlsx`、生成的 `battle_tbcard.json`、卡牌目录门禁与 MG2A 测试；不改变现有四张 Implemented 卡、默认 Deck、Queue、Turn、Effect、Scene、Prefab 或 Addressables 逻辑地址。英文正式本地化与每张卡的可执行程序留给对应后续切片；验证状态见 `06_testing/2026-08-07-marine-game-mg2a-card-catalog.md`。
+
+## CD-063：机枪兵程序是 Hero 会话私有深模块，唯一共享写入仍经 Queue
+
+**问题**：机枪兵需要 Ammo、自动最近目标和兴奋剂额外命中，而默认战士不应承受职业状态或规则分支。若让 Hand UI、Card 配置文本或一个新的职业队列直接写资源/卡区/参与者，就会形成第二写入口；若按模板 ID、外部 key 或卡名分支，又会让配置身份和运行时规则耦合。
+
+**选择**：生成 `HeroRuntimeProfile.MachineGunner` 与 `MachineGunnerProgramId`。只有 `BattleSession` 装配到该 Hero profile 时才创建 internal `MachineGunnerBattleRuntime`；`BattleCardPlayRules`、`BattleTurnController` 与 `HandCardContainer` 使用同一实例投影规则，所有事实写入仍从既有 `BattleCommandQueue.Submit` 到达回合控制器。首个可玩切片只映射五个强类型程序：`Shoot`、`Elbow`、`Block`、`Reload`、`Stim`；其余 enum 项在表中保持 `CatalogOnly`，不会伪装为已实现。
+
+**理由**：Session-owned 深模块将职业可变事实限制在一场机枪兵战斗内，默认 Hero 1001、通用 Queue 与现有 Card Effect 语义无需复制或替换。生成 enum 是稳定边缘身份，避免从卡牌文本或原始配置 key 解释行为；同一规则实例再供 UI 只读使用，可防止自动/自身目标被错误禁用。
+
+**影响**：初始牌可通过 Queue 原子支付 Energy/Ammo、结算参与者与卡区；Ammo 不足失败保持零写入。当前结算记录新增 Ammo 支付这一 source-only 类别，表现层显式不把它变成可见 cue。未来 MG3--MG7 必须在此深模块上增加可验证的目标/随机、状态/伤害、回合钩子与 Power；驻防、排气散热等选择不得借 UI 私有状态，需新增权威待决命令协议。验证见 `06_testing/2026-08-07-machine-gunner-mg2b-starter-runtime.md`。
+
+## CD-064：机枪兵随机目标必须在整张卡成功提交后才推进职业随机流
+
+**问题**：随机目标的候选需要在卡牌预构建期得到，但目标、弹药、效果和卡区的任一后续校验失败都不应改变这场战斗后续的随机序列。若选择器直接持有并推进运行时随机流，失败的出牌尝试会悄然污染扫射等卡牌的可复现结果。
+
+**选择**：`MachineGunnerTargetSelector` 只消费调用方传入的 `GameRandom`；`MachineGunnerBattleRuntime` 在解析时克隆当前状态，保存候选状态，并只在效果和 Hand→Discard 提交完成后写回 `CardRandomState`。最近、最远、全体、第二近和自身不消耗随机；无存活敌人与伪造随机输入在候选生成前失败。
+
+**理由**：将随机状态视作卡牌事务的一部分，使失败路径保持零写入，且不需要引入第二随机源或让 UI 提供随机结果。目标顺序仍唯一来自 Encounter，后续多段随机卡可以复用同一规则。
+
+**影响**：目前五张初始牌的数值和随机状态均不变；MG3 的选择器测试固定了目标顺序、相同种子重放和失败零推进。后续启用随机程序时必须保持“本地预演、成功提交”边界，验证见 `06_testing/2026-08-07-machine-gunner-mg3-target-random.md`。
+
+## CD-065：职业私有状态通过内部伤害公式覆盖接入既有 Effect 事务
+
+**问题**：机枪兵的 Weakness、Smoke、Burn/Oil、Armor 与 Invisible 不能安全地塞入通用 `CombatantData`，但敌方已有 Effect 和职业初始牌都必须采用同一攻击顺序。若在 Effect 提交后再重算伤害，或让状态模块绕过 Queue 直接改参与者，会破坏预构建快照、结算顺序和唯一共享写入口。
+
+**选择**：`MachineGunnerBattleRuntime` 独占 `MachineGunnerCombatState`，并以 internal `IBattleDamageFormulaOverride` 向既有 `BattleEffectExecutor` 提供只读计算和提交后的护甲钩子。攻击结果在预构建期冻结后才写入参与者；Armor 仅在冻结结果已经穿透生命时消耗。职业状态的回合钩子由既有 `BattleTurnController` 在 Queue 命令内调用，通用 Block/Vulnerable 仍归 `BattleStatusTiming`。
+
+**理由**：这让同一职业状态同时覆盖初始牌和敌方攻击，却不扩张通用参与者模型、公开 Effect API 或 Queue 之外的写入面。纯公式与提交后钩子分离，也避免“护甲先扣、伤害后失败”或对已冻结伤害二次解释。
+
+**影响**：只影响 Hero 1002 装配后的 Session；默认 Hero 1001 继续使用原始公式且不创建职业运行时。当前完整覆盖 Weakness、双向 Smoke、Vulnerable、Block、HP、Burn/Oil、Armor 与 SmokePersist 生命周期；延迟伤害、Invisible、恢复、束缚等其余机制留给后续卡牌切片。验证见 `06_testing/2026-08-07-machine-gunner-mg4-private-runtime.md`。
+
+## CD-066：Power 是独立卡区事实，表现缺口不得伪装为可玩能力牌
+
+**问题**：能力牌不能进入弃牌堆，否则持续效果没有可审计的归属；但当前手牌表现只有 Draw、Discard、Exhaust 三个 pile 锚点，动态临时牌还受初始插画预加载合同限制。若为了表现而把 Power 伪装成弃牌，或提前把所有能力牌翻成 `Implemented`，会让卡区事实和玩家看到的状态失真。
+
+**选择**：`BattleCardZonesData` 增加第五个 `PowerPile`，并让 Hand→Power 保持普通、按序的 `BattleCardMovedSettlement`。表现计划明确可以为这一事实产生零可见步骤；只有拥有真实私有规则的 Power Program 才允许转入该卡区，其余目录卡继续由 `CatalogOnly` 门禁拒绝。职业手牌容量在同一私有运行时限制为 10，默认路径仍不改变原有抽牌目标。
+
+**理由**：先固定真实归属和结算顺序，能让后续 Power HUD/图标/动画只是读取现有事实，而不是倒逼运行时存放 UI 镜像。零可见步骤是显式未实现边界，不会把不具备动态插画加载与奖励入口的卡伪装成可用内容。
+
+**影响**：CardZones 的布局、唯一归属断言和手牌抽取都识别 `PowerPile`；既有 Hand→Discard/Draw→Hand 动画不变。当前生产 Deck 和默认 Hero 不含能力牌，未创建 Power UI、奖励/Run、临时牌动态加载或场景改动。验证见 `06_testing/2026-08-07-machine-gunner-mg4-private-runtime.md`。
+
+## CD-067：X 费、变动弹药与随机多段命中在职业运行时内冻结为一张卡的支付快照
+
+**问题**：机枪兵的 X 费、多段随机射击和“最多/全部消耗弹药”都依赖执行瞬间的资源与存活目标。若在每个 effect 结算时重新读取 Energy/Ammo，或让目标选择器直接推进会话随机流，会导致同一张卡的命中数随前段结果漂移，并使随后失败的卡牌尝试污染可复现随机序列。
+
+**选择**：`MachineGunnerBattleRuntime` 在首次共享写入前解析 `MachineGunnerCostResolution`，冻结 Energy 支付、X 值、实际 Ammo 支付和 Stim 附加命中；随后基于局部投影预构建全部伤害/资源操作。随机程序从显式复制 `GameRandom.State` 的候选流逐段选择投影存活敌人，只有资源、效果和卡区移动整体成功后才把候选状态写回。`BattleCardPlayRules` 仅使用该运行时暴露的最小合法性和目标输入投影，不持有职业资源或随机事实。
+
+**理由**：这把可变资源和 PRNG 一并视为卡牌事务的输入，而非每段 effect 的临时查询，保持失败零写入、随机可重放和 Queue 的唯一共享写入边界。显式复制状态避免底层随机构造器对种子的再次变换，故零段卡也不会意外推进随机流。
+
+**影响**：本决定开启 TumbleReload、HoldLine、Spray、BayonetParry、WildRampage、QuickElbow、HeavyElbow、HurricaneElbow、PrecisionShot、SixHits 和 QuickManeuver；目录门禁以精确外部 key 集合锁定 16 张已实现卡。默认职业和其随机/费用规则不变。延迟伤害、超上限 Energy、手牌选择、动态临时卡、自动连锁与 Power 触发仍需独立协议。验证见 `06_testing/2026-08-07-machine-gunner-mg5-x-multishot-runtime.md`。
+
+## CD-068：机枪兵即时状态以预演操作提交，私有状态不伪造 Effect ID
+
+**问题**：机枪兵程序需要在同一张卡的伤害之后施加 Weakness、Smoke 或 Vulnerable。直接调用通用 `BattleEffectExecutor` 会绕过职业程序的整卡预演与零写入边界；私有状态没有对应的 `BattleEffectId`，而伪造枚举值会破坏配置来源和展示路由。
+
+**选择**：`MachineGunnerProgramOperation` 显式表达目标范围、私有状态或通用 Vulnerable。运行时先在 `MachineGunnerProjectedCombatant` 中冻结伤害后存活、私有状态和 Vulnerable 的前后值，再在提交阶段校验实际前值仍与投影一致。Weakness/Smoke 提交为职业私有 `StatusApplied` settlement，保留来源、目标、顺序和值变更但不生成未知 UI cue；Vulnerable 调用既有 `CombatantData.ApplyVulnerableGain`，并以 `BattleStatusAppliedSettlement(EffectId = null)` 进入既有易伤图标脉冲。`BattleStatusAppliedSettlement` 的 Effect ID 因此允许为空，但只表示职业原生程序操作，而非虚构的配置 Effect。
+
+**理由**：状态操作和前序伤害属于同一张卡的投影事务。这样全体伤害杀死的目标不会再收到状态，Smoke 的“自身加全体存活敌人”也可在一次预演内冻结；同时保留 Queue 的唯一共享写入边界和通用 Vulnerable 的既有时机/表现语义。
+
+**影响**：本决定开启 StunGrenade、SmokeBomb、KidneyShot、PainfulElbow 和 SniperShot，使机枪兵快照精确达到 21 张已实现卡。它不提供逐段 OnShotHit、燃烧生命周期、Exhaust、动态多源交叉结算或私有状态 HUD；这些仍需各自的运行时切片与验收。验证见 `06_testing/2026-08-07-machine-gunner-mg5-immediate-status-runtime.md`。
+
+## CD-069：已有完整 Power 程序以精确配置门禁开放，不为目录状态另造运行时分支
+
+**问题**：六张机枪兵能力牌已经拥有程序注册、资源/状态提交、`PowerPile` 归宿和回合读取，但作者表仍把它们列为 `CatalogOnly`。若为“开放”再复制一套 Power 结算或由 UI 直接改动状态，会破坏 Hero 会话私有模块和 Queue 的唯一共享写入入口；反之，仅按数量翻转卡牌又可能误开放仍缺机制的目录卡。
+
+**选择**：`BattleCardCatalogBuildValidator` 继续以 `MARINE_*` 外部 key 的精确集合冻结当前可执行集合，并把 `CoreExpansion`、`OutputAdjust`、`BlastShield`、`MagExpansion`、`SmokePersist` 与 `PowerOverclock` 纳入其中。只修改这六张作者表的 `implementation_status`，复用已有 `MachineGunnerCardProgramRegistry`、`CommitPowerActivation`、`BeginPlayerRound` 和 `GetPlayerRoundHandTarget`；不新增公开 API、Power UI、奖励入口或第二条写链。
+
+**理由**：配置门禁应该反映已证明可执行的能力边界，而不是重复实现已存在的职业规则。用身份集合而非连续 ID 锁定可执行卡，能让后续某张未实现卡被误翻转时在构建和快照测试中立即失败。
+
+**影响**：机枪兵快照变为 27 张 `Implemented` / 37 张 `CatalogOnly`；六张 Power 可经既有 Queue 事务进入 `PowerPile` 并影响资源、护甲、烟雾或下一回合抽牌目标。奖励/Run、Power 可视化、升级实例和其余 37 张卡仍不在本决定范围内。验证见 `06_testing/2026-08-07-machine-gunner-mg6-existing-power-runtime.md`。
+
+## CD-070：Burn/Oil 由最后一名存活玩家结束行动的同一 Queue 命令结算
+
+**问题**：Burn 的“玩家行动结束、敌人行动前”时机既不能为每名玩家重复结算全场，也不能新建绕过 `BattleCommandQueue.Submit` 的隐式伤害写入口。Oil 又要求 Burn 只消费施加前已有的 Oil，并允许 Oil 下降，不能复用只允许累加的通用状态预演记录。
+
+**选择**：在 `BattleTurnController.TryEndPlayerAction` 已丢弃手牌、提交既有状态时机并标记当前玩家结束行动后，仅在 `HaveAllLivingPlayersEndedAction()` 为真时调用 `MachineGunnerBattleRuntime.ResolvePlayerRoundEnd`。该模块在同一命令内按 Encounter 顺序对存活敌人，再对机枪兵玩家生成 Debuff 伤害 settlement，并在敌方全灭后跳过玩家自燃；控制器立即重新派生终局，不再继续下一阶段。`ApplyBurn` 作为专门预演/提交记录，同时冻结 Burn 增加与 Oil 减少，并由一条纯计算函数供投影与真实状态共享。
+
+**理由**：这样回合时机、结算顺序、Block 伤害、死亡中断和卡牌提交仍只有一条权威写链；Burn/Oil 的特殊双字段原子变化也不会放宽普通私有状态“只能增加”的错误边界。敌人先于玩家能避免全灭敌人与玩家自燃同时出现而项目不存在 Draw 终局模型的无效事实。
+
+**影响**：开放 GasPump、Napalm、Molotov 与 FlameElbow 的基础值程序，机枪兵快照达到 31 张 `Implemented` / 33 张 `CatalogOnly`。这不实现升级实例、Burn HUD、BurningOil 的不耗 Oil 增长、逐段命中、Exhaust、奖励/Run 或第二条写入链。验证见 `06_testing/2026-08-07-machine-gunner-mg7-burn-oil-runtime.md`。
+
+## CD-071：职业动态成本和本回合卡链只读预览与队首提交共用同一事实
+
+**问题**：连肘是否免费依赖“本回合紧邻上一张成功卡”的会话私有事实，不能由静态 `Card.Cost` 判断。若 `BattleCardPlayRules` 先按通用固定费用拒绝、队首运行时又在稍后免除费用，0 Energy 的合格连肘会在交互层永远无法提交；若各自复制折扣逻辑，UI 与队首会随未来卡链规则漂移。
+
+**选择**：将 `MachineGunnerBattleRuntime.TryPreviewCost` 作为不写状态的唯一成本派生函数，规则层和 `ExecutePlayerCard` 都读取它。运行时只在卡区成功归宿后记录 `NonShootAttack` 或 `Other`，并在 `BeginPlayerRound` 清空；合格连肘将本次冻结的 `EnergySpent` 置为 0，连续连肘因自身是非射击攻击而继续满足条件。功夫机甲和开火仍留在同一私有深模块：前者按成功非射击攻击卡的整卡完成触发一次，后者为每段常规射击在既有伤害管线中增加层数并在玩家行动结束清零。
+
+**理由**：成本、卡链和伤害修正都从同一会话事实读取，既没有新命令或 UI 写入口，也不需要把职业规则扩张进默认 Hero。`battle.html` 的可执行分支虽然把狙击标作射击，但没有把 `firePower` 加到狙击伤害；本切片以该行为作为更具体的运行时口径，测试锁定“常规射击吃开火、狙击不吃开火”，同时不影响未来燃烧弹药对全部射击的独立判定。
+
+**影响**：开放 KungfuMech (3212)、ElectroBoost (3236) 和 ComboElbow (3242)，机枪兵快照达到 34 张 `Implemented` / 30 张 `CatalogOnly`。升级实例、逐段 OnHit、BurningOil、Exhaust、奖励/Run、Power HUD 与第二条写链仍不在本决定范围内；验证见 `06_testing/2026-08-07-machine-gunner-mg8-kungfu-firepower-combo-runtime.md`。
+
+## CD-072：逐段命中后的职业状态在同一张卡的投影事务内交错提交
+
+**问题**：`SpikeShot`、`IncendiaryAmmo` 和 `AgedOil` 都以“每次命中后”为触发时机。若先累积整张卡的全部伤害、最后再统一上状态，Stim 的第二段命中读不到第一段新增的 Vulnerable，且 FlameElbow 的 Burn/Oil 顺序会被后续全局钩子反转；若命中后直接改写真实状态，又会绕过整卡预演、失败零写入和既有 Queue 权威链。
+
+**选择**：`MachineGunnerCardProgram` 增加仅供攻击程序使用、只允许命中目标私有状态/Burn/Vulnerable 的 `PostHitOperations`。`MachineGunnerBattleRuntime` 预构建每一段实际伤害后，立即在同一局部投影中依序附加程序后置操作，再附加全局命中钩子：射击走 `IncendiaryAmmo`，非射击攻击走 `AgedOil`。所有操作仍作为原有 `ExecutePlayerCard` 的准备结果，通过同一 `BattleCommandQueue.Submit` 原子提交；伤害后死亡跳过后置状态，存活的零伤害或完全格挡命中仍执行后置状态。X/多段程序的钩子值不再被执行次数二次缩放。
+
+**理由**：以逐段投影为唯一时序事实，既让后段伤害读取前段已生成的状态，也保持随机、资源、卡区和参与者写入的整卡原子性。`IncendiaryAmmo` 叠层来自原型的累加赋值；`AgedOil` 的原型是固定赋值，故多张只启用而不将 `Oil +2` 相乘。`HurricaneElbow` 的广义非射击逐段规则按每段 +2 实现，避免 X=3 被错误放大为 18；这比原型中遗漏该分支的局部代码更符合卡牌文字，且由回归明确锁定。
+
+**影响**：开放 IncendiaryAmmo (3210)、SpikeShot (3248) 和 AgedOil (3253)，并将 FlameElbow、KidneyShot、PainfulElbow、SniperShot 的既有命中后状态纳入统一时序；机枪兵快照达到 37 张 `Implemented` / 27 张 `CatalogOnly`。不实现 BurningOil 的回合末不耗油增长、IncompleteCombustion 的 Exhaust/动态交叉结算、升级实例、奖励/Run、Power HUD 或第二条写入链；验证见 `06_testing/2026-08-07-machine-gunner-mg9-per-hit-runtime.md`。
+
+## CD-073：烈火烹油作为回合末的专用非消耗 Burn 增长，而非普通 Burn 施加
+
+**问题**：既有 `MachineGunnerCombatState.ApplyBurn` 的契约是读取旧 Oil 后把 Oil 向下减半，适用于 Napalm、Molotov 和 FlameElbow 的“施加 Burn”。`BurningOil` (3254) 则要求在回合末、所有 Burn 伤害前，对已有 Burn 的敌人增加 `1 + Oil`，Oil 不能变化，且多张副本不能把数值倍增。复用普通施加规则会直接改变 Oil 和本轮伤害；把它拆成新命令又会破坏既有回合末原子性与胜负中断。
+
+**选择**：在 `MachineGunnerBattleRuntime.ResolvePlayerRoundEnd` 内保留既有存活敌人 Encounter 快照，并在 Burn 伤害循环前调用专用 `AppendBurningOilGrowthForLivingEnemies`。该 helper 只在 `GetPowerStack(BurningOil) > 0` 时，对每名仍存活且旧 Burn 大于零的敌人以 `_combatState.Add` 写入 `Burn += 1 + Oil`，并追加现有 `MachineGunnerPrivateStatusChangedSettlement`；不调用 `ApplyBurn`，不写 Oil，也不传入玩家。全部增长完成后才复用原有 Burn/Block/死亡/Victory 结算，仍由同一个 `BattleCommandQueue.Submit` 事务提交。
+
+**理由**：这把“普通施加 Burn 且消费旧 Oil”与“持续 Power 在回合末读取 Oil 但不消费”的相反契约封装在同一职业私有深模块，而不泛化成目前只有一张卡使用的浅层 Burn 模式接口。持有层数继续可供 PowerPile/展示读取，但以大于零判定保证原型的赋值式启用语义；预先收集全部增长 settlement 则锁定原型的全体增长先于任一 Burn 伤害的顺序。
+
+**影响**：开放 BurningOil (3254)，机枪兵快照达到 38 张 `Implemented` / 26 张 `CatalogOnly`。不实现 IncompleteCombustion 的 Exhaust、燃烧者×存活目标动态交叉结算和 Burn→Smoke，也不引入升级实例、奖励/Run、Power HUD 或第二条写入链；验证见 `06_testing/2026-08-07-machine-gunner-mg10a-burning-oil-runtime.md`。
+
+## CD-074：不充分爆燃以专用预演记录冻结“来源快照 × 动态存活目标”
+
+**问题**：`IncompleteCombustion` (3222) 同时包含“初始燃烧敌人是固定来源”和“每个来源出手时只打当前存活目标”两种不同快照语义。把它塞入通用 `Damage` 会丢失每段敌人来源身份；把 Burn→Smoke 提前或逐来源转换又会改变后续来源的伤害值。复用 `ApplyBurn` 还会错误消费 Oil，且普通状态增加记录不能表达 `Burn = 0`。
+
+**选择**：在 `MachineGunnerBattleRuntime` 内建立仅供该 Program 使用的 `ResolveIncompleteCombustion` 预演操作及两种已准备记录。预演先按 Encounter 顺序捕获开始时存活且 `Burn > 0` 的来源和其 Burn 值；每个来源在随后按当时投影存活目标造成 Debuff 伤害，即使该来源已死亡也不取消其已捕获的一轮伤害。全部伤害后，才按 Encounter 顺序对仍存活敌人以 `Set` 写入 `Smoke += Burn`、`Burn = 0`。伤害 settlement 保留燃烧敌人为来源，状态 settlement 使用玩家为来源；不调用 `ApplyBurn`，不读写 Oil。卡牌的合法性仍由既有职业 Program 门禁和队首事务负责，归宿分支只为注册 Program 支持 `ExhaustPile`。
+
+**理由**：专用记录把原型的双重快照、伤害先于转换、死亡来源继续出伤和 Oil 不变封装在职业私有深模块中，避免为一张卡放宽通用伤害/状态 API。预演和提交继续同属 `ExecutePlayerCard` 的一个 `BattleCommandQueue.Submit` 事务，因此卡牌、资源、目标、状态与终局的权威写链不增加第二条路径；终局仍在整张卡提交后统一判断。
+
+**影响**：作者表将 IncompleteCombustion (3222) 翻为 `Implemented`，机枪兵生成目录达到 39 张 `Implemented` / 25 张 `CatalogOnly`。新增运行时回归覆盖完整交叉结算、死亡来源快照、无燃烧空操作和全敌死亡后的 Exhaust→BattleEnded 顺序，生成 JSON 快照另锁定费用、升级元数据、Self、ExhaustPile、状态与 Program；静态编译通过。2026-08-11 已在唯一既有 Unity Editor 执行 `Sync and Build All`，Console 记录本地 Addressables 成功构建（25.627 秒、无 Error），定向原生 EditMode `94b4d610258b4b05a896adfd20ca6428` 为 65/65 passed。升级实例、奖励/Run、Power HUD 与第二条写入链不在本决定范围内；记录见 `06_testing/2026-08-08-machine-gunner-mg10b-incomplete-combustion-runtime.md`。
+
+## CD-075：爆炸肘将“立即触发现有 Burn”建模为全局命中钩子之后的 Debuff 追加段
+
+**问题**：`ExplosiveElbow` (3252) 既是普通非射击攻击，又要求在命中后立即触发一次目标当前 Burn。若把这段伤害做成普通 Attack，会错误读取 Weakness、Smoke 和 Vulnerable 并消耗 Armor；若直接调用回合末 Burn 结算，会绕过整张卡预演/原子提交，并可能错误改变 Burn 或 Oil。旧 STS2 Mod handoff 的 1 Energy / 8 数值也与当前需求摘要明确采用的 `marine-game` 来源不一致。
+
+**选择**：`MachineGunnerCardProgram` 以受限布尔声明 `TriggersCurrentBurnDebuffAfterGlobalHitEffects`，仅允许攻击程序启用。每段普通命中后，运行时保持既有“卡牌后置状态 → IncendiaryAmmo → AgedOil”投影顺序，再对仍存活且当前 Burn 大于零的目标追加同值 `MachineGunnerDamageKind.Debuff` 预演伤害；不调用 `ApplyBurn`，不写 Burn/Oil。3252 的目录 `Enemy` 保留为基础输入映射，程序内部仍按自动最近存活敌人选择；费用 2、基础 Attack 10 和 DiscardPile 继续采用摘要来源链，未采用未列入该链的 handoff 数值。
+
+**理由**：一条受限程序声明既复用已存在的伤害计算、Block、投影和 settlement 提交，又不把只有 3252 需要的“当前 Burn 触发”泛化成新的通用伤害/回合 API。把追加段放在全局命中钩子之后，能让同一张卡先完成已有的燃烧弹药和陈年机油语义，再读取真正的当前 Burn；整张卡继续经唯一 `BattleCommandQueue.Submit` 事务提交，致死普通攻击自然跳过后续操作。
+
+**影响**：作者表将 ExplosiveElbow (3252) 翻为 `Implemented`，机枪兵生成目录达到 40 张 `Implemented` / 24 张 `CatalogOnly`。回归锁定 Attack→AgedOil→Debuff 顺序、无 Burn、普通攻击致死跳过和 Debuff 致死后的 Discard→BattleEnded 顺序，以及生成 JSON 的原始元数据。升级实例、奖励/Run、Power HUD 与第二条写入链不在本决定范围内；验证见 `06_testing/2026-08-11-machine-gunner-mg11-explosive-elbow-runtime.md`。
+
+## CD-076：光学迷彩将攻击后的隐身消耗与伤害词条解耦为受限程序声明
+
+**问题**：`OpticalCamo` (3249) 需要在玩家行动结束和普通攻击成功后减少 Invisible，但狙击攻击不能破隐。现有 `IsSniper` 同时参与伤害公式：把 3248 `SpikeShot` 直接标为狙击来复用“不破隐”会错误移除其既有开火加成，且会把“伤害词条”和“隐身生命周期”混成一项事实。
+
+**选择**：`MachineGunnerCardProgram` 新增只允许攻击程序设置的 `PreservesInvisibleAfterSuccessfulAttack` 声明；3247 `SniperShot` 与 3248 `SpikeShot` 显式设置为 `true`。`MachineGunnerBattleRuntime` 只在攻击牌已成功进入其卡区归宿后、且程序未声明保留时减少玩家 1 层 Invisible；失败出牌不触发。玩家行动结束仍独立减少 1 层。`MachineGunnerCombatState.ReduceDuration` 仅执行状态变化，具体生命周期时机由调用者定义。3249 本身是 Self 技能，支付 2 Energy 后用既有私有状态操作施加 `Invisible +2` 并进入 DiscardPile。
+
+**理由**：把“成功攻击后是否保留隐身”作为一个受限声明，既复用现有状态、伤害和卡区原子事务，又不为单张卡扭曲 `IsSniper`/开火伤害语义。归宿成功后才减层使资源、目标或卡区失败路径保持零写入；行动结束时的独立减少保持来源所述的持续时间规则。该小型职业私有 seam 同时保留未来 3264 的狙击延迟行为另行设计，不提前泛化延迟/下回合时机。
+
+**影响**：作者表将 OpticalCamo (3249) 翻为 `Implemented`，机枪兵生成目录达到 41 张 `Implemented` / 23 张 `CatalogOnly`。回归锁定施加与弃牌、普通肘击/射击消耗、3247/3248 保留且 3248 继续吃开火、行动结束先减层和失败攻击零消耗，并锁定生成 JSON 的费用、Self、DiscardPile、升级元数据、状态与 Program 49。角色半透明、Invisible HUD、升级实例、奖励/Run、Scene、Prefab、默认 Hero/Deck 与第二条写入链不在本决定范围内；验证见 `06_testing/2026-08-11-machine-gunner-mg12-optical-camo-runtime.md`。
+
+## CD-077：Buffer 通过 Effect 链局部伤害序列冻结一次性受击防御
+
+**问题**：`HoloDecoy` (3259) 需要使下一次正值攻击伤害完全无效，并在这次伤害之后消费一层可叠加、无回合衰减的 `Buffer`。通用 Effect 执行器会先预演整条 Effect 链；若预演直接写职业状态，失败路径会破坏零写入，若每一段都只读真实状态，同一条链的多段伤害又会错误地重复消费同一层。额外的 Buffer settlement 还必须计入下一条 Effect/敌人意图的 Order，否则连续 settlement 契约会被破坏。
+
+**选择**：伤害公式覆盖以每个 `BattleEffectExecutionRequest` 的局部 `IBattleDamageFormulaOverrideSequence` 工作。序列仅在自身投影中预留目标的 Buffer，并为命中的正值攻击排入一次后续状态变化；提交时先写原始 `BattleDamageAppliedSettlement`，再以紧随其后的 Order 写 `MachineGunnerPrivateStatusChangedSettlement(Buffer before→before-1)`。`BattlePreparedEffectPlan.PlannedSettlementCount` 统一报告基础操作与所有局部后续 settlement，`BattleEffectExecutor`、`BattleEnemyActionExecutor` 和 `BattleTurnController` 都用该总数推进/校验 Order。零值攻击、非机枪兵目标或无 Buffer 不排入后续状态变化；被 Buffer 完全抵挡时不消耗 Armor。
+
+**理由**：局部序列把“本条 Effect 链内已预留的防御层数”从真实状态隔离出来，既能先完整验证所有操作，又准确表达“同一条链两段攻击只由第一段消耗一层”。提交仍经原有 `BattleCommandQueue.Submit` 写入，原始伤害 settlement 保持在 Buffer 消耗之前，表现层可以看到完整、连续的事实顺序；通用执行器无需知道机枪兵私有状态的具体含义。
+
+**影响**：作者表将 HoloDecoy (3259) 翻为 `Implemented`，机枪兵生成目录达到 42 张 `Implemented` / 22 张 `CatalogOnly`。回归锁定 Hand→Exhaust、一次/叠层 Buffer、零 Energy 的零写入、无回合衰减、一次 Effect 链内两段伤害只消费一次，以及敌人连续 Order；生成 JSON 快照锁定 Program 59、Cost 1、Self 与基础/升级 ExhaustPile。`README web.md` 的“升级后不消耗”与作者表的升级 ExhaustPile 相冲突，且当前没有升级 CardInstance，因此本决定只实现基础态、保留作者表字段，未把该差异伪装为已支持的升级行为。验证见 `06_testing/2026-08-12-machine-gunner-mg13-holo-decoy-runtime.md`。
+
+## CD-078：下回合私有状态和 Queue 签发的强制结束行动
+
+**问题**：`Retreat` (3216) 需要在成功出牌后结束玩家行动，并在下一玩家回合开始补满当前 Ammo 上限；`QuickRoll` (3235) 需要把可叠加的下挡总值转换为一次性 Block。若职业运行时直接调用结束行动或嵌套提交命令，会绕过 Queue 的 authority sequence、展示屏障和 continuation 所有权；若用全局延迟总线承载两个局部状态，又会提前扩大到尚未实现的延迟牌、奖励或 Run。玩家在撤退结算的发布期间若重入提交普通 Play/End，也不得获得额外行动窗口。
+
+**选择**：将 `NextRoundBlock` 与 `ReloadAmmoAtNextPlayerRound` 作为 Hero 1002 的私有战斗状态，`MachineGunnerBattleRuntime.BeginPlayerRound` 仅返回冻结的回合开始结果。控制器按固定顺序写入：清除既有 Block；清除下挡并给予 Block；应用既有资源档案的普通补充；清除补满弹预约并将 Ammo 补至当前最大值；最后走既有抽牌。`MachineGunnerCardProgramExecutionResult` 只在卡片已成功归宿且战斗仍 Ongoing 时声明请求结束 actor，`BattleTurnOperationResult` 透传该最小事实；Queue 在本次 Play 的阶段 settlement 前保存它，并以 system token 冻结 `EndPlayerActionCommand` continuation。控制器在发布前设置同 actor 的强制结束锁，普通 Play/End 零写入拒绝，系统 continuation 成功后清锁。
+
+**理由**：Queue 继续独占命令排序、token、continuation、展示屏障和 drain；职业模块只表达卡牌及回合开始的局部业务结果，不持有第二条写入链或待提交命令。两个延迟值保留在已经用于机枪兵私有状态 settlement 的会话对象中，因而可审计、可测试、不会跨战斗泄漏。固定时序使“下挡”和“补满弹”与既有 Block 清除、普通 Ammo +1 和抽牌的相对顺序可观察且稳定。
+
+**影响**：作者表仅将 Retreat (3216) 与 QuickRoll (3235) 翻为 `Implemented`，机枪兵生成目录达到 44 张 `Implemented` / 20 张 `CatalogOnly`。回归锁定 15 Block、Hand→Discard、PlayCard→系统 EndPlayerAction、Ammo 0→1→5、下挡 0→5→10 后一次性清除与普通卡的单结果断言。`TacticalAdvance` (3234) 保持 CatalogOnly：免费攻击与 Stim 的额外弹药、以及尚未实现的 Bound 前置规则并未在本决定中猜测或实现。验证见 `06_testing/2026-08-12-machine-gunner-mg14a-retreat-quick-roll-runtime.md`。
+
+## CD-079：游击战术将实际支付与名义触发弹耗分离
+
+**问题**：`GuerrillaTactics` (3251) 每层要求“每消耗 1 弹药获得 1 Block”。将来免费的攻击和 `MachinegunBurst` 会分别出现实际不扣 Ammo、但仍应视为消耗弹药的规则；若只读取实际资源扣除，会使后续卡无法表达名义弹耗，若现在从卡名或卡牌 ID 推断，又会提前裁决尚未实现的免费攻击×Stim 组合语义。普通 Power 固定每张加 1 层，也无法表达 3251 的基础 2 层。
+
+**选择**：`MachineGunnerCardProgram` 以仅供 Power 使用的 `PowerStackGain` 声明层数，默认 1，3251 显式为 2。`MachineGunnerCostResolution` 同时冻结 `AmmoSpent`（实际资源写入和 Ammo settlement）与 `AmmoSpentForGuerrilla`（游击触发用的名义值）；当前已有程序在成本预览中令二者相等。`TryPrepareOperations` 在原卡操作与既有功夫机甲后置钩子之后，仍在同一个投影序列中预演 `游击层数 × AmmoSpentForGuerrilla` 的 Block，只有整张卡能成功提交时才写入。
+
+**理由**：层数、资源支付、Block 前值和失败零写入继续由同一职业深模块的预演事务冻结，提交仍只经过 `BattleCommandQueue.Submit`。分离字段保留未来免费/虚拟支付的明确声明位置，却不把尚未裁决的跨卡组合变成隐式默认；PowerPile 的实体卡数也继续与数值层数分开表达。
+
+**影响**：作者表将 GuerrillaTactics (3251) 翻为 `Implemented`，机枪兵生成目录达到 45 张 `Implemented` / 19 张 `CatalogOnly`。回归锁定一张 Power=2 层、两张 Power=两个实例且总 4 层、正常 1 弹→2 Block、Stim 实际 2 弹→4 Block、成本失败零写入和 settlement 顺序。TacticalAdvance、固定机枪、临时 MachinegunBurst、升级实例、奖励/Run、Power HUD 与第二条写入链仍不在本决定范围内；验证见 `06_testing/2026-08-12-machine-gunner-mg14b-guerrilla-tactics-runtime.md`。
+
+## CD-080：伤害段以 Kind + CardTag 声明并将防御后效局部预约
+
+**问题**：新版 README 同时区分普通攻击、支援、炸弹、燃烧、射击和狙击。旧的 `Attack/Delayed/Debuff` 与分散的 `IsShoot/IsSniper` 布尔值无法表达“支援吃目标易伤但不吃来源力量”、“纯狙击不吃开火”或 Spike 的双词条；若每张程序传递力量/烟雾/易伤行为布尔值，规则会散落且无法稳定覆盖通用 Effect。DefenseTarget 的 Intangible 又需要在同一 Effect 链内逐段消费，不能在预演阶段写真实状态。
+
+**选择**：`MachineGunnerDamageRequest` 只携带 `MachineGunnerDamageKind` 与 `[Flags] MachineGunnerCardTag`（`Shoot`、`Sniper`、`Shotgun`）。Pipeline 的 private rule profile 集中解释 Attack、Support、Bomb、Burn、Debuff 的修正；调用方不得选择 Smoke、Vulnerable、FirePower、ArmorBreak 或防御消费策略。`Shoot` 读取 Stim/FirePower/IncendiaryAmmo，纯 `Sniper` 只读取 IncendiaryAmmo 与狙击倍率、免来源 Smoke，`Shoot | Sniper` 两者并存。Effect 伤害序列以局部投影预约 Buffer/Intangible：Buffer 优先；否则正值 incoming Attack 在 Block 前封顶为 1 并预约 Intangible -1；提交始终是 Damage 后的私有状态 settlement。
+
+**理由**：两维声明把“伤害段的结算方程”与“卡牌来源的横切词条”分开，同时把细节隐藏在职业深模块，避免外部调用者构造错误组合。局部预约保持预演失败零写入、多段逐段消费和连续 Order；Buffer 优先是来源未定义组合时记录在案的最小实现决定，而非伪装成原始规则。
+
+**影响**：ElectroBoost (3236) 改为 Uncommon Power、FirePower +3 战斗持续；DefenseTarget (3262) 翻为 Exhaust/Implemented，当前既有 64 模板目录为 46 / 18。回归锁定纯狙击与双词条射击、Support/Bomb/Burn 方程、Intangible 分段封顶、Buffer 优先、2/3/9 弹阈值、失败零写入及生成元数据。尚未录入的新 18 张模板、延迟效果、升级实例、AnyAlly、奖励/Run、UI、Scene、Prefab 和第二条写入链不在本决定范围内；验证见 `06_testing/2026-08-12-machine-gunner-v2a-damage-taxonomy-defense-target.md`。
+
+## CD-081：V2 扩展目录以独立快照冻结 CatalogOnly 身份
+
+**问题**：新版 README 将机枪兵目录从既有的 64 个模板扩展到 82 个。若把新增 18 张与 V1 的 64 身份混入同一历史快照，旧目录回归会失去稳定的边界；若只生成 Program enum 而不额外校验状态、绑定和插图，新卡又可能因配置漂移被错误开放为可执行卡牌。
+
+**选择**：保留 V1 64 模板快照与其原有门禁，另以 `marine-game-v2-20260812-cards` 建立扩展快照。扩展校验只接受 3265–3282、Program 65–82 的精确 18 个外部键，且每项必须为 `CatalogOnly`、`art_placeholder`、空 `effect_bindings`、带升级元数据。`ValidateCurrentProject()` 同时执行两个快照；运行时继续先由 `BattleCardPlayRules` 拒绝非 `Implemented` 卡，再触及职业程序注册表。
+
+**理由**：目录身份、可玩状态和运行时程序是三个不同事实。独立扩展快照既保持已验证的 64 卡历史契约，也能在下一张 V2 卡真正具备程序、测试和精确表项翻转之前，阻止“配置已存在”等同于“可以打出”的误判；没有引入奖励/Run、默认 Deck 或第二条写入链。
+
+**影响**：作者表、本地化与生成配置现在包含 82 个模板，目录计数为 46 `Implemented` / 36 `CatalogOnly`。V2B 回归锁定 18 个身份、连续 ID/Program、所有 CatalogOnly 属性与“把 Mark 改为 Implemented 必须失败”的构建门禁；Luban、本地化、Sync/Addressables、定向 112/112 与完整 586/586 EditMode 已通过。延迟效果、卡牌标签映射、升级实例、AnyAlly、默认 Deck、奖励/Run、UI、Scene、Prefab 与任何新 V2 卡的可执行程序仍不在本决定范围内；验证见 `06_testing/2026-08-12-machine-gunner-v2b-catalog-extension.md`。
+
+## CD-082：V2C 破甲即时卡以既有状态与统一伤害链接入
+
+**问题**：V2 目录中的铝热炸弹（3273）和踏碎（3281）都要求施加持续的破甲，但不能因为共享状态已存在就绕过卡牌程序、表状态和目录门禁；铝热炸弹还需要固定“燃烧与破甲”的程序顺序，踏碎则必须保证破甲只在普通攻击成功命中且目标仍存活后施加。
+
+**选择**：3273 在同一出牌事务中声明两个既有操作：先 `ApplyBurn(4)`，再 `ApplyPrivateStatus(ArmorBreak, 2)`，两项均按 Encounter 顺序处理全部存活敌人；Burn 继续沿用油料交互，ArmorBreak 持续而不随回合衰减。3281 使用既有自动最近目标和 9 点 `Attack`，并以逐段命中后的既有操作在目标仍存活时施加 `ArmorBreak +4`。V2 扩展快照只把这两个外部键列为 `Implemented`，其余 16 张保持 `CatalogOnly`。
+
+**理由**：现有 `MachineGunnerCombatState`、Burn/Oil 预演、攻击后置状态、伤害管线与私有状态 settlement 已完整表达这两个基础态，无需增设生命周期、延迟调度、目标输入、标签推断或第二写入链。把“先燃烧后破甲”和“攻击后再破甲”写入程序与回归，避免未来重排操作时静默改变规则。
+
+**影响**：机枪兵目录现在为 82 模板、48 `Implemented` / 34 `CatalogOnly`；3273/3281 未加入默认 Deck、奖励或 Run，未实现升级实例、多人、UI、Scene 或 Prefab。Luban、本地化导入、Sync/Addressables、定向 81/81 和完整 589/589 EditMode 已通过；验证见 `06_testing/2026-08-12-machine-gunner-v2c-armor-break-instant-cards.md`。
+
+## CD-083：击退射击以双目标快照和独立 LoseStrength 行动结束计划接入
+
+**问题**：`KnockbackShot` (3223) 的目录目标规则只能表达 `Enemy`，但来源行为要求分别结算最近与第二近敌人；若逐段重新选目标，第一段击杀后会把第二段错误递补到第三名敌人。其“失去力量”又是对攻击力的独立减值和行动结束生命周期，不能复用伤害倍率型 `Weakness`、受击放大型 `Vulnerable`，也不能直接改写可能为负的永久 `Strength`。敌方清除时机还必须位于自己的行动完成后、意图推进前，并保持 settlement Order 连续。
+
+**选择**：3223 使用职业私有的自动前两名存活敌人选择模式，并拒绝显式 `TargetId`。程序在施放预演时按 Encounter 顺序一次快照最多两名目标，将 7 点和 3 点 Attack 分别绑定到对应快照位置；缺少第二名时跳过第二段，任何前段死亡都不重新选择。每段只在该目标仍存活时追加 `LoseStrength +2`。卡支付 1 Ammo，但不因名称或弹药成本推断 `Shoot` / `Sniper` 标签。`LoseStrength` 作为独立非负职业私有状态进入伤害管线，Attack 的来源项固定为 `max(0, baseDamage + Strength - LoseStrength)`，Burn 等非 Attack 伤害不读取它。行动结束使用可预演、可校验、可提交的 actor 计划清零该状态并写私有状态 settlement：敌人在其 Effect / completion 后、intent advance 前提交，玩家在自己的行动结束阶段、回合末 Burn 前提交。
+
+**理由**：一次快照把“最近”和“第二近”定义为同一张卡开始结算时的稳定身份，避免死亡造成隐式重定向；受限目标模式也不会把双目标语义扩散为通用 `TargetRule` 或 UI 输入协议。独立状态保留 `Strength` 的原有事实和可能为负的语义，并明确区分失去力量、虚弱与易伤。行动结束计划沿用既有准备/校验/提交事务和连续 Order，使敌人意图推进前的清除可观察、失败路径零写入，且不新增 Queue 之外的写入入口。
+
+**影响**：作者表只将 KnockbackShot (3223) 翻为 `Implemented`；82 模板目录达到 49 `Implemented` / 33 `CatalogOnly`，V1 为 47/17，V2 扩展仍为 2/16。基础态的 7/3 Attack、各 `LoseStrength +2` 已接入；升级 9/5 与 +3 仍是元数据，卡也未加入默认 Deck、奖励或 Run。Luban、本地化导入、Sync/Addressables、静态编译、Unity MCP 定向 10/10 与完整 597/597 EditMode 已通过；验证见 `06_testing/2026-08-12-machine-gunner-v2d-knockback-lost-strength-runtime.md`。
+
+## CD-084：V2E 以职业私有实例调度器和阶段联合计划承载延迟支援
+
+**问题**：女妖、火力支援、燃烧轰炸、炸弹、三连击延迟狙击与钢针都跨越出牌命令和后续回合阶段，并允许同种效果多实例共存。若复用 Power 层数字典，会丢失每次施放各自的倒计时、冻结数值与创建顺序；若由卡牌程序在未来阶段直接写战斗状态，便会形成 `BattleCommandQueue.Submit` 之外的共享写入路径。来源还没有逐项裁决 Support/Bomb/钢针修正、同阶段多实例与触发时随机选择，因此继续隐式推断会让规则随调用点漂移。
+
+**选择**：`MachineGunnerBattleRuntime` 私有持有独立的 ScheduledEffect 实例集合；实例冻结类型、来源、基础态数值、剩余触发/倒计时与单调插入顺序。成功出牌的职业计划在同一事务中创建实例并写 Created settlement；后续阶段由 Queue/Turn 的既有稳定接缝向 Runtime 请求一份可预演、可校验、可提交的联合计划，按实例插入顺序写 Triggered、Countdown、Removed 及伤害/状态 settlement，所有 Order 连续。round-start 计划位于最后一名敌人行动成功之后、敌方 Smoke 清理、玩家资源补充和抽牌之前；round-end 在弃牌与 Shackle/LoseStrength/既有临时状态清除之后、Burn 之前结算 Bomb 类实例。战斗终局跳过剩余计划，并清空未触发实例。
+
+伤害和目标口径固定在职业模块内部：Support 读取目标 Smoke、Vulnerable 与 ArmorBreak，不读来源修正；Bomb 只读取目标 Smoke；钢针 Delayed 只读取目标 Smoke。每个随机段在触发时从当前投影的存活敌人重新选取，随机状态只随完整阶段计划成功提交。女妖每次触发先锁定一个当前最近目标，同次触发不重定向；三连击延迟段取当前最远目标。燃烧轰炸逐波逐目标执行 `Support → 若存活则 ApplyBurn（含旧 Oil 交互）→ Oil`。这些来源未完整说明的细节按用户授权的“脑补”明确冻结为项目决定，不冒充上游逐字事实。
+
+**理由**：独立实例保留多次施放的身份、进度和稳定顺序；联合投影计划使同一阶段的随机选择、死亡过滤、Burn/Oil 和状态后效能在写入前整体校验，正常路径仍由 Queue 独占排序、drain、continuation、barrier 与 fault。以 DamageKind 统一解释 Support/Bomb/Delayed，可防止卡牌调用方各自拼装 Weakness、Vulnerable、Smoke 或 ArmorBreak 布尔值。Created/Triggered/Countdown/Removed settlement 让延迟生命周期可测试、可审计，同时表现层当前可选择静默忽略其内部记录。
+
+**影响**：3237、3238、3239、3240、3241、3264、3274 的基础态翻为 `Implemented`；82 模板达到 56 `Implemented` / 26 `CatalogOnly`，V1 为 53/11、V2 为 3/15。Luban、本地化导入、Sync/Addressables、定向 101/101 与完整 606/606 EditMode 已通过。当前原子性保证止于每份 round-start 联合计划：最后一名敌人的行动事务已经在计划准备前提交，尚无横跨“敌人行动 + round-start 延迟阶段”的回滚；正常串行触发已验证，但异常提交故障下的完整跨域原子回滚不在本决定内。恢复仍未实现，升级 CardInstance、默认 Deck、奖励、Run、UI、多人及其余 26 张 `CatalogOnly` 也不在本决定范围内；验证见 `06_testing/2026-08-12-machine-gunner-v2e-delayed-support-scheduler-runtime.md`。
+
+## CD-085：V2F 烟雾、防御与标记复用既有即时事务
+
+**问题**：`ChainSmoke` (3269) 的本地化卡名带有抽牌暗示，但来源行为只声明 Smoke；若按名称推断 Draw，会绕过精确程序契约。`EmergencyCooling` (3272) 的 Block 与 Smoke 具有可观察顺序。`Mark` (3280) 虽然是消耗 Ammo 的 Attack，却没有 `Shoot` / `Sniper` 词条；若从类型或成本猜测标签，会错误触发 Stim、FirePower 与 IncendiaryAmmo。Mark 的破甲还必须只写入攻击后仍存活的目标。
+
+**选择**：三张卡只通过生成的 `MachineGunnerProgramId` 注册基础态程序，不读取名称或显示文本。3269 使用来源范围的 `ApplyPrivateStatus(Smoke, 5)`，不创建 Draw 操作；3272 在同一事务中按 `GainBlock(8) → ApplyPrivateStatus(Smoke, 3)` 排序；3280 显式为 `Tags.None` 的普通 Attack，支付 1 Ammo、造成 5 点 Damage，并通过既有 post-hit 存活门禁追加 `ArmorBreak +2`。资源不足继续在预演/校验阶段失败，保持资源、状态、卡区和随机流零写入。
+
+**理由**：现有 GainBlock、Smoke、普通 Attack、后置状态和事务门禁已能完整表达三张基础卡，无需新增 Draw、状态、伤害种类、事件总线或第二条写入路径。把 `Tags.None` 与操作顺序写进程序和回归，可防止未来因卡名、卡型或弹耗做隐式分类而改变规则。
+
+**影响**：3269、3272、3280 的基础态翻为 `Implemented`；82 模板达到 59 `Implemented` / 23 `CatalogOnly`，V1 为 53/11、V2 扩展为 6/12。Luban、本地化导入、Sync/Addressables（11.414 秒）、定向 83/83 与完整 611/611 EditMode 已通过。升级实例、默认 Deck、奖励、Run、UI、多人、临时卡、选择和自动免费攻击仍不在本决定范围内；验证见 `06_testing/2026-08-12-machine-gunner-v2f-smoke-block-mark-runtime.md`。
+
+## CD-086：V2G 私人改装基础态复用既有 Power 事务
+
+**问题**：`PrivateMod` (3268) 同时要求“弹药上限 +1”和“开火 +1”，但提高 AmmoMaximum 不等于补充当前 Ammo。若复用装填语义或在扩容时把当前 Ammo 一并提高，会改变来源规则；若在 Power 提交后另行追加 FirePower，则会把一张卡拆成不可联合校验的两次写入。FirePower 已有逐段 Shoot 伤害语义，也不应为本卡再建命中后事件。
+
+**选择**：3268 注册为 1 Energy / Self / PowerPile 的 `PrivateMod` Power 程序。既有 Power 预演/提交在成功出牌事务中增加一层 PrivateMod，把 AmmoMaximum +1 并原样保留当前 Ammo；同一程序操作再为来源增加 `FirePower +1`。后续 Shoot 的每段伤害继续通过既有伤害规则读取 FirePower，后续装填继续补至当时的 AmmoMaximum。资源不足仍在提交前失败，不产生资源、状态、Power、随机流或卡区写入。
+
+**理由**：把上限扩展、Power 层数、FirePower 和卡区归宿保留在既有权威出牌事务内，既能表达来源的双重基础态，又不新增第二条共享写入路径或射击事件总线。显式保持当前 Ammo 也把“容量”和“现有弹量”区分为两个事实，避免未来扩容能力隐式获得装填收益。
+
+**影响**：3268 基础态翻为 `Implemented`；82 模板达到 60 `Implemented` / 22 `CatalogOnly`，V1 为 53/11、V2 扩展为 7/11。Luban、本地化导入和最终 Sync/Addressables（4.376 秒；首轮 11.092 秒后重新导入再构建）、定向 85/85 与完整 613/613 EditMode 已通过。升级实例、默认 Deck、奖励、Run、UI、多人、临时卡、选择、自动免费攻击及其他跨卡协议仍不在本决定范围内；验证见 `06_testing/2026-08-12-machine-gunner-v2g-private-mod-runtime.md`。
+
+## CD-087：V2H 焚风以跨参与者预演原子转换烟雾与燃烧
+
+**问题**：`FoehnWind` (3276) 的基础值来自施放者结算时的当前 Smoke，而 Burn 与可能减半的 Oil 属于目标；它不是固定值 `ApplyBurn`，也不是伤害。若把“目标施加燃烧”和“来源烟雾清零”拆成两个普通操作，便无法在写入前联合冻结、核对跨参与者事实，还可能在前半段成功后留下未清除 Smoke。来源 Smoke 为 0 时又应成功支付费用并弃牌，而不是伪造 `0→0` 状态记录或判为失败。
+
+**选择**：3276 注册为 2 Energy / Skill / 显式 Enemy / DiscardPile 的程序，并使用专用 `ConvertSourceSmokeToTargetBurn` 复合操作。预演阶段读取来源当前 Smoke；值大于 0 时，用它作为基础 Burn 调用既有 Burn/Oil 计算，联合冻结目标 Burn、目标 Oil 与来源 Smoke 快照。提交前先核对三项事实，再按目标 Burn → 仅在 Oil 变化时记录目标 Oil → 来源 Smoke 归零的顺序一次提交。Smoke 为 0 时该操作返回空，但出牌的能量支付和卡区归宿仍正常提交。能量或显式敌方目标门禁失败时不进入上述写链。
+
+**理由**：专用复合操作把一张卡的跨参与者状态转换保留在既有权威出牌事务内，同时复用项目唯一的 Oil 加成与减半规则，避免复制燃烧公式或增加 Queue 外写入入口。显式的空 Smoke 成功语义也区分了“没有可转换状态”和“不能出牌”，并保持 settlement 只记录真实变化。
+
+**影响**：3276 基础态翻为 `Implemented`；82 模板达到 61 `Implemented` / 21 `CatalogOnly`，V1 为 53/11、V2 扩展为 8/10。Luban、本地化导入、Sync/Addressables（12.164 秒）、定向 89/89 与完整 617/617 EditMode 已通过。升级实例、默认 Deck、奖励、Run、UI、多人、临时卡、选择、自动免费攻击、AnyAlly 及其他跨卡协议仍不在本决定范围内；验证见 `06_testing/2026-08-12-machine-gunner-v2h-foehn-wind-runtime.md`。
+
+## CD-088：V2I 充能爆射按施放快照序号线性生成纯狙击段
+
+**问题**：`ChargedBurst` (3282) 不是普通的全体同值伤害。它要求对施放时的存活敌人按 Encounter 序号，让基础 12 每名线性增加 50%；若逐段重新查询存活列表，前段致死会让后续目标向前递补并错误降低伤害。该卡还必须是纯 Sniper：不能因为 Attack 或全体多段而隐式获得 Stim、FirePower 或 Shoot 语义，同时仍需逐目标读取 IncendiaryAmmo 并保留 Invisible。
+
+**选择**：3282 注册为 2 Energy / Attack / AllEnemies / DiscardPile 的程序，目标输入模式使用 `AllLivingEnemies`，显式 `TargetId` 由门禁拒绝。准备阶段按 Encounter 顺序冻结当时全部存活目标及其零基序号；`LinearDamageByTargetOrdinal` 按 `baseDamage + baseDamage × 50% × ordinal` 生成每段基础值，因此基础 12 依次为 12、18、24。后续结算只检查快照目标是否仍存活，不删除槽位或重排序号。程序只声明 `Sniper` 标签与 `preservesInvisibleAfterSuccessfulAttack`：不声明 `Shoot`，由既有伤害规则逐段读取 Invisible、Vulnerable 与 IncendiaryAmmo，但不读取 Stim 或 FirePower。
+
+**理由**：冻结目标身份和序号把“谁是第几名”定义为同一张卡开始结算时的稳定事实，避免死亡改变后续段的基础值。专用执行类型只描述序号到基础伤害的映射，修正、燃烧弹药和隐身仍由既有强类型 Sniper 规则处理；这既不复制伤害公式，也不新增名称、UI 或调用方布尔值驱动的旁路。费用、逐段伤害、逐目标燃烧弹药与卡区归宿继续在同一权威出牌事务中提交。
+
+**影响**：3282 基础态翻为 `Implemented`；82 模板达到 62 `Implemented` / 20 `CatalogOnly`，V1 为 53/11、V2 扩展为 9/9。Luban、本地化导入、Sync/Addressables（11.456 秒）、定向 94/94 与完整 622/622 EditMode 已通过。升级实例、默认 Deck、奖励、Run、UI、多人、临时卡、选择、自动免费攻击、AnyAlly 及其他跨卡协议仍不在本决定范围内；验证见 `06_testing/2026-08-12-machine-gunner-v2i-charged-burst-runtime.md`。
+
+## CD-089：V2J 过载供能与防御姿态共享一次性下回合能量净修正
+
+**问题**：`Overload` (3213) 需要在当前回合即时获得能量，并让下一回合少补 1 Energy；`DefensiveStance` (3271) 则需要先给 Block，再让下一回合多补 1 Energy。把两者压成一个可正可负字段会丢失各自叠层和清除事实；把当前回合主动获得也伪装为回合开始补给，则会混淆 `BattleEnergyGainedSettlement` 与 `BattleEnergyRefilledSettlement`。同时，下一回合的正负修正可能相互抵消或超过基础补给，必须在一次回合开始结算中冻结并避免负补给。
+
+**选择**：3213 注册为 0 Energy / Self / DiscardPile，按 `GainEnergy(2) → NextRoundEnergyGainPenalty +1` 提交；即时获得受当前 EnergyMaximum 硬上限裁剪，仅记录实际变化量。3271 注册为 1 Energy / Self / DiscardPile，按 `GainBlock(8) → NextRoundEnergyGainBonus +1` 提交。Bonus 与 Penalty 使用两项独立、非负、可叠加的职业私有状态；下一玩家回合开始时以 `effectiveGain = max(0, baseGain + bonus - penalty)` 计算补给，再按 EnergyMaximum 裁剪，随后在同一次回合开始流程中分别清零两项状态。主动获得能量继续产生 `BattleEnergyGainedSettlement`，回合开始补给只产生 `BattleEnergyRefilledSettlement`。
+
+**理由**：独立状态保留了来源、叠层与可观察清除语义，而回合开始只消费一次净修正，避免先加后减造成中间能量写入或错误越界。复用既有权威出牌事务、资源上限和回合开始资源档案，也让能量、Block、状态、卡区及失败零写入保持在现有 Queue 边界内，不新增第二条共享写入路径。
+
+**延期边界**：`LimitOverload` (3260) 继续为 `CatalogOnly`。其“抽牌到手牌满”不能直接使用 `DrawCards(10)`：当前出牌事务在操作提交完成后才将本卡从 Hand 移至 DiscardPile，普通抽牌操作会把仍在手中的 3260 计入容量，从而少抽一张。该卡必须先建立以成功归宿后的投影 Hand 为输入、能在首次写入前冻结并校验抽牌数量的“抽至满手”卡区预演/提交 seam；在此之前不得用固定抽牌数、提前移牌或额外补抽伪装实现。
+
+**影响**：3213 与 3271 基础态翻为 `Implemented`；82 模板达到 64 `Implemented` / 18 `CatalogOnly`，V1 为 54/10、V2 扩展为 10/8。Luban、本地化导入、Sync/Addressables（11.72 秒）、补强后的定向 136/136 与完整 631/631 EditMode（17.642 秒）已通过。升级实例、默认 Deck、奖励、Run、UI、多人及 3260 的抽至满手协议仍不在本决定范围内；验证见 `06_testing/2026-08-12-machine-gunner-v2j-round-energy-runtime.md`。
+
+## CD-090：V2K 便携帮手作为即时射击段后的受限同目标伤害，而非通用命中事件
+
+**问题**：`PortableHelper` (3267) 要求多个帮手在每次射击后分别攻击原目标，并读取开火、易伤与破甲。若建立全局“造成伤害”事件，帮手自身、延迟支援、炸弹或其他非卡牌伤害都可能误触发，甚至形成递归；若把帮手并入来源攻击数值，又会丢失逐帮手 Block/HP、致死停止和 settlement 顺序。来源射击还已有卡牌后置状态、IncendiaryAmmo、AgedOil 与当前 Burn 等顺序，帮手必须位于这些既有钩子之后。
+
+**选择**：3267 注册为 1 Energy / Self / PowerPile 的 Power 程序，每次成功施放增加一层 `PortableHelper`。只在即时卡牌伤害的 `AppendPreparedHitAndPostHitOperations` 边界中，在来源 Damage 与全部既有 post-hit/global hooks 之后检查 `program.IsShootCategory`；若原目标仍存活，则按 Power 层数逐个向同一目标附加独立的 `MachineGunnerDamageKind.PortableHelper` 伤害操作，任一段致死后停止。该伤害类型的基础值为 1，只读取来源 FirePower、目标 Vulnerable 与 ArmorBreak，并经过目标 Block/HP；它忽略 Strength、Weakness、双方 Smoke、Invisible 与狙击倍率，使用 `Tags.None`，因此不会触发 Stim、IncendiaryAmmo、AgedOil、KungfuMech、帮手递归、Ammo 或 Invisible 生命周期。
+
+**理由**：受限钩子把触发来源限定为“卡牌即时射击的真实分段”，同时复用既有局部投影和整张卡的 Queue 原子提交。每个帮手保留独立伤害记录，能够准确表达同目标、逐层格挡、逐层致死停止与连续 Order；专用伤害档案则把策划指定的三项增幅集中在伤害管线内，不让调用方散落布尔开关，也不扩大为当前没有消费者的通用事件总线。
+
+**结构边界**：`IsShootCategory` 包含 Shoot、Sniper 与 Shotgun，因此 Shotgun 在未来出现即时卡牌伤害段时会进入同一钩子；当前没有 Shotgun 卡实例，故只有结构契约、没有直接运行验收。延迟 Support、Bomb、Needle 与 TripleStrike 延迟段不经过即时卡牌命中入口，结构上不会触发帮手；本决定不把这一跨模块排除伪报为实际卡牌测试，也不改变延迟调度器。
+
+**影响**：3267 基础态翻为 `Implemented`；82 模板达到 65 `Implemented` / 17 `CatalogOnly`，V1 为 54/10、V2 扩展为 11/7。Luban、本地化、Sync/Addressables（12.163 秒）、定向 120/120 与完整 639/639 EditMode（131.4561842 秒）已通过。升级实例、默认 Deck、奖励、Run、UI、多人及其余 17 张目录卡不在本决定范围内；验证见 `06_testing/2026-08-12-machine-gunner-v2k-portable-helper-runtime.md`。
+
+## CD-091：V2L 狂轰滥炸在四类延迟 Support 触发时读取当前层数并先缩放载荷
+
+**问题**：`Bombard` (3265) 要让支援效果随 Power 层数提高，但现有延迟调度同时包含 Support、Bomb 与 Needle 等不同伤害语义，燃烧轰炸还组合 Damage、Burn 与 Oil。若按任意伤害 settlement 或卡名建立通用钩子，会误放大炸弹、钢针、回合末燃烧、即时攻击和便携帮手；若在创建延迟实例时快照层数，则先安排支援、后打出狂轰滥炸不会影响将来触发，也无法让多次触发读取当时的真实 Power。原始来源还没有规定百分比出现小数时如何取整。
+
+**选择**：3265 注册为 1 Energy / Self / PowerPile 的 Power 程序，每次成功施放增加 4 层 `Bombard`，卡本身不产生即时伤害或状态。只在 `BansheeStrike`、`FireSupport`、`FireBombardment` 与 `TripleStrike` 四种 scheduled effect 的实际触发准备路径读取当前 Power 层数；每层对声明载荷增加 10%，正值按 `floor((baseValue × (100 + 10 × stacks) + 50) / 100)` half-up。该取整口径是经用户授权“脑补”后冻结的项目决定。女妖、火力支援与三连击只换算 Support 基础伤害；燃烧轰炸分别换算 Support Damage、Burn 与 Oil。缩放后的伤害继续进入既有 Support 管线，燃烧轰炸继续按 `Damage → 存活后 Burn → Oil` 准备和提交。
+
+**理由**：以 scheduled effect kind 为白名单把增幅限制在需求明确的四类支援，不需要扩展全局伤害事件，也不改变现有调度实例的身份、顺序或事务边界。触发时读取让先创建的延迟支援能够看到后续 Power，同时让女妖的每次触发自然读取当时层数。先缩放声明基值、后走现有 Support 管线，保留目标 Smoke、Vulnerable 与 ArmorBreak 的单一公式来源；燃烧轰炸的状态载荷则沿用原 Burn/Oil 交互和致死门禁。
+
+**排除边界**：GuidedNuke / FiveHundredPounder 的 Bomb、NeedleStorm 的 Delayed、回合末 Burn、即时攻击、便携帮手与其他非声明来源不调用该缩放入口。命中数、波次数、倒计时、目标选择、触发/移除 settlement 与 Support 伤害档案均不因本决定改变；本决定也不建立通用“支援增伤”状态或事件总线。
+
+**影响**：作者表只将 Q155（3265）翻为 `Implemented`；82 模板达到 66 `Implemented` / 16 `CatalogOnly`，V1 为 54/10、V2 扩展为 12/6。Luban、本地化导入和 Sync/Addressables（12.963 秒）已通过；Unity MCP 定向 `9c21aa7c79b94f1980988945d35636dd` 为 134/134（1.4521749 秒），精确素材真实加载 `da1d1e3969014e81b06cb57a2392de13` 为 1/1（106.8572486 秒）。两次 645 项完整任务与一次 5 项素材类任务都只在同一 `CardArtLogicalAddresses_LoadSprites` 冷加载处触发 180 秒 timeout，因此本决定按组合门禁验收，明确不声称完整 EditMode 存在一次全绿任务。升级实例、默认 Deck、奖励、Run、UI、多人及其余 16 张目录卡不在本决定范围内；验证见 `06_testing/2026-08-12-machine-gunner-v2l-bombard-runtime.md`。
+
+## CD-092：V2M 天空之怒在四类原始 Support 逻辑段后逐层随机结算
+
+**问题**：`SkyWrath` (3266) 要在“每次支援”后按 Power 层数分别造成随机主目标与其余目标伤害，但当前 scheduled effects 中既有真正的 Support，也有 Needle Delayed、Bomb 与组合 Burn/Oil。如果从任意伤害 settlement 或显示文案推断触发，不仅会把钢针、炸弹、燃烧、即时攻击与便携帮手误判为支援，还会让天空之怒自身递归。原始需求也没有完整说明“每次支援”对应 hit、wave 还是整个 effect、层间死亡如何影响随机候选、单候选是否推进随机流，以及它与 Bombard 的组合顺序。
+
+**选择**：3266 注册为 1 Energy / Self / PowerPile 的 Power 程序，每次成功施放增加 1 层整场持续的 `SkyWrath`，卡本身不产生即时伤害或随机写入。只在四类原始 scheduled Support 逻辑段完整结束后调用受限入口：BansheeStrike 每个 hit、FireSupport 每个 hit、FireBombardment 每个 wave、TripleStrike 的延迟 Support 一次。燃烧轰炸的入口位于一波全部目标的 `Damage → 存活后 Burn → Oil` 之后。每层先重新取得当前投影中的存活敌人，再调用一次 `NextInt(living.Count)` 选择主目标；即使只有一个候选也推进随机流。主目标先承受基础 8 点 Support，该层开始快照中的其余目标再按 Encounter 顺序各承受基础 4 点 Support。若后续层开始时已无存活敌人则停止且不调用随机流。
+
+**组合与顺序**：天空之怒的 8/4 先通过既有 Bombard 正值 half-up 换算，再进入现有 Support 管线读取目标 Smoke、Vulnerable 与 ArmorBreak；Bombard 4 层时对应基础值为 11/6。每层主目标伤害和其余目标伤害使用独立 prepared operation，随后下一层从已更新投影重新取候选。天空之怒操作完成后不再次调用本入口，因此不递归；全部操作仍属于同一个 scheduled trigger 的联合计划、校验与提交，没有新增全局事件或共享写入路径。
+
+**来源裁决与排除边界**：当前行为来源 `README web.md` 把支援明确列为女妖打击、火力支援、燃烧轰炸和三连击延迟段；旧 `HANDOFF.md` 中把钢针纳入触发的描述不能覆盖该来源。因此 `NeedleStorm` 的 Delayed、GuidedNuke / FiveHundredPounder 的 Bomb、回合末 Burn、即时 Attack/Shoot、PortableHelper 与天空之怒自身均不触发。该决定不改变四类原始支援的命中数、波次数、目标选择、载荷、倒计时或生命周期 settlement，也不扩大 Bombard 的 scheduled-effect 白名单。
+
+**影响**：作者表只将 Q156（3266）翻为 `Implemented`；82 模板达到 67 `Implemented` / 15 `CatalogOnly`，V1 为 54/10、V2 扩展为 13/5。Luban、本地化导入和 Sync/Addressables（12.956 秒）已通过；翻表前运行时任务 `eefded85c7aa4a099d3b16ee4577e704` 为 117/117，最终定向任务 `3a279411d63749abaf8eca64ec4236cc` 为 139/139，完整任务 `a46a25a9da924131965130d6e2b07b8b` 为 650/650（174.2163423 秒）。开发中的两轮红测分别来自场景能量超过 fixture 上限及随机 oracle 构造方式不等价，两次均只修测试，生产实现未改变。升级实例、默认 Deck、奖励、Run、UI、多人及其余 15 张目录卡不在本决定范围内；验证见 `06_testing/2026-08-12-machine-gunner-v2m-sky-wrath-runtime.md`。
+
+## CD-093：V2N 极限过载以当前牌离手后投影的卡区深事务抽至满手
+
+**问题**：`LimitOverload` (3260) 要在 0 费获得 1 Energy 后“抽牌到手牌满”，并让下回合能量恢复 -3。现有出牌流程在程序操作后才将当前牌移出 Hand，若直接复用 `DrawCards(10)`，容量计算会把正在解算的 3260 仍计入 Hand 而稳定少抽一张；若先公开发布离手、再调用普通抽牌，又会暴露中间布局、破坏出牌原子性，并可能让本卡进入同次弃牌重洗而自抽。
+
+**选择**：在 `BattleCardZonesData` 提供 `PreparePlayedCardDepartureAndDrawToHandLimit` / `ValidatePreparedPlayedCardDepartureAndDraw` / `CommitPreparedPlayedCardDepartureAndDraw` 三段 seam。Prepare 以当前 `Layout` 和洗牌随机状态为权威快照，在本地副本中先从 Hand 移除当前牌，再仅用原 DrawPile 与原 DiscardPile 计算并冻结抽至上限 10 的最终布局、随机后状态和 settlement；解算卡在抽牌计算结束后才放入目标弃牌堆，因此不参与同次重洗。Validate 纯只读校验所属聚合、一次性、布局引用与洗牌随机状态；Commit 通过后不再随机，仅写入冻结随机状态并发布一次最终 `Layout`。
+
+**出牌事务与顺序**：Program 60 声明 `GainEnergy(1) → DrawToHandLimitAfterPlayedCardDeparture(10) → NextRoundEnergyGainPenalty +3`。运行时在首次对外写入前执行上述 CardZones Prepare/Validate，并把能量变化暂存在本地 `playerTurnAfter`。成功 settlement 顺序为 `EnergySpent(0) → 可选 EnergyGained(1) → 当前牌 Hand→DiscardPile → 旧弃牌重洗/抽牌 → Penalty +3`；满能量时不生成虚假 `BattleEnergyGainedSettlement`。复合卡区操作已包含当前牌归宿，普通出牌结尾不会再移牌；普通 `DrawCards` 与 `BattleCommandQueue.Submit` 唯一共享写入边界不变。
+
+**理由与边界**：该 seam 把“当前卡归宿后的容量”、“只重洗旧弃牌”和“只发布一次最终卡区”收口在拥有布局与洗牌随机的深模块内，职业运行时只声明复合意图，不重复操作卡堆。失败或快照漂移时保持资源、状态、卡区、随机与表现零写入；下一回合仍复用 V2J 的 `max(0, baseGain + bonus - penalty)` 后上限裁剪与一次性清除，没有建立新的回合能量公式。3260 不是 Attack/Shoot，不消耗 Ammo、Stim，不触发 IncendiaryAmmo 或 PortableHelper。
+
+**影响**：作者表只将 Q150（3260）翻为 `Implemented`；82 模板达到 68 `Implemented` / 14 `CatalogOnly`，V1 为 55/9、V2 扩展保持 13/5。Luban、本地化导入/校验和 Sync/Addressables（15.828 秒）已通过；Unity MCP 正式定向任务 `feda36c5daef4fffab34065ba5988686` 为 169/169（2.2836982 秒），完整 EditMode 任务 `a84b5bb4f7dd4ca1b9791c81bb930973` 为 659/659（282.0044831 秒）；CardArt 与 Character Prefab 的 Addressables 冷加载较慢但均通过。升级“+2 能量”仍只是元数据；默认 Deck、奖励、Run、UI、多人及其余 14 张目录卡不在本决定范围内。验证见 `06_testing/2026-08-12-machine-gunner-v2n-limit-overload-runtime.md`。
+
+## CD-094：V2O Innate 以强类型卡牌配置驱动首轮起手且隐秘行动复用普通状态与抽牌语义
+
+**问题**：`StealthAction` (3275) 要求“固有”，即无论洗牌结果都必须进入首次起手。若在 Turn 或职业运行时按 3275 / Program 75 特判，会把通用卡牌元数据泄漏到调度层；若在构造牌堆前把固有牌直接塞入 Hand，会绕过既有洗牌、移动 settlement 和单次 `Layout` 发布契约。多张固有超过默认起手 5 时，还必须明确是丢弃固有、超出目标还是挤占普通补牌。
+
+**选择**：在卡牌作者表与 Luban `Card` bean 增加非空布尔字段 `is_innate`，生成运行时只读字段 `IsInnate`，默认值为 false；当前精确目录中只把 3275 标记为 true。`BattleTurnController` 在 `StartBattle` 的任何写入前，用静态表为每个存活玩家的现有卡牌实例收集无序固有集合，再把具体顺序与布局规划交给 CardZones；该通用路径不识别职业、卡牌 ID 或 ProgramId。CardZones 在原始 Deck 完成既有洗牌后，按 DrawPile 的真实抽取顺序选取固有实例，再以普通实例填充剩余起手槽位。
+
+**数量、顺序与原子性**：固有实例数为 0～5 时全部进入 Hand，并用普通牌补到默认目标 5；为 6～10 时全部进入 Hand且不再补普通牌；超过 Hand 上限 10 时，全部玩家起手预演在状态机启动前失败并返回 `InvalidOpeningHandConfiguration`。CardZones 的 Prepare 冻结所属聚合、初始 `Layout`、洗牌随机状态、最终布局和起手顺序；Validate 拒绝跨所属、布局/随机漂移与重复提交；Commit 不推进随机，按“固有优先、各组保持已洗牌后的抽取顺序”生成连续 settlement 并只发布一次最终 `Layout`。后续回合继续走普通补牌，不重复应用 Innate。
+
+**隐秘行动程序**：Program 75 只声明已有的 `Invisible +1` 与普通 `DrawCards(1)`，成功归宿仍为 DiscardPile。统一出牌事务顺序为 `EnergySpent(1) → Invisible +1 → Draw → 当前卡离手`；抽牌容量计算时当前卡尚在 Hand，因此 Hand 已满 10 时抽 0，随后弃置 3275 后为 9。该程序不是 Attack/Shoot，不消耗 Ammo，也不触发 Stim、IncendiaryAmmo、PortableHelper 或伤害链。
+
+**理由与边界**：静态 `IsInnate` 是可由任意职业复用的内容事实，Turn 只负责在其既有静态配置/回合编排职责中收集实例身份并保证全部玩家先预演，CardZones 则继续拥有牌区选择、快照校验、顺序与原子发布。该 seam 不改变默认起手目标 5、所有职业共享的起手上限 10、普通回合补牌或现有随机算法，也不把升级描述转化为尚不存在的升级实例。
+
+**影响**：正式表只让 3275 成为 `Implemented` / `is_innate = true`，其余模板为 false；82 模板达到 69/13，V1 为 55/9、V2 为 14/4。Luban、本地化与 Sync/Addressables（18.363 秒）已通过；正式目录快照 `8acfa22da51c4f2fb757bbe102fb945c` 为 21/21，最终聚合定向 `982a4f4c4af24ba78e678bf0e66f2ce1` 为 237/237，完整 EditMode `91d060c915ff4dfea42608b7c22669ab` 为 673/673。默认 Deck 内容、奖励、Run、UI、多人、Scene、Prefab 和升级实例不在本决定范围内。验证见 `06_testing/2026-08-12-machine-gunner-v2o-stealth-action-innate-runtime.md`。
+
+## CD-095：V2P 机枪扫射分离实际零弹耗与游击名义弹耗并显式退出两类联动
+
+**问题**：`MachinegunBurst` (3263) 是只能由 `FixedMachinegun` (3261) 创建的临时 Attack，来源明确要求随机 5×2、实际 Ammo 消耗为 0、但游击战术按消耗 2 Ammo 计算。若复用实际 `AmmoSpent`，就无法触发游击；若为游击伪造 2 点实际消耗，又会错误扣除 Ammo 并生成不存在的资源 settlement。来源也没有声明 3263 带 Shoot 标签；仅凭卡名或“机枪”语义把它归为 Shoot 会误触发 Stim、燃烧弹药、开火与便携帮手，而把 `Tags.None` 的 Attack 自动当作普通非射击攻击又会误触发功夫机甲、烈火烹油和连肘最近记录。
+
+**选择**：Program 63 注册为 0 Energy / Attack / RandomEnemy / ExhaustPile / 无升级，执行两段独立的基础 5 点普通 Attack；每段开始都从当前投影的存活敌人重新选择随机目标，整张卡成功后才提交卡牌随机状态。程序的实际 Ammo 成本保持 0；为游击战术提供显式的 `AmmoSpentForGuerrillaOverride = 2`，未声明覆盖的程序继续使用实际弹耗。3263 冻结 `Tags.None`，因此不进入 Shoot 分类；同时以统一的 `ParticipatesInNonShootAttackSynergies` 派生事实控制功夫机甲、烈火烹油与 `NonShootAttackRecent` 三个入口，普通 Attack 默认参与，3263 显式为 false。
+
+**理由**：把实际资源消耗和某个后置机制的名义数值分成两个强类型事实，可以保留真实 Ammo、settlement 与 UI 口径，同时精确表达游击的来源特例。射击分类和非射击联动资格也保持为两个独立维度，避免从名称、卡牌 ID 或一个 `Tags.None` 的反向判断推导跨卡语义。随机重选继续复用职业卡牌随机流与整张出牌事务；伤害仍走既有普通 Attack 公式、Block/HP、致死与连续 settlement 链，没有新增第二条 Queue 写入路径。
+
+**影响与边界**：作者表只将 3263 翻为 `Implemented`，82 模板达到 70/12，V1 为 56/8、V2 扩展保持 14/4。正式 `battle.card.xlsx` SHA-256 为 `B65D97253A43B2FF8575BCEE6F230B651EFD36FE84A10B7ACBFC0BCC62A0AB29`；Luban、本地化与 Sync/Addressables（11.757 秒）已通过；最终定向 `0f60a2e799904069ab68ae6f13a91953` 为 154/154，域重载后的 CardArt 探针 `f87e7034664a4126bb0b32c2888751e9` 为 1/1，完整 EditMode `a078688b69bd4f198bb736c6285ab5e7` 为 678/678。3261 仍为 `CatalogOnly` 且临时卡创建 seam 尚未实现，所以 3263 只能由直接运行时夹具验证，不能据此宣称生产流程可生成或获得；奖励排除、默认 Deck、Run、升级、UI、多人、Scene 与 Prefab 均不在本决定范围内。验证见 `06_testing/2026-08-12-machine-gunner-v2p-machinegun-burst-runtime.md`。
+
+## CD-096：V2Q 固定机枪以 CardZones 深事务原子替换剩余手牌并显式发布临时卡创建
+
+**问题**：`FixedMachinegun` (3261) 要先获得 Block，再耗尽来源卡与其余手牌，并创建等量 `MachinegunBurst` (3263) 到 Hand。若依次调用来源离手、`DiscardHand` 和现有 `AddTemporaryToHand`，中途会多次发布 `Layout`，实例分配失败还可能留下“已弃牌但未创建齐”的部分写入；若把新实例伪装成 DrawPile→Hand，又会污染卡区来源事实和 UI 动画。3263 不在 Deck 时，Hand 视图也不能只按牌组模板预载，否则生产创建成功后仍可能缺少可显示模板。
+
+**选择**：Program 61 的基础态声明 2 Energy、Self、ExhaustPile，并把成功效果冻结为 `GainBlock(10) → 来源 Hand→ExhaustPile → 剩余 Hand 按原顺序 Hand→DiscardPile → 等量创建 3263 到 Hand`。剩余 Hand 的数量在来源卡逻辑离手后计算；为空时仍合法获得 Block 并 Exhaust 来源，但创建数量为 0。新卡是 BattleSession 内的临时 `CardInstanceData`，不修改 Deck、奖励或 Run。升级 15 Block 没有对应升级实例，基础态仍只使用 10。
+
+**卡区事务与 settlement**：`BattleCardZonesData` 以单一 Prepare / Validate / Commit 复合计划拥有全部卡区变化。Prepare 在首次写入前冻结所属聚合、原 `Layout`、卡实例分配状态、来源归宿、其余 Hand 原序、全部新实例、最终布局与连续 settlement；Validate 拒绝所属、布局、分配状态或一次性漂移；Commit 不再分配实例，只登记冻结的新卡并发布一次最终 `Layout`。旧手牌继续使用真实 Hand→Discard 记录，来源使用 Hand→Exhaust；每张新实例使用独立 `CardCreated` settlement 指向 Hand，不借用 DrawPile→Hand 或普通 Draw 语义。
+
+**表现与动态模板**：表现计划按 settlement 类型生成既有 Hand→Discard、`HandToExhaust` 与 `CreatedToHand` cue。来源卡先离手、旧手牌按权威原序弃置、新实例再按创建顺序进入 Hand；表现只消费权威结果，不自行创建或重排卡牌。职业程序 registry 同时声明运行时可能创建的模板依赖，Session 汇总为 `AvailableCardTemplateIds` 并传递给 Hand 异步预载，使 3263 即使不在本局 Deck 也具有可用模板；该链路不把 3263 加入默认 Deck 或奖励目录。
+
+**理由与边界**：布局、实例所有权与分配器状态都属于 CardZones，将复合替换封装为深事务可以在首次可见写入前完成所有可能失败的校验，并维持 `BattleCommandQueue.Submit` 唯一共享写入入口。显式创建 settlement 保留“从无到有”的领域事实，也让 UI 不必从最终 Hand 差异猜测来源。本决定不复用 Innate、普通 Draw、V2N 抽至满手或伪造卡堆移动来表达临时创建。
+
+**影响与验收**：正式作者表只将 3261 翻为 `Implemented`，`battle.card.xlsx` SHA-256 为 `02F549502D14214C98B4BA97212962B05E58A9B768EF1D7E4CAD441E1DCD6FB7`，并保持 `is_innate=false`。Luban 于 22:00:11 成功生成全项目 168 个 Card JSON；Marine 82 模板为 71/11，V1 为 57/7、V2 扩展为 14/4，3261 为 status 0 / Program 61 / Exhaust / 非 Innate。Localization import/validate 与 Sync/Addressables 均成功，Addressables 13.42 秒；force scripts 域重载后，最终聚合定向 `ba19d1744f084167927568f5572f91e6` 为 262/262（30.1698095 秒），完整 EditMode `dc6a1453b602487c8bfbbe7e42c3968d` 为 690/690（20.8279366 秒），均为 0 failed/skipped。静态编译为 Runtime 0 error / 6 warning、Editor 0 error / 12 warning。升级 15 Block、升级实例、默认 Deck、奖励排除、Run、多人、Scene 与 Prefab 不在本决定范围内。验证见 `06_testing/2026-08-12-machine-gunner-v2q-fixed-machinegun-runtime.md`。
+
+## CD-097：V2R 霸凌按命令开始时的目标活跃状态种类冻结普通抽牌数
+
+**问题**：`Bully` (3278) 的来源只规定“0 费，6 伤；目标每有一种状态抽 1 张”，没有定义状态集合、计数时点、同种多层是否重复，也没有说明伤害消费状态、命中后新增状态或致死后是否改变抽牌数。若在伤害结算后动态读取目标，会让 Buffer、Intangible、Armor 等受击消费以及 IncendiaryAmmo / AgedOil 等后置效果反向改变同一次命令的抽牌数；若由卡牌程序直接逐张 Draw，又会绕过 CardZones 对手牌上限、重洗随机、布局快照与失败零写入的所有权。
+
+**选择**：Program 78 注册为 0 Energy / Attack / 显式 Enemy / DiscardPile，使用普通基础 6 点 Attack 与 `Tags.None`；不从名称推断 Shoot。程序准备阶段在任何战斗写入前冻结命令起始目标的活跃状态种类数：通用 Strength 非零计一种、Vulnerable 大于零计一种，每个 `MachineGunnerCombatantStatus` 正层数各计一种，同种状态不论层数只计一次。HP、Block、资源、PowerPile 卡实例、Stim 与 scheduled effect 不计。伤害及既有 post-hit 链完成后仍使用该旧值抽牌，目标致死、受击消费或新状态都不回写冻结计数。
+
+**PreparedDraw 深事务**：按状态种类抽牌复用 `BattleCardZonesData.PrepareDraw` / `ValidatePreparedDraw` / `CommitPreparedDraw`。Prepare 在首次写入前冻结请求数量、Hand 10 上限、DrawPile / DiscardPile、洗牌随机前后状态、最终布局及连续移动 settlement；Validate 拒绝布局或随机快照漂移；Commit 不重新随机，只发布冻结结果。0 种状态合法抽 0；Hand 已满时不伪造移动且不推进洗牌随机，随后当前牌按普通成功归宿进入 DiscardPile。目标门禁、计划漂移或其他失败继续保持 Energy、伤害、状态、随机流、卡区与表现结果零写入，`BattleCommandQueue.Submit` 唯一写入边界不变。
+
+**来源与脑补边界**：0 费、基础 6 伤、显式敌方目标、按目标每种状态抽 1 张和升级 9 伤来自当前 `README web.md`；“命令开始时”、精确状态集合、同种多层只计一次、排除 HP/Block/资源/Power/Stim/延迟实例，以及伤害后仍使用旧值，是为获得确定性和事务安全而冻结的项目实现决定。该决定不建立通用状态注册表，也不把职业私有状态与 Weakness、Vulnerable 或 Strength 合并；升级 9 伤仍只是作者表元数据。
+
+**影响与验收**：正式作者表只将 Q168（3278）翻为 `Implemented`，U168 保持 `is_innate=false`，`battle.card.xlsx` SHA-256 为 `878812D99F68C8F9B9A7BC620E2794180F6E8A3F21B5252B16A12BDB70915499`。Luban 于 2026-08-12 22:48:16 成功；全项目 Card JSON 168 个，Marine 82 模板为 72/10，V1 为 57/7、V2 为 15/3，3278 为 status 0 / Program 78 / DiscardPile / 非 Innate。Localization、Sync/Addressables（16.521 秒、BuildLayout）、静态编译、正式聚合 209/209 与完整 697/697 EditMode 均通过。补强 6/6、非表格聚合 150/150 通过；TDD 初始唯一红项只是测试遗漏 `EnergySpent(0)`，生产未改。默认 Deck、奖励、Run、升级实例、多人、Scene 与 Prefab 不在本决定范围内；验证见 `06_testing/2026-08-12-machine-gunner-v2r-bully-runtime.md`。
+
+## CD-098：V2S 先发制人按命令开始时的来源活跃状态种类冻结普通抽牌数
+
+**问题**：`PreemptiveStrike` (3277) 的来源只规定“0 费 1 弹，8 伤；自己每有一种状态抽 1 张”，没有定义状态集合、同种多层是否重复、计数时点，也没有说明 Damage / post-hit 期间的状态变化或目标致死是否改变抽牌数。若直接复用 V2R 的目标状态读取会把“自己”错误换成敌人；若在伤害后重新读取来源，会让命中后链或其他状态生命周期反向改变同一次命令。Shackle 又是私有状态身份之一，但既有上游规则会禁止携带者打出任何 Attack，不能为了让它参与成功计数而绕过攻击门禁；卡牌程序直接逐张 Draw 也会绕过 CardZones 对容量、重洗随机、布局快照与失败零写入的所有权。
+
+**选择**：Program 77 注册为 0 Energy / 1 Ammo / Attack / 显式 Enemy / DiscardPile，使用普通基础 8 点 Attack 与 `Tags.None`，不从名称推断 Shoot。程序准备阶段在任何战斗写入前冻结命令起始来源的活跃状态种类数 `N`：Strength 非零计一种、Vulnerable 大于零计一种，每个 `MachineGunnerCombatantStatus` 正层数各计一种，同种状态不论层数只计一次。当前 16 种身份完整保留；Power、Stim、scheduled effect、Block 与资源不计。Shackle 仍属于身份集合，但携带时继续由上游 Attack 门禁返回失败并保持零写入，其余 15 种私有状态分别具有成功计数回归。
+
+**PreparedDraw 与时序**：按来源状态种类抽牌复用 `BattleCardZonesData.PrepareDraw` / `ValidatePreparedDraw` / `CommitPreparedDraw`。Prepare 在首次战斗写入前冻结请求数量、Hand 上限、DrawPile / DiscardPile、洗牌随机前后状态、最终布局及连续移动 settlement；成功支付资源并完成 Damage 与既有 post-hit 链后，Commit 只提交旧计划、不重新计数或随机。目标致死仍按命令起点的 `N` 抽牌；目标门禁、Ammo 不足、Shackle、布局/随机漂移或其他失败继续保持 Energy、Ammo、伤害、状态、随机流、卡区与表现结果零写入，`BattleCommandQueue.Submit` 唯一写入边界不变。
+
+**来源与脑补边界**：0 费、1 Ammo、基础 8 伤、显式敌方目标、“自己每有一种状态抽 1 张”和升级 12 伤来自当前 `README web.md`；“命令开始时”、精确状态集合、同种多层只计一次、排除 Power/Stim/scheduled effect/Block/资源，以及 Damage / post-hit 后仍使用旧值，是为确定性和事务安全冻结的项目实现决定。该决定不建立通用状态注册表，不合并 Strength、Vulnerable 与职业私有状态，也不把 Shackle 的身份存在解释成可绕过攻击禁用；升级 12 伤仍只是作者表元数据。
+
+**影响与验收**：正式作者表只将 Q167（3277）翻为 `Implemented`，U167 保持 `is_innate=false`，`battle.card.xlsx` SHA-256 为 `6C9120A317622F103F9A0DDEEEBB994B28F88230B679BA7E0B1D28201F8E2648`。Luban 于 2026-08-12 23:26:12 成功；全项目 Card JSON 168 个，Marine 82 模板为 73/9，V1 为 57/7、V2 为 16/2，3277 为 status 0 / Program 77 / DiscardPile / 非 Innate。Localization、Sync/Addressables（13.966 秒、BuildLayout）、静态编译、最终 V2S 5/5、正式聚合 214/214 与完整 702/702 EditMode 均通过；TDD 与正式聚合首轮的三项红色均为测试 oracle，生产实现未因其改变，production 审查无 blocker。默认 Deck、奖励、Run、UI、多人、升级实例与升级 12 伤不在本决定范围内；验证见 `06_testing/2026-08-12-machine-gunner-v2s-preemptive-strike-runtime.md`。
+
+## CD-099：Ironclad 首批四张基础卡通过通用 Effect 序列与 PreparedDraw 接入
+
+**问题**：冻结 Ironclad 目录中的 Bludgeon 与 Twin Strike 可以复用现有伤害 Effect，但 Pommel Strike 与 Shrug It Off 还需要在同一次普通出牌中把战斗 Effect 和抽牌按作者顺序组合。若在伤害/格挡已经提交后直接调用卡区 `Draw`，后续失败会留下半次权威写入；若让 Effect Executor 自己管理牌堆、手牌上限和洗牌随机，又会复制 CardZones 的事实与随机所有权。Twin Strike 两次复用同一伤害模板还必须保留两个独立逻辑段，同时本地化参数键不能为了第二段执行而破坏既有 validator 规范。
+
+**选择**：在公共 Effect 枚举末端新增 `DrawCards = 4`，本轮正式 Effect 4007～4011 分别表达 Damage 32、Damage 5、Damage 9、Draw 1 与 Block 8。普通卡统一由 `BattleCardEffectSequenceExecutor` 按 `effect_bindings` 原序分成 Draw 前战斗 Effect、至多一次 Draw、Draw 后战斗 Effect；Draw 必须是 `Attribute.None`、Value 非负，第二个 Draw 或非法数据在首次写入前返回稳定失败。Draw 后战斗 Effect 从 Draw 前计划的完整 Source / Target / Strength 投影继续预演，全部子计划联合校验后才允许支付与提交。
+
+普通抽牌继续由 `BattleCardZonesData` 的 `PrepareDraw` / `ValidatePreparedDraw` / `CommitPreparedDraw` 深事务拥有：Prepare 冻结 Hand 10 上限、DrawPile / DiscardPile、旧弃牌重洗、洗牌随机前后状态、最终布局与连续 settlement；Validate 拒绝跨聚合、重复提交、布局或随机漂移；Commit 不重新随机，并只在实际抽牌时发布一次完整布局。Draw Effect 执行时当前牌仍在 Hand，因此满 10 张时抽 0、随机不推进，随后当前牌才按成功归宿离手；Draw 前致死不会取消已冻结的抽牌。
+
+四张基础态的有序绑定固定为：Bludgeon `damage:4007`；Twin Strike `damage:4008, damageRepeat:4008`；Pommel Strike `damage:4009, cards:4010`；Shrug It Off `block:4011, cards:4010`。Twin 的第二段继续复用 Effect 4008，保留独立结算或致死后的跳过记录；说明文本只显示 `{damage}`，第二执行键统一使用 validator 已接受的 `damageRepeat`，不放宽规范去接受 `damage_repeat`。
+
+**理由与边界**：战斗 Effect 投影、卡区布局与洗牌随机分别留在原有深模块，由一个内部组合计划负责顺序与首写前联合校验，可以保持 `BattleCommandQueue.Submit` 唯一共享写入入口，又不为 Ironclad 增加卡牌 ID、名称或文本分支。该切片只提供通用的“至多一次普通 Draw”组合，不等于完成 I5 的每步独立目标，也不推导全体、随机、X 费、选择、Power 或升级实例能力。
+
+**影响与验收**：Pommel Strike（3113）基础 Damage 9 + Draw 1、Shrug It Off（3115）基础 Block 8 + Draw 1、Twin Strike（3120）基础 Damage 5 两次、Bludgeon（3123）基础 Damage 32 已翻为 `Implemented`；Ironclad 85 张达到 8/77。正式工作簿 SHA-256 为 Card `54DA52D0C80885A2D55AEC8E260207E2D4E27AC8251304BF0710DB180EBC4EBB`、Effect `B616F993F5373AFF2DDD764E9C431A2C13F66CD3C5B2F39595B4A813FB7863BC`、Enums `B9F8DD24C77EE64FA36C6DC7FEA5C0D83229011F45463A99ABAE30B3A7870B26`、i18n `7E91C7F46AEBBBF20188690EC49B1B5C3F6C84C2EF3A9531D22D42E3E23644F8`。Luban、Localization、Sync/Addressables（13.595 秒、BuildLayout）、静态编译、正式 smoke 20/20、正式聚合 67/67 与完整 EditMode 713/713 均通过。升级实例、其余 77 张目录卡、Deck、奖励、Run、UI 与多人不在本决定范围内；验证见 `06_testing/2026-08-13-sts2-ironclad-first-four-effect-runtime.md`。
+
+## CD-100：V2T 战术推进以独立二元授权和共享费用解算冻结下一张成功攻击
+
+**问题**：`TacticalAdvance` (3234) 要求 2 Energy 获得 Block，并让“下一张攻击牌不消耗费用”。现有机枪兵费用同时包含 Energy、Fixed / UpToLimit / AllAvailable Ammo、X 效果规模、Stim 额外段与 Guerrilla 名义耗弹，直接把卡牌费用改成 0 会把“实际支付”错误扩散为“效果值也为 0”，或让 Stim / Guerrilla 丢失原语义。若把免攻实现成第 17 种 `MachineGunnerCombatantStatus`，还会错误增加 3277 / 3278 的状态种类抽牌数；若在攻击开始时立即消费，Shackle、目标错误、卡区容量或后续计划失败都会浪费授权。
+
+**选择**：Program 34 注册为 2 Energy / Skill / Self / DiscardPile，基础态成功时先获得 10 Block，再把职业运行时的独立 `_nextAttackFree` 二元授权设为 true 并推进费用修订号；重复施放只刷新同一授权，不累计次数。该授权跨回合保留，Skill 不读取或消费。Attack 先执行既有 Shackle 和输入门禁，再以当前授权及 revision 准备费用；只有整张 Attack 的效果、后置链与成功卡牌归宿全部提交后，才按准备快照消费授权。因此 Shackle、目标错误、费用/计划校验、卡区容量或其他失败保持授权和全部战斗事实不变；成功致死 Attack 仍消费。
+
+**共享费用解算**：新增纯 `BattleCardCostResolver`，以 Normal / Waived 支付模式为 Fixed / X 冻结 `ActualEnergySpent`、`EffectValue` 与 `NominalEnergySpentForTriggers`。通用 `BattleCardPlayRules` 与 `BattleTurnController` 的普通 Fixed 支付成为一个真实适配器，机枪兵职业费用成为第二个真实适配器；既有通用 X 路径没有在本决定中迁移或扩展。机枪兵准备成本继续单独冻结 Energy 与 Ammo 的 actual / effect / nominal，以及 Stim 额外段：Waived 只把实际 Energy / Ammo 支付归零，Fixed / UpToLimit 保留基础效果与 Stim 段，并把两者纳入 Guerrilla 名义耗弹；AllAvailable 保留既有免费 Stim 段且不把它伪造成名义 Ammo。`ComboElbow` 最近攻击分类保持独立，不因免攻改变。
+
+**理由与状态边界**：actual、effect、nominal 是三个不同问题：资源 settlement/UI 只看 actual，伤害段数看 effect，Guerrilla 等触发器看 nominal。共享纯解算器统一 Fixed / X 的数学与冻结结果，但把 Ammo、Stim、Shackle、Guerrilla 和成功生命周期留在机枪兵适配器内，既形成可复用 seam，又没有把职业规则泄漏到通用模块。授权不是“战斗状态种类”，因此使用独立 bool + revision 而不进入 16 种 `MachineGunnerCombatantStatus`；3277 / 3278 的计数集合保持原决定。
+
+**来源裁决与边界**：当前 `README web.md`、正式作者表和 i18n 一致给出基础 10 Block、升级 14 Block；历史 `HANDOFF.md` 的 12/16 属于被当前来源覆盖的旧口径。基础 10 已运行验证，升级 14 仍只是作者表元数据，没有升级 `CardInstance`。本决定只实现下一张成功 Attack 的费用豁免，不实现自动免费攻击链、手牌选择/保留、默认 Deck、奖励、Run、UI 专属提示、多人、Scene、Prefab 或战士免攻卡；公共 resolver 只为未来适配器提供 seam，不等于这些消费者已完成。
+
+**影响与验收**：正式作者表只将 Q124（3234）翻为 `Implemented`，`battle.card.xlsx` SHA-256 为 `55D43141149D7A86D7957B1C43ED9303B9E9D091094E0CFAF2CF39FE2F73C569`。Luban 于 2026-08-13 01:44:15 成功；全项目 Card JSON 168 个，Marine 82 模板为 74/8、V1 58/6、V2 16/2，3234 为 status 0 / Program 34 / 空 bindings / 非 Innate。Localization import/validate、Sync/Addressables（端到端 16.852 秒、Addressables 14.762 秒、BuildLayout `buildlayout_2026.08.13.01.45.29.json`）与静态编译均通过。精确 V2T 6/6、致死/溢出补强 1/1、Starter 142/142、正式快照 36/36、含真实 AB 的正式聚合 213/213 和完整 EditMode 721/721 均通过；最终双轴 production / spec review 为 0 blocker，Standards 指出的冗余 `CardTemplateId` 已删除。验证见 `06_testing/2026-08-13-machine-gunner-v2t-tactical-advance-runtime.md`。
+
+## CD-101：V2U 不解释12连以纯两波资源计划冻结换弹射击
+
+**问题**：`TwelveHits` (3257) 不是普通“按当前 Ammo 重复若干次”的单段费用：它必须先消耗当前 Ammo 最多射击 6 次，再立即补满 Ammo，并为第二波重新消耗最多 6 发；0 Ammo 也允许施放。V2T 的免费 Attack 又要求实际 Energy/Ammo 为 0，但效果与触发器仍按最大费用解释。若在逐 hit 循环中临时读取和改写 Ammo，目标致死、Stim、IncendiaryAmmo、PortableHelper 或失败回滚都会改变后续资源轨迹；若把波间换弹塞进公共 `BattleCardCostResolver`，则会把机枪兵专属语义泄漏给通用费用模块。
+
+**选择**：Program 57 注册为 3 Energy / Rare / Attack / `AutomaticNearestEnemy` / DiscardPile，并使用专用 `ReloadedAmmoVolley` 执行种类。命令开始时只冻结一个最近存活敌人；第一波普通支付为 `min(initialAmmo, 6)`，之后无条件补到命令开始时 AmmoMaximum，第二波基础支付为 `min(AmmoMaximum, 6)`。0 Ammo 时第一波冻结 0 个效果段，但换弹和第二波照常执行。所有来源伤害段基础值为 5；目标投影死亡后停止两波剩余伤害，不重定向，已冻结的换弹和第二波支付不取消。
+
+**深 resolver 与逐 hit 边界**：新增机枪兵私有纯 `MachineGunnerReloadedVolleyResolver`，输入只有 initial Ammo、AmmoMaximum、单波上限、Stim 是否激活与 Normal/Waived 支付模式；输出冻结首/次波效果段数、首/次波实际 Ammo、补满前后值、全卡唯一 Stim 段、Guerrilla 名义 Ammo 与最终 Ammo。该 resolver 不读取或写入战斗对象，也不负责伤害。公共 `BattleCardCostResolver` 继续只解析 Energy normal/waived；逐 hit 层继续复用既有 `AppendPreparedHitAndPostHitOperations`，因此每个来源段按现有顺序经过 Damage、IncendiaryAmmo 与 PortableHelper，且不会为 3257 复制第二套命中后系统。
+
+**免费与失败事务**：Waived 时两波实际 Ammo 均为 0，但效果段按每波 6 冻结，波间仍补满；Stim 激活时只给第二波增加一个来源段，整卡 Guerrilla nominal Ammo 为 13，否则为 12，最终 Ammo 保持补满。正常支付只有在第二波基础 6 发后仍有容量时才追加 Stim 段。V2T 授权仍在整张 Attack 成功归宿后消费；Energy、目标、Shackle、费用/计划或快照失败在首次写入前终止并保留授权。成功致死仍提交资源轨迹并消费授权。
+
+**来源与排除边界**：当前 `README web.md`、i18n 与作者表一致给出基础 3 Energy / 每段 5 伤，升级为 2 Energy / 每段 6 伤。V2U 只实现基础 `CardInstance`；升级 2E/6 伤仍仅是元数据。本决定不新增通用两阶段资源协议，不声称 Ironclad 可复用机枪兵换弹 resolver，也不实现默认 Deck、奖励、Run、UI、多人、Scene/Prefab、自动免费攻击链或剩余目录卡。
+
+**影响与验收**：正式作者表只将 Q147（3257）翻为 `Implemented`，SHA-256 为 `7131597FD5F3D948921F54926C0205E24E31F747D7C9B1206B78902AE6BEF818`；生成 JSON SHA-256 为 `28324422913241FC627F5C3A0BCF715332E4F2B3DCDFA94E4B6E4FF3ED7A6306`。Luban 于 2026-08-13 03:00:27 成功；全项目 Card JSON 168 个，Marine 82 为 75/7、V1 59/5、V2 16/2。Localization import/validate（7.350 / 3.124 秒）、Sync/Addressables（18.482 / 12.173 秒，BuildLayout `buildlayout_2026.08.13.03.02.34.json`）与静态编译均通过。六项逐片 TDD、Starter 148/148、正式快照 37/37、含真实 AB 的正式聚合 220/220 和完整 EditMode 728/728 均通过；任务 ID 与红绿边界见 `06_testing/2026-08-13-machine-gunner-v2u-twelve-hits-runtime.md`。
+
+## CD-102：V2V 排气散热以共享手牌单选协议和原子卡区事务执行
+
+**问题**：`VentHeat` (3244) 的基础行为是“消耗另一张手牌，再获得 1 Energy；没有其他牌时无事发生”，而来源牌自身仍要按成功归宿弃置。普通 `PlayCardCommand` 原先只描述来源牌和战斗目标，无法把玩家选择的另一个 `CardInstanceId` 作为权威输入送到 Queue；若由 UI 直接移动卡牌或加能量，会产生第二条共享写链。若依次调用两个普通卡区移动，第二步失败会留下半次结算；若把选择保存在 `BattleTurnData`，又会把瞬时交互状态污染成战斗事实。表现层还必须同时处理两张从 Hand 离开的 transient，不能用一个伪造的 prelude 掩盖真实 settlement 顺序。
+
+**选择与结算**：Program 44 注册为 0 Energy / Skill / Self / DiscardPile。若来源之外存在合法手牌，命令必须在 `SelectedCardIds` 中精确携带一个不同的当前手牌实例；运行时先提交 `EnergySpent(0)`，再把所选牌 Hand→ExhaustPile，随后按 `EnergyMaximum` 裁剪并仅在能量实际增加时提交 `EnergyGained(1)`，最后把来源牌 Hand→DiscardPile。来源是唯一手牌时无需选择，仍提交 0 费与来源弃置，但不产生能量结算；能量已满时选择牌仍被消耗，也不伪造 `EnergyGained`。空选择、多个选择、选择来源、自身不存在、跨 owner 或陈旧选择均在首次写入前返回稳定失败。
+
+**共享选择 seam 与原子性**：`PlayCardCommand.SelectedCardIds` 是不可变权威输入；规则层以 `BattleHandCardSelectionRequest` 返回所需数量和合法实例集合；`BattleCardZonesData` 以 `BattlePreparedHandCardSelectionResolution` 联合 Prepare / Validate / Commit 所选牌 Exhaust 与来源牌 Discard。计划冻结 owner、起始 Layout、两张实例及最终所有卡区；Commit 只发布一次完整 `Layout` 和连续的两条 `CardMoved`，重复提交、跨 owner 或布局漂移均拒绝且零写入。职业运行时只负责把 Program 44 适配到该通用原语，Queue 的 ordering、drain、continuation、barrier 与 fault 所有权不变。
+
+**UI 会话与表现**：`HandCardSelectionSession` 是 Hand UI 的局部不可变会话，不进入 `BattleTurnData`。会话冻结来源牌、合法候选、Layout、Turn 和 Queue 快照；候选左键确认并提交携带所选实例的新命令，来源牌左键或任意卡右键取消，未知点击忽略。选择期间所有牌停止拖拽，候选与非候选使用独立视觉角色但保持点击 raycast；Layout / Turn / Queue 漂移、容器禁用或销毁会清除会话且不产生权威写入。表现计划不伪造 prelude；已有两条真实 `CardMoved` 依次把 selected transient 路由到 Exhaust、source transient 路由到 Discard，并按 runner 的步骤转换时机清理。
+
+**复用与边界**：这组 seam 表达的是普通“从当前手牌精确选择若干实例并原子解析归宿”的协议，不包含机枪兵卡名、Program、能量收益或目标牌规则，因此未来 Ironclad `Burning Pact` 可以提供自己的规则/效果适配器并复用命令、请求、卡区事务和 UI 会话。该可复用性不代表战士卡已经实现；本决定没有新增 Burning Pact 程序、翻转其目录状态或验证其运行时，也没有把升级能量 +2、任意多选、跨玩家选择、自动选择、Deck、奖励、Run、多人、Scene 或 Prefab 纳入范围。
+
+**影响与验收**：正式作者表只将 Q134（3244）翻为 `Implemented`，SHA-256 为 `B3BA678FBC0C021F49C3F9FEDE4190099960EE109FFC302D96C77F29D54F4A6D`；i18n 只修改 B/C404-405，SHA-256 为 `8833E99F546B2C1195C4F0317A1B9208535ED083743F1ABF183874EFFFD23D77`。Luban 于 2026-08-13 14:55:40 成功；生成 JSON SHA-256 为 `5988DA20801C8BF724EF0E471466A0A746A5E732DE3450BD7680F00A735F2615`，全项目 168 张为 85/83，Marine 82 为 76/6、V1 60/4、V2 16/2。Localization Import/Validate、Sync/Addressables（15.85 秒，BuildLayout `buildlayout_2026.08.13.14.59.24.json`，134615 bytes）和静态编译均通过；行为 15/15、目录 38/38、含真实 AB 的正式聚合 306/306 与完整 EditMode 744/744 均通过。任务 ID、逐片红绿和 fixture/oracle 修正见 `06_testing/2026-08-13-machine-gunner-v2v-vent-heat-runtime.md`。
+
+## CD-103：Burning Pact 以通用选择 Effect 和原子选牌抽牌归宿事务接入
+
+**问题**：`Burning Pact`（3125）的基础行为是支付 1 Energy，选择并消耗另一张手牌，再抽 2 张；来源牌本身最后进入 DiscardPile。它同时需要 V2V 已建立的出牌前手牌实例选择、首批 Ironclad 已建立的普通抽牌，以及“选择牌离手后计算容量、来源牌仍占 Hand”的特殊投影。若先消耗选择牌再调用普通 Draw，后续布局或随机漂移会留下半次权威写入；若先把来源牌移出 Hand 再抽，则 Hand 10 场景会错误抽 2 张而非 1 张。把该卡按 ID、名称或职业写进 Queue 又会破坏通用配置语义和后续复用。
+
+**数据语法与选择规则**：公共枚举新增 `EffectType.ExhaustSelectedHandCard = 5`，Effect 4012 固定为该类型、`Attribute.None`、Value 1；Effect 4013 固定为 `DrawCards`、`Attribute.None`、Value 2。3125 保持 `Program.None`，有序绑定固定为 `exhaustCards:4012,cards:4013`。通用解析器只接受选择 Effect 位于首项，后面恰好一个符合普通 Draw 约束的 Draw；缺失或重复任一项、Draw 在前、选择 Value 不为 1、非法 Attribute，或在两者前后夹入其他战斗 Effect，均在首次写入前返回稳定失败。运行时没有 3125、Burning Pact 显示名或 Ironclad 分支；牌面文本继续通过 `{exhaustCards}` / `{cards}` 从同一 Effect 数据格式化。
+
+`BattleSingleOtherHandCardSelectionRules` 统一定义 Vent Heat 与 Burning Pact 的“当前来源之外另一张手牌”候选集合。存在候选时，`PlayCardCommand.SelectedCardIds` 必须精确携带一个合法实例，规则层以 `BattleHandCardSelectionRequest` 暴露 RequiredCount 1 与合法 ID；空选、多个、选中来源或陈旧实例均拒绝。来源是唯一手牌时不创建选择请求，也不伪造自动选择；Burning Pact 仍支付 1 Energy、抽 2 张并弃置来源，这与 Vent Heat 无候选时“不获能”的职业结果保持各自语义。
+
+**原子卡区计划与结算顺序**：`BattlePreparedSelectedHandCardDrawAndPlayedCardDeparture` 在 Prepare 阶段冻结 owner、起始 Layout、洗牌 RNG 前后状态、最终 Layout、全部移动 settlements 与一次性提交标记；Validate 拒绝跨 owner、布局或随机快照漂移及重复提交；Commit 不重新洗牌，只发布一次最终 Layout。权威逻辑顺序固定为 `EnergySpent → optional selected HandToExhaust → optional DiscardPileToDrawPile / reshuffle → DrawPileToHand（至多 2）→ source HandToDiscard`。抽牌容量以“选择牌已离手、来源牌仍在 Hand”的投影计算：初始 Hand 10 时先消耗一张，仍只有一个空位，实际抽 1，来源最后弃置后 Hand 为 9。所有计划在 Energy 首写前完成联合准备和校验；失败保持 Energy、卡区、RNG、Turn 与 settlement 零写入。
+
+**UI、表现与复用边界**：Burning Pact 直接复用 V2V 已验证的 `SelectedCardIds`、`BattleHandCardSelectionRequest`、`HandCardSelectionSession`、候选视觉和确认/取消协议，不增加 Scene/Prefab 或战士专用 UI。表现层消费真实 settlement：`EnergySpent` 没有可见 prelude，随后依次路由 selected→Exhaust、每次 Draw→Hand、source→Discard，并按既有 transient 生命周期清理。共享的是选择规则、命令协议和 CardZones 深事务；Vent Heat 的能量收益仍留在职业适配器，Burning Pact 的选择后抽牌仍由通用 Effect 序列适配，两者没有合并成含职业分支的浅模块。
+
+**影响与验收**：3125 基础态已翻为 `Implemented`，Ironclad 85 张达到 9/76；全项目 168 张为 86/82，Marine 82 张保持 76/6，Effect 增至 13 项。正式工作簿 SHA-256 为 Enums `D0984D35BE585D04C9C1E56B62B5C8AEFBB0F9760A38DBACF9477B3A685D0EC3`、Card `C3025BA774D84E24CAD679DEE057AA79F25A41F81AC83798E6263DDE8FAA22DB`、Effect `0B002B0C97820E7BF3F5DEFB54084F53CF94F1F224E77E15A8E8BCB62CC30173`、i18n `A05411C781FE20D3CFA99F0FD4AAD08F68E34F0A80571E425A5C2772E50B4C37`；Luban、Localization、Sync/Addressables、静态编译和真实 AB 均通过。正式行为 9/9、目录 22/22、聚合 172/172、完整 EditMode 754/754，Console 最终 0 error。升级 Draw 3 仍只是目录/本地化元数据；升级实例、默认 Deck、奖励、Run、多人、Scene/Prefab 与其余 76 张目录卡不在本决定范围内。完整任务 ID、耗时、数据哈希与构建证据见 `06_testing/2026-08-13-sts2-ironclad-burning-pact-runtime.md`。
+
+## CD-104：Not Yet 与战地手术通过共享 Heal 结果和行动结束再生适配接入
+
+**问题**：`Not Yet`（3171）要求普通 Self Effect 在支付后恢复 10 点生命并进入 ExhaustPile；`Field Surgery`（3231）则在出牌时只添加 Regeneration 5 与 Shackle 1，随后于行动结束按当前 Regeneration 层数治疗并减 1 层。两者共享“恢复不得超过战斗生命上限”，但一个是配置 Effect，另一个是职业状态生命周期。若分别直写 Health，会产生两套封顶、快照和结算口径；若把 Regeneration 塞进普通 Effect executor，又会让通用层知道职业状态和回合顺序。来源还明确要求先清 Shackle / LoseStrength 等临时状态，再恢复，然后处理 Bomb 与 Burn；旧行动结束适配器曾把 Heal 放在清理之前。
+
+**共享 Heal 契约**：公共枚举新增 `EffectType.Heal = 6`，Effect 4014 固定为 `Heal / Attribute.None / Value 10`。`BattleHealthRestorationOutcomeResolver` 以 requested、current health 与 max health 纯计算 `RequestedAmount`、`HealthBefore`、`HealthAfter` 和实际 `Amount`，用剩余生命空间封顶以避免加法溢出。普通 Effect executor 和职业 Regeneration 都只经 `BattleCombatantEffectOperations.ApplyPreparedHealthRestoration` 校验旧生命快照并调用 `CombatantData.ApplyHealthRestorationOutcome`；没有公开第二个 Health 写入口。`BattleHealthRestoredSettlement` 即使实际 `Amount = 0` 也保留请求量与前后生命，只有正实际量派生 `HealthRestoredNumber` 与 `+N`，不显示 `+0`。
+
+**两个独立适配器**：3171 保持 `Program.None`，由 `heal:4014` 进入普通有序 Effect 计划；基础态为 2 Energy、Rare Skill、Self、Hand→ExhaustPile。满生命仍提交 Energy、零实际治疗和来源 Exhaust；Heal 后存在缺失 Effect 时，联合预构建在 Energy、Health、卡区、随机流、Turn 与 settlement 首写前整体失败。3231 保持 Program 31 与空 bindings；出牌事务按 `EnergySpent → Regeneration +5 → Shackle +1 → source Exhaust` 排序，不立即治疗，Shackle 溢出也在 Regeneration 或其他事实首写前失败。共享模块没有 3171、3231、名称、职业或回合阶段分支。
+
+**行动结束与状态身份**：Regeneration 追加为第 17 个 `MachineGunnerCombatantStatus`，保留旧枚举数值。玩家行动结束的当前来源顺序固定为 `Shackle 清零 → LoseStrength 清零 → Heal → Regeneration -1 → Bomb → Burn`；Heal 使用行动结束计划冻结的 actor、Health、MaxHealth 与 Regeneration，不在提交时重算。该顺序细化 CD-083 / CD-084，旧实现的相反顺序只保留为 TDD 红灯，不登记成新玩法。Regeneration 进入 3277 / 3278 的私有状态种类集合；本决定只 supersede CD-098、CD-100 及其派生文档中“当前固定 16 种”的数量口径，不改写那些决定的历史文本，也不改变 Shackle 的 Attack 门禁或战术推进授权仍位于枚举之外的语义。
+
+**影响与验收**：3171 与 3231 基础态翻为 `Implemented`，全项目 168 张达到 88/80，Ironclad 85 张为 10/75，Marine 82 张为 77/5（V1 61/3、V2 16/2），Effect 为 14 项。正式工作簿 SHA-256 为 Enums `dc35fc55df7a4223347f81054c09df88ddea3b6eb88da36de41499562dd7618e`、Effect `34eef4012c2b858e43fb0f7cb7c2417e1a3caa34d5afa3dcb46dfbd61c465af0`、Card `7c57c0a024d445d990ee275e7474a5460f7055504b1169f0b74dfd525d3665f3`、i18n `bd37b5660cbd5b1ceff8c07a58410c4f49e124acbdc3b97d893d4754b8551f5e`；Luban、Localization、Sync/Addressables、静态编译和真实 AB 均通过。来源顺序修正后的最终精确行为 `b511f5ddcd2041a9b264c0f982c4b600` 为 9/9，正式目录 `c3e5c7dbcb534cd18a85b635761fb8d7` 为 50/50，治疗视图精确任务 `4d5e4253e93840bd849571512f5f0a43` 为 1/1，含治疗视图与真实 AB 的最终聚合 `818f8283386b4d86aa625c6d95284245` 为 243/243，完整 EditMode `c6a86ba528804a13b1c84fe38c28b48b` 为 766/766。Not Yet 升级 13、Field Surgery 升级 6、AnyAlly / 多玩家、升级实例、默认 Deck、奖励、Run、Scene / Prefab 与其余目录卡不在范围内；完整证据见 `06_testing/2026-08-13-shared-heal-not-yet-field-surgery-runtime.md`。
+
+## CD-105：Sword Boomerang 与幻彩射击通过共享具体重复伤害计划接入
+
+**问题**：`Sword Boomerang`（3116）要求每一击从当前仍存活敌人中独立随机选择，前一击致死必须改变下一击候选；`Prismatic Shot / 幻彩射击`（3279）则固定显式目标，按目标命令起始状态种类展开逻辑段，并让 Stim、IncendiaryAmmo 与 PortableHelper 紧邻每一来源段。两张卡都需要在 Energy、Ammo、HP/Block、状态、卡区、随机流或 settlement 首写前确定完整结果。若通用 Effect 和职业程序各自维护重复循环，会复制目标投影、死亡停止、随机推进与快照校验；若在 Commit 时重新选目标或读取状态，则同一命令会受中途权威写入影响而失去确定性和失败零写入。
+
+**共享 concrete prepared plan**：新增 `BattleRepeatedDamageExecutor`、`BattleRepeatedDamageRequest` 与 `BattlePreparedRepeatedDamagePlan`。目标策略只开放两个真实消费者需要的 `FixedEnemy` 与 `RandomLivingEnemyPerHit`：前者锁定一个显式敌人并在其投影死亡后停止，后者每段只从 Encounter 顺序中当时投影仍存活的敌人选择，没有候选时停止尾段且不再取随机数。Prepare 冻结来源标量、Encounter 全体敌人标量、每段目标、配置值、主伤 outcome、紧邻后效后的目标投影、全部敌方终态、卡牌目标随机流 before/after 及计划 settlement 总数；Validate 拒绝跨 owner、来源/敌人/Encounter/RNG/职业序列快照漂移和重复生命周期；Commit 只提交冻结段并最后一次性推进随机流，不重新选目标、重算公式或读取状态。
+
+`IBattleRepeatedDamageHitSequence` 是 planner 与具体伤害管线之间的窄适配口。通用 `BattleRepeatedDamageEffectAdapter` 只解析普通 `DealDamage / Attribute.None` bindings，并用默认序列复用现有伤害 outcome 与内部写入口；它没有 3116、名称或职业分支。机枪兵 `MachineGunnerRepeatedDamageHitSequence` 只在职业侧冻结并提交每段主伤、IncendiaryAmmo 与 PortableHelper，同时核对 Stim 和 17 种私有状态快照；共享 planner 不知道 Program 79、Ammo、Stim、Burn 或 Helper。这样共享的是目标/投影/随机/计划生命周期，不是把两套不同伤害语义压成一个含职业条件的浅函数。
+
+**随机所有权**：通用卡牌目标随机流的唯一可变 `GameRandom` 归 `BattleTurnController` 所有。`BattleSession` 只携带由战斗种子原样复制的不可变 `CardTargetRandomSeed`，`BattleLifetimeScope` 把种子装配给 Queue/Turn，`BattleCommandQueue.CardTargetRandomState` 仅供只读事务和确定性核对。Sword Boomerang 的 Prepare 在随机副本上演算，成功 Commit 后才把权威状态推进到冻结 after；目标规则、费用、绑定、快照或其他失败都不推进。固定目标幻彩射击不消费该随机域，也没有建立第二个全局或 Unity 随机源。
+
+**两个适配器的精确语义**：3116 基础态为 1 Energy、Common Attack、RandomEnemy、DiscardPile，三条有序绑定 `damage` / `damageRepeat1` / `damageRepeat2` 均指向 4015=`DealDamage / None / 3`，即三次独立随机 3 伤；被击杀目标从后续候选移除，显式 TargetId 在首写前拒绝。升级第 4 次仍只是元数据。3279 基础态为 0 Energy、Rare Attack、显式 Enemy、Program 79、基础 Ammo 1；目标命令起始状态种类 `S` 由 Strength 非零、Vulnerable 正层与 17 种职业私有状态正层各计一次，逻辑段为 `[6, 9 × S]`。Stim 激活时每个逻辑段后立即复制同基础值，整卡 Ammo 为 `1 + logicalCount`，资源门禁全额成功或零写入；每段按 `main Damage → IncendiaryAmmo Burn → PortableHelper` 完成，固定目标死亡后停止且不重定向。升级首段 9、重复段 9 仍仅为元数据。
+
+**复合 settlement 回归修正**：初次广义行为聚合 `14131e7fa23c4f14a3a08e2cad0da556` 完成 250 项但有 16 项失败，最小化后异常为“机枪兵卡区 settlement 顺序不连续”。根因是既有机枪兵复合卡区计划在计算 starting order 时，本地 `settlements` 尚未包含稍后前置的 `EnergySpent` / 可选 `AmmoSpent`。修复把这两类不可变付款记录先加入局部计划序列，再让 Vent Heat、PreparedDraw、离手后抽牌、换手创建及 repeated plan 统一从 `settlements.Count` 取顺序；构造记录本身不写权威资源，失败时仍整体丢弃。该修正恢复既有 Bully、Limit Overload、Machinegun Burst 与 Vent Heat 路径，不改变其玩法语义。
+
+**影响与验收**：3116 与 3279 基础态翻为 `Implemented`，全项目 168 张达到 90/78，Ironclad 85 张为 11/74，Marine 82 张为 78/4（V1 61/3、V2 17/1），Effect 为 15 项。正式工作簿 SHA-256 为 Enums `DC35FC55DF7A4223347F81054C09DF88DDEA3B6EB88DA36DE41499562DD7618E`、Card `EA90C1A34FBDD9C54EBE2832C6CCC796DC4752A6B90C15F6A42BDB8C03A2CDF1`、Effect `35BF163D09E6F8AA6478C134D90A5FBAC304CC3135357D8237909DBC87ECAE64`、i18n `B80CD6EDCD0EAE2F52812B1CFF5DDAD96C1AB0507CD05E012C919DB05122215F`。Luban、Localization Import/Validate、`Sync and Build All`、Addressables 13.962 秒、BuildLayout/物理 bundle 与静态编译均通过；双卡定向 `6932f72f288a477ca5869c21e3ac3996` 为 11/11，正式门禁 `908e5fb8b93e437d89533bb1b727231a` 为 53/53，回归代表集 `6ee679521f4c45d9a69b9984110c51bb` 为 5/5，最终行为聚合 `4ea4eff81b3c4ce786e318d0902c1ed4` 为 243/243，完整 EditMode `3e0a091d891e4f918668b99cb4a20157` 为 776/776（77.7525946 秒）。默认 Deck、奖励、Run、多人、Scene/Prefab、升级实例与其余目录卡不在本决定范围内；完整证据见 `06_testing/2026-08-13-shared-repeated-damage-sword-boomerang-prismatic-shot-runtime.md`。
+
+## CD-106：Body Slam 与二手烟以来源快照动态值和通用 Poison 生命周期接入
+
+**问题**：`Body Slam`（3105）的伤害基础值来自施放者当前 Block，`Secondhand Smoke / 二手烟`（3270）的 Poison 基础值来自施放者当前 Smoke；两者都不能在 Commit 时重新读取可变来源，也不能为卡牌 ID 或职业名称复制伤害 / 状态写入口。Poison 还需要统一适用于玩家与敌人的权威层数、行动开始 tick、致死中止和表现事实。若 Secondhand 先提交 Poison 再按 live 卡区直接移动来源牌，同步 observer 可改写布局并留下半次出牌；若为 Poison 修改 Participant HUD Prefab，又超出本切片授权。
+
+**来源动态值与卡牌适配**：通用 Effect magnitude 支持 `ConfiguredValue` 与 `SourceBlock`。`SourceBlock` 在 Prepare 时冻结来源当前 Block 为普通 `DealDamage` 的 base magnitude，随后继续经过 Strength、目标 Vulnerable、目标 Block / HP 与致死公式，且不消费来源 Block。3105 基础态只使用该通用 Effect；升级仍是 metadata。Program 70 在 Prepare 时冻结来源当前 Smoke，把正值作为 Poison apply 请求交给显式敌方目标，不改变来源 Smoke；Smoke 为 0 时操作为空但出牌仍成功。3270 升级文本描述来源与目标 Smoke 总和，但当前没有升级 `CardInstance`，运行时基础态不得提前读取目标 Smoke。
+
+**通用 Poison 契约与时序**：Poison 是 `CombatantData` 的通用权威非负事实，不属于 17 种职业私有状态。Apply / Tick 都以 Prepare、Validate、Commit 冻结参与者快照与一次性生命周期；tick 绕过 Block，生命损失为 `min(current Poison, current Health)`，随后 Poison `max(0, before - 1)`，致死也减层，零层不写 settlement。敌人在自己的行动开始先 tick：非致死再执行旧行为 / 状态 / intent advance，致死则直接产生 source-not-alive skip、不推进意图并继续 Encounter。玩家在 PlayerRoundStart 先按稳定玩家顺序 tick：非致死才继续 Block / 职业状态 / 资源 / 抽牌，致死则跳过 reset 并把 BattleEnded 延迟到状态机栈退出后提交。
+
+**状态种类、卡区与表现边界**：3277、3278、3279 共用状态种类 helper，当前集合为 Strength、Vulnerable、通用 Poison 和 17 种职业私有状态，最大 20；同一状态只按存在计一次，3277 读来源，3278 / 3279 读目标并在命令起点冻结。Secondhand 只在没有其他卡区深操作时使用 `BattlePreparedPlayedCardDeparture`：Poison 首写前准备 / 校验，末尾按冻结最终布局一次提交；Draw、DrawToHandLimit、Replace、选择等既有深事务继续独占卡区变化。Poison tick 表现只产生 Health loss number，致死追加 death transition，不产生 attack shake 或 block absorbed。没有修改 Scene / Prefab，因此常驻 Poison 图标、层数文本与 pulse 未实现；M9B 的 HUD 结论继续成立。
+
+**已知边界**：玩家 Poison plans 本身可联合准备，但 Poison 之后的完整 round reset 还不是一个跨模块 joint transaction；正常生产 observer 只做展示投影，异常重入写入是后续 P2。敌人当前没有公开 Regeneration 路径；未来开放时，其行动结束治疗计划必须从 Poison 后投影生命准备，不能读取 tick 前生命。升级实例、默认 Deck、奖励、Run、多人和 UI 专属 Poison 资产不在本决定范围。
+
+**影响与验收**：3105 / 3270 基础态已翻为 `Implemented`，全项目 168 张为 92/76，Ironclad 85 张为 12/73，Marine 82 张为 79/3（V1 61/3、V2 18/0），Effect 为 16 项。Body Slam 的正式基础 / 升级文本均为 EN `Deal {damage} damage, equal to your Block.`、ZH `造成 {damage} 点伤害，数值等同于你当前的格挡。`；`{damage}` 保持 validator 绑定且运行时动态显示来源 Block，升级实例仍未实现。正式工作簿 SHA-256 / bytes 为 Enums `48aa59ec32cba63429678f34d2f88d8010d0ba2842865e021d3578b93ce2ef5e` / 10982、Effect `cac78b6069764a037275b3261125e379de9a8f75a358f34c9d430ac98dff6d14` / 4603、Card `01c1613de65ee7e9b6fb49a774fecb4e31c53535c2186cb0b5e9bbac03358be0` / 23197、i18n `0bb37d8ba79bff9c3d8853b95af7c436373893385c0c62055e5400be2fbd8d0b` / 29057。Luban、Localization Import / Validate、Sync/Addressables（50.667 秒）及真实 `AssetBundleProvider` 均通过；BuildLayout / bundle、生成物与 Localization asset hash 见验收页。前置任务前缀 `419c…` 2/2、`b5f…` 8/8、`79a…` 289/289 与 `fd6…` 的预翻表红灯保留；最终权威定向 `88e36d2a5cbb47b7b4a67207dad00856` 为 9/9，完整 EditMode `9ca3d43a79d24b25a917fad7b6166584` 为 793/793，强枚举清理后精确任务 `40af8c25ba4442ffbe9e98451890f01c` 为 1/1。静态 Editor build 0 error / 12 条既有 warning，资产屏障 idle、Console 0 error；常驻 Poison HUD / Prefab 与升级运行时仍未实现。完整证据见 `06_testing/2026-08-14-shared-source-magnitude-poison-body-slam-secondhand-smoke-runtime.md`。
+
+## CD-107：Barricade 与 Garrison 以共享 Block 保留授权接入，手牌保留保持职业侧单行动语义
+
+**问题**：`Barricade`（3157）要求 Block 永久跨玩家回合保留，`Garrison`（3246）则只让 Block 在计时层存续期间跨回合保留，并同时让精确选择的两张其他手牌只跨过一次行动结束弃牌。若两张卡各自在 Turn 中改写清 Block 时机，会复制永久 / 计时判定和层数递减；若把手牌保留也塞进公共 Block 模块，则模块会知道 CardZones 与职业选择规则，接口变浅且难以复用。
+
+**选择**：共享 `BattleBlockRetention` 只拥有参与者的永久授权、计时层数与玩家回合开始计划。`PreparePermanent`、`PrepareTimed` 与 `PreparePlayerRoundStart` 都冻结 owner 和旧快照，经 Validate 后一次 Commit；玩家回合开始以进入该时点的授权决定是否清 Block，然后才让计时层数递减，所以 `2→1`、`1→0` 两次均保留 Block，下一次无授权时才清除。3157 通过普通 Self Effect 4017 建立永久授权并进入 PowerPile；3246 的职业适配器获得 12 Block、建立 2 层 Garrison，并发布对应状态 settlement。共享模块没有卡牌 ID、职业、手牌或 UI 分支。
+
+**Garrison 选择与一次行动保留**：规则与 UI 必须从来源以外的当前 Hand 精确选择 2 个不同实例；候选足够但未选、少选、多选、重复或漂移都在 Energy、Block、状态、卡区与 Turn 首写前失败。UI 会话累积到精确 2 张才提交，来源左键或任意右键取消。成功后职业侧冻结这两个实例，当前一次 `EndPlayerAction` 只弃置未选手牌；随后立即消费该授权，下一次行动结束恢复全手弃置。该状态不改变 Draw、DiscardPile 或永久 Deck。
+
+**边界与验收**：3157 / 3246 基础态翻为 `Implemented`，全项目 94/74、Ironclad 13/72、Marine 80/2（V1 62/2、V2 18/0），Effect 17。升级 Barricade 2 Energy 与 Garrison 15 Block / 选 3 仍仅为 metadata；升级实例、默认 Deck、奖励、Run、多人、Scene / Prefab 不在本决定范围。正式工作簿哈希、分阶段 Sync / Localization / Addressables、02:59:03 BuildLayout、生成前 3/3、最终定向 300/300、完整 EditMode 798/798 与静态 0 error / 12 warning 见 `06_testing/2026-08-14-shared-block-retention-barricade-garrison-runtime.md`；未 commit、未 push。
+
+## CD-108：Havoc 与 Opportunistic Strike 通过 Queue-owned system-token continuation 触发免费出牌
+
+**问题**：Havoc（3108）要从 DrawPile 顶部取牌并免费打出且强制 Exhaust；Opportunistic Strike（3243）要在上一张成功牌为 Attack / Shoot 后，从当前 Hand 随机触发一张 Attack。两者都必须执行完整出牌规则、效果与表现，但若在 Turn 内递归调用出牌，会绕过 Queue 的唯一写入口、表现屏障、fault 与 continuation 顺序。
+
+**选择**：Queue 持有不可伪造的内部 system token，并只在前一命令成功提交后串行消费 frozen continuation。触发牌仍进入正常出牌管线，但费用冻结为 0；Havoc 的来源固定为 DrawPile 顶牌且最终归宿强制 Exhaust，Opportunistic 的候选固定为当前 Hand 中的 Attack，并使用既有确定性随机域。外部仍只能调用 `BattleCommandQueue.Submit`，生产代码不公开第二写入口；无候选、前置牌型不符、快照漂移或触发牌失败均走现有 typed 结果，不以递归半提交污染当前命令。
+
+**边界与验收**：3108 / 3243 基础态翻为 `Implemented`，全项目 96/72、Ironclad 14/71、Marine 81/1（V1 63/1、V2 18/0），Effect 18。Havoc 升级费用与 Opportunistic 升级选择行为仍仅为 metadata；自动选择非 Attack、任意卡区触发、链式无限触发、升级实例、Deck / Run / 多人不在范围。初次 full 暴露强枚举与非展示 Effect 本地化门禁问题，修正后定向 8/8、cleanup 1/1、完整 EditMode 802/802、静态 0 error / 12 warning；数据、AB 与任务证据见 `06_testing/2026-08-14-shared-triggered-play-havoc-opportunistic-strike-runtime.md`。
+
+## CD-109：Juggernaut 与 Unstoppable 共用 settlement-derived trigger 深模块与 Queue 表现屏障
+
+**问题**：`Juggernaut`（3169）要在持有者后续每次实际获得 Block 后伤害随机敌人；`Unstoppable`（3250）要在持有者造成致死或破除正 Block 后随机免费打出一张合法攻击。两者都由已提交 settlement 触发，但子事务不能在 Turn 或职业适配器内递归写状态，也不能越过父命令表现屏障。
+
+**选择**：引入共享 `BattleSettlementTriggerEngine`。Power 注册以 Prepare / Validate / Commit 冻结 owner、trigger kind、action kind / value、候选模板与注册表 revision；父命令提交后，引擎按 settlement 顺序、再按注册顺序冻结 intent batch。`BattleCommandQueue` 持有唯一引擎和独占确定性随机流，并且只在父结果的表现屏障完成后，以内部 system token 串行执行 `ResolveSettlementTriggersCommand`。每个子动作再次 Prepare / Validate / Commit 参与者标量、Encounter 敌人顺序、随机 before/after、伤害 outcome 或临时卡请求；成功首写后才推进随机。共享引擎不知道卡牌 ID、名称、Program 或职业分支。
+
+**消费者语义**：Juggernaut 通过 Effect 4019（raw type 10 / `None` / 6）注册 `BlockGained -> RandomEnemyDamage`；只匹配目标为 owner 且 `Amount > 0` 的格挡 settlement。这个 6 点子伤害不读 Strength / Vulnerable，仍由目标 Block / HP / 致死结果承接。Unstoppable 由 Program 50 注册 `FatalOrBlockBroken -> RandomCardPlay`；职业侧只负责从静态表顺序提供 `Implemented` / Attack / 非 Shoot / 目标可自动解析候选，共享引擎创建唯一临时实例，随后通过 Queue 以 `Waived` 费用完整出牌并强制 Exhaust。当前触发注册 ID 在它自己派生的 settlement 链中抑制，阻止同一 Unstoppable 自递归，其他注册仍可按顺序观察。
+
+**边界与验收**：只实现两张基础态；Juggernaut 升级伤害与 Unstoppable 升级 debuff 触发仍仅为 metadata。本切片不新增 HUD / Prefab / Scene，不开放通用 event bus、任意 action grammar、Deck / 奖励 / Run / 多人或升级实例。正式生成后全项目 168 张为 98/70、Ironclad 15/70、Marine 82/0（V1 64/0、V2 18/0）、Effect 19，强枚举已替代开发期 raw 10。Luban 通过；首次 Sync 正确拒绝缺少 `{triggerDamage}` 的 i18n，单点修复后 Localization / `Sync and Build All` 与 Addressables 15.175 秒成功，BuildLayout SHA-256 为 `429C1CD806275B7095205307B67DAE71F39678C19E53E3C39B574193ACDAA769`。Runtime / Editor 静态编译分别为 0 error / 6 warning 与 0 error / 12 warning；定向 `054b6bcd5d734f729a2f1f95c4e7a80d` 7/7，完整 EditMode `d156b8e2537546ef9e83da0ef5dadd2a` 807/807。作者表、生成物和精确耗时见 `06_testing/2026-08-14-shared-settlement-trigger-juggernaut-unstoppable-runtime.md`。

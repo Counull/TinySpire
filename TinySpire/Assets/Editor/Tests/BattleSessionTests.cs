@@ -16,6 +16,7 @@ public sealed class BattleSessionTests
         BattleSession session = BattleSession.FromConfig(tables, options);
 
         Assert.That(session.Combatants.All.Count, Is.EqualTo(2));
+        Assert.That(session.MachineGunnerRuntime, Is.Null);
 
         PlayerCombatantData player = null;
         EnemyCombatantData enemy = null;
@@ -31,6 +32,14 @@ public sealed class BattleSessionTests
         Assert.That(player.TemplateId, Is.EqualTo(1001));
         Assert.That(player.MaxHealth, Is.EqualTo(80));
         Assert.That(player.Strength.CurrentValue, Is.EqualTo(1));
+        Assert.That(session.PlayerResourceProfiles.Count, Is.EqualTo(1));
+        BattlePlayerResourceProfile profile = session.PlayerResourceProfiles[player.Id];
+        Assert.That(profile.InitialEnergy, Is.EqualTo(3));
+        Assert.That(profile.MaxEnergy, Is.EqualTo(3));
+        Assert.That(profile.EnergyGainPerRound, Is.EqualTo(3));
+        Assert.That(profile.InitialAmmo, Is.Zero);
+        Assert.That(profile.MaxAmmo, Is.Zero);
+        Assert.That(profile.AmmoGainPerRound, Is.Zero);
         Assert.That(enemy, Is.Not.Null);
         Assert.That(enemy.TemplateId, Is.EqualTo(2001));
         Assert.That(enemy.MaxHealth, Is.EqualTo(20));
@@ -41,6 +50,10 @@ public sealed class BattleSessionTests
         Assert.That(session.CardZones.DrawPile.Count, Is.EqualTo(10));
         Assert.That(session.CardZones.DiscardPile, Is.Empty);
         Assert.That(session.CardZones.ExhaustPile, Is.Empty);
+        Assert.That(
+            session.AvailableCardTemplateIds,
+            Is.EqualTo(new[] { 3002, 3003, 3004 }),
+            "普通职业只能预声明初始牌组的去重模板。");
         Assert.That(session.EnemyIntents.Layout.CurrentValue.TryGetBehaviorId(enemy.Id, out int behaviorId), Is.True);
         Assert.That(behaviorId, Is.EqualTo(7001));
 
@@ -147,15 +160,15 @@ public sealed class BattleSessionTests
         var data = new Dictionary<string, JArray>
         {
             ["battle_tbhero"] = JArray.Parse(
-                "[{\"id\":1001,\"name_i18n_key\":\"battle.hero.test_warrior.name\",\"view_prefab_key\":\"pfb_char_player\",\"max_health\":80,\"base_strength\":1,\"initial_deck_id\":1001}]"),
+                "[{\"id\":1001,\"name_i18n_key\":\"battle.hero.test_warrior.name\",\"view_prefab_key\":\"pfb_char_player\",\"max_health\":80,\"base_strength\":1,\"initial_deck_id\":1001,\"initial_energy\":3,\"max_energy\":3,\"energy_gain_per_round\":3,\"initial_ammo\":0,\"max_ammo\":0,\"ammo_gain_per_round\":0,\"runtime_profile\":0}]"),
             ["battle_tbenemy"] = JArray.Parse(
                 "[{\"id\":2001,\"name_i18n_key\":\"battle.enemy.test_slime.name\",\"view_prefab_key\":\"pfb_char_enemy\",\"max_health\":20,\"base_strength\":0,\"behavior_group_id\":6001},{\"id\":2002,\"name_i18n_key\":\"battle.enemy.test_slime.name\",\"view_prefab_key\":\"pfb_char_enemy\",\"max_health\":20,\"base_strength\":0,\"behavior_group_id\":6002}]"),
             ["battle_tbdeck"] = JArray.Parse(
                 "[{\"id\":1001,\"card_template_ids\":[3002,3002,3002,3002,3002,3003,3003,3003,3003,3004]}]"),
             ["battle_tbcard"] = JArray.Parse(
-                "[{\"id\":3002,\"external_key\":\"TEST_BATTLE_SESSION_STRIKE\",\"catalog_snapshot_key\":\"test-fixture\",\"name_i18n_key\":\"battle.card.strike.name\",\"description_i18n_key\":\"battle.card.strike.description\",\"upgraded_description_i18n_key\":\"battle.card.strike.description\",\"card_type\":0,\"rarity\":0,\"cost\":1,\"cost_kind\":0,\"upgraded_cost\":1,\"target_rule\":1,\"play_destination\":0,\"upgraded_play_destination\":0,\"has_upgrade\":false,\"implementation_status\":0,\"effect_bindings\":[{\"argument_key\":\"damage\",\"effect_id\":4002}]},{" +
-                "\"id\":3003,\"external_key\":\"TEST_BATTLE_SESSION_DEFEND\",\"catalog_snapshot_key\":\"test-fixture\",\"name_i18n_key\":\"battle.card.defend.name\",\"description_i18n_key\":\"battle.card.defend.description\",\"upgraded_description_i18n_key\":\"battle.card.defend.description\",\"card_type\":1,\"rarity\":0,\"cost\":1,\"cost_kind\":0,\"upgraded_cost\":1,\"target_rule\":0,\"play_destination\":0,\"upgraded_play_destination\":0,\"has_upgrade\":false,\"implementation_status\":0,\"effect_bindings\":[{\"argument_key\":\"block\",\"effect_id\":4003}]},{" +
-                "\"id\":3004,\"external_key\":\"TEST_BATTLE_SESSION_BASH\",\"catalog_snapshot_key\":\"test-fixture\",\"name_i18n_key\":\"battle.card.bash.name\",\"description_i18n_key\":\"battle.card.bash.description\",\"upgraded_description_i18n_key\":\"battle.card.bash.description\",\"card_type\":0,\"rarity\":0,\"cost\":2,\"cost_kind\":0,\"upgraded_cost\":2,\"target_rule\":1,\"play_destination\":0,\"upgraded_play_destination\":0,\"has_upgrade\":false,\"implementation_status\":0,\"effect_bindings\":[{\"argument_key\":\"damage\",\"effect_id\":4004},{\"argument_key\":\"vulnerable\",\"effect_id\":4005}]}]"),
+                "[{\"id\":3002,\"external_key\":\"TEST_BATTLE_SESSION_STRIKE\",\"catalog_snapshot_key\":\"test-fixture\",\"name_i18n_key\":\"battle.card.strike.name\",\"description_i18n_key\":\"battle.card.strike.description\",\"upgraded_description_i18n_key\":\"battle.card.strike.description\",\"card_type\":0,\"rarity\":0,\"cost\":1,\"cost_kind\":0,\"upgraded_cost\":1,\"target_rule\":1,\"play_destination\":0,\"upgraded_play_destination\":0,\"has_upgrade\":false,\"implementation_status\":0,\"effect_bindings\":[{\"argument_key\":\"damage\",\"effect_id\":4002}],\"program_id\":0,\"is_innate\":false},{" +
+                "\"id\":3003,\"external_key\":\"TEST_BATTLE_SESSION_DEFEND\",\"catalog_snapshot_key\":\"test-fixture\",\"name_i18n_key\":\"battle.card.defend.name\",\"description_i18n_key\":\"battle.card.defend.description\",\"upgraded_description_i18n_key\":\"battle.card.defend.description\",\"card_type\":1,\"rarity\":0,\"cost\":1,\"cost_kind\":0,\"upgraded_cost\":1,\"target_rule\":0,\"play_destination\":0,\"upgraded_play_destination\":0,\"has_upgrade\":false,\"implementation_status\":0,\"effect_bindings\":[{\"argument_key\":\"block\",\"effect_id\":4003}],\"program_id\":0,\"is_innate\":false},{" +
+                "\"id\":3004,\"external_key\":\"TEST_BATTLE_SESSION_BASH\",\"catalog_snapshot_key\":\"test-fixture\",\"name_i18n_key\":\"battle.card.bash.name\",\"description_i18n_key\":\"battle.card.bash.description\",\"upgraded_description_i18n_key\":\"battle.card.bash.description\",\"card_type\":0,\"rarity\":0,\"cost\":2,\"cost_kind\":0,\"upgraded_cost\":2,\"target_rule\":1,\"play_destination\":0,\"upgraded_play_destination\":0,\"has_upgrade\":false,\"implementation_status\":0,\"effect_bindings\":[{\"argument_key\":\"damage\",\"effect_id\":4004},{\"argument_key\":\"vulnerable\",\"effect_id\":4005}],\"program_id\":0,\"is_innate\":false}]"),
             ["battle_tbcardeffect"] = JArray.Parse(
                 "[{\"id\":4002,\"effect_type\":1,\"attribute\":0,\"value\":6},{" +
                 "\"id\":4003,\"effect_type\":2,\"attribute\":0,\"value\":5},{" +

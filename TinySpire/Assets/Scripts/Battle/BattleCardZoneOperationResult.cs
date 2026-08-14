@@ -10,7 +10,7 @@ namespace TinySpire.Battle
         /// <summary>指定移动是否满足前置条件；批量抽牌与弃手操作始终成功。</summary>
         public bool Succeeded { get; }
 
-        /// <summary>本次操作实际产生的跨卡区移动记录数量；同一张牌可在重洗后再次移动。</summary>
+        /// <summary>本次操作实际产生的跨卡区移动记录数量；重洗与直接创建记录不计入该数量。</summary>
         public int MovedCardCount { get; }
 
         /// <summary>可直接并入当前权威命令的冻结卡区结算记录。</summary>
@@ -44,10 +44,11 @@ namespace TinySpire.Battle
                 {
                     movedCardCount++;
                 }
-                else if (!(settlement is BattleCardsReshuffledSettlement))
+                else if (!(settlement is BattleCardsReshuffledSettlement)
+                         && !(settlement is BattleCardCreatedSettlement))
                 {
                     throw new ArgumentException(
-                        "卡区操作结果只能包含移动或重洗记录。",
+                        "卡区操作结果只能包含移动、创建或重洗记录。",
                         nameof(settlements));
                 }
             }

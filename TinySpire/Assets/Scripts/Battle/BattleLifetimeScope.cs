@@ -63,10 +63,12 @@ public sealed class BattleLifetimeScope : LifetimeScope
             session.EnemyCombatantIdsInEncounterOrder,
             session.EnemyIntents,
             configs.Tables,
-            configs.GameConfig.EnergyPerRound,
+            session.PlayerResourceProfiles,
             configs.GameConfig.InitialHandCount,
             presentation,
-            coordinator);
+            coordinator,
+            session.MachineGunnerRuntime,
+            session.CardTargetRandomSeed);
     }
 
     /// <summary>把当前唯一玩家映射到 Session 卡区，并在生产接线超出 DEP-008 边界时立即失败。</summary>

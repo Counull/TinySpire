@@ -30,23 +30,28 @@ namespace TinySpire.Battle
         /// <summary>伤害操作才具有的公式推演结果。</summary>
         internal BattleDamageFormulaOutcome? DamageOutcome { get; }
 
+        /// <summary>治疗操作才具有的生命恢复推演结果。</summary>
+        internal BattleHealthRestorationOutcome? HealthRestorationOutcome { get; }
+
         /// <summary>冻结一次内部参与者 Effect 操作结果。</summary>
         internal BattleCombatantEffectOperationResult(
             BattleCombatantEffectOperationStatus status,
             int valueBefore,
             int valueAfter,
-            BattleDamageFormulaOutcome? damageOutcome)
+            BattleDamageFormulaOutcome? damageOutcome,
+            BattleHealthRestorationOutcome? healthRestorationOutcome = null)
         {
             Status = status;
             ValueBefore = valueBefore;
             ValueAfter = valueAfter;
             Amount = valueAfter - valueBefore;
             DamageOutcome = damageOutcome;
+            HealthRestorationOutcome = healthRestorationOutcome;
         }
     }
 
     /// <summary>
-    /// 由后续 Effect executor 独占的参与者状态操作入口，不暴露为生产公共 seam。
+    /// 由 Effect executor 与职业生命周期适配器共享的参与者状态操作入口，不暴露为生产公共 seam。
     /// </summary>
     internal sealed class BattleCombatantEffectOperations
     {
@@ -235,6 +240,88 @@ namespace TinySpire.Battle
                 0,
                 0,
                 damageOutcome);
+        }
+
+        /// <summary>提交 Effect 预构建阶段已冻结的伤害结果，避免提交时再次按不同上下文计算伤害。</summary>
+        internal BattleCombatantEffectOperationResult ApplyPreparedDamage(
+            CombatantId sourceId,
+            CombatantId targetId,
+            BattleDamageFormulaOutcome damageOutcome)
+        {
+            if (!_combatants.TryGet(sourceId, out CombatantData source))
+            {
+                return new BattleCombatantEffectOperationResult(
+                    BattleCombatantEffectOperationStatus.SourceNotFound,
+                    0,
+                    0,
+                    null);
+            }
+
+            if (!source.IsAlive)
+            {
+                return new BattleCombatantEffectOperationResult(
+                    BattleCombatantEffectOperationStatus.SourceNotAlive,
+                    0,
+                    0,
+                    null);
+            }
+
+            if (!_combatants.TryGet(targetId, out CombatantData target))
+            {
+                return new BattleCombatantEffectOperationResult(
+                    BattleCombatantEffectOperationStatus.TargetNotFound,
+                    0,
+                    0,
+                    null);
+            }
+
+            if (!target.IsAlive)
+            {
+                return new BattleCombatantEffectOperationResult(
+                    BattleCombatantEffectOperationStatus.TargetNotAlive,
+                    0,
+                    0,
+                    null);
+            }
+
+            target.ApplyDamageOutcome(damageOutcome);
+            return new BattleCombatantEffectOperationResult(
+                BattleCombatantEffectOperationStatus.Applied,
+                0,
+                0,
+                damageOutcome);
+        }
+
+        /// <summary>提交 Effect 预构建阶段已冻结的治疗结果，避免提交时按变化后的生命重新计算。</summary>
+        internal BattleCombatantEffectOperationResult ApplyPreparedHealthRestoration(
+            CombatantId targetId,
+            BattleHealthRestorationOutcome healthRestorationOutcome)
+        {
+            if (!_combatants.TryGet(targetId, out CombatantData target))
+            {
+                return new BattleCombatantEffectOperationResult(
+                    BattleCombatantEffectOperationStatus.TargetNotFound,
+                    0,
+                    0,
+                    null);
+            }
+
+            if (!target.IsAlive)
+            {
+                return new BattleCombatantEffectOperationResult(
+                    BattleCombatantEffectOperationStatus.TargetNotAlive,
+                    target.CurrentHealth,
+                    target.CurrentHealth,
+                    null);
+            }
+
+            target.ApplyHealthRestorationOutcome(healthRestorationOutcome);
+            return new BattleCombatantEffectOperationResult(
+                BattleCombatantEffectOperationStatus.Applied,
+                healthRestorationOutcome.HealthBefore,
+                healthRestorationOutcome.HealthAfter,
+                damageOutcome: null,
+                healthRestorationOutcome: healthRestorationOutcome);
         }
     }
 }

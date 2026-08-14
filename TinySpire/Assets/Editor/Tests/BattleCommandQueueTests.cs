@@ -178,7 +178,6 @@ public sealed class BattleCommandQueueTests
         EnemyCombatantData enemy = combatants.AddEnemy(templateId: 201, maxHealth: 20, strength: 0);
         var firstZones = new BattleCardZonesData(new[] { 3001, 3001 }, shuffleSeed: 1);
         var secondZones = new BattleCardZonesData(Array.Empty<int>(), shuffleSeed: 2);
-        firstZones.Draw(2);
         var cardZones = new Dictionary<CombatantId, BattleCardZonesData>
         {
             [firstPlayer.Id] = firstZones,
@@ -189,7 +188,8 @@ public sealed class BattleCommandQueueTests
             combatants,
             presentation,
             cardZones,
-            enemyCombatantIdsInEncounterOrder: new[] { enemy.Id });
+            enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
+            initialHandCount: 2);
         using BattleCommandLifecycleExecutionRecorder lifecycle = queue.RecordExecutionLifecycle();
         queue.SubmitRegistered(new StartBattleCommand());
         presentation.CompleteNext();
@@ -232,9 +232,6 @@ public sealed class BattleCommandQueueTests
         EnemyCombatantData enemy = combatants.AddEnemy(templateId: 201, maxHealth: 20, strength: 0);
         var firstZones = new BattleCardZonesData(new[] { 3001, 3001 }, shuffleSeed: 1);
         var secondZones = new BattleCardZonesData(new[] { 3001 }, shuffleSeed: 2);
-        firstZones.Draw(2);
-        secondZones.Draw(1);
-        CardInstanceId secondPlayerCardId = secondZones.Hand[0];
         var cardZones = new Dictionary<CombatantId, BattleCardZonesData>
         {
             [firstPlayer.Id] = firstZones,
@@ -246,8 +243,10 @@ public sealed class BattleCommandQueueTests
             presentation,
             cardZones,
             new Dictionary<int, int> { [3001] = 1 },
-            enemyCombatantIdsInEncounterOrder: new[] { enemy.Id });
+            enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
+            initialHandCount: 2);
         queue.SubmitRegistered(new StartBattleCommand());
+        CardInstanceId secondPlayerCardId = secondZones.Hand[0];
         presentation.CompleteNext();
 
         queue.SubmitRegistered(new EndPlayerActionCommand(firstPlayer.Id));
@@ -286,9 +285,6 @@ public sealed class BattleCommandQueueTests
         EnemyCombatantData secondEnemy = combatants.AddEnemy(templateId: 202, maxHealth: 22, strength: 0);
         var firstZones = new BattleCardZonesData(new[] { 3001 }, shuffleSeed: 1);
         var secondZones = new BattleCardZonesData(new[] { 3001 }, shuffleSeed: 2);
-        firstZones.Draw(1);
-        secondZones.Draw(1);
-        CardInstanceId lateCardId = firstZones.Hand[0];
         var cardZones = new Dictionary<CombatantId, BattleCardZonesData>
         {
             [firstPlayer.Id] = firstZones,
@@ -300,9 +296,11 @@ public sealed class BattleCommandQueueTests
             presentation,
             cardZones,
             new Dictionary<int, int> { [3001] = 1 },
-            enemyCombatantIdsInEncounterOrder: new[] { secondEnemy.Id, firstEnemy.Id });
+            enemyCombatantIdsInEncounterOrder: new[] { secondEnemy.Id, firstEnemy.Id },
+            initialHandCount: 1);
         using BattleCommandLifecycleExecutionRecorder lifecycle = queue.RecordExecutionLifecycle();
         queue.SubmitRegistered(new StartBattleCommand());
+        CardInstanceId lateCardId = firstZones.Hand[0];
         presentation.CompleteNext();
 
         queue.SubmitRegistered(new EndPlayerActionCommand(firstPlayer.Id));
@@ -629,9 +627,6 @@ public sealed class BattleCommandQueueTests
         PlayerCombatantData player = combatants.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
         EnemyCombatantData enemy = combatants.AddEnemy(templateId: 201, maxHealth: 20, strength: 0);
         var zones = new BattleCardZonesData(new[] { 3001, 3002 }, shuffleSeed: 1234);
-        zones.Draw(2);
-        CardInstanceId oneCostCardId = FindCardByTemplate(zones, 3001);
-        CardInstanceId twoCostCardId = FindCardByTemplate(zones, 3002);
         var cardZones = new Dictionary<CombatantId, BattleCardZonesData> { [player.Id] = zones };
         var cardCosts = new Dictionary<int, int> { [3001] = 1, [3002] = 2 };
         var presentation = new ControllableBattleCommandPresentation();
@@ -640,8 +635,11 @@ public sealed class BattleCommandQueueTests
             presentation,
             cardZones,
             cardCosts,
-            enemyCombatantIdsInEncounterOrder: new[] { enemy.Id });
+            enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
+            initialHandCount: 2);
         queue.SubmitRegistered(new StartBattleCommand());
+        CardInstanceId oneCostCardId = FindCardByTemplate(zones, 3001);
+        CardInstanceId twoCostCardId = FindCardByTemplate(zones, 3002);
         presentation.CompleteNext();
 
         BattleCommandSubmissionResult firstSubmission =
@@ -678,10 +676,6 @@ public sealed class BattleCommandQueueTests
         EnemyCombatantData enemy = combatants.AddEnemy(templateId: 201, maxHealth: 20, strength: 0);
         var firstZones = new BattleCardZonesData(new[] { 3001 }, shuffleSeed: 1);
         var secondZones = new BattleCardZonesData(new[] { 3002 }, shuffleSeed: 2);
-        firstZones.Draw(1);
-        secondZones.Draw(1);
-        CardInstanceId firstCardId = firstZones.Hand[0];
-        CardInstanceId secondCardId = secondZones.Hand[0];
         var cardZones = new Dictionary<CombatantId, BattleCardZonesData>
         {
             [firstPlayer.Id] = firstZones,
@@ -694,8 +688,11 @@ public sealed class BattleCommandQueueTests
             presentation,
             cardZones,
             cardCosts,
-            enemyCombatantIdsInEncounterOrder: new[] { enemy.Id });
+            enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
+            initialHandCount: 1);
         queue.SubmitRegistered(new StartBattleCommand());
+        CardInstanceId firstCardId = firstZones.Hand[0];
+        CardInstanceId secondCardId = secondZones.Hand[0];
         presentation.CompleteNext();
         queue.SubmitRegistered(new PlayCardCommand(firstPlayer.Id, firstCardId, firstPlayer.Id));
 
@@ -731,9 +728,6 @@ public sealed class BattleCommandQueueTests
         PlayerCombatantData player = combatants.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
         EnemyCombatantData enemy = combatants.AddEnemy(templateId: 201, maxHealth: 20, strength: 0);
         var zones = new BattleCardZonesData(new[] { 3002, 3002 }, shuffleSeed: 1234);
-        zones.Draw(2);
-        CardInstanceId firstCardId = zones.Hand[0];
-        CardInstanceId secondCardId = zones.Hand[1];
         var cardZones = new Dictionary<CombatantId, BattleCardZonesData> { [player.Id] = zones };
         var cardCosts = new Dictionary<int, int> { [3002] = 2 };
         var presentation = new ControllableBattleCommandPresentation();
@@ -742,9 +736,12 @@ public sealed class BattleCommandQueueTests
             presentation,
             cardZones,
             cardCosts,
-            enemyCombatantIdsInEncounterOrder: new[] { enemy.Id });
+            enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
+            initialHandCount: 2);
         using BattleCommandLifecycleExecutionRecorder lifecycle = queue.RecordExecutionLifecycle();
         queue.SubmitRegistered(new StartBattleCommand());
+        CardInstanceId firstCardId = zones.Hand[0];
+        CardInstanceId secondCardId = zones.Hand[1];
         presentation.CompleteNext();
         queue.SubmitRegistered(new PlayCardCommand(player.Id, firstCardId, player.Id));
         BattleCommandSubmissionResult overspend =
@@ -779,8 +776,6 @@ public sealed class BattleCommandQueueTests
         PlayerCombatantData player = combatants.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
         EnemyCombatantData enemy = combatants.AddEnemy(templateId: 201, maxHealth: 20, strength: 0);
         var zones = new BattleCardZonesData(new[] { 3001 }, shuffleSeed: 1234);
-        zones.Draw(1);
-        CardInstanceId cardId = zones.Hand[0];
         var cardZones = new Dictionary<CombatantId, BattleCardZonesData> { [player.Id] = zones };
         var cardCosts = new Dictionary<int, int> { [3001] = 1 };
         var presentation = new ControllableBattleCommandPresentation();
@@ -789,9 +784,11 @@ public sealed class BattleCommandQueueTests
             presentation,
             cardZones,
             cardCosts,
-            enemyCombatantIdsInEncounterOrder: new[] { enemy.Id });
+            enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
+            initialHandCount: 1);
         using BattleCommandLifecycleExecutionRecorder lifecycle = queue.RecordExecutionLifecycle();
         queue.SubmitRegistered(new StartBattleCommand());
+        CardInstanceId cardId = zones.Hand[0];
         BattleCommandSubmissionResult stalePlay =
             queue.SubmitRegistered(new PlayCardCommand(player.Id, cardId, player.Id));
         zones.DiscardFromHand(cardId);
@@ -825,8 +822,6 @@ public sealed class BattleCommandQueueTests
         EnemyCombatantData enemy = combatants.AddEnemy(templateId: 201, maxHealth: 1, strength: 0);
         EnemyCombatantData survivingEnemy = combatants.AddEnemy(templateId: 202, maxHealth: 5, strength: 0);
         var zones = new BattleCardZonesData(new[] { 3001 }, shuffleSeed: 1234);
-        zones.Draw(1);
-        CardInstanceId cardId = zones.Hand[0];
         var cardZones = new Dictionary<CombatantId, BattleCardZonesData> { [player.Id] = zones };
         var cardCosts = new Dictionary<int, int> { [3001] = 1 };
         var targetRules = new Dictionary<int, cfg.battle.TargetRule>
@@ -840,9 +835,11 @@ public sealed class BattleCommandQueueTests
             cardZones,
             cardCosts,
             enemyCombatantIdsInEncounterOrder: new[] { enemy.Id, survivingEnemy.Id },
+            initialHandCount: 1,
             cardTargetRules: targetRules);
         using BattleCommandLifecycleExecutionRecorder lifecycle = queue.RecordExecutionLifecycle();
         queue.SubmitRegistered(new StartBattleCommand());
+        CardInstanceId cardId = zones.Hand[0];
         BattleCommandSubmissionResult playSubmission =
             queue.SubmitRegistered(new PlayCardCommand(player.Id, cardId, enemy.Id));
         BattleEffectStateTestDriver.Kill(combatants, player.Id, enemy.Id);
@@ -884,8 +881,6 @@ public sealed class BattleCommandQueueTests
         PlayerCombatantData player = combatants.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
         EnemyCombatantData enemy = combatants.AddEnemy(templateId: 201, maxHealth: 20, strength: 0);
         var zones = new BattleCardZonesData(new[] { 3001 }, shuffleSeed: 1234);
-        zones.Draw(1);
-        CardInstanceId cardId = zones.Hand[0];
         var cardZones = new Dictionary<CombatantId, BattleCardZonesData> { [player.Id] = zones };
         var cardCosts = new Dictionary<int, int> { [3001] = 1 };
         var targetRules = new Dictionary<int, cfg.battle.TargetRule>
@@ -899,8 +894,10 @@ public sealed class BattleCommandQueueTests
             cardZones,
             cardCosts,
             enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
+            initialHandCount: 1,
             cardTargetRules: targetRules);
         queue.SubmitRegistered(new StartBattleCommand());
+        CardInstanceId cardId = zones.Hand[0];
         presentation.CompleteNext();
         var healthBeforeExecution = enemy.Health;
         int healthValueBeforeExecution = enemy.CurrentHealth;
@@ -934,8 +931,6 @@ public sealed class BattleCommandQueueTests
         PlayerCombatantData player = combatants.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
         EnemyCombatantData enemy = combatants.AddEnemy(templateId: 201, maxHealth: 20, strength: 0);
         var zones = new BattleCardZonesData(new[] { 3001 }, shuffleSeed: 1234);
-        zones.Draw(1);
-        CardInstanceId cardId = zones.Hand[0];
         var cardZones = new Dictionary<CombatantId, BattleCardZonesData> { [player.Id] = zones };
         var cardCosts = new Dictionary<int, int> { [3001] = 1 };
         var presentation = new ControllableBattleCommandPresentation();
@@ -943,9 +938,11 @@ public sealed class BattleCommandQueueTests
             combatants,
             presentation,
             cardZones,
-            cardCosts);
+            cardCosts,
+            initialHandCount: 1);
         using BattleCommandLifecycleExecutionRecorder lifecycle = queue.RecordExecutionLifecycle();
         queue.SubmitRegistered(new StartBattleCommand());
+        CardInstanceId cardId = zones.Hand[0];
         presentation.CompleteNext();
         BattleTurnData turnBeforeExecution = queue.Turn.CurrentValue;
         CardZoneLayoutData layoutBeforeExecution = zones.Layout.CurrentValue;
@@ -975,8 +972,6 @@ public sealed class BattleCommandQueueTests
         var combatants = new BattleCombatantsData();
         PlayerCombatantData player = combatants.AddPlayer(templateId: 101, maxHealth: 1, strength: 0);
         var zones = new BattleCardZonesData(new[] { 3001 }, shuffleSeed: 1234);
-        zones.Draw(1);
-        CardInstanceId cardId = zones.Hand[0];
         var cardZones = new Dictionary<CombatantId, BattleCardZonesData> { [player.Id] = zones };
         var cardCosts = new Dictionary<int, int> { [3001] = 1 };
         var presentation = new ControllableBattleCommandPresentation();
@@ -984,9 +979,11 @@ public sealed class BattleCommandQueueTests
             combatants,
             presentation,
             cardZones,
-            cardCosts);
+            cardCosts,
+            initialHandCount: 1);
         using BattleCommandLifecycleExecutionRecorder lifecycle = queue.RecordExecutionLifecycle();
         queue.SubmitRegistered(new StartBattleCommand());
+        CardInstanceId cardId = zones.Hand[0];
         presentation.CompleteNext();
         BattleEffectStateTestDriver.Kill(combatants, player.Id, player.Id);
         BattleTurnData turnBeforeExecution = queue.Turn.CurrentValue;
@@ -1059,17 +1056,17 @@ public sealed class BattleCommandQueueTests
         PlayerCombatantData player = combatants.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
         EnemyCombatantData enemy = combatants.AddEnemy(templateId: 201, maxHealth: 20, strength: 0);
         var zones = new BattleCardZonesData(new[] { 3999 }, shuffleSeed: 1234);
-        zones.Draw(1);
-        CardInstanceId cardId = zones.Hand[0];
         var cardZones = new Dictionary<CombatantId, BattleCardZonesData> { [player.Id] = zones };
         var presentation = new ControllableBattleCommandPresentation();
         BattleCommandQueue queue = BattleCommandQueueTestFactory.Create(
             combatants,
             presentation,
             cardZones,
-            enemyCombatantIdsInEncounterOrder: new[] { enemy.Id });
+            enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
+            initialHandCount: 1);
         using BattleCommandLifecycleExecutionRecorder lifecycle = queue.RecordExecutionLifecycle();
         queue.SubmitRegistered(new StartBattleCommand());
+        CardInstanceId cardId = zones.Hand[0];
         presentation.CompleteNext();
         BattleTurnData turnBeforeExecution = queue.Turn.CurrentValue;
         CardZoneLayoutData layoutBeforeExecution = zones.Layout.CurrentValue;
@@ -1144,7 +1141,6 @@ public sealed class BattleCommandQueueTests
         PlayerCombatantData secondPlayer = combatants.AddPlayer(templateId: 102, maxHealth: 28, strength: 0);
         var firstZones = new BattleCardZonesData(new[] { 3001 }, shuffleSeed: 1);
         var secondZones = new BattleCardZonesData(Array.Empty<int>(), shuffleSeed: 2);
-        firstZones.Draw(1);
         var presentation = new ControllableBattleCommandPresentation();
         BattleCommandQueue queue = BattleCommandQueueTestFactory.Create(
             combatants,
@@ -1153,7 +1149,8 @@ public sealed class BattleCommandQueueTests
             {
                 [firstPlayer.Id] = firstZones,
                 [secondPlayer.Id] = secondZones,
-            });
+            },
+            initialHandCount: 1);
         queue.SubmitRegistered(new StartBattleCommand());
         queue.SubmitRegistered(new EndPlayerActionCommand(firstPlayer.Id));
         queue.SubmitRegistered(new EndPlayerActionCommand(secondPlayer.Id));
@@ -1216,7 +1213,8 @@ internal static class BattleCommandQueueTestFactory
         Tables tables = null,
         uint battleSeed = 1,
         IReadOnlyDictionary<int, cfg.battle.TargetRule> cardTargetRules = null,
-        BattleCommandSubmissionCoordinator coordinator = null)
+        BattleCommandSubmissionCoordinator coordinator = null,
+        IReadOnlyDictionary<CombatantId, BattlePlayerResourceProfile> playerResourceProfiles = null)
     {
         IReadOnlyDictionary<CombatantId, BattleCardZonesData> resolvedCardZones =
             playerCardZones ?? new Dictionary<CombatantId, BattleCardZonesData>();
@@ -1240,16 +1238,29 @@ internal static class BattleCommandQueueTestFactory
 
         BattleCommandSubmissionCoordinator resolvedCoordinator =
             coordinator ?? new BattleCommandSubmissionCoordinator();
-        var queue = new BattleCommandQueue(
-            combatants,
-            resolvedCardZones,
-            resolvedEnemyIds,
-            resolvedEnemyIntents,
-            resolvedTables,
-            energyPerRound,
-            initialHandCount,
-            presentation,
-            resolvedCoordinator);
+        BattleCommandQueue queue = playerResourceProfiles == null
+            ? new BattleCommandQueue(
+                combatants,
+                resolvedCardZones,
+                resolvedEnemyIds,
+                resolvedEnemyIntents,
+                resolvedTables,
+                energyPerRound,
+                initialHandCount,
+                presentation,
+                resolvedCoordinator,
+                cardTargetRandomSeed: battleSeed)
+            : new BattleCommandQueue(
+                combatants,
+                resolvedCardZones,
+                resolvedEnemyIds,
+                resolvedEnemyIntents,
+                resolvedTables,
+                playerResourceProfiles,
+                initialHandCount,
+                presentation,
+                resolvedCoordinator,
+                cardTargetRandomSeed: battleSeed);
         TrackCoordinator(queue, resolvedCoordinator);
         return queue;
     }
@@ -1326,7 +1337,9 @@ internal static class BattleCommandQueueTestFactory
                     ["has_upgrade"] = false,
                     ["implementation_status"] = (int)cfg.battle.CardImplementationStatus.Implemented,
                     ["effect_bindings"] = new JArray(),
-                    ["illustration_key"] = string.Empty
+                    ["illustration_key"] = string.Empty,
+                    ["program_id"] = (int)cfg.battle.MachineGunnerProgramId.None,
+                    ["is_innate"] = false,
                 });
             }
         }

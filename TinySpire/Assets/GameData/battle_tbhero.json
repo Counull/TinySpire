@@ -5,6 +5,28 @@
     "max_health": 30,
     "base_strength": 0,
     "initial_deck_id": 1001,
-    "view_prefab_key": "pfb_char_player"
+    "view_prefab_key": "pfb_char_player",
+    "initial_energy": 3,
+    "max_energy": 3,
+    "energy_gain_per_round": 3,
+    "initial_ammo": 0,
+    "max_ammo": 0,
+    "ammo_gain_per_round": 0,
+    "runtime_profile": 0
+  },
+  "1002": {
+    "id": 1002,
+    "name_i18n_key": "battle.hero.machine_gunner.name",
+    "max_health": 70,
+    "base_strength": 0,
+    "initial_deck_id": 1002,
+    "view_prefab_key": "pfb_char_player",
+    "initial_energy": 3,
+    "max_energy": 5,
+    "energy_gain_per_round": 3,
+    "initial_ammo": 5,
+    "max_ammo": 5,
+    "ammo_gain_per_round": 1,
+    "runtime_profile": 1
   }
 }

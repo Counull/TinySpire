@@ -41,7 +41,8 @@ public sealed class BattleCardCatalogBuildValidatorTests
                         ["argument_key"] = "damage",
                         ["effect_id"] = effectId
                     }),
-                ["illustration_key"] = "art_placeholder"
+                ["illustration_key"] = "art_placeholder",
+                ["is_innate"] = false
             }
         };
         var effects = new JObject
@@ -75,7 +76,8 @@ public sealed class BattleCardCatalogBuildValidatorTests
                 ["id"] = cardId,
                 ["implementation_status"] = (int)cfg.battle.CardImplementationStatus.Implemented,
                 ["effect_bindings"] = new JArray(),
-                ["illustration_key"] = "card_art_strike"
+                ["illustration_key"] = "card_art_strike",
+                ["is_innate"] = false
             }
         };
 
@@ -109,7 +111,8 @@ public sealed class BattleCardCatalogBuildValidatorTests
                         ["argument_key"] = argumentKey,
                         ["effect_id"] = effectId
                     }),
-                ["illustration_key"] = "card_art_strike"
+                ["illustration_key"] = "card_art_strike",
+                ["is_innate"] = false
             }
         };
 
@@ -143,7 +146,8 @@ public sealed class BattleCardCatalogBuildValidatorTests
                         ["argument_key"] = string.Empty,
                         ["effect_id"] = effectId
                     }),
-                ["illustration_key"] = "card_art_strike"
+                ["illustration_key"] = "card_art_strike",
+                ["is_innate"] = false
             }
         };
         var effects = new JObject
@@ -187,7 +191,8 @@ public sealed class BattleCardCatalogBuildValidatorTests
                         ["argument_key"] = argumentKey,
                         ["effect_id"] = secondEffectId
                     }),
-                ["illustration_key"] = "card_art_strike"
+                ["illustration_key"] = "card_art_strike",
+                ["is_innate"] = false
             }
         };
         var effects = new JObject
@@ -221,7 +226,8 @@ public sealed class BattleCardCatalogBuildValidatorTests
                 ["id"] = cardId,
                 ["implementation_status"] = unknownStatus,
                 ["effect_bindings"] = new JArray(),
-                ["illustration_key"] = "card_art_strike"
+                ["illustration_key"] = "card_art_strike",
+                ["is_innate"] = false
             }
         };
 
@@ -255,7 +261,8 @@ public sealed class BattleCardCatalogBuildValidatorTests
                         ["argument_key"] = "damage",
                         ["effect_id"] = effectId
                     }),
-                ["illustration_key"] = invalidKey
+                ["illustration_key"] = invalidKey,
+                ["is_innate"] = false
             }
         };
         var effects = new JObject
@@ -288,7 +295,8 @@ public sealed class BattleCardCatalogBuildValidatorTests
                 ["id"] = cardId,
                 ["implementation_status"] = (int)cfg.battle.CardImplementationStatus.CatalogOnly,
                 ["effect_bindings"] = new JArray(),
-                ["illustration_key"] = actualKey
+                ["illustration_key"] = actualKey,
+                ["is_innate"] = false
             }
         };
 
@@ -323,7 +331,8 @@ public sealed class BattleCardCatalogBuildValidatorTests
                         ["argument_key"] = "damage",
                         ["effect_id"] = effectId
                     }),
-                ["illustration_key"] = "card_art_strike"
+                ["illustration_key"] = "card_art_strike",
+                ["is_innate"] = false
             }
         };
         var effects = new JObject
@@ -344,5 +353,89 @@ public sealed class BattleCardCatalogBuildValidatorTests
             failure.Message,
             Is.EqualTo(
                 $"battle_tbcardeffect record key '{mismatchedPropertyKey}' does not match id {effectId}."));
+    }
+
+    /// <summary>验证每张目录卡都必须显式声明布尔类型的固有标记，不允许缺失或数字代替。</summary>
+    [Test]
+    public void Validate_CardWithoutBooleanInnateFlag_Throws()
+    {
+        const int cardId = 9110;
+        var card = new JObject
+        {
+            ["id"] = cardId,
+            ["implementation_status"] =
+                (int)cfg.battle.CardImplementationStatus.Implemented,
+            ["program_id"] = 1,
+            ["effect_bindings"] = new JArray(),
+            ["illustration_key"] = "card_art_strike",
+        };
+        var cards = new JObject { [cardId.ToString()] = card };
+
+        InvalidOperationException missing = Assert.Throws<InvalidOperationException>(
+            () => BattleCardCatalogBuildValidator.Validate(
+                new JObject(),
+                cards,
+                new JObject()));
+        Assert.That(
+            missing.Message,
+            Is.EqualTo($"Card {cardId} has no boolean is_innate."));
+
+        card["is_innate"] = 1;
+        InvalidOperationException wrongType = Assert.Throws<InvalidOperationException>(
+            () => BattleCardCatalogBuildValidator.Validate(
+                new JObject(),
+                cards,
+                new JObject()));
+        Assert.That(
+            wrongType.Message,
+            Is.EqualTo($"Card {cardId} has no boolean is_innate."));
+    }
+
+    /// <summary>验证牌组固有牌按实例数量计数：重复模板十张可通过，第十一张在构建期被拒绝。</summary>
+    [Test]
+    public void Validate_DeckCountsRepeatedInnateTemplatesAgainstOpeningHandLimit()
+    {
+        const int deckId = 7110;
+        const int cardId = 9111;
+        var deckCards = new JArray();
+        for (int index = 0; index < 10; index++)
+            deckCards.Add(cardId);
+        var decks = new JObject
+        {
+            [deckId.ToString()] = new JObject
+            {
+                ["id"] = deckId,
+                ["card_template_ids"] = deckCards,
+            },
+        };
+        var cards = new JObject
+        {
+            [cardId.ToString()] = new JObject
+            {
+                ["id"] = cardId,
+                ["implementation_status"] =
+                    (int)cfg.battle.CardImplementationStatus.Implemented,
+                ["program_id"] = 1,
+                ["effect_bindings"] = new JArray(),
+                ["illustration_key"] = "card_art_strike",
+                ["is_innate"] = true,
+            },
+        };
+
+        Assert.DoesNotThrow(() => BattleCardCatalogBuildValidator.Validate(
+            decks,
+            cards,
+            new JObject()));
+
+        deckCards.Add(cardId);
+        InvalidOperationException overflow = Assert.Throws<InvalidOperationException>(
+            () => BattleCardCatalogBuildValidator.Validate(
+                decks,
+                cards,
+                new JObject()));
+        Assert.That(
+            overflow.Message,
+            Is.EqualTo(
+                $"Deck {deckId} contains 11 innate cards, exceeding opening hand limit 10."));
     }
 }

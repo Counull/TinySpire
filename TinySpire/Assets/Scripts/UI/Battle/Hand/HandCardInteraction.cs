@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 
 [DisallowMultipleComponent]
-public sealed class HandCardInteraction : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IBeginDragHandler, IDragHandler, IEndDragHandler
+public sealed class HandCardInteraction : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler, IBeginDragHandler, IDragHandler, IEndDragHandler
 {
     private HandCardContainer _container;
     private HandCardVisual _card;
@@ -24,6 +24,12 @@ public sealed class HandCardInteraction : MonoBehaviour, IPointerEnterHandler, I
     public void OnPointerExit(PointerEventData eventData)
     {
         _container?.HandlePointerExit(_card);
+    }
+
+    /// <summary>把手牌点击事件原样转交给容器统一解析活动选牌会话。</summary>
+    public void OnPointerClick(PointerEventData eventData)
+    {
+        _container?.HandlePointerClick(_card, eventData);
     }
 
     /// <summary>把开始拖拽事件转交给手牌容器。</summary>

@@ -48,6 +48,25 @@ namespace TinySpire.Battle
                     return new BattleEffectFormulaResult(
                         Math.Max(0, context.ConfiguredValue),
                         null);
+                case BattleEffectOperationType.Heal:
+                    int requestedAmount = Math.Max(0, context.ConfiguredValue);
+                    if (!context.Target.HasValue)
+                        return new BattleEffectFormulaResult(requestedAmount, null);
+                    if (!context.TargetMaxHealth.HasValue)
+                    {
+                        throw new InvalidOperationException(
+                            "目标治疗公式必须提供冻结的生命上限。");
+                    }
+
+                    BattleHealthRestorationOutcome restorationOutcome =
+                        BattleHealthRestorationOutcomeResolver.Resolve(
+                            context.ConfiguredValue,
+                            context.Target.Value.Health,
+                            context.TargetMaxHealth.Value);
+                    return new BattleEffectFormulaResult(
+                        restorationOutcome.RequestedAmount,
+                        damageOutcome: null,
+                        healthRestorationOutcome: restorationOutcome);
                 default:
                     throw new ArgumentOutOfRangeException(nameof(context.OperationType));
             }

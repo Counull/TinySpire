@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using cfg;
 
 namespace TinySpire.Battle
@@ -57,6 +58,18 @@ namespace TinySpire.Battle
         /// </summary>
         public IReadOnlyList<CombatantId> EnemyCombatantIdsInEncounterOrder { get; }
 
+        /// <summary>按玩家 CombatantId 冻结的 Hero 资源档案，仅供场景装配权威队列。</summary>
+        internal IReadOnlyDictionary<CombatantId, BattlePlayerResourceProfile> PlayerResourceProfiles { get; }
+
+        /// <summary>仅在当前 Hero 声明机枪兵档案时创建的职业运行时；默认职业保持为空。</summary>
+        internal MachineGunnerBattleRuntime MachineGunnerRuntime { get; }
+
+        /// <summary>本场初始牌组及职业程序可能直接创建的全部卡牌模板，供表现层在异步启动阶段一次准备。</summary>
+        internal IReadOnlyList<int> AvailableCardTemplateIds { get; }
+
+        /// <summary>由战斗种子原样复制的通用卡牌目标随机流初始种子。</summary>
+        internal uint CardTargetRandomSeed { get; }
+
         /// <summary>
         /// 从已初始化的配置服务创建一场战斗。
         /// </summary>
@@ -67,6 +80,10 @@ namespace TinySpire.Battle
             CardZones = initialized.CardZones;
             EnemyIntents = initialized.EnemyIntents;
             EnemyCombatantIdsInEncounterOrder = initialized.EnemyCombatantIdsInEncounterOrder;
+            PlayerResourceProfiles = initialized.PlayerResourceProfiles;
+            MachineGunnerRuntime = initialized.MachineGunnerRuntime;
+            AvailableCardTemplateIds = initialized.AvailableCardTemplateIds;
+            CardTargetRandomSeed = initialized.CardTargetRandomSeed;
         }
 
         /// <summary>组合已完成初始化的运行时数据聚合与遇敌顺序。</summary>
@@ -74,12 +91,23 @@ namespace TinySpire.Battle
             BattleCombatantsData combatants,
             BattleCardZonesData cardZones,
             BattleEnemyIntentsData enemyIntents,
-            IReadOnlyList<CombatantId> enemyCombatantIdsInEncounterOrder)
+            IReadOnlyList<CombatantId> enemyCombatantIdsInEncounterOrder,
+            IReadOnlyDictionary<CombatantId, BattlePlayerResourceProfile> playerResourceProfiles,
+            MachineGunnerBattleRuntime machineGunnerRuntime,
+            IReadOnlyList<int> availableCardTemplateIds,
+            uint cardTargetRandomSeed)
         {
             Combatants = combatants;
             CardZones = cardZones;
             EnemyIntents = enemyIntents;
             EnemyCombatantIdsInEncounterOrder = enemyCombatantIdsInEncounterOrder;
+            PlayerResourceProfiles = playerResourceProfiles;
+            MachineGunnerRuntime = machineGunnerRuntime;
+            AvailableCardTemplateIds = availableCardTemplateIds
+                ?? throw new ArgumentNullException(nameof(availableCardTemplateIds));
+            if (cardTargetRandomSeed == 0)
+                throw new ArgumentOutOfRangeException(nameof(cardTargetRandomSeed));
+            CardTargetRandomSeed = cardTargetRandomSeed;
         }
 
         /// <summary>
@@ -99,10 +127,22 @@ namespace TinySpire.Battle
             cfg.battle.Encounter encounter = tables.TbEncounter.GetOrDefault(options.EncounterTemplateId)
                 ?? throw new InvalidOperationException($"Encounter template {options.EncounterTemplateId} does not exist.");
 
-            ValidateDeckCards(tables, deck);
+            IReadOnlyList<int> availableCardTemplateIds =
+                BuildAvailableCardTemplateIds(tables, deck, hero.RuntimeProfile);
 
+            BattlePlayerResourceProfile playerResourceProfile = new BattlePlayerResourceProfile(
+                hero.InitialEnergy,
+                hero.MaxEnergy,
+                hero.EnergyGainPerRound,
+                hero.InitialAmmo,
+                hero.MaxAmmo,
+                hero.AmmoGainPerRound);
             var combatants = new BattleCombatantsData();
-            combatants.AddPlayer(hero.Id, hero.MaxHealth, hero.BaseStrength);
+            PlayerCombatantData player = combatants.AddPlayer(hero.Id, hero.MaxHealth, hero.BaseStrength);
+            var playerResourceProfiles = new Dictionary<CombatantId, BattlePlayerResourceProfile>
+            {
+                [player.Id] = playerResourceProfile,
+            };
             var enemyCombatantIdsInEncounterOrder = new List<CombatantId>(encounter.EnemyTemplateIds.Length);
             foreach (int enemyTemplateId in encounter.EnemyTemplateIds)
             {
@@ -114,6 +154,7 @@ namespace TinySpire.Battle
 
             BattleCardZonesData cardZones = null;
             BattleEnemyIntentsData enemyIntents = null;
+            MachineGunnerBattleRuntime machineGunnerRuntime = null;
             try
             {
                 cardZones = new BattleCardZonesData(
@@ -124,15 +165,29 @@ namespace TinySpire.Battle
                     enemyCombatantIdsInEncounterOrder,
                     tables,
                     options.RandomSeed);
+                if (hero.RuntimeProfile == cfg.battle.HeroRuntimeProfile.MachineGunner)
+                {
+                    machineGunnerRuntime = new MachineGunnerBattleRuntime(
+                        combatants,
+                        enemyCombatantIdsInEncounterOrder.AsReadOnly(),
+                        player.Id,
+                        options.RandomSeed);
+                }
 
                 return new BattleSession(
                     combatants,
                     cardZones,
                     enemyIntents,
-                    enemyCombatantIdsInEncounterOrder.AsReadOnly());
+                    enemyCombatantIdsInEncounterOrder.AsReadOnly(),
+                    new ReadOnlyDictionary<CombatantId, BattlePlayerResourceProfile>(
+                        playerResourceProfiles),
+                    machineGunnerRuntime,
+                    availableCardTemplateIds,
+                    options.RandomSeed);
             }
             catch
             {
+                machineGunnerRuntime?.Dispose();
                 enemyIntents?.Dispose();
                 cardZones?.Dispose();
                 combatants.Dispose();
@@ -145,6 +200,7 @@ namespace TinySpire.Battle
         /// </summary>
         public void Dispose()
         {
+            MachineGunnerRuntime?.Dispose();
             EnemyIntents.Dispose();
             Combatants.Dispose();
             CardZones.Dispose();
@@ -161,14 +217,45 @@ namespace TinySpire.Battle
             return FromConfig(configs.Tables, options);
         }
 
-        /// <summary>确认初始牌组引用的每张静态卡牌模板均存在。</summary>
-        private static void ValidateDeckCards(Tables tables, cfg.battle.Deck deck)
+        /// <summary>冻结初始牌组与职业程序可能直接创建的模板，并在会话发布前拒绝缺失或不可运行的动态模板。</summary>
+        private static IReadOnlyList<int> BuildAvailableCardTemplateIds(
+            Tables tables,
+            cfg.battle.Deck deck,
+            cfg.battle.HeroRuntimeProfile runtimeProfile)
         {
+            var templateIds = new List<int>();
+            var seenTemplateIds = new HashSet<int>();
             foreach (int cardTemplateId in deck.CardTemplateIds)
             {
                 if (tables.TbCard.GetOrDefault(cardTemplateId) == null)
                     throw new InvalidOperationException($"Card template {cardTemplateId} does not exist.");
+
+                if (seenTemplateIds.Add(cardTemplateId))
+                    templateIds.Add(cardTemplateId);
             }
+
+            if (runtimeProfile != cfg.battle.HeroRuntimeProfile.MachineGunner)
+                return new ReadOnlyCollection<int>(templateIds);
+
+            foreach (int cardTemplateId in MachineGunnerCardProgramRegistry.PotentiallyCreatedCardTemplateIds)
+            {
+                cfg.battle.Card cardTemplate = tables.TbCard.GetOrDefault(cardTemplateId)
+                    ?? throw new InvalidOperationException(
+                        $"Machine Gunner dynamically created card template {cardTemplateId} does not exist.");
+                if (cardTemplate.ImplementationStatus !=
+                    cfg.battle.CardImplementationStatus.Implemented ||
+                    cardTemplate.ProgramId == cfg.battle.MachineGunnerProgramId.None ||
+                    !MachineGunnerCardProgramRegistry.TryGet(cardTemplate.ProgramId, out _))
+                {
+                    throw new InvalidOperationException(
+                        $"Machine Gunner dynamically created card template {cardTemplateId} is not runnable.");
+                }
+
+                if (seenTemplateIds.Add(cardTemplateId))
+                    templateIds.Add(cardTemplateId);
+            }
+
+            return new ReadOnlyCollection<int>(templateIds);
         }
     }
 }

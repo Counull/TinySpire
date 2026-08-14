@@ -243,6 +243,90 @@ public sealed class BattleCombatantEffectOperationsTests
             Assert.That(target.CurrentBlock, Is.Zero);
         }
     }
+
+    /// <summary>验证通用中毒触发在零层、正数、事实漂移与重复消费下都遵守一次性原子协议。</summary>
+    [Test]
+    public void PoisonTick_ZeroPositiveAndDriftedPlans_PreserveAtomicOneShotContract()
+    {
+        using (var combatants = new BattleCombatantsData())
+        {
+            PlayerCombatantData source = combatants.AddPlayer(101, 30, 0);
+            EnemyCombatantData target = combatants.AddEnemy(201, 20, 0);
+            var poison = new BattlePoisonApplication(combatants);
+
+            BattlePoisonTickPreparationResult zeroPreparation = poison.PrepareTick(target.Id);
+            Assert.That(zeroPreparation.Succeeded, Is.True);
+            Assert.That(zeroPreparation.Plan.HasWrite, Is.False);
+            Assert.That(poison.ValidatePreparedTick(zeroPreparation.Plan), Is.True);
+            IReadOnlyList<BattleSettlementRecord> zeroSettlements =
+                poison.CommitPreparedTick(zeroPreparation.Plan, startingOrder: 0);
+
+            Assert.That(zeroSettlements, Is.Empty);
+            Assert.That(target.CurrentHealth, Is.EqualTo(20));
+            Assert.That(target.CurrentBlock, Is.Zero);
+            Assert.That(target.CurrentPoison, Is.Zero);
+
+            target.ApplyBlockGain(5);
+            BattlePoisonApplicationPreparationResult application = poison.PrepareApply(
+                source.Id,
+                target.Id,
+                amount: 4);
+            Assert.That(application.Succeeded, Is.True);
+            Assert.That(target.CurrentPoison, Is.Zero);
+            Assert.That(poison.ValidatePrepared(application.Plan), Is.True);
+            Assert.That(target.CurrentPoison, Is.Zero);
+            poison.CommitPrepared(application.Plan, startingOrder: 1);
+
+            BattlePoisonTickPreparationResult positivePreparation = poison.PrepareTick(target.Id);
+            Assert.That(positivePreparation.Succeeded, Is.True);
+            Assert.That(positivePreparation.Plan.HasWrite, Is.True);
+            Assert.That(target.CurrentHealth, Is.EqualTo(20));
+            Assert.That(target.CurrentBlock, Is.EqualTo(5));
+            Assert.That(target.CurrentPoison, Is.EqualTo(4));
+            Assert.That(poison.ValidatePreparedTick(positivePreparation.Plan), Is.True);
+            Assert.That(target.CurrentHealth, Is.EqualTo(20));
+            Assert.That(target.CurrentBlock, Is.EqualTo(5));
+            Assert.That(target.CurrentPoison, Is.EqualTo(4));
+
+            IReadOnlyList<BattleSettlementRecord> positiveSettlements =
+                poison.CommitPreparedTick(positivePreparation.Plan, startingOrder: 7);
+            Assert.That(positiveSettlements, Has.Count.EqualTo(1));
+            var ticked = positiveSettlements[0] as BattlePoisonTickedSettlement;
+            Assert.That(ticked, Is.Not.Null);
+            Assert.That(ticked.Order, Is.EqualTo(7));
+            Assert.That(ticked.HealthBefore, Is.EqualTo(20));
+            Assert.That(ticked.HealthAfter, Is.EqualTo(16));
+            Assert.That(ticked.HealthLoss, Is.EqualTo(4));
+            Assert.That(ticked.BlockBefore, Is.EqualTo(5));
+            Assert.That(ticked.BlockAfter, Is.EqualTo(5));
+            Assert.That(ticked.PoisonBefore, Is.EqualTo(4));
+            Assert.That(ticked.PoisonAfter, Is.EqualTo(3));
+            Assert.That(ticked.WasFatal, Is.False);
+            Assert.That(target.CurrentHealth, Is.EqualTo(16));
+            Assert.That(target.CurrentBlock, Is.EqualTo(5));
+            Assert.That(target.CurrentPoison, Is.EqualTo(3));
+            Assert.Throws<System.InvalidOperationException>(
+                () => poison.ValidatePreparedTick(positivePreparation.Plan));
+            Assert.Throws<System.InvalidOperationException>(
+                () => poison.CommitPreparedTick(positivePreparation.Plan, startingOrder: 8));
+
+            BattlePoisonTickPreparationResult driftedPreparation = poison.PrepareTick(target.Id);
+            BattleEffectStateTestDriver.ApplyDamage(
+                combatants,
+                source.Id,
+                target.Id,
+                configuredValue: 6);
+            Assert.That(target.CurrentHealth, Is.EqualTo(15));
+            Assert.That(target.CurrentBlock, Is.Zero);
+            Assert.That(target.CurrentPoison, Is.EqualTo(3));
+            Assert.That(poison.ValidatePreparedTick(driftedPreparation.Plan), Is.False);
+            Assert.Throws<System.InvalidOperationException>(
+                () => poison.CommitPreparedTick(driftedPreparation.Plan, startingOrder: 9));
+            Assert.That(target.CurrentHealth, Is.EqualTo(15));
+            Assert.That(target.CurrentBlock, Is.Zero);
+            Assert.That(target.CurrentPoison, Is.EqualTo(3));
+        }
+    }
 }
 
 /// <summary>让既有测试夹具经 M7C 公共 Effect executor 建立受伤或死亡事实。</summary>

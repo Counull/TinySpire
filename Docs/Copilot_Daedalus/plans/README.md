@@ -2,9 +2,14 @@
 title: plans · 实现计划（03_design 角色）
 page_type: plan
 lifecycle: active
-updated: 2026-08-06
+updated: 2026-08-14
 m10_status: m10-complete-targeted-25-green-full-451-with-2-non-m10-failures
 ---
+
+## 最新状态
+
+- [2026-08-06 STS2 v0.107.1 Ironclad 单人卡池接入](2026-08-06-sts2-v01071-ironclad-card-pool.md) — Juggernaut 基础态已经 settlement-derived trigger 与 Queue 表现屏障正式发布；Ironclad 15/70、全项目 98/70，定向 7/7、完整 EditMode 807/807
+- [2026-08-12 Marine Game 机枪兵 V2 卡牌单场战斗接入](2026-08-12-machine-gunner-v2-card-runtime-plan.md) — Unstoppable 基础态已共用同一 settlement trigger 深模块正式发布；Marine 82/0（V1 64/0、V2 18/0）
 
 # plans · 实现计划
 
@@ -14,7 +19,8 @@ m10_status: m10-complete-targeted-25-green-full-451-with-2-non-m10-failures
 
 ## 现有计划
 
-- [2026-08-06 STS2 v0.107.1 Ironclad 单人卡池接入](2026-08-06-sts2-v01071-ironclad-card-pool.md) — 以本机 public/main build 23811903 冻结 85 张单人卡；先完成 CatalogOnly 运行时/构建隔离与目录录入，再按机制串行翻转为可玩
+- [2026-08-12 Marine Game 机枪兵 V2 卡牌单场战斗接入](2026-08-12-machine-gunner-v2-card-runtime-plan.md) — 当前 README web 的单场卡牌实施计划；Unstoppable 已验收，当前 82 Implemented / 0 CatalogOnly（V1 64/0、V2 18/0）
+- [2026-08-06 STS2 v0.107.1 Ironclad 单人卡池接入](2026-08-06-sts2-v01071-ironclad-card-pool.md) — 以本机 public/main build 23811903 冻结 85 张单人卡；Juggernaut 已验收，当前 15 Implemented / 70 CatalogOnly
 - [2026-08-05 M10 BattleScene MVP 对标、可靠性与内容扩展入口](2026-08-05-m10-battlescene-conformance.md) — 唯一实施计划已完成；M10 定向 25/25 通过，完整 EditMode 451 项中的两项非 M10 UI/Targeting 异常按交付时事实保留，不把未纳入本提交的后续 M9 测试校准计入 M10 通过口径
 - [2026-08-05 M9 目标箭头与锁定框视觉反馈](2026-08-05-m9-targeting-visual-feedback.md) — 已实施并通过 Unity 定向验收；保留后续 UI 调参入口
 - [2026-08-05 M9 出牌不飞向怪物](2026-08-05-play-card-no-target-flight.md)
@@ -29,6 +35,9 @@ m10_status: m10-complete-targeted-25-green-full-451-with-2-non-m10-failures
 - [2026-08-05 M9 代码结构与实现质量审查](2026-08-05-m9-code-structure-review.md) — 只读建议来源；当前 BUG 分诊与采纳边界见 `../06_testing/2026-08-05-m9-post-validation-bug-triage.md`
 
 ## 已替代 / 历史计划
+
+- [2026-08-07 Marine Game 机枪兵卡牌单场战斗接入](2026-08-07-marine-game-card-only-integration.md) — 旧压缩包的 64 模板历史切片；已由 V2 计划取代
+- [2026-08-06 机枪兵单场战斗内容接入](2026-08-06-machine-gunner-card-pool-integration.md) — 旧 JSON 的 MG0/MG1 历史计划；资源档案的已完成事实保留，卡牌内容及后续切片由 2026-08-07 计划取代
 
 - [2026-07-30 BattleScene M3A 参与者视图与生命 HUD](2026-07-30-battlescene-participant-views.md) — M3A 历史方案已完成；其中 `view_prefab_address` / 完整角色 Prefab 地址已由 CD-055 的短键与逻辑地址标准取代
 - [2026-07-30 YooAsset 到 Addressables 迁移](2026-07-30-addressables-migration.md) — 迁移已完成；其中“配置表 Unity 素材保留完整地址”和旧分步构建入口已由 CD-055 与根 `AGENTS.md` 取代，场景及 GameData 基础设施地址仍保留完整 `Assets/...`

@@ -444,6 +444,443 @@ public sealed class BattleCommandPresentationAdapterTests
         Assert.That(completionCount, Is.Zero);
     }
 
+    /// <summary>确认散热的两张离手牌按被选消耗、源牌弃置的结算顺序飞向各自锚点并各清理一次。</summary>
+    [Test]
+    public void Present_VentHeatDualHandDepartures_RoutesSelectedToExhaustThenSourceToDiscardAndCleansBothInOrder()
+    {
+        GameObject canvasObject = new GameObject(
+            "AdapterVentHeatCanvas",
+            typeof(RectTransform),
+            typeof(Canvas));
+        var participantObject = new GameObject("AdapterVentHeatParticipant");
+        var handObject = new GameObject("AdapterVentHeatHand");
+        var cardObjects = new List<GameObject>();
+        BattleCommandPresentationAdapter adapter = null;
+        using var zones = new BattleCardZonesData(new[] { 3244, 3203 }, shuffleSeed: 3244);
+        try
+        {
+            zones.Draw(2);
+            CardInstanceId sourceCardId = zones.Hand.Single(cardId =>
+                zones.Cards[cardId].TemplateId == 3244);
+            CardInstanceId selectedCardId = zones.Hand.Single(cardId =>
+                zones.Cards[cardId].TemplateId == 3203);
+            GameObject cardPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/Arts/Runtime/Card/Prefab/CardView.prefab");
+            var visualsById = new Dictionary<CardInstanceId, HandCardVisual>();
+            var initialScreenPositions = new Dictionary<CardInstanceId, Vector2>();
+            CardInstanceId[] visualOrder = { sourceCardId, selectedCardId };
+            for (int index = 0; index < visualOrder.Length; index++)
+            {
+                GameObject cardObject = UnityEngine.Object.Instantiate(cardPrefab);
+                cardObjects.Add(cardObject);
+                HandCardVisual visual = cardObject.GetComponent<HandCardVisual>();
+                CanvasGroup group = visual.CardContent.gameObject.AddComponent<CanvasGroup>();
+                visual.Initialize(Vector3.one * 0.36f, visualOrder[index], group);
+                visual.SetBasePoseImmediately(new HandCardPose(
+                    new Vector2(-120f + index * 240f, -280f),
+                    -4f + index * 8f,
+                    index));
+                visualsById.Add(visualOrder[index], visual);
+                initialScreenPositions.Add(visualOrder[index], visual.GetScreenCenter());
+            }
+
+            Canvas canvas = canvasObject.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            RectTransform canvasRect = canvasObject.GetComponent<RectTransform>();
+            canvasRect.sizeDelta = new Vector2(1000f, 600f);
+            Text drawText = CreatePileText(canvasRect, "DrawPile", new Vector2(-360f, -210f));
+            Text discardText = CreatePileText(canvasRect, "DiscardPile", new Vector2(360f, -210f));
+            Text exhaustText = CreatePileText(canvasRect, "ExhaustPile", new Vector2(0f, -210f));
+            BattleCardPileHudView pileView = canvasObject.AddComponent<BattleCardPileHudView>();
+            SetPrivateField(pileView, "_drawPileText", drawText);
+            SetPrivateField(pileView, "_discardPileText", discardText);
+            SetPrivateField(pileView, "_exhaustPileText", exhaustText);
+            Canvas.ForceUpdateCanvases();
+            Assert.That(
+                pileView.TryGetPileScreenAnchor(
+                    BattleCardZone.ExhaustPile,
+                    out Vector2 exhaustScreenPosition),
+                Is.True);
+            Assert.That(
+                pileView.TryGetPileScreenAnchor(
+                    BattleCardZone.DiscardPile,
+                    out Vector2 discardScreenPosition),
+                Is.True);
+
+            BattleParticipantPresenter participantPresenter =
+                participantObject.AddComponent<BattleParticipantPresenter>();
+            HandCardContainer hand = handObject.AddComponent<HandCardContainer>();
+            var transientDestroyOrder = new List<CardInstanceId>();
+            hand.ConfigureTransientCardDestroyForTesting(transient =>
+                transientDestroyOrder.Add(transient.GetComponent<HandCardVisual>().CardId));
+            SetPrivateField(hand, "_cardZones", zones);
+            GetPrivateField<List<HandCardVisual>>(hand, "_cards").AddRange(
+                visualOrder.Select(cardId => visualsById[cardId]));
+
+            int layoutPublicationCount = 0;
+            using IDisposable layoutSubscription = zones.Layout
+                .Skip(1)
+                .Subscribe(_ => layoutPublicationCount++);
+            BattlePreparedHandCardSelectionResolution zonePlan =
+                zones.PrepareHandCardSelectionResolution(
+                    selectedCardId,
+                    BattleCardZone.ExhaustPile,
+                    sourceCardId,
+                    BattleCardZone.DiscardPile,
+                    selectedStartingOrder: 1,
+                    playedCardStartingOrder: 3);
+
+            Assert.That(zonePlan.SelectedCardMovement.Order, Is.EqualTo(1));
+            Assert.That(zonePlan.PlayedCardDeparture.Order, Is.EqualTo(3));
+            Assert.That(layoutPublicationCount, Is.Zero);
+
+            BattleCardZoneOperationResult zoneResult =
+                zones.CommitPreparedHandCardSelectionResolution(zonePlan);
+            CardZoneLayoutData committedLayout = zones.Layout.CurrentValue;
+
+            Assert.That(zoneResult.Succeeded, Is.True);
+            Assert.That(layoutPublicationCount, Is.EqualTo(1));
+            Assert.That(committedLayout, Is.SameAs(zonePlan.NextLayout));
+            Assert.That(zoneResult.Settlements.Select(settlement => settlement.Order),
+                Is.EqualTo(new[] { 1, 3 }));
+            MethodInfo rebuildCards = typeof(HandCardContainer).GetMethod(
+                "RebuildCards",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(rebuildCards, Is.Not.Null);
+            rebuildCards.Invoke(hand, new object[] { false });
+
+            var playerId = new CombatantId(1001);
+            var result = new BattleCommandExecutionResult(
+                authoritySequence: 3244,
+                BattleCommandType.PlayCard,
+                playerId,
+                BattleCommandExecutionFailureReason.None,
+                new BattleSettlementRecord[]
+                {
+                    new BattleEnergySpentSettlement(0, playerId, 2, 2),
+                    zoneResult.Settlements[0],
+                    new BattleEnergyGainedSettlement(2, playerId, 2, 3),
+                    zoneResult.Settlements[1],
+                });
+            BattleCommandPresentationPlan presentationPlan =
+                BattleCommandPresentationPlan.Create(result);
+            Assert.That(presentationPlan.Prelude, Is.Null);
+            Assert.That(
+                presentationPlan.SettlementSteps.Select(step =>
+                    (step.SettlementOrder, step.Kind)),
+                Is.EqualTo(new[]
+                {
+                    (1, BattleCommandPresentationStepKind.CardMoved),
+                    (3, BattleCommandPresentationStepKind.CardMoved),
+                }));
+            adapter = new BattleCommandPresentationAdapter(
+                participantPresenter,
+                hand,
+                pileView,
+                () => 0.23f);
+            int completionCount = 0;
+
+            ((IBattleCommandPresentation)adapter).Present(result, () => completionCount++);
+            adapter.Tick();
+
+            Assert.That(
+                visualsById[selectedCardId].GetScreenCenter().x,
+                Is.EqualTo(exhaustScreenPosition.x).Within(0.1f));
+            Assert.That(
+                visualsById[selectedCardId].GetScreenCenter().y,
+                Is.EqualTo(exhaustScreenPosition.y).Within(0.1f));
+            Assert.That(
+                visualsById[sourceCardId].GetScreenCenter().x,
+                Is.EqualTo(initialScreenPositions[sourceCardId].x).Within(0.1f));
+            Assert.That(
+                visualsById[sourceCardId].GetScreenCenter().y,
+                Is.EqualTo(initialScreenPositions[sourceCardId].y).Within(0.1f));
+            Assert.That(transientDestroyOrder, Is.Empty);
+            Assert.That(completionCount, Is.Zero);
+
+            adapter.Tick();
+
+            Assert.That(
+                visualsById[sourceCardId].GetScreenCenter().x,
+                Is.EqualTo(discardScreenPosition.x).Within(0.1f));
+            Assert.That(
+                visualsById[sourceCardId].GetScreenCenter().y,
+                Is.EqualTo(discardScreenPosition.y).Within(0.1f));
+            Assert.That(
+                transientDestroyOrder,
+                Is.EqualTo(new[] { selectedCardId, sourceCardId }));
+            Assert.That(completionCount, Is.EqualTo(1));
+
+            adapter.Tick();
+            adapter.CompleteImmediately();
+            adapter.CompleteImmediately();
+
+            Assert.That(completionCount, Is.EqualTo(1));
+            Assert.That(
+                transientDestroyOrder,
+                Is.EqualTo(new[] { selectedCardId, sourceCardId }));
+            Assert.That(zones.Layout.CurrentValue, Is.SameAs(committedLayout));
+            Assert.That(layoutPublicationCount, Is.EqualTo(1));
+            Assert.That(zones.Hand, Is.Empty);
+            Assert.That(zones.ExhaustPile, Is.EqualTo(new[] { selectedCardId }));
+            Assert.That(zones.DiscardPile, Is.EqualTo(new[] { sourceCardId }));
+        }
+        finally
+        {
+            adapter?.Dispose();
+            foreach (GameObject cardObject in cardObjects)
+            {
+                if (cardObject != null)
+                    UnityEngine.Object.DestroyImmediate(cardObject);
+            }
+            UnityEngine.Object.DestroyImmediate(handObject);
+            UnityEngine.Object.DestroyImmediate(participantObject);
+            UnityEngine.Object.DestroyImmediate(canvasObject);
+        }
+    }
+
+    /// <summary>确认 Burning Pact 的选择消耗、两次抽牌入场与来源弃置按真实冻结顺序串行播放，且不会再次写卡区。</summary>
+    [Test]
+    public void Present_BurningPactAtomicCardFlow_RoutesDeparturesAndIncomingDrawsInSettlementOrder()
+    {
+        GameObject canvasObject = new GameObject(
+            "AdapterBurningPactCanvas",
+            typeof(RectTransform),
+            typeof(Canvas));
+        var participantObject = new GameObject("AdapterBurningPactParticipant");
+        var handObject = new GameObject("AdapterBurningPactHand");
+        var cardObjects = new List<GameObject>();
+        BattleCommandPresentationAdapter adapter = null;
+        using var zones = new BattleCardZonesData(
+            new[] { 3125, 3001, 3002, 3003 },
+            shuffleSeed: 3125);
+        try
+        {
+            zones.Draw(2);
+            CardInstanceId sourceCardId = zones.Hand[0];
+            CardInstanceId selectedCardId = zones.Hand[1];
+            int layoutPublicationCount = 0;
+            using IDisposable layoutSubscription = zones.Layout
+                .Skip(1)
+                .Subscribe(_ => layoutPublicationCount++);
+            BattlePreparedSelectedHandCardDrawAndPlayedCardDeparture zonePlan =
+                zones.PrepareSelectedHandCardDrawAndPlayedCardDeparture(
+                    selectedCardId,
+                    BattleCardZone.ExhaustPile,
+                    drawCount: 2,
+                    BattleCardZonesData.BattleCardHandLimit,
+                    sourceCardId,
+                    BattleCardZone.DiscardPile,
+                    startingOrder: 1);
+            CardInstanceId[] drawnCardIds = zonePlan.Settlements
+                .OfType<BattleCardMovedSettlement>()
+                .Where(moved =>
+                    moved.FromZone == BattleCardZone.DrawPile &&
+                    moved.ToZone == BattleCardZone.Hand)
+                .Select(moved => moved.CardId)
+                .ToArray();
+
+            Assert.That(drawnCardIds, Has.Length.EqualTo(2));
+            Assert.That(layoutPublicationCount, Is.Zero);
+            Assert.That(
+                zonePlan.Settlements.Select(settlement => settlement.Order),
+                Is.EqualTo(new[] { 1, 2, 3, 4 }));
+
+            GameObject cardPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
+                "Assets/Arts/Runtime/Card/Prefab/CardView.prefab");
+            var visualsById = new Dictionary<CardInstanceId, HandCardVisual>();
+            CardInstanceId[] visualOrder = new[] { sourceCardId, selectedCardId }
+                .Concat(drawnCardIds)
+                .ToArray();
+            var initialScreenPositions = new Dictionary<CardInstanceId, Vector2>();
+            for (int index = 0; index < visualOrder.Length; index++)
+            {
+                GameObject cardObject = UnityEngine.Object.Instantiate(cardPrefab);
+                cardObjects.Add(cardObject);
+                HandCardVisual visual = cardObject.GetComponent<HandCardVisual>();
+                CanvasGroup group = visual.CardContent.gameObject.AddComponent<CanvasGroup>();
+                visual.Initialize(Vector3.one * 0.36f, visualOrder[index], group);
+                visual.SetBasePoseImmediately(new HandCardPose(
+                    new Vector2(-270f + index * 180f, -280f),
+                    -6f + index * 4f,
+                    index));
+                visualsById.Add(visualOrder[index], visual);
+                initialScreenPositions.Add(visualOrder[index], visual.GetScreenCenter());
+            }
+
+            Canvas canvas = canvasObject.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            RectTransform canvasRect = canvasObject.GetComponent<RectTransform>();
+            canvasRect.sizeDelta = new Vector2(1000f, 600f);
+            Text drawText = CreatePileText(canvasRect, "DrawPile", new Vector2(-360f, -210f));
+            Text discardText = CreatePileText(canvasRect, "DiscardPile", new Vector2(360f, -210f));
+            Text exhaustText = CreatePileText(canvasRect, "ExhaustPile", new Vector2(0f, -210f));
+            BattleCardPileHudView pileView = canvasObject.AddComponent<BattleCardPileHudView>();
+            SetPrivateField(pileView, "_drawPileText", drawText);
+            SetPrivateField(pileView, "_discardPileText", discardText);
+            SetPrivateField(pileView, "_exhaustPileText", exhaustText);
+            Canvas.ForceUpdateCanvases();
+            Assert.That(
+                pileView.TryGetPileScreenAnchor(
+                    BattleCardZone.ExhaustPile,
+                    out Vector2 exhaustScreenPosition),
+                Is.True);
+            Assert.That(
+                pileView.TryGetPileScreenAnchor(
+                    BattleCardZone.DiscardPile,
+                    out Vector2 discardScreenPosition),
+                Is.True);
+
+            BattleParticipantPresenter participantPresenter =
+                participantObject.AddComponent<BattleParticipantPresenter>();
+            HandCardContainer hand = handObject.AddComponent<HandCardContainer>();
+            var transientDestroyOrder = new List<CardInstanceId>();
+            hand.ConfigureTransientCardDestroyForTesting(transient =>
+                transientDestroyOrder.Add(transient.GetComponent<HandCardVisual>().CardId));
+            SetPrivateField(hand, "_cardZones", zones);
+            GetPrivateField<List<HandCardVisual>>(hand, "_cards").AddRange(
+                visualOrder.Select(cardId => visualsById[cardId]));
+
+            BattleCardZoneOperationResult zoneResult =
+                zones.CommitPreparedSelectedHandCardDrawAndPlayedCardDeparture(zonePlan);
+            CardZoneLayoutData committedLayout = zones.Layout.CurrentValue;
+            Assert.That(zoneResult.Succeeded, Is.True);
+            Assert.That(layoutPublicationCount, Is.EqualTo(1));
+            Assert.That(committedLayout, Is.SameAs(zonePlan.NextLayout));
+            MethodInfo rebuildCards = typeof(HandCardContainer).GetMethod(
+                "RebuildCards",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(rebuildCards, Is.Not.Null);
+            rebuildCards.Invoke(hand, new object[] { false });
+
+            var playerId = new CombatantId(1001);
+            var result = new BattleCommandExecutionResult(
+                authoritySequence: 3125,
+                BattleCommandType.PlayCard,
+                playerId,
+                BattleCommandExecutionFailureReason.None,
+                new BattleSettlementRecord[]
+                {
+                    new BattleEnergySpentSettlement(0, playerId, 3, 2),
+                    zoneResult.Settlements[0],
+                    zoneResult.Settlements[1],
+                    zoneResult.Settlements[2],
+                    zoneResult.Settlements[3],
+                });
+            Assert.That(result.Settlements, Has.Count.EqualTo(5));
+            Assert.That(result.Settlements[0], Is.TypeOf<BattleEnergySpentSettlement>());
+            Assert.That(
+                result.Settlements.Skip(1).Select(settlement => settlement.RecordType),
+                Is.All.EqualTo(BattleSettlementRecordType.CardMoved));
+            Assert.That(
+                result.Settlements.Skip(1).Cast<BattleCardMovedSettlement>().Select(moved =>
+                    (moved.CardId, moved.FromZone, moved.ToZone)),
+                Is.EqualTo(new[]
+                {
+                    (selectedCardId, BattleCardZone.Hand, BattleCardZone.ExhaustPile),
+                    (drawnCardIds[0], BattleCardZone.DrawPile, BattleCardZone.Hand),
+                    (drawnCardIds[1], BattleCardZone.DrawPile, BattleCardZone.Hand),
+                    (sourceCardId, BattleCardZone.Hand, BattleCardZone.DiscardPile),
+                }));
+            BattleCommandPresentationPlan presentationPlan =
+                BattleCommandPresentationPlan.Create(result);
+            Assert.That(presentationPlan.Prelude, Is.Null);
+            Assert.That(
+                presentationPlan.SettlementSteps.Select(step =>
+                    (step.SettlementOrder, step.Kind)),
+                Is.EqualTo(new[]
+                {
+                    (1, BattleCommandPresentationStepKind.CardMoved),
+                    (2, BattleCommandPresentationStepKind.CardMoved),
+                    (3, BattleCommandPresentationStepKind.CardMoved),
+                    (4, BattleCommandPresentationStepKind.CardMoved),
+                }));
+
+            float frameDelta = 0.23f;
+            adapter = new BattleCommandPresentationAdapter(
+                participantPresenter,
+                hand,
+                pileView,
+                () => frameDelta);
+            int completionCount = 0;
+            ((IBattleCommandPresentation)adapter).Present(result, () => completionCount++);
+
+            adapter.Tick();
+
+            Assert.That(
+                visualsById[selectedCardId].GetScreenCenter().x,
+                Is.EqualTo(exhaustScreenPosition.x).Within(0.1f));
+            Assert.That(
+                visualsById[selectedCardId].GetScreenCenter().y,
+                Is.EqualTo(exhaustScreenPosition.y).Within(0.1f));
+            Assert.That(visualsById[drawnCardIds[0]].IsIncomingCardMotionActive, Is.True);
+            Assert.That(visualsById[drawnCardIds[1]].IsIncomingCardMotionActive, Is.False);
+            Assert.That(
+                visualsById[sourceCardId].GetScreenCenter().x,
+                Is.EqualTo(initialScreenPositions[sourceCardId].x).Within(0.1f));
+            Assert.That(transientDestroyOrder, Is.Empty);
+            Assert.That(completionCount, Is.Zero);
+
+            Assert.That(
+                visualsById[drawnCardIds[0]].TryFastForwardIncomingCardMotion(),
+                Is.True);
+            Assert.That(visualsById[drawnCardIds[0]].IsIncomingCardMotionActive, Is.False);
+            frameDelta = 0.01f;
+            adapter.Tick();
+
+            Assert.That(visualsById[drawnCardIds[1]].IsIncomingCardMotionActive, Is.True);
+            Assert.That(
+                visualsById[drawnCardIds[1]].TryFastForwardIncomingCardMotion(),
+                Is.True);
+            Assert.That(visualsById[drawnCardIds[1]].IsIncomingCardMotionActive, Is.False);
+            Assert.That(completionCount, Is.Zero);
+
+            frameDelta = 0.23f;
+            adapter.Tick();
+
+            Assert.That(
+                visualsById[sourceCardId].GetScreenCenter().x,
+                Is.EqualTo(discardScreenPosition.x).Within(0.1f));
+            Assert.That(
+                visualsById[sourceCardId].GetScreenCenter().y,
+                Is.EqualTo(discardScreenPosition.y).Within(0.1f));
+            Assert.That(
+                transientDestroyOrder,
+                Is.EqualTo(new[] { selectedCardId, sourceCardId }));
+            Assert.That(drawnCardIds, Has.None.Matches<CardInstanceId>(
+                cardId => transientDestroyOrder.Contains(cardId)));
+            Assert.That(drawnCardIds.All(cardId => visualsById[cardId] != null), Is.True);
+            Assert.That(completionCount, Is.EqualTo(1));
+
+            adapter.Tick();
+            adapter.CompleteImmediately();
+            adapter.CompleteImmediately();
+
+            Assert.That(completionCount, Is.EqualTo(1));
+            Assert.That(
+                transientDestroyOrder,
+                Is.EqualTo(new[] { selectedCardId, sourceCardId }));
+            Assert.That(zones.Layout.CurrentValue, Is.SameAs(committedLayout));
+            Assert.That(layoutPublicationCount, Is.EqualTo(1));
+            Assert.That(zones.Hand, Is.EqualTo(drawnCardIds));
+            Assert.That(zones.DrawPile, Is.Empty);
+            Assert.That(zones.ExhaustPile, Is.EqualTo(new[] { selectedCardId }));
+            Assert.That(zones.DiscardPile, Is.EqualTo(new[] { sourceCardId }));
+        }
+        finally
+        {
+            adapter?.Dispose();
+            foreach (GameObject cardObject in cardObjects)
+            {
+                if (cardObject != null)
+                    UnityEngine.Object.DestroyImmediate(cardObject);
+            }
+            UnityEngine.Object.DestroyImmediate(handObject);
+            UnityEngine.Object.DestroyImmediate(participantObject);
+            UnityEngine.Object.DestroyImmediate(canvasObject);
+        }
+    }
+
     /// <summary>确认 concrete adapter 把重洗步骤路由到现有 Pile View，并仍由同一 runner 释放一次 completion。</summary>
     [Test]
     public void Present_CardsReshuffled_UsesConcretePileCueInSharedRunner()

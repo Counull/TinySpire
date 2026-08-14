@@ -29,7 +29,10 @@ public static class TinySpireBuildTools
             EditorUtility.DisplayProgressBar("TinySpire Build", "Validating configuration table manifest...", 0.45f);
             ConfigTableManifestValidator.ValidateCurrentProject();
 
-            EditorUtility.DisplayProgressBar("TinySpire Build", "Validating battle card catalog...", 0.5f);
+            EditorUtility.DisplayProgressBar("TinySpire Build", "Validating Hero resource profiles...", 0.5f);
+            BattleHeroResourceProfileBuildValidator.ValidateCurrentProject();
+
+            EditorUtility.DisplayProgressBar("TinySpire Build", "Validating battle card catalog...", 0.55f);
             BattleCardCatalogBuildValidator.ValidateCurrentProject();
 
             EditorUtility.DisplayProgressBar("TinySpire Build", "Importing and validating localization...", 0.6f);

@@ -23,6 +23,28 @@ namespace cfg.battle
         DealDamage = 1,
         GainBlock = 2,
         ApplyVulnerable = 3,
+        /// <summary>
+        /// Card draw
+        /// </summary>
+        DrawCards = 4,
+        /// <summary>
+        /// Exhaust one explicitly selected hand card
+        /// </summary>
+        ExhaustSelectedHandCard = 5,
+        Heal = 6,
+        /// <summary>
+        /// Deal damage equal to source current Block
+        /// </summary>
+        DealDamageFromSourceBlock = 7,
+        RetainBlock = 8,
+        /// <summary>
+        /// Play the top Draw Pile card and Exhaust it
+        /// </summary>
+        PlayTopDrawCardAndExhaust = 9,
+        /// <summary>
+        /// Whenever the source gains Block, deal the configured damage to one random living enemy
+        /// </summary>
+        RegisterBlockGainRandomEnemyDamage = 10,
     }
 
 } 

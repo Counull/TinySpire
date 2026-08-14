@@ -75,7 +75,7 @@ namespace TinySpire.UI.Battle
             gameObject.SetActive(false);
         }
 
-        /// <summary>把三类数字步骤映射为锁定的纯字符与颜色样式。</summary>
+        /// <summary>把四类数字步骤映射为锁定的纯字符与颜色样式。</summary>
         private void ApplyStyle(
             BattleCommandPresentationStepKind kind,
             int amount)
@@ -92,6 +92,7 @@ namespace TinySpire.UI.Battle
                     _text.color = _healthLossColor;
                     break;
                 case BattleCommandPresentationStepKind.BlockGainedNumber:
+                case BattleCommandPresentationStepKind.HealthRestoredNumber:
                     _text.text = $"+{magnitude}";
                     _text.color = _blockGainedColor;
                     break;

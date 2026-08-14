@@ -348,7 +348,6 @@ public sealed class HandCardTargetFocusTests
         {
             PlayerCombatantData player = combatants.AddPlayer(1001, 30, 0);
             EnemyCombatantData enemy = combatants.AddEnemy(2001, 20, 0);
-            zones.Draw(1);
             cfg.Tables tables = CreateTargetFocusTables(cardCost: 4);
             var playerZones = new Dictionary<CombatantId, BattleCardZonesData>
             {
@@ -359,6 +358,7 @@ public sealed class HandCardTargetFocusTests
                 new ImmediateBattleCommandPresentation(),
                 playerZones,
                 enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
+                initialHandCount: 1,
                 tables: tables);
             queue.SubmitRegistered(new StartBattleCommand());
             BattleTurnData turnBefore = queue.Turn.CurrentValue;
@@ -855,7 +855,7 @@ public sealed class HandCardTargetFocusTests
             ["battle_tbhero"] = JArray.Parse(
                 "[{\"id\":1001,\"name_i18n_key\":\"battle.hero.test.name\"," +
                 "\"view_prefab_key\":\"\",\"max_health\":30," +
-                "\"base_strength\":0,\"initial_deck_id\":1001}]"),
+                "\"base_strength\":0,\"initial_deck_id\":1001,\"initial_energy\":3,\"max_energy\":3,\"energy_gain_per_round\":3,\"initial_ammo\":0,\"max_ammo\":0,\"ammo_gain_per_round\":0,\"runtime_profile\":0}]"),
             ["battle_tbenemy"] = JArray.Parse(
                 "[{\"id\":2001,\"name_i18n_key\":\"battle.enemy.test.name\"," +
                 "\"max_health\":20,\"base_strength\":0,\"view_prefab_key\":\"\"," +
@@ -882,6 +882,8 @@ public sealed class HandCardTargetFocusTests
                     ["upgraded_play_destination"] = (int)cfg.battle.CardPlayDestination.DiscardPile,
                     ["has_upgrade"] = false,
                     ["implementation_status"] = (int)cfg.battle.CardImplementationStatus.Implemented,
+                    ["program_id"] = (int)cfg.battle.MachineGunnerProgramId.None,
+                    ["is_innate"] = false,
                     ["effect_bindings"] = new JArray(),
                     ["illustration_key"] = string.Empty,
                 },
