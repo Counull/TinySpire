@@ -30,6 +30,19 @@ Docs/
 - 如需说明本机路径，只能放在本地注释、临时日志或个人环境说明里；项目协作规范一律使用相对路径。
 - 根目录的本文档优先级最高；子目录文档若与本文档冲突，以本文档为准。
 
+## 1.1 Current roadmap entry
+
+For future TinySpire progression work, **“roadmap” means the active Run roadmap**:
+
+```text
+Docs/Copilot_Daedalus/RUN_ROADMAP.md
+```
+
+`Docs/Copilot_Daedalus/ROADMAP.md` is the frozen BattleScene MVP archive. Read it
+only when tracing M0–M10 history or its acceptance evidence; do not treat it as
+the current implementation entrypoint. Dynamic progress remains in
+`Docs/Copilot_Daedalus/SESSION_LOG.md`.
+
 ## 2. Agent Roles
 
 | Agent | Directory | Role |
@@ -73,6 +86,7 @@ Daedalus 还需要读取：
 
 ```text
 Docs/Copilot_Daedalus/README.md
+Docs/Copilot_Daedalus/RUN_ROADMAP.md
 Docs/Copilot_Daedalus/SESSION_LOG.md
 Docs/Copilot_Daedalus/CODE_DECISIONS.md
 ```
@@ -190,13 +204,13 @@ Machine-specific absolute paths may appear only in temporary troubleshooting not
 Current phase:
 
 ```text
-BattleScene MVP planning / early implementation
+Run MVP：G1 首片 Grill 尚未开始（needs-grill）
 ```
 
 Primary target:
 
 ```text
-Card → Effect → BattleState → UI → Feedback
+最小 Run 生命周期与 Battle 进出契约；具体首片尚未提名
 ```
 
 Current collaboration model:

@@ -18,13 +18,20 @@ updated: 2026-08-14
 - 已核验不成立：唯一写 seam（`BattleCommandQueue.Submit`）无绕过、UI 无权威写入、确定性随机无跨域耦合、场景生命周期与订阅销毁合规、完成定义与 807/807 记录一致。
 - G1 仍为 `needs-grill`；不存在开始 G1 首片 Grill 前必须纠正的真实缺陷，也没有发生任何修复授权。审计记录：`06_testing/2026-08-14-battlescene-to-run-audit.md`。
 
+## 2026-08-14 BattleScene → Run 外部只读交接审计包（待执行）
+
+- 已在 `10_communication/` 建立 BattleScene → Run 阶段交接审计任务书与 DeepSeek Harness 薄 Prompt。审计固定产品代码 tag `milestone-battlescene-mvp-2026-08-14`（`e07e39a`），并以 `18d9023` 的 Roadmap 换轨文档作为 Run 交接语义；两提交之间 `TinySpire/**` 无已提交变化。
+- 本轮只准备外发材料，没有运行外部审计、Unity、build 或测试，也没有授权修改代码。G1 仍为 `needs-grill`；审计只判断是否存在开始 Grill 前必须纠正的真实缺陷或生命周期阻塞。
+- DeepSeek Harness 输出首先作为 `source-only` 审查材料返回，不自动成为事实或修复授权。确认的 blocker 才另建窄修复计划；G1 设计问题回到对应切片 Grill，UI / 动画品质债继续留在独立轨道。
+- 入口：`10_communication/2026-08-14-battlescene-to-run-audit-brief.md` 与 `10_communication/2026-08-14-battlescene-to-run-audit.deepseek-harness-prompt.md`。
+
 ## 2026-08-14 BattleScene MVP 检查点与 Run 路线图交接（G1 未开始）
 
 - BattleScene MVP 与当前基础卡牌运行时已形成 Git 检查点：commit `e07e39a`，tag `milestone-battlescene-mvp-2026-08-14`，分支 `codex/battlescene-mvp-checkpoint` 已推送到 GitHub。该检查点保留完整 EditMode **807/807 passed** 的最新权威记录。
 - `ROADMAP.md` 原地冻结为 M0～M10 的固定归档，不移动路径，以保留历史计划和验收页的引用；独立 `RUN_ROADMAP.md` 开始承担 G1～G8 的阶段骨架、依赖和完成定义。根 `README.md` 已同步公开阶段转换。
 - G1 当前状态为 `needs-grill`：尚未 Grill、尚未拆成可执行切片、尚未形成 G1 实施计划，也没有任何运行时代码、Scene、Prefab、表格或构建授权。未来每个切片以及出现独立玩法/生命周期选择的子切片都分别 Grill 和授权。
 - 战斗 UI、视觉反馈与动画被认定为功能可用但非最终品质的产品债；除非阻塞某个新玩法切片的可读性或可操作性，否则不阻断 Run 本体推进。大范围表现改造后续单独切片。
-- 当前换轨分支为 `codex/run-roadmap-transition`。下一动作不是立即实施 G1，而是在用户明确提出“开始 G1 首片 Grill”后，只选择一个最小可观察结果进行问责和计划。
+- Roadmap 换轨已经提交并推送到 `main`，临时换轨分支已删除。下一动作先执行上述只读交接审计；审计结果经本仓裁决后，才决定直接开始 G1 首片 Grill，或先建立一个独立的最小修复切片。
 - 决定见 `CODE_DECISIONS.md` CD-110；Run 阶段入口见 `RUN_ROADMAP.md`。
 
 ## 2026-08-14 共享 settlement-derived trigger、Ironclad Juggernaut 与机枪兵 Unstoppable（已完成 Unity 原生验证）

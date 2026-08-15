@@ -51,6 +51,12 @@ Status Source: [SESSION_LOG.md](SESSION_LOG.md)
 |---|---|
 | [ROADMAP.md](ROADMAP.md) | 已完成的 BattleScene MVP（M0～M10）固定路线与验收历史；Run 阶段不再在此扩写。 |
 
+## Communication Docs
+
+| 目录 | 何时读 |
+|---|---|
+| [10_communication/](10_communication/) | 需要向其他 Agent 外发审计任务、确认问题或素材说明时；不属于默认工程上下文，外部输出也不自动成为项目事实。 |
+
 ## 外部依赖（只读）
 
 不属于默认上下文，按任务相关性取。

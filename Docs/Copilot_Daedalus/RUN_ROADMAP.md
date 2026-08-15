@@ -12,6 +12,8 @@ note: 本文件只承担 BattleScene 之后的 Run 阶段骨架、依赖与门�
 
 # TinySpire · Run MVP 路线图
 
+> **当前路线入口。** 后续任务中提到“Roadmap / 跑路线图”，默认指向本文；旧 `ROADMAP.md` 只用于追溯已冻结的 BattleScene MVP（M0～M10）。当前动态状态仍查 `SESSION_LOG.md`。
+
 > BattleScene MVP 的冻结路线见 [ROADMAP.md](ROADMAP.md)。当前动态状态只查 [SESSION_LOG.md](SESSION_LOG.md)。本路线图不是 G1 实施计划，也不是一次性需求问卷；每个实际切片都要单独 Grill、形成窄计划并获得明确授权。
 
 ## 1. 当前起点与终点

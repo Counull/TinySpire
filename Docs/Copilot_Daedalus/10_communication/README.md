@@ -2,7 +2,7 @@
 title: 10_communication · 跨 Agent 沟通
 page_type: communication
 lifecycle: active
-updated: 2026-08-06
+updated: 2026-08-14
 ---
 
 # 10_communication · 跨 Agent 沟通
@@ -10,6 +10,11 @@ updated: 2026-08-06
 - 角色：对 Pegasus / Calliope / Theseus 的 hand-off、确认问题、外发措辞草稿。
 - **非默认工程上下文**：只在做沟通任务时读。
 - 已确认结论迁往对应事实源或实现计划。
+
+## 代码阶段交接与审计
+
+- [BattleScene → Run 阶段交接只读审计任务书](2026-08-14-battlescene-to-run-audit-brief.md)：固定基线、双轴范围、证据标准、排除项与结果回收规则。
+- [DeepSeek Harness · BattleScene → Run 只读审计 Prompt](2026-08-14-battlescene-to-run-audit.deepseek-harness-prompt.md)：可直接外发的薄 Prompt；只读审计，不授权修改代码。
 
 ## 可外发素材说明
 
