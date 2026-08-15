@@ -1,8 +1,11 @@
+using System;
 using System.Collections.Generic;
 using cfg;
+using Cysharp.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using TinySpire.Battle;
+using TinySpire.Run;
 using VContainer;
 
 public sealed class BattleSessionTests
@@ -75,6 +78,35 @@ public sealed class BattleSessionTests
         }
     }
 
+    /// <summary>Bootstrap 已注册但尚无 active Run 时，legacy/debug Battle 仍使用 Inspector 默认输入。</summary>
+    [Test]
+    public void BattleSetupRegistration_WithIdleRunFlow_UsesInspectorDefaults()
+    {
+        using var store = new RunStateStore();
+        var flow = new RunFlowService(
+            store,
+            new ConfigService(),
+            new NoOpSceneFlow(),
+            new UnusedRunEntropySource());
+        var parentBuilder = new ContainerBuilder();
+        parentBuilder.RegisterInstance(flow)
+            .AsSelf()
+            .As<IBattleSetupOptionsSource>();
+
+        using (IObjectResolver parent = parentBuilder.Build())
+        using (IScopedObjectResolver child = parent.CreateScope(
+                   builder => BattleLifetimeScope.RegisterBattleSetupOptions(builder, 1001, 5001, 5)))
+        {
+            BattleSetupOptions options = child.Resolve<BattleSetupOptions>();
+
+            Assert.That(options.HeroTemplateId, Is.EqualTo(1001));
+            Assert.That(options.EncounterTemplateId, Is.EqualTo(5001));
+            Assert.That(options.RandomSeed, Is.EqualTo(5u));
+            Assert.That(options.PlayerInitialHealth, Is.Null);
+            Assert.That(options.DeckTemplateId, Is.Null);
+        }
+    }
+
     /// <summary>验证 Session 只创建参与者与洗牌后的未发牌卡区，不提前执行首轮抽牌。</summary>
     [Test]
     public void FromConfig_CreatesCombatantsAndUndealtDeckFromStaticTemplates()
@@ -99,6 +131,7 @@ public sealed class BattleSessionTests
 
         Assert.That(player, Is.Not.Null);
         Assert.That(player.TemplateId, Is.EqualTo(1001));
+        Assert.That(player.CurrentHealth, Is.EqualTo(80));
         Assert.That(player.MaxHealth, Is.EqualTo(80));
         Assert.That(player.Strength.CurrentValue, Is.EqualTo(1));
         Assert.That(session.PlayerResourceProfiles.Count, Is.EqualTo(1));
@@ -127,6 +160,65 @@ public sealed class BattleSessionTests
         Assert.That(behaviorId, Is.EqualTo(7001));
 
         session.Dispose();
+    }
+
+    /// <summary>验证 Run 显式输入会覆盖 Hero 默认生命与牌组，并把同一本战 seed 交给 Session。</summary>
+    [Test]
+    public void FromConfig_WithRunInputs_UsesHeroCurrentHealthDeckAndBattleSeed()
+    {
+        Tables tables = CreateTables();
+        var options = new BattleSetupOptions(
+            heroTemplateId: 1002,
+            encounterTemplateId: 5001,
+            randomSeed: 2468,
+            playerInitialHealth: 57,
+            deckTemplateId: 1001);
+
+        using BattleSession session = BattleSession.FromConfig(tables, options);
+        PlayerCombatantData player = null;
+        foreach (CombatantData combatant in session.Combatants.All.Values)
+        {
+            if (combatant is PlayerCombatantData candidate)
+                player = candidate;
+        }
+
+        Assert.That(player, Is.Not.Null);
+        Assert.That(player.TemplateId, Is.EqualTo(1002));
+        Assert.That(player.CurrentHealth, Is.EqualTo(57));
+        Assert.That(player.MaxHealth, Is.EqualTo(90));
+        Assert.That(session.CardZones.Cards.Count, Is.EqualTo(10));
+        Assert.That(session.AvailableCardTemplateIds, Is.EqualTo(new[] { 3002, 3003, 3004 }));
+        Assert.That(session.CardTargetRandomSeed, Is.EqualTo(2468u));
+    }
+
+    /// <summary>验证 Run 当前生命超过 Hero 上限时 Session 在发布前立即拒绝装配。</summary>
+    [Test]
+    public void FromConfig_WithRunHealthAboveHeroMaximum_IsRejected()
+    {
+        Tables tables = CreateTables();
+        var options = new BattleSetupOptions(
+            heroTemplateId: 1002,
+            encounterTemplateId: 5001,
+            randomSeed: 2468,
+            playerInitialHealth: 91,
+            deckTemplateId: 1002);
+
+        Assert.Throws<System.InvalidOperationException>(() => BattleSession.FromConfig(tables, options));
+    }
+
+    /// <summary>验证 Run 指定不存在的牌组模板时不会回退到 Hero 默认牌组。</summary>
+    [Test]
+    public void FromConfig_WithMissingRunDeck_IsRejectedWithoutFallback()
+    {
+        Tables tables = CreateTables();
+        var options = new BattleSetupOptions(
+            heroTemplateId: 1002,
+            encounterTemplateId: 5001,
+            randomSeed: 2468,
+            playerInitialHealth: 57,
+            deckTemplateId: 9999);
+
+        Assert.Throws<System.InvalidOperationException>(() => BattleSession.FromConfig(tables, options));
     }
 
     /// <summary>验证相同战斗种子产生完全相同的洗牌后抽牌堆。</summary>
@@ -257,6 +349,26 @@ public sealed class BattleSessionTests
         {
             CreateCount++;
             return _options;
+        }
+    }
+
+    /// <summary>legacy setup 测试不切换场景，只同步完成请求。</summary>
+    private sealed class NoOpSceneFlow : ISceneFlowService
+    {
+        /// <summary>同步完成未使用的场景切换。</summary>
+        public UniTask LoadSceneWithLoadingAsync(string targetSceneAddress)
+        {
+            return UniTask.CompletedTask;
+        }
+    }
+
+    /// <summary>legacy setup 测试不得创建新 Run，因此误调用时立即失败。</summary>
+    private sealed class UnusedRunEntropySource : IRunEntropySource
+    {
+        /// <summary>拒绝签发测试不需要的 Run 随机输入。</summary>
+        public RunEntropy Next()
+        {
+            throw new InvalidOperationException("Legacy setup must not create a Run.");
         }
     }
 

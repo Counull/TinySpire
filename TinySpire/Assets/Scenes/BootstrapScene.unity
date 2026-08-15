@@ -167,7 +167,7 @@ MonoBehaviour:
     TypeName: 
   autoRun: 1
   autoInjectGameObjects: []
-  initialSceneName: BattleScene
+  initialSceneName: RunEntryScene
   loadingSceneName: LoadingScene
 --- !u!1660057539 &9223372036854775807
 SceneRoots:

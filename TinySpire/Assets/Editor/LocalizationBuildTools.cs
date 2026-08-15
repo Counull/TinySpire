@@ -62,6 +62,28 @@ public static class LocalizationBuildTools
         "battle.ui.action.exit"
     };
 
+    private static readonly string[] RequiredRunEntryKeys =
+    {
+        "run.entry.title",
+        "run.entry.menu.start",
+        "run.entry.menu.settings",
+        "run.entry.menu.compendium",
+        "run.entry.menu.statistics",
+        "run.entry.common.back",
+        "run.entry.common.coming_soon",
+        "run.entry.settings.title",
+        "run.entry.settings.placeholder",
+        "run.entry.hero.title",
+        "run.entry.hero.confirm",
+        "run.entry.hero.future_slot",
+        "run.entry.map.title",
+        "run.entry.map.battle_node",
+        "run.entry.map.cleared",
+        "run.entry.map.health",
+        "run.entry.failure.title",
+        "run.entry.failure.restart"
+    };
+
     /// <summary>
     /// 将 Excel 翻译源表同步到 Battle Cards String Table，并立即校验结果。
     /// </summary>
@@ -110,6 +132,7 @@ public static class LocalizationBuildTools
         var requiredKeys = new HashSet<string>(RequiredKeywordKeys, StringComparer.Ordinal);
         requiredKeys.UnionWith(RequiredBattleHudKeys);
         requiredKeys.UnionWith(RequiredBattleFlowKeys);
+        requiredKeys.UnionWith(RequiredRunEntryKeys);
         foreach (JProperty cardProperty in cards.Properties())
         {
             JObject card = (JObject)cardProperty.Value;
@@ -134,6 +157,8 @@ public static class LocalizationBuildTools
                 RequireEntry(table, battleHudKey);
             foreach (string battleFlowKey in RequiredBattleFlowKeys)
                 RequireEntry(table, battleFlowKey);
+            foreach (string runEntryKey in RequiredRunEntryKeys)
+                RequireEntry(table, runEntryKey);
             ValidateParticipantNames(table, heroes, "Hero");
             ValidateParticipantNames(table, enemies, "Enemy");
 

@@ -21,7 +21,22 @@ namespace TinySpire.Battle
         /// </summary>
         public PlayerCombatantData AddPlayer(int templateId, int maxHealth, int strength)
         {
-            var player = new PlayerCombatantData(AllocateCombatantId(), templateId, maxHealth, strength);
+            return AddPlayer(templateId, maxHealth, maxHealth, strength);
+        }
+
+        /// <summary>根据 Run 当前生命与 Hero 上限创建并加入玩家参与者。</summary>
+        public PlayerCombatantData AddPlayer(
+            int templateId,
+            int currentHealth,
+            int maxHealth,
+            int strength)
+        {
+            var player = new PlayerCombatantData(
+                AllocateCombatantId(),
+                templateId,
+                currentHealth,
+                maxHealth,
+                strength);
             Add(player);
             return player;
         }

@@ -1,6 +1,7 @@
 using System;
 using DG.Tweening;
 using TinySpire.Battle;
+using TinySpire.Run;
 using UnityEngine;
 using VContainer;
 using VContainer.Unity;
@@ -267,18 +268,53 @@ namespace TinySpire.UI.Battle
             });
         }
 
-        /// <summary>把现有本地化、同地址场景流与 Application.Quit 接到当前 concrete TurnHud。</summary>
+        /// <summary>把当前 Scope 的本地化、场景流与 Run 托管状态接到 concrete TurnHud。</summary>
         private static void ConfigureProductionFlowFeedbackView(
             IObjectResolver resolver,
             BattleTurnHudView view)
         {
             LocalizationService localization = resolver.Resolve<LocalizationService>();
-            SceneFlowService sceneFlow = resolver.Resolve<SceneFlowService>();
-            GameStartupOptions startupOptions = resolver.Resolve<GameStartupOptions>();
-            view.ConfigureFlowFeedback(
+            ISceneFlowService sceneFlow = resolver.Resolve<ISceneFlowService>();
+            ConfigureFlowFeedbackView(
+                view,
                 key => localization.GetString(key),
-                () => sceneFlow.LoadSceneWithLoadingAsync(startupOptions.InitialSceneAddress),
+                sceneFlow,
+                IsRunManaged(resolver),
                 () => Application.Quit());
+        }
+
+        /// <summary>只有父 Scope 同时持有 RunFlow 与 active attempt 时才启用 Run 托管终局。</summary>
+        internal static bool IsRunManaged(IObjectResolver resolver)
+        {
+            if (resolver == null)
+                throw new ArgumentNullException(nameof(resolver));
+
+            return resolver.TryResolve(out RunFlowService flow) &&
+                   flow.HasActiveBattleInput;
+        }
+
+        /// <summary>Run 托管时隐藏旧终局动作；legacy/debug 重开固定回到 BattleScene。</summary>
+        internal static void ConfigureFlowFeedbackView(
+            BattleTurnHudView view,
+            Func<string, string> localize,
+            ISceneFlowService sceneFlow,
+            bool runManaged,
+            Action quitApplication)
+        {
+            if (view == null)
+                throw new ArgumentNullException(nameof(view));
+            if (localize == null)
+                throw new ArgumentNullException(nameof(localize));
+            if (sceneFlow == null)
+                throw new ArgumentNullException(nameof(sceneFlow));
+            if (quitApplication == null)
+                throw new ArgumentNullException(nameof(quitApplication));
+
+            view.ConfigureFlowFeedback(
+                localize,
+                () => sceneFlow.LoadSceneWithLoadingAsync(RunSceneAddresses.Battle),
+                quitApplication,
+                showLegacyTerminalActions: !runManaged);
         }
 
         /// <summary>从当前 Scope 保留延迟解析入口，避免 adapter 构造时递归创建仍依赖 Queue 的 Hand。</summary>

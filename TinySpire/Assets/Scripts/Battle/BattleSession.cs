@@ -26,10 +26,21 @@ namespace TinySpire.Battle
         /// <summary>本场确定性随机流的初始种子。</summary>
         public uint RandomSeed { get; }
 
+        /// <summary>Run 显式提供的玩家入场当前生命；旧入口未提供时为空。</summary>
+        public int? PlayerInitialHealth { get; }
+
+        /// <summary>Run 显式提供的起始牌组模板；旧入口未提供时为空。</summary>
+        public int? DeckTemplateId { get; }
+
         /// <summary>
         /// 创建战斗装配参数，并验证所有模板标识和种子均有效。
         /// </summary>
-        public BattleSetupOptions(int heroTemplateId, int encounterTemplateId, int randomSeed = 1)
+        public BattleSetupOptions(
+            int heroTemplateId,
+            int encounterTemplateId,
+            int randomSeed = 1,
+            int? playerInitialHealth = null,
+            int? deckTemplateId = null)
         {
             if (heroTemplateId <= 0)
                 throw new ArgumentOutOfRangeException(nameof(heroTemplateId));
@@ -37,10 +48,16 @@ namespace TinySpire.Battle
                 throw new ArgumentOutOfRangeException(nameof(encounterTemplateId));
             if (randomSeed <= 0)
                 throw new ArgumentOutOfRangeException(nameof(randomSeed));
+            if (playerInitialHealth.HasValue && playerInitialHealth.Value <= 0)
+                throw new ArgumentOutOfRangeException(nameof(playerInitialHealth));
+            if (deckTemplateId.HasValue && deckTemplateId.Value <= 0)
+                throw new ArgumentOutOfRangeException(nameof(deckTemplateId));
 
             HeroTemplateId = heroTemplateId;
             EncounterTemplateId = encounterTemplateId;
             RandomSeed = (uint)randomSeed;
+            PlayerInitialHealth = playerInitialHealth;
+            DeckTemplateId = deckTemplateId;
         }
     }
 
@@ -129,10 +146,17 @@ namespace TinySpire.Battle
 
             cfg.battle.Hero hero = tables.TbHero.GetOrDefault(options.HeroTemplateId)
                 ?? throw new InvalidOperationException($"Hero template {options.HeroTemplateId} does not exist.");
-            cfg.battle.Deck deck = tables.TbDeck.GetOrDefault(hero.InitialDeckId)
-                ?? throw new InvalidOperationException($"Deck template {hero.InitialDeckId} does not exist.");
+            int deckTemplateId = options.DeckTemplateId ?? hero.InitialDeckId;
+            cfg.battle.Deck deck = tables.TbDeck.GetOrDefault(deckTemplateId)
+                ?? throw new InvalidOperationException($"Deck template {deckTemplateId} does not exist.");
             cfg.battle.Encounter encounter = tables.TbEncounter.GetOrDefault(options.EncounterTemplateId)
                 ?? throw new InvalidOperationException($"Encounter template {options.EncounterTemplateId} does not exist.");
+            int playerInitialHealth = options.PlayerInitialHealth ?? hero.MaxHealth;
+            if (playerInitialHealth > hero.MaxHealth)
+            {
+                throw new InvalidOperationException(
+                    $"Player initial health {playerInitialHealth} exceeds Hero {hero.Id} max health {hero.MaxHealth}.");
+            }
 
             IReadOnlyList<int> availableCardTemplateIds =
                 BuildAvailableCardTemplateIds(tables, deck, hero.RuntimeProfile);
@@ -145,7 +169,11 @@ namespace TinySpire.Battle
                 hero.MaxAmmo,
                 hero.AmmoGainPerRound);
             var combatants = new BattleCombatantsData();
-            PlayerCombatantData player = combatants.AddPlayer(hero.Id, hero.MaxHealth, hero.BaseStrength);
+            PlayerCombatantData player = combatants.AddPlayer(
+                hero.Id,
+                playerInitialHealth,
+                hero.MaxHealth,
+                hero.BaseStrength);
             var playerResourceProfiles = new Dictionary<CombatantId, BattlePlayerResourceProfile>
             {
                 [player.Id] = playerResourceProfile,

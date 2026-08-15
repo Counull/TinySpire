@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using TinySpire.Battle;
+using TinySpire.Run;
 using TinySpire.UI.Battle;
 using UnityEngine;
 using VContainer;
@@ -10,7 +11,7 @@ public sealed class BattleLifetimeScope : LifetimeScope
 {
     [SerializeField] private int heroTemplateId = 1001;
     [SerializeField] private int encounterTemplateId = 5001;
-    // TODO(DEP-007): Replace the Inspector seed with a RunState-derived battle seed once run lifecycle exists.
+    // 保留 Inspector 值作为没有 active Run 时的 legacy/debug Battle fallback。
     [SerializeField, Min(1)] private int battleSeed = 1;
 
     /// <summary>注册本场战斗的运行时事实、权威命令队列、逐帧入口与现有只读视图。</summary>
@@ -37,6 +38,7 @@ public sealed class BattleLifetimeScope : LifetimeScope
                 resolver.Resolve<IBattleCommandPresentation>(),
                 resolver.Resolve<BattleCommandSubmissionCoordinator>()),
             Lifetime.Singleton);
+        builder.RegisterEntryPoint<BattleResultRunBridge>();
         builder.RegisterEntryPoint<BattleCommandRuntimeDriver>();
     }
 
@@ -56,6 +58,14 @@ public sealed class BattleLifetimeScope : LifetimeScope
                 if (resolver.TryResolve(
                         out IBattleSetupOptionsSource source))
                 {
+                    if (source is RunFlowService runFlow && !runFlow.HasActiveBattleInput)
+                    {
+                        return new BattleSetupOptions(
+                            defaultHeroTemplateId,
+                            defaultEncounterTemplateId,
+                            defaultBattleSeed);
+                    }
+
                     BattleSetupOptions injected = source.CreateBattleSetupOptions();
                     if (injected == null)
                     {

@@ -15,6 +15,11 @@ MonoBehaviour:
   m_GroupName: TinySpire Scenes
   m_GUID: 40b1001b1253f0548b59b412eedbde32
   m_SerializeEntries:
+  - m_GUID: 1789fc1c1db262f45b8480fc64810287
+    m_Address: Assets/Scenes/RunEntryScene.unity
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 3a9046261e611ef47818b6dc25faad7c
     m_Address: Assets/Scenes/BattleScene.unity
     m_ReadOnly: 0

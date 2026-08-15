@@ -1,7 +1,16 @@
 ---
 created: 2026-07-06
-updated: 2026-08-14
+updated: 2026-08-16
 ---
+
+## 2026-08-16 G1-A 基础入口 → 首战最小 Run 生命周期（verified，待 Theseus 审查）
+
+- 已按冻结的 G1-A Grill 与实施计划完成一个进程内最小竖切：Bootstrap 默认进入功能性 `RunEntryScene`；主菜单、设置、图鉴、统计、双 Hero 单选、临时单节点地图、失败页都在同一 Scene 内以 TMP + i18n 切换。Hero 1001/1002 都可创建单人 Run；没有实现多人队伍、存档、奖励、多节点或主动退出 Run。
+- `RunStateStore` 是跨场景 Run 事实的唯一写入所有者，冻结进战 snapshot 并签发 attempt 身份；`RunFlowService` 只编排。Battle 继续只经 `IBattleSetupOptionsSource` / `BattleSetupOptions` 取得 Hero、当前生命、牌组、Encounter 与 seed，`BattleSession` 已证明实际消费这些值。Battle → Run 只由 child Scope 的 `BattleResultRunBridge` 消费稳定、屏障后 exactly-once `BattleResult`；旧 Scope Dispose 后解除订阅。Run 模式隐藏旧 HUD Restart/Exit，legacy Battle 入口仍有 Inspector fallback。
+- 胜利通过真实 Queue 命令打完：1001 以 seed `1143371176`、30/30、Deck 1001 入战，结算 17/30；`BattleResult` 后回 `RunEntryScene`，节点 `Completed`、生命 17/30。失败也通过真实回合/敌人行动完成：1002 attempt 1 seed `768055331` 失败后恢复 snapshot 70/70；重开 attempt 2 seed `261103211`，新 Session 为 70/70、Hand 5 / Draw 7 / Discard 0 / Exhaust 0 / Power 0，未继承失败战临时状态。
+- 当前唯一 Unity 6000.5.5f1 Editor 在 Packed Play Mode / Use Existing Build 中完成 `BootstrapScene → RunEntryScene → BattleScene → RunEntryScene` 两条胜败链；设置/占位页返回、两名 Hero 选择、节点、失败重开均通过，运行时 Console Error 查询为 0。`TinySpire/Build/Sync and Build All` 成功，Addressables 15.018 秒，最新 BuildLayout `BuildError` 为空且 RunEntryScene 由 `AssetBundleProvider` 打入独立 bundle。
+- 最终完整 EditMode job `55272b6354df42b6a0f351975ab58e71` 为 **873/873 passed**、0 failed、0 skipped、24.2229056 秒；中间 RED 包含 seed 具体碰撞 0/1、RunEntry Scope 0/1、idle RunFlow legacy 1/3、生产 DI 的真实 VContainer 异常，以及禁用 Domain Reload 下重复分配默认 UI Actions 导致的 870/873，均已逐项转绿；完整套件后 View 再跑仍为 3/3。详细命令、job、构建与手测证据见 `06_testing/2026-08-16-g1a-entry-first-battle-run-lifecycle.md`；代码决定见 CD-112。
+- 当前工作区停在 `main`、HEAD `65fd7846eaf414b89987c33785879844d4c2e023`，未 commit、未 push，等待 Theseus 审查。已知非阻塞风险：CJK TMP 字体使用当前 OS 字体动态创建，当前 Windows 验收通过但仓库未携带跨平台字体资产；Scene builder 原子重试与 scene group stale 清理仍为 Editor 工具 P2。G1-A verified 不自动授权 G1 后续或 G2。
 
 ## 2026-08-14 BattleScene → Run 交接最小 seam 修复（自动门禁与 Editor 原生串行验收完成，G1 仍未开始）
 

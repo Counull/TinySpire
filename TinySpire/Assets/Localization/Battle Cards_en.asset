@@ -64,7 +64,7 @@ MonoBehaviour:
       m_Items:
       - rid: 3318493899348770842
   - m_Id: 46598512603136
-    m_Localized: Sisyphus
+    m_Localized: Warrior
     m_Metadata:
       m_Items: []
   - m_Id: 46598609072128
@@ -2645,6 +2645,79 @@ MonoBehaviour:
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
+  - m_Id: 6047014752776192
+    m_Localized: TinySpire
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913536
+    m_Localized: Start Game
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913537
+    m_Localized: Settings
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913538
+    m_Localized: Compendium
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913539
+    m_Localized: Statistics
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913540
+    m_Localized: Back
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913541
+    m_Localized: In Development
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913542
+    m_Localized: Settings
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913543
+    m_Localized: Settings layout placeholder
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913544
+    m_Localized: Choose a Hero
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913545
+    m_Localized: Start Run
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913546
+    m_Localized: Future Team Slot
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913547
+    m_Localized: Temporary Map
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913548
+    m_Localized: First Battle
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913549
+    m_Localized: Cleared
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913550
+    m_Localized: HP {current}/{max}
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 6047014798913551
+    m_Localized: Battle Failed
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913552
+    m_Localized: Restart Battle
+    m_Metadata:
+      m_Items: []
   references:
     version: 2
     RefIds:
@@ -2989,3 +3062,4 @@ MonoBehaviour:
         - id: 4654058116378649
         - id: 4654058116378651
         - id: 4654058116378652
+        - id: 6047014798913550

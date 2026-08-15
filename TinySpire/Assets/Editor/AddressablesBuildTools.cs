@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using Newtonsoft.Json.Linq;
 using TinySpire.Battle;
+using TinySpire.Run;
 using UnityEditor;
 using UnityEditor.AddressableAssets;
 using UnityEditor.AddressableAssets.Build;
@@ -28,7 +29,8 @@ public static class AddressablesBuildTools
     private static readonly string[] ScenePaths =
     {
         "Assets/Scenes/LoadingScene.unity",
-        "Assets/Scenes/BattleScene.unity"
+        RunSceneAddresses.RunEntry,
+        RunSceneAddresses.Battle
     };
 
     /// <summary>按项目稳定地址配置场景、配置、角色与牌面本地资源组。</summary>

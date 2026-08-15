@@ -2091,6 +2091,78 @@ MonoBehaviour:
     m_Key: battle.card.marine.charged_burst.upgrade_description
     m_Metadata:
       m_Items: []
+  - m_Id: 6047014752776192
+    m_Key: run.entry.title
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913536
+    m_Key: run.entry.menu.start
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913537
+    m_Key: run.entry.menu.settings
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913538
+    m_Key: run.entry.menu.compendium
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913539
+    m_Key: run.entry.menu.statistics
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913540
+    m_Key: run.entry.common.back
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913541
+    m_Key: run.entry.common.coming_soon
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913542
+    m_Key: run.entry.settings.title
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913543
+    m_Key: run.entry.settings.placeholder
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913544
+    m_Key: run.entry.hero.title
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913545
+    m_Key: run.entry.hero.confirm
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913546
+    m_Key: run.entry.hero.future_slot
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913547
+    m_Key: run.entry.map.title
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913548
+    m_Key: run.entry.map.battle_node
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913549
+    m_Key: run.entry.map.cleared
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913550
+    m_Key: run.entry.map.health
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913551
+    m_Key: run.entry.failure.title
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6047014798913552
+    m_Key: run.entry.failure.restart
+    m_Metadata:
+      m_Items: []
   m_Metadata:
     m_Items: []
   m_KeyGenerator:

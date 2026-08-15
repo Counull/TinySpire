@@ -1,6 +1,6 @@
 ---
 created: 2026-07-06
-updated: 2026-08-14
+updated: 2026-08-16
 ---
 
 # Daedalus · 代码决策记录
@@ -1242,3 +1242,15 @@ Run 规划采用递归切片门禁：每个可执行切片先处于 `needs-grill
 **边界与后续**：本决定不增加 `Abandoned`，不把 Restart / Exit / 回地图 / 奖励从 HUD 收回流程层，也不把牌组或奖励塞进当前 `BattleResult`。结果已经冻结结算后玩家身份与生命事实；但父 Scope 的生产 Run 注册、Run 根种子与战斗标识、初始 HP / 牌组输入，以及 `BattleResult → RunState` 原子写回仍需 G1 分别 Grill。因此 DEP-007 保持 open，不能宣称完整 Battle 进出契约已经完成。现有 `BattleEnded`、`BattleAlreadyEnded`、M9F 稳定面板与按钮门控不变。
 
 **架构与验收**：这是对 AC-002 已确定替换源的最小接缝实现，并遵守 AC-001/004/007/008/009；没有 reopen Locked 约定，不修改 `ARCHITECTURE_CONVENTIONS.md`。结算快照补强的 compile RED 为 6 个缺失类型 / `Players` 错误，两个精确 GREEN 均为 1/1；QueueM8D 14/14、相关 9 个 fixture 127/127、完整 EditMode 811/811、Runtime / Editor 静态编译均通过。唯一 Unity Editor 中已串行通过 Bootstrap → BattleScene、真实 Queue 胜利、HUD Restart、新 Scope 空结果、真实 Queue 失败、HUD Exit exactly-once guard、2 秒无晚到结果、零 active tween 与 Stop 后 Battle Scope 归零；Editor 未证明 Player OS 进程实际退出，只证明 HUD Exit listener 与重复提交 guard。完整任务号和排除范围见 `06_testing/2026-08-14-battlescene-to-run-seam-corrections.md`。
+
+## CD-112：G1-A 以唯一 RunState、attempt snapshot 与 child-scope Result bridge 贯通首战
+
+**问题**：G1-A 需要在 Bootstrap、入口 Scene 与 BattleScene 之间保存一局 Run 的 Hero、生命、牌组、节点和本战随机输入，同时允许失败后恢复进战前状态并用新随机输入重开。若入口 UI、静态单例或 Battle Scene 临时变量各保存一份状态，胜败与重开会产生冲突事实；若 Battle UI 直接判胜或写 Run，会绕过 CD-111 的稳定 `BattleResult` 边界；若 bridge 放在 root，又会让旧 Battle Scope 的迟到回调污染新 attempt。
+
+**选择**：`RunStateStore` 是当前进程内唯一 Run 事实写入所有者，发布完整不可变 `RunState`。每次 `BeginBattle` 先冻结 `RunBattleSnapshot`，再以 `RunId + AttemptSequence` 建立 `RunBattleId` 并签发不可变 `RunBattleInput`；`RestartBattle` 先恢复 snapshot，再递增 attempt。seed 使用正整数空间内与 `int.MaxValue` 互素的固定步进映射，保证有效 attempt 序列内不与另一 attempt 重复。`RunFlowService` 只读取配置、调用 Store 迁移并请求 SceneFlow，不保存第二份 Run 业务状态。
+
+**Battle 输入与结果**：CD-111 的 `BattleSetupOptions` 扩为可选 `PlayerInitialHealth` 与 `DeckTemplateId`，保留 legacy Inspector fallback；Run-managed Battle 把 `RunBattleInput` 的 Hero、Encounter、seed、当前生命和牌组模板一次冻结到 child Scope，`BattleSession` 实际以当前生命/最大生命创建玩家，并用指定牌组和同一 seed 建立全部既有随机域。`BattleResultRunBridge` 只注册为 `BattleLifetimeScope` child entry point，同时冻结该 Scope 的 setup/attempt 身份；只接受当前 attempt 的稳定 Result，胜利写回结算生命并完成节点，失败保留 snapshot 而不写临时生命，Dispose 时解除订阅。`AuthoritySequence` 仍只用于战内排序，不充当跨战斗身份。
+
+**入口与兼容边界**：Bootstrap root 跨 `RunEntryScene` / `BattleScene` 保留 Store、Flow 与 SceneFlow；`RunEntryLifetimeScope` 只拥有 View/Presenter。入口 View 全部使用 TMP + i18n，页面和候选 Hero 只在创建 Run 前是局部 UI 会话；Run 创建后页面完全由 `RunState.NodeStatus` 派生。程序化创建的 `InputSystemUIInputModule` 只依赖自身 `OnEnable` 分配默认 UI Actions，不再次调用 `AssignDefaultActions`，避免禁用 Domain Reload 时破坏包级共享静态状态。Run 模式保留 Battle 终局阻断面板但隐藏旧 Restart/Exit，避免与 bridge 竞争；没有 active Run 的 legacy Battle 继续使用 Inspector setup 和 BattleScene 重载地址。
+
+**边界与验收**：本决定只覆盖单人、单节点、首战胜败和失败重开；不建立存档、奖励、退出 Run、永久死亡、多节点、地图生成或多人。最终完整 EditMode job `55272b6354df42b6a0f351975ab58e71` 为 873/873，`Sync and Build All`、Packed Play Mode 的两名 Hero、胜利 17/30 回图、失败恢复 70/70、attempt seed `768055331 → 261103211` 与新 Session 空弃牌/消耗区均通过；当前 OS CJK 字体的跨平台可携带性仍是独立风险。完整证据见 `06_testing/2026-08-16-g1a-entry-first-battle-run-lifecycle.md`。

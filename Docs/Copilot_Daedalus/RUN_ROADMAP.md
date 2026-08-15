@@ -4,7 +4,7 @@ owner: Daedalus
 page_type: roadmap
 lifecycle: active
 created: 2026-08-14
-updated: 2026-08-14
+updated: 2026-08-16
 status_source: SESSION_LOG.md
 predecessor: ROADMAP.md
 note: 本文件只承担 BattleScene 之后的 Run 阶段骨架、依赖与门禁；任何阶段或切片都不因出现在本文而获得实施授权。
@@ -14,7 +14,7 @@ note: 本文件只承担 BattleScene 之后的 Run 阶段骨架、依赖与门�
 
 > **当前路线入口。** 后续任务中提到“Roadmap / 跑路线图”，默认指向本文；旧 `ROADMAP.md` 只用于追溯已冻结的 BattleScene MVP（M0～M10）。当前动态状态仍查 `SESSION_LOG.md`。
 
-> BattleScene MVP 的冻结路线见 [ROADMAP.md](ROADMAP.md)。当前动态状态只查 [SESSION_LOG.md](SESSION_LOG.md)。本路线图不是 G1 实施计划，也不是一次性需求问卷；每个实际切片都要单独 Grill、形成窄计划并获得明确授权。
+> BattleScene MVP 的冻结路线见 [ROADMAP.md](ROADMAP.md)。当前动态状态只查 [SESSION_LOG.md](SESSION_LOG.md)。G1-A 已完成独立 Grill、计划、实现和验证；这不等于整个 G1 或任何 G2+ 范围获得授权。
 
 ## 1. 当前起点与终点
 
@@ -59,18 +59,16 @@ Run MVP 的终点不是“把所有 STS 内容做完”，而是至少用一个�
 
 表中阶段结果与依赖继承自旧 Roadmap，只是下一轮问责的候选起点，不是冻结需求。当前动态状态、正在进行的阶段和下一动作一律查 [SESSION_LOG.md](SESSION_LOG.md)。
 
-## 4. G1 候选边界：只登记，不在本轮 Grill
+## 4. G1 当前状态：G1-A verified，阶段剩余范围未授权
 
-G1 的目标是证明一个 Run 能拥有跨场景生命周期，并能把一次 Battle 的输入与结果可靠地接回 Run。以下只是未来 Grill 的候选边界，不是已确认切片，也不规定实施顺序：
+G1-A「基础入口 → 角色选择 → 临时单节点地图 → 首战 → 胜利回图 / 失败可 SL 重开」已于 2026-08-16 完成真实验证：
 
-- Run 的创建、唯一身份、角色/种子最小输入与销毁语义。
-- CD-009 中前瞻的 `RunScope` / `RunFlowService` 是否仍是当前最小方案，以及它与 Bootstrap / Scene scope 的确切父子关系。
-- `RunState → BattleSession` 的输入快照与 `BattleResult → RunState` 的原子写回契约。
-- 战斗胜利后的过渡边界：直接返回地图、先进入奖励，还是需要独立的“恭喜/战后总结”表现；该界面若存在，谁拥有流程、何时允许跳过、是否承担奖励事实，都必须单独 Grill，当前不作决定。
-- 战斗失败、放弃 Run、异常退出与返回主菜单的销毁/恢复语义。
-- 主菜单第一版是否只开放新 Run，还是在 G2 存档完成前展示不可用的“继续游戏”。
+- Bootstrap 默认进入单一 `RunEntryScene`；主菜单、设置/占位页、双 Hero 单选、临时地图和失败页都在该 Scene 内切换。
+- `RunStateStore` 唯一拥有跨场景事实与 snapshot；`RunFlowService` 只编排。Battle 经现有 setup seam 消费 Hero、当前生命、牌组模板与 seed；Battle 只经稳定 `BattleResult` bridge 写回。
+- 1001 胜利后以 17/30 回图并完成节点；1002 失败后恢复 70/70 snapshot，重开签发新 attempt/new seed 且创建干净 BattleSession。
+- `Sync and Build All`、Packed Play Mode 真实 bundle 链和完整 EditMode 873/873 已通过。权威动态记录与风险见 [SESSION_LOG.md](SESSION_LOG.md)，详细证据见 [06_testing/2026-08-16-g1a-entry-first-battle-run-lifecycle.md](06_testing/2026-08-16-g1a-entry-first-battle-run-lifecycle.md)。
 
-G1 的最终阶段验收仍保持粗粒度：开始一个新 Run，进入至少一场战斗，并在战斗结束后回到 Run 流程；生命与牌组连续，退出后旧 Run 不残留。具体场景数量、UI 形状和中间页面必须由后续切片 Grill 决定。
+G1-A 明确没有实现存档、继续游戏、主动退出 Run、永久死亡、奖励、多节点/分叉、真实地图生成或 Run 结算，因此不能把本切片的 `verified` 扩张为整个 G1 已完成。任何上述后续结果都要重新提名、局部 Grill、形成窄计划并获得授权。
 
 ## 5. G2～G8 待 Grill 候选骨架
 
@@ -130,4 +128,4 @@ G1 的最终阶段验收仍保持粗粒度：开始一个新 Run，进入至少�
 
 ## 7. 下一步
 
-本轮只完成路线图换轨，不创建 G1 实施计划、不修改运行时代码、不启动 G1 Grill。下一次由用户明确选择“开始 G1 首片 Grill”后，再从第 4 节候选边界中提名一个最小结果，建立对应计划。
+先由 Theseus 审查当前未提交 G1-A 工作区。审查通过后的下一切片仍由用户从 G1 剩余边界或 G2 候选中明确提名；本次验证不自动授权存档、奖励、多节点、退出 Run 或其他扩大范围。

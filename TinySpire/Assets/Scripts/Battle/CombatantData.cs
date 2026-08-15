@@ -109,14 +109,27 @@ namespace TinySpire.Battle
 
         /// <summary>建立参与者的初始事实与对外只读响应式视图。</summary>
         protected CombatantData(CombatantId id, int templateId, int maxHealth, int strength)
+            : this(id, templateId, maxHealth, maxHealth, strength)
+        {
+        }
+
+        /// <summary>以显式当前生命建立参与者初始事实与只读响应式视图。</summary>
+        protected CombatantData(
+            CombatantId id,
+            int templateId,
+            int currentHealth,
+            int maxHealth,
+            int strength)
         {
             if (maxHealth <= 0)
                 throw new ArgumentOutOfRangeException(nameof(maxHealth));
+            if (currentHealth <= 0 || currentHealth > maxHealth)
+                throw new ArgumentOutOfRangeException(nameof(currentHealth));
 
             Id = id;
             TemplateId = templateId;
             MaxHealth = maxHealth;
-            _health = new ReactiveProperty<int>(maxHealth);
+            _health = new ReactiveProperty<int>(currentHealth);
             _strength = new ReactiveProperty<int>(strength);
             _block = new ReactiveProperty<int>(0);
             _vulnerable = new ReactiveProperty<int>(0);
@@ -255,6 +268,17 @@ namespace TinySpire.Battle
         /// <summary>由参与者聚合创建玩家实例。</summary>
         internal PlayerCombatantData(CombatantId id, int templateId, int maxHealth, int strength)
             : base(id, templateId, maxHealth, strength)
+        {
+        }
+
+        /// <summary>由参与者聚合以 Run 当前生命和 Hero 上限创建玩家实例。</summary>
+        internal PlayerCombatantData(
+            CombatantId id,
+            int templateId,
+            int currentHealth,
+            int maxHealth,
+            int strength)
+            : base(id, templateId, currentHealth, maxHealth, strength)
         {
         }
     }

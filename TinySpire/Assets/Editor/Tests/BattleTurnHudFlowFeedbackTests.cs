@@ -4,9 +4,11 @@ using Cysharp.Threading.Tasks;
 using DG.Tweening;
 using NUnit.Framework;
 using TinySpire.Battle;
+using TinySpire.Run;
 using TinySpire.UI.Battle;
 using UnityEngine;
 using UnityEngine.UI;
+using VContainer;
 
 public sealed class BattleTurnHudFlowFeedbackTests
 {
@@ -349,6 +351,174 @@ public sealed class BattleTurnHudFlowFeedbackTests
         }
     }
 
+    /// <summary>Run 托管终局仍完成稳定面板表现，但隐藏本地 Restart/Exit 且不能抢占场景流。</summary>
+    [Test]
+    public void BattleOutcome_RunManaged_HidesLegacyActionsAndKeepsPointerBlock()
+    {
+        GameObject root = null;
+        Sequence timeline = null;
+        BattleCommandPresentationTween lease = null;
+        try
+        {
+            root = new GameObject(
+                "BattleTurnHudRunOutcomeTest",
+                typeof(RectTransform),
+                typeof(BattleTurnHudView));
+            BattleTurnHudView view = root.GetComponent<BattleTurnHudView>();
+            CanvasGroup outcomePanel = CreatePanel(
+                root.transform,
+                "BattleOutcomePanel",
+                raycastTarget: true);
+            Text outcomeText = CreateText(outcomePanel.transform, "BattleOutcomeText");
+            Button restartButton = CreateButton(outcomePanel.transform, "RestartButton");
+            Text restartText = CreateText(restartButton.transform, "RestartText");
+            Button exitButton = CreateButton(outcomePanel.transform, "ExitButton");
+            Text exitText = CreateText(exitButton.transform, "ExitText");
+            SetPrivateField(view, "_battleOutcomePanel", outcomePanel);
+            SetPrivateField(view, "_battleOutcomeText", outcomeText);
+            SetPrivateField(view, "_restartButton", restartButton);
+            SetPrivateField(view, "_restartButtonText", restartText);
+            SetPrivateField(view, "_exitButton", exitButton);
+            SetPrivateField(view, "_exitButtonText", exitText);
+            int restartCount = 0;
+            int quitCount = 0;
+            view.ConfigureFlowFeedback(
+                key => $"localized:{key}",
+                () =>
+                {
+                    restartCount++;
+                    return UniTask.CompletedTask;
+                },
+                () => quitCount++,
+                showLegacyTerminalActions: false);
+
+            lease = view.CreateFlowFeedbackTween(new BattleFlowFeedbackCue(
+                BattleFlowFeedbackCueKind.BattleOutcome,
+                "battle.ui.result.victory",
+                blocksSystemPointer: true));
+            timeline = CreateAndStartTimeline(lease);
+            timeline.ManualUpdate(0.01f, 0.01f);
+
+            Assert.That(outcomePanel.gameObject.activeSelf, Is.True);
+            Assert.That(outcomePanel.blocksRaycasts, Is.True);
+            Assert.That(restartButton.gameObject.activeSelf, Is.False);
+            Assert.That(exitButton.gameObject.activeSelf, Is.False);
+            Assert.That(restartButton.interactable, Is.False);
+            Assert.That(exitButton.interactable, Is.False);
+
+            timeline.Complete(withCallbacks: true);
+            lease.Cleanup();
+            restartButton.onClick.Invoke();
+            exitButton.onClick.Invoke();
+
+            Assert.That(outcomePanel.gameObject.activeSelf, Is.True);
+            Assert.That(outcomePanel.alpha, Is.EqualTo(1f));
+            Assert.That(outcomePanel.interactable, Is.False);
+            Assert.That(outcomePanel.blocksRaycasts, Is.True);
+            Assert.That(restartCount, Is.Zero);
+            Assert.That(quitCount, Is.Zero);
+        }
+        finally
+        {
+            timeline?.Kill(complete: false);
+            lease?.Cleanup();
+            if (root != null)
+                UnityEngine.Object.DestroyImmediate(root);
+        }
+    }
+
+    /// <summary>legacy/debug 的 Restart 必须固定重载 BattleScene，不再复用 Bootstrap 初始入口。</summary>
+    [Test]
+    public void ConfigureProductionFlowFeedback_LegacyRestartAlwaysLoadsBattleScene()
+    {
+        GameObject root = null;
+        Sequence timeline = null;
+        BattleCommandPresentationTween lease = null;
+        try
+        {
+            root = new GameObject(
+                "BattleTurnHudLegacyRestartTest",
+                typeof(RectTransform),
+                typeof(BattleTurnHudView));
+            BattleTurnHudView view = root.GetComponent<BattleTurnHudView>();
+            CanvasGroup outcomePanel = CreatePanel(
+                root.transform,
+                "BattleOutcomePanel",
+                raycastTarget: true);
+            Text outcomeText = CreateText(outcomePanel.transform, "BattleOutcomeText");
+            Button restartButton = CreateButton(outcomePanel.transform, "RestartButton");
+            Text restartText = CreateText(restartButton.transform, "RestartText");
+            Button exitButton = CreateButton(outcomePanel.transform, "ExitButton");
+            Text exitText = CreateText(exitButton.transform, "ExitText");
+            SetPrivateField(view, "_battleOutcomePanel", outcomePanel);
+            SetPrivateField(view, "_battleOutcomeText", outcomeText);
+            SetPrivateField(view, "_restartButton", restartButton);
+            SetPrivateField(view, "_restartButtonText", restartText);
+            SetPrivateField(view, "_exitButton", exitButton);
+            SetPrivateField(view, "_exitButtonText", exitText);
+            var scenes = new RecordingSceneFlow();
+            BattleCommandPresentationAdapter.ConfigureFlowFeedbackView(
+                view,
+                key => key,
+                scenes,
+                runManaged: false,
+                () => { });
+
+            lease = view.CreateFlowFeedbackTween(new BattleFlowFeedbackCue(
+                BattleFlowFeedbackCueKind.BattleOutcome,
+                "battle.ui.result.defeat",
+                blocksSystemPointer: true));
+            timeline = CreateAndStartTimeline(lease);
+            timeline.Complete(withCallbacks: true);
+            restartButton.onClick.Invoke();
+
+            Assert.That(
+                scenes.LoadedAddresses,
+                Is.EqualTo(new[] { RunSceneAddresses.Battle }));
+        }
+        finally
+        {
+            timeline?.Kill(complete: false);
+            lease?.Cleanup();
+            if (root != null)
+                UnityEngine.Object.DestroyImmediate(root);
+        }
+    }
+
+    /// <summary>生产 Adapter 只有在 RunFlow 确实持有 active attempt 时才判定为 Run 托管。</summary>
+    [Test]
+    public void RunManagementDetection_RequiresActiveRunBattle()
+    {
+        using var store = new RunStateStore();
+        var scenes = new RecordingSceneFlow();
+        var flow = new RunFlowService(
+            store,
+            new ConfigService(),
+            scenes,
+            new UnusedRunEntropySource());
+        var builder = new ContainerBuilder();
+        builder.RegisterInstance(flow).AsSelf();
+        using IObjectResolver resolver = builder.Build();
+
+        Assert.That(
+            BattleCommandPresentationAdapter.IsRunManaged(resolver),
+            Is.False);
+
+        store.CreateNewRun(new RunCreationOptions(
+            new RunId(Guid.Parse("11111111-2222-3333-4444-555555555555")),
+            heroTemplateId: 1001,
+            initialHealth: 80,
+            maxHealth: 80,
+            deckTemplateId: 1001,
+            encounterTemplateId: 5001,
+            randomRootSeed: 2468u));
+        store.BeginBattle();
+
+        Assert.That(
+            BattleCommandPresentationAdapter.IsRunManaged(resolver),
+            Is.True);
+    }
+
     /// <summary>确认 Adapter 虽预构造全部 cue，仍严格先播放战斗开始覆盖层、再玩家横幅、最后一次 completion。</summary>
     [Test]
     public void Adapter_StartBattle_PlaysOverlayThenPlayerBannerBeforeSingleCompletion()
@@ -535,5 +705,30 @@ public sealed class BattleTurnHudFlowFeedbackTests
             BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.That(field, Is.Not.Null, $"Missing field {fieldName}.");
         field.SetValue(target, value);
+    }
+
+    /// <summary>记录 legacy 重开请求的稳定 BattleScene 地址。</summary>
+    private sealed class RecordingSceneFlow : ISceneFlowService
+    {
+        /// <summary>按调用顺序保存场景目标。</summary>
+        public System.Collections.Generic.List<string> LoadedAddresses { get; } =
+            new System.Collections.Generic.List<string>();
+
+        /// <summary>记录目标并同步完成测试期场景请求。</summary>
+        public UniTask LoadSceneWithLoadingAsync(string targetSceneAddress)
+        {
+            LoadedAddresses.Add(targetSceneAddress);
+            return UniTask.CompletedTask;
+        }
+    }
+
+    /// <summary>HUD 托管识别只读取已有 Run，不应签发新的 Run 随机输入。</summary>
+    private sealed class UnusedRunEntropySource : IRunEntropySource
+    {
+        /// <summary>误创建 Run 时立即使测试失败。</summary>
+        public RunEntropy Next()
+        {
+            throw new InvalidOperationException("Run management detection must not create a Run.");
+        }
     }
 }

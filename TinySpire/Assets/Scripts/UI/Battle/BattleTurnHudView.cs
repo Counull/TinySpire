@@ -53,6 +53,7 @@ namespace TinySpire.UI.Battle
         private Func<UniTask> _restartBattle;
         private Action _quitApplication;
         private bool _terminalActionSubmitted;
+        private bool _showLegacyTerminalActions = true;
 
         /// <summary>接收当前战斗事实、统一命令入口和生命周期协调器。</summary>
         [Inject]
@@ -75,7 +76,8 @@ namespace TinySpire.UI.Battle
         internal void ConfigureFlowFeedback(
             Func<string, string> localizeFlowText,
             Func<UniTask> restartBattle,
-            Action quitApplication)
+            Action quitApplication,
+            bool showLegacyTerminalActions = true)
         {
             _localizeFlowText = localizeFlowText
                 ?? throw new ArgumentNullException(nameof(localizeFlowText));
@@ -83,6 +85,7 @@ namespace TinySpire.UI.Battle
                 ?? throw new ArgumentNullException(nameof(restartBattle));
             _quitApplication = quitApplication
                 ?? throw new ArgumentNullException(nameof(quitApplication));
+            _showLegacyTerminalActions = showLegacyTerminalActions;
             HideFlowGroup(_battleStartOverlay);
             HideFlowGroup(_turnBannerGroup);
             HideBattleOutcomePanel();
@@ -236,6 +239,7 @@ namespace TinySpire.UI.Battle
                     _restartButtonText.raycastTarget = false;
                     _exitButtonText.raycastTarget = false;
                     _terminalActionSubmitted = false;
+                    SetTerminalButtonsVisible(_showLegacyTerminalActions);
                     SetTerminalButtonsInteractable(false);
                     _battleOutcomePanel.alpha = 0f;
                     _battleOutcomePanel.interactable = false;
@@ -252,9 +256,9 @@ namespace TinySpire.UI.Battle
 
                     reachedStableEnd = true;
                     _battleOutcomePanel.alpha = 1f;
-                    _battleOutcomePanel.interactable = true;
+                    _battleOutcomePanel.interactable = _showLegacyTerminalActions;
                     _battleOutcomePanel.blocksRaycasts = true;
-                    SetTerminalButtonsInteractable(true);
+                    SetTerminalButtonsInteractable(_showLegacyTerminalActions);
                 });
             return new BattleCommandPresentationTween(
                 sequence,
@@ -271,12 +275,14 @@ namespace TinySpire.UI.Battle
             if (_restartButton != null)
             {
                 _restartButton.onClick.RemoveListener(RestartBattle);
-                _restartButton.onClick.AddListener(RestartBattle);
+                if (_showLegacyTerminalActions)
+                    _restartButton.onClick.AddListener(RestartBattle);
             }
             if (_exitButton != null)
             {
                 _exitButton.onClick.RemoveListener(QuitApplication);
-                _exitButton.onClick.AddListener(QuitApplication);
+                if (_showLegacyTerminalActions)
+                    _exitButton.onClick.AddListener(QuitApplication);
             }
         }
 
@@ -301,7 +307,8 @@ namespace TinySpire.UI.Battle
         /// <summary>原子占用本地终局场景动作 guard，并同步锁定两个场景按钮。</summary>
         private bool TryBeginTerminalAction()
         {
-            if (_terminalActionSubmitted ||
+            if (!_showLegacyTerminalActions ||
+                _terminalActionSubmitted ||
                 _battleOutcomePanel == null ||
                 !_battleOutcomePanel.gameObject.activeInHierarchy ||
                 _restartButton == null ||
@@ -317,6 +324,15 @@ namespace TinySpire.UI.Battle
             return true;
         }
 
+        /// <summary>按 Battle 是否由 Run 托管切换旧终局按钮可见性。</summary>
+        private void SetTerminalButtonsVisible(bool visible)
+        {
+            if (_restartButton != null)
+                _restartButton.gameObject.SetActive(visible);
+            if (_exitButton != null)
+                _exitButton.gameObject.SetActive(visible);
+        }
+
         /// <summary>同步调整两个终局场景按钮，不改变面板对下层战斗输入的阻断。</summary>
         private void SetTerminalButtonsInteractable(bool interactable)
         {
@@ -330,6 +346,7 @@ namespace TinySpire.UI.Battle
         private void HideBattleOutcomePanel()
         {
             _terminalActionSubmitted = false;
+            SetTerminalButtonsVisible(_showLegacyTerminalActions);
             SetTerminalButtonsInteractable(false);
             HideFlowGroup(_battleOutcomePanel);
         }

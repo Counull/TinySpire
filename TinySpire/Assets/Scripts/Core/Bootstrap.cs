@@ -1,4 +1,6 @@
 using UnityEngine;
+using TinySpire.Battle;
+using TinySpire.Run;
 using VContainer;
 using VContainer.Unity;
 
@@ -8,7 +10,7 @@ using VContainer.Unity;
 /// </summary>
 public sealed class Bootstrap : LifetimeScope
 {
-    [SerializeField] private string initialSceneName = "BattleScene";
+    [SerializeField] private string initialSceneName = "RunEntryScene";
     [SerializeField] private string loadingSceneName = "LoadingScene";
 
     private BootstrapFailureView _failureView;
@@ -27,7 +29,15 @@ public sealed class Bootstrap : LifetimeScope
         builder.Register<AddressableAssetService>(Lifetime.Singleton);
         builder.Register<ConfigService>(Lifetime.Singleton);
         builder.Register<LocalizationService>(Lifetime.Singleton);
-        builder.Register<SceneFlowService>(Lifetime.Singleton);
+        builder.Register<SceneFlowService>(Lifetime.Singleton)
+            .AsSelf()
+            .As<ISceneFlowService>();
+        builder.Register<RunStateStore>(Lifetime.Singleton);
+        builder.Register<SystemRunEntropySource>(Lifetime.Singleton)
+            .As<IRunEntropySource>();
+        builder.Register<RunFlowService>(Lifetime.Singleton)
+            .AsSelf()
+            .As<IBattleSetupOptionsSource>();
         builder.RegisterInstance<IBootstrapFailurePresenter>(_failureView);
         builder.RegisterEntryPoint<GameLauncher>();
     }
