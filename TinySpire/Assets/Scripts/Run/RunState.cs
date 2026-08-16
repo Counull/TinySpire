@@ -122,6 +122,62 @@ namespace TinySpire.Run
         }
     }
 
+    /// <summary>从已验证存档恢复一份地图稳定 Run 所需的全部领域事实。</summary>
+    public sealed class RunRestoreOptions
+    {
+        public RunId RunId { get; }
+        public int HeroTemplateId { get; }
+        public int CurrentHealth { get; }
+        public int MaxHealth { get; }
+        public int DeckTemplateId { get; }
+        public int EncounterTemplateId { get; }
+        public uint RandomRootSeed { get; }
+        public RunNodeStatus NodeStatus { get; }
+        public int BattleAttemptSequence { get; }
+
+        /// <summary>冻结并验证一份不含 Battle transient 的稳定恢复输入。</summary>
+        public RunRestoreOptions(
+            RunId runId,
+            int heroTemplateId,
+            int currentHealth,
+            int maxHealth,
+            int deckTemplateId,
+            int encounterTemplateId,
+            uint randomRootSeed,
+            RunNodeStatus nodeStatus,
+            int battleAttemptSequence)
+        {
+            if (runId.Value == Guid.Empty)
+                throw new ArgumentException("Run id cannot be empty.", nameof(runId));
+            if (heroTemplateId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(heroTemplateId));
+            if (maxHealth <= 0)
+                throw new ArgumentOutOfRangeException(nameof(maxHealth));
+            if (currentHealth <= 0 || currentHealth > maxHealth)
+                throw new ArgumentOutOfRangeException(nameof(currentHealth));
+            if (deckTemplateId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(deckTemplateId));
+            if (encounterTemplateId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(encounterTemplateId));
+            if (randomRootSeed == 0)
+                throw new ArgumentOutOfRangeException(nameof(randomRootSeed));
+            if (nodeStatus != RunNodeStatus.Available && nodeStatus != RunNodeStatus.Completed)
+                throw new ArgumentOutOfRangeException(nameof(nodeStatus));
+            if (battleAttemptSequence < 0)
+                throw new ArgumentOutOfRangeException(nameof(battleAttemptSequence));
+
+            RunId = runId;
+            HeroTemplateId = heroTemplateId;
+            CurrentHealth = currentHealth;
+            MaxHealth = maxHealth;
+            DeckTemplateId = deckTemplateId;
+            EncounterTemplateId = encounterTemplateId;
+            RandomRootSeed = randomRootSeed;
+            NodeStatus = nodeStatus;
+            BattleAttemptSequence = battleAttemptSequence;
+        }
+    }
+
     /// <summary>一局 Run 内某次战斗尝试的稳定关联标识。</summary>
     public readonly struct RunBattleId : IEquatable<RunBattleId>
     {
@@ -310,6 +366,25 @@ namespace TinySpire.Run
             RandomRootSeed = options.RandomRootSeed;
             NodeStatus = RunNodeStatus.Available;
             BattleAttemptSequence = 0;
+            ActiveBattle = null;
+            BattleSnapshot = null;
+        }
+
+        /// <summary>从已验证存档输入重建一份没有 Battle transient 的稳定 RunState。</summary>
+        internal RunState(RunRestoreOptions options)
+        {
+            if (options == null)
+                throw new ArgumentNullException(nameof(options));
+
+            RunId = options.RunId;
+            HeroTemplateId = options.HeroTemplateId;
+            CurrentHealth = options.CurrentHealth;
+            MaxHealth = options.MaxHealth;
+            DeckTemplateId = options.DeckTemplateId;
+            EncounterTemplateId = options.EncounterTemplateId;
+            RandomRootSeed = options.RandomRootSeed;
+            NodeStatus = options.NodeStatus;
+            BattleAttemptSequence = options.BattleAttemptSequence;
             ActiveBattle = null;
             BattleSnapshot = null;
         }

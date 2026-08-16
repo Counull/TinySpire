@@ -1254,3 +1254,13 @@ Run 规划采用递归切片门禁：每个可执行切片先处于 `needs-grill
 **入口与兼容边界**：Bootstrap root 跨 `RunEntryScene` / `BattleScene` 保留 Store、Flow 与 SceneFlow；`RunEntryLifetimeScope` 只拥有 View/Presenter。入口 View 全部使用 TMP + i18n，页面和候选 Hero 只在创建 Run 前是局部 UI 会话；Run 创建后页面完全由 `RunState.NodeStatus` 派生。程序化创建的 `InputSystemUIInputModule` 只依赖自身 `OnEnable` 分配默认 UI Actions，不再次调用 `AssignDefaultActions`，避免禁用 Domain Reload 时破坏包级共享静态状态。Run 模式保留 Battle 终局阻断面板但隐藏旧 Restart/Exit，避免与 bridge 竞争；没有 active Run 的 legacy Battle 继续使用 Inspector setup 和 BattleScene 重载地址。
 
 **边界与验收**：本决定只覆盖单人、单节点、首战胜败和失败重开；不建立存档、奖励、退出 Run、永久死亡、多节点、地图生成或多人。最终完整 EditMode job `55272b6354df42b6a0f351975ab58e71` 为 873/873，`Sync and Build All`、Packed Play Mode 的两名 Hero、胜利 17/30 回图、失败恢复 70/70、attempt seed `768055331 → 261103211` 与新 Session 空弃牌/消耗区均通过；当前 OS CJK 字体的跨平台可携带性仍是独立风险。完整证据见 `06_testing/2026-08-16-g1a-entry-first-battle-run-lifecycle.md`。
+
+## CD-113：G2-A 以稳定态 Save Document、原子单槽 Adapter 与显式恢复编排持久化 Run
+
+**问题**：G2-A 需要跨进程保存最近成功的地图稳定态，同时禁止 Battle 中间态泄漏到磁盘，并在坏档、配置漂移或提交失败时保住旧有效 checkpoint。旧 CD-009 曾前瞻独立 RunScope，但现行 CD-112 和生产 Scene parent seam 已由 Bootstrap root 跨场景持有 Store / Flow；为本片强建新父 Scope 会同时改写两个高影响 Scene，并让“无 active Run 的主菜单如何解析入口 Flow”产生新的生命周期问题。
+
+**选择**：继续以 Bootstrap root 持有 `RunStateStore`、`RunFlowService` 和 `IRunSaveStore`，active Run 生命周期通过 Store 的显式 restore/clear 表达，不修改 Scene parent。Run 领域定义 schema v1 的 `RunSaveDocument`、严格 codec、显式 migration 入口与 save port；Document 只接受无 transient battle facts 的 `Available` / `Completed` 稳定态，并保存 Run/Hero/HP/Deck/Encounter、随机根、节点状态和 attempt 序号。恢复时按当前配置检查 Hero、Deck、Encounter 以及 Hero 最大生命兼容性；任何不兼容都在 hydrate 前类型化失败。
+
+**持久化与失败语义**：唯一生产 Adapter 位于 Infrastructure，以 `Application.persistentDataPath` 构造单槽 versioned JSON。提交先在同目录创建 temp，durable flush 后重新解析、迁移、校验并与输入等价比较；首次提交同卷 Move，已有正式档使用 `File.Replace`，任何平台/IO/校验失败都不得退化为删除旧档后覆盖。Hero 确认提交 S0；胜利只在 BattleResult 已完整结算、清除 transient 并返回地图后提交 S1；BeginBattle、战斗过程、失败和 G1 重开不调用 save port。重试复用缓存的同一 Document，不重取 entropy、不重放 BattleResult；确认退出时清除未提交内存态并恢复上一成功 checkpoint。
+
+**UI 与边界**：启动只探测存档，不自动 hydrate；Continue 是显式用户意图。有效档或不可用档阻止直接新开局并要求确认放弃；坏 JSON、非法 UTF-8、未知 schema、缺失/不兼容配置与 IO 错误禁用 Continue、显示原因，只有确认后才删除。删除有效档失败仍保留 Continue 能力。当前 Completed 节点保留 S1 并显示“节点已清除、后续内容未接入”；CD-112 的失败页、snapshot 与新 seed 重开保持原语义。本决定不授权 G3+、平台 Save Spike、平台 SDK、云存档、多槽、奖励、地图生成或永久死亡。最终完整 EditMode `0004316410dc4b1e9db8d80312499dc4` 为 947/947；Luban、本地 Addressables 构建与唯一 Editor 的 S0 / Continue / 战中不写盘 / S1 / 冷启动恢复 / 确认删除主链通过。完整证据见 `06_testing/2026-08-16-g2a-run-persistence.md`。

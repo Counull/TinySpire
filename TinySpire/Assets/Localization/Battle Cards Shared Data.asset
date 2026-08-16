@@ -2163,6 +2163,94 @@ MonoBehaviour:
     m_Key: run.entry.failure.restart
     m_Metadata:
       m_Items: []
+  - m_Id: 6156689980682240
+    m_Key: run.entry.menu.continue
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985408
+    m_Key: run.entry.common.cancel
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985409
+    m_Key: run.entry.abandon.title
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985410
+    m_Key: run.entry.abandon.message
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985411
+    m_Key: run.entry.abandon.confirm
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985412
+    m_Key: run.entry.save.issue.title
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985413
+    m_Key: run.entry.save.issue.invalid_json
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985414
+    m_Key: run.entry.save.issue.invalid_document
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985415
+    m_Key: run.entry.save.issue.unsupported_schema
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985416
+    m_Key: run.entry.save.issue.interrupted_commit
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985417
+    m_Key: run.entry.save.issue.io_failure
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985418
+    m_Key: run.entry.save.issue.missing_configuration
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985419
+    m_Key: run.entry.save.delete.title
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985420
+    m_Key: run.entry.save.delete.message
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985421
+    m_Key: run.entry.save.delete.confirm
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985422
+    m_Key: run.entry.save.delete.failed
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985423
+    m_Key: run.entry.save.commit_failed
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985424
+    m_Key: run.entry.save.retry
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985425
+    m_Key: run.entry.save.exit
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985426
+    m_Key: run.entry.save.rollback.title
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985427
+    m_Key: run.entry.save.rollback.message
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985428
+    m_Key: run.entry.save.rollback.confirm
+    m_Metadata:
+      m_Items: []
   m_Metadata:
     m_Items: []
   m_KeyGenerator:

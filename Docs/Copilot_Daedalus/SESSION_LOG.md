@@ -3,6 +3,36 @@ created: 2026-07-06
 updated: 2026-08-16
 ---
 
+## 当前 Run 路线状态（as of 2026-08-16 / `fa14889` + G2-A working tree）
+
+| 维度 | 当前事实 |
+|---|---|
+| Current phase | **G2 · completed** |
+| G1 phase | `completed`；完成依据为 G1-A `verified` |
+| Current slice | **G2-A · Run Persistence 与继续游戏** |
+| Slice status | `verified`；G2-A1 → A2 → A3 已串行完成，不存在 G2-B |
+| Next candidate action | Theseus 审阅 G2-A diff 与验证证据；G3+ 必须另行 Grill、计划和授权 |
+| Implementation authorization | G2-A 授权已完成；G3+、Platform Save Spike 与平台能力均未授权 |
+| Current acceptance evidence | `06_testing/2026-08-16-g2a-run-persistence.md` |
+
+## 2026-08-16 G2-A Run Persistence 与继续游戏（verified，待 Theseus 审查）
+
+- 先完成 seam audit：现行 CD-112 与生产 Scene parent seam 以 Bootstrap root 跨场景持有 `RunStateStore` / `RunFlowService`；CD-009 的独立 RunScope 仍是未落地前瞻。本片以 Store 的显式 restore/clear 表达 active Run 生命周期，不修改 Scene、Prefab、parentReference、asmdef 或 Battle 结算结构。领域 `Run/Map/Battle` 不接触存档 IO；既有 Battle 地址校验器使用 `System.IO.Path` 不属于存档依赖，未顺手重构。
+- G2-A1 新增 `RunSaveDocument` v1、严格 codec、显式 migration 入口、稳定态 mapper、配置兼容校验与 `IRunSaveStore` port。文档只含 Run/Hero/HP/Deck/Encounter、随机根、节点状态与 attempt 序号；`InBattle` / `Failed`、ActiveBattle、snapshot、BattleSession、卡区、敌人、队列、动画与 Unity Object 均不能进入存档。恢复除检查 Hero/Deck/Encounter ID 外，还要求存档最大生命与当前 Hero 配置一致，配置漂移会在 Continue 前类型化失败。
+- G2-A2 在 Infrastructure 新增 `persistentDataPath/run-save.json` 单槽 Adapter：同目录唯一 temp、严格 UTF-8、durable flush、重新解析/迁移/校验、首次同卷 Move、已有档 `File.Replace`；任何失败都不使用 delete+copy 覆盖旧档。坏 JSON、非法 UTF-8、未知 schema、读取/写入/替换/删除失败与残留 temp 都返回可诊断结果；Run/Map/Battle 无 `System.IO`、PlayerPrefs、WX/TT SDK 或平台 `#if` 存档依赖。
+- G2-A3 在 Hero 确认后提交 S0；胜利只在唯一 BattleResult bridge 完整结算、回到地图稳定态后提交 S1。BeginBattle、战斗过程、失败与 G1 重开不写/删/覆盖存档；Continue 只在用户点击后恢复最近成功稳定态。有效档新开局、坏档删除均需确认；commit 失败阻止推进并缓存同一 document 供重试，退出前提示并回退上一成功 checkpoint。当前唯一节点胜利后保留 S1 并显示“节点已清除、后续内容未接入”；G1 失败页/重开语义保持不变。
+- TDD 证据：A1 10/10、A2 6/6、A3 Flow 19/19、Presenter/View 25/25 和 Localization 43/43 分阶段转绿；审阅补强的非法 UTF-8、Hero 最大生命漂移、删除失败后仍可 Continue、I/O 失败保留 temp 诊断、真实二次 Replace / Move / Delete 与冷启动 Completed S1 均先红后绿。最终相关聚合 job `a287a16c93f24a66b46c27e994cdc36b` 为 115/115，审阅补丁定向 job `96604e4d2d3c400e9eac5b51516c0c1f` 为 4/4，最终完整 EditMode job `0004316410dc4b1e9db8d80312499dc4` 为 **947/947 passed**、0 failed、0 skipped、19.641 秒。
+- `DataTables/gen.bat` 成功；`TinySpire/Build/Sync and Build All` 成功，Local Addressables 构建 14.565 秒。唯一 Unity 6000.5.5f1 Editor 实走：无档 Continue 禁用 → Hero 1001 提交 S0 → 重启后确认框取消不删并 Continue → 入战期间正式档字节/时间戳与 S0 不变 → 真实 Queue 胜利后提交 S1（12/30、attempt 1）→ 再次重启恢复 Completed 与精确完成文案 → 经 UI 确认放弃并删除。各段运行时 Console error/warning 查询为 0；最终 EditMode 后仅有测试自身本地化通过日志与 Test Runner 保存结果日志，无产品异常。
+- 本片没有实现或修改 G3+、Platform Save Spike、微信/抖音 SDK、云存档、多槽、奖励、地图生成、永久死亡、Player build 或平台存档迁移。当前路径仍受 `DefaultCompany/TinySpire` 的 `persistentDataPath` 身份影响；`File.Replace` 的目标平台能力仍须在未来明确授权的 Platform Save Spike / Player 验收中验证。完整证据见 `06_testing/2026-08-16-g2a-run-persistence.md`，决定见 CD-113。未 commit、未 push、未建分支。
+
+## 2026-08-16 G1 阶段关闭 → G2 可执行路线图交接（documentation-only）
+
+- 用户明确裁决 G1-A 的 verified 结果构成 G1 阶段完成依据；当前不再从“G1 剩余范围或 G2”二选一，而是进入 G2。`fa14889` 已位于 `main` 与 `origin/main`；既有 G1-A 测试、构建和手测证据不在本轮重写或重复冒充新验证。
+- `RUN_ROADMAP.md` 已从“阶段名 + 候选问题”重写为可执行路线图：G2～G8 各自列明玩家结果、候选子切片、主要交付物、通过标准、阶段完成门槛、依赖和明确排除项；所有候选切片仍须分别 Grill、计划、授权和验收。
+- 当前工作区已有 Hermes/Pegasus 的 `design/2026-08-16-g2a-run-persistence-grill.md`，状态为 `proposed-for-plan`。Roadmap 保留 G2-A 名称，并把 Save Document、本地原子单槽、检查点/继续游戏拆成 A1～A3 串行停止点；未把它们误登记为三个已授权 Goal。
+- 本轮没有修改运行时代码、配置表、Scene/Prefab 或 Unity 资产，也没有运行 Unity、测试或 Addressables 构建。没有授权 G2 技术审计、实施计划或实现。
+- 本轮遵守所有权边界，只修改 `Docs/Copilot_Daedalus/`；根协作状态文档与 `Docs/Hermes_Pegasus/STATUS.md` 中仍有 BattleScene/G1 旧状态，需由对应 owner 后续同步，不在本轮顺手改写。
+
 ## 2026-08-16 G1-A 基础入口 → 首战最小 Run 生命周期（verified，待 Theseus 审查）
 
 - 已按冻结的 G1-A Grill 与实施计划完成一个进程内最小竖切：Bootstrap 默认进入功能性 `RunEntryScene`；主菜单、设置、图鉴、统计、双 Hero 单选、临时单节点地图、失败页都在同一 Scene 内以 TMP + i18n 切换。Hero 1001/1002 都可创建单人 Run；没有实现多人队伍、存档、奖励、多节点或主动退出 Run。

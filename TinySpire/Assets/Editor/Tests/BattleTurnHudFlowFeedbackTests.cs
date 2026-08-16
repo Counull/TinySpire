@@ -495,7 +495,8 @@ public sealed class BattleTurnHudFlowFeedbackTests
             store,
             new ConfigService(),
             scenes,
-            new UnusedRunEntropySource());
+            new UnusedRunEntropySource(),
+            new InMemoryRunSaveStore());
         var builder = new ContainerBuilder();
         builder.RegisterInstance(flow).AsSelf();
         using IObjectResolver resolver = builder.Build();

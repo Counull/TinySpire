@@ -7,6 +7,7 @@ updated: 2026-08-16
 
 ## 最新记录
 
+- [2026-08-16 G2-A Run Persistence 与继续游戏](2026-08-16-g2a-run-persistence.md) — versioned Save Document、原子单槽、S0/S1、Continue/确认删除、commit 重试与回退已完成；Luban/Local Addressables、唯一 Editor 主链与完整 EditMode 947/947 通过
 - [2026-08-16 G1-A 基础入口到首战 Run 生命周期](2026-08-16-g1a-entry-first-battle-run-lifecycle.md) — 单一 RunState/snapshot、Battle setup/result seam、RunEntryScene TMP+i18n、双 Hero、单节点、胜利 17/30 回图与失败 70/70 恢复后新 seed 重开均通过；Sync/真实 AssetBundleProvider、Packed Play 两条链、Console runtime error=0 与完整 EditMode 873/873 已收口
 - [2026-08-14 BattleScene → Run 交接最小 seam 修复验收](2026-08-14-battlescene-to-run-seam-corrections.md) — Queue-owned typed BattleResult、结算后玩家快照、屏障后 exactly-once 发布与父 Scope hero/encounter/seed 注入已完成；QueueM8D 14/14、相关 9 个 fixture 127/127、完整 EditMode 811/811，以及唯一 Editor 中的真实胜利、Restart、失败、Exit guard、无晚到结果与 Scope 归零均通过
 - [2026-08-14 BattleScene → Run 交接只读审计](2026-08-14-battlescene-to-run-audit.md) — `SAFE_TO_START_G1_GRILL`，无 P0/P1/PreG1Blocker；4 条 G1DesignInput·P2 后由所有者另行授权最小 seam 修复，B2R-203 仍为 owner open
@@ -70,6 +71,7 @@ updated: 2026-08-16
 
 ## 验证记录
 
+- [2026-08-16 G2-A Run Persistence 与继续游戏](2026-08-16-g2a-run-persistence.md) — A1/A2/A3 RED→GREEN、真实目录原子 IO、冷启动稳定态、坏档/配置/commit 失败、G1 回归与 UI 投影均覆盖；完整 EditMode 947/947，Luban / Local Addressables 与 Unity 手测通过
 - [2026-08-16 G1-A 基础入口到首战 Run 生命周期](2026-08-16-g1a-entry-first-battle-run-lifecycle.md) — RunState/snapshot/attempt seed、Battle 输入实装、child-scope Result bridge、legacy 兼容、入口/本地化/Scene/Addressables 合约均有 RED→GREEN；Packed Play 真实胜败与重开、最新 BuildLayout 和完整 EditMode 873/873 通过
 - [2026-08-14 BattleScene → Run 交接最小 seam 修复验收](2026-08-14-battlescene-to-run-seam-corrections.md) — W1/W2 精确 RED→GREEN、胜败同一 typed 结果、结算后玩家快照、重复 completion、连续 Battle、父来源单次冻结、Inspector fallback 与同/异 seed 均已覆盖；完整 811/811、Runtime/Editor 静态 0 error 与唯一 Editor 原生串行路径通过，Exit 仅证明 listener / guard、不冒充 Player OS 退出证据
 - [2026-08-14 BattleScene → Run 交接只读审计](2026-08-14-battlescene-to-run-audit.md) — 固定 `e07e39a` 产品基线与 `18d9023` Run 语义的双轴外部审计复核归档；审计本身不构成修复授权，Pegasus 漂移只等待所有者裁决

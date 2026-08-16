@@ -24,7 +24,7 @@ namespace TinySpire.UI.Run
         };
 
         internal const string RequiredEntryGlyphs =
-            "开始游戏设置图鉴统计返回开发中布局占位选择角色确认并未来队伍槽临时地图首战已完成生命战斗失败重开本关战士机枪兵";
+            "开始游戏继续设置图鉴统计返回取消开发中布局占位选择角色确认并未来队伍槽临时地图首战节点已清除后续内容未接入生命战斗失败重开本关战士机枪兵放弃当前存档前会删除不可用有效无法版本未知迁移检测写入读取引用配置缺失保存重试退出不回退上一份成功检查点若尚无将恢复永久撤销？。“”，；";
 
         private static readonly Color32 BackgroundColor = new Color32(18, 24, 36, 255);
         private static readonly Color32 SurfaceColor = new Color32(28, 38, 55, 248);
@@ -45,10 +45,14 @@ namespace TinySpire.UI.Run
         private bool _built;
 
         private TMP_Text _mainTitle;
+        private TMP_Text _continueGameText;
         private TMP_Text _startGameText;
         private TMP_Text _settingsMenuText;
         private TMP_Text _compendiumMenuText;
         private TMP_Text _statisticsMenuText;
+        private TMP_Text _saveIssueTitleText;
+        private TMP_Text _saveIssueText;
+        private Button _continueGameButton;
 
         private TMP_Text _heroTitle;
         private TMP_Text _warriorText;
@@ -80,6 +84,21 @@ namespace TinySpire.UI.Run
         private TMP_Text _failureTitle;
         private TMP_Text _failureHealth;
         private TMP_Text _restartBattleText;
+
+        private TMP_Text _confirmationTitle;
+        private TMP_Text _confirmationMessage;
+        private TMP_Text _confirmationConfirmText;
+        private TMP_Text _confirmationCancelText;
+
+        private TMP_Text _saveFailureMessage;
+        private TMP_Text _saveFailureHealth;
+        private TMP_Text _retrySaveText;
+        private TMP_Text _saveFailureExitText;
+
+        private TMP_Text _rollbackTitle;
+        private TMP_Text _rollbackMessage;
+        private TMP_Text _rollbackConfirmText;
+        private TMP_Text _rollbackCancelText;
 
         /// <summary>所有按钮被归一化后发布的唯一 UI 动作流。</summary>
         public event Action<RunEntryAction> ActionRequested;
@@ -114,10 +133,14 @@ namespace TinySpire.UI.Run
                 page.Value.SetActive(page.Key == model.Page);
 
             _mainTitle.text = model.GetText(RunEntryTextSlot.MainTitle);
+            _continueGameText.text = model.GetText(RunEntryTextSlot.ContinueGame);
+            _continueGameButton.interactable = model.ContinueEnabled;
             _startGameText.text = model.GetText(RunEntryTextSlot.StartGame);
             _settingsMenuText.text = model.GetText(RunEntryTextSlot.Settings);
             _compendiumMenuText.text = model.GetText(RunEntryTextSlot.Compendium);
             _statisticsMenuText.text = model.GetText(RunEntryTextSlot.Statistics);
+            _saveIssueTitleText.text = model.GetText(RunEntryTextSlot.SaveIssueTitle);
+            _saveIssueText.text = model.GetText(RunEntryTextSlot.SaveIssue);
 
             _heroTitle.text = model.GetText(RunEntryTextSlot.HeroTitle);
             _warriorText.text = model.GetText(RunEntryTextSlot.Hero1001Name);
@@ -159,6 +182,21 @@ namespace TinySpire.UI.Run
             _failureTitle.text = model.GetText(RunEntryTextSlot.FailureTitle);
             _failureHealth.text = model.GetText(RunEntryTextSlot.Health);
             _restartBattleText.text = model.GetText(RunEntryTextSlot.RestartBattle);
+
+            _confirmationTitle.text = model.GetText(RunEntryTextSlot.ConfirmationTitle);
+            _confirmationMessage.text = model.GetText(RunEntryTextSlot.ConfirmationMessage);
+            _confirmationConfirmText.text = model.GetText(RunEntryTextSlot.ConfirmationConfirm);
+            _confirmationCancelText.text = model.GetText(RunEntryTextSlot.Cancel);
+
+            _saveFailureMessage.text = model.GetText(RunEntryTextSlot.SaveFailureMessage);
+            _saveFailureHealth.text = model.GetText(RunEntryTextSlot.Health);
+            _retrySaveText.text = model.GetText(RunEntryTextSlot.RetrySave);
+            _saveFailureExitText.text = model.GetText(RunEntryTextSlot.Exit);
+
+            _rollbackTitle.text = model.GetText(RunEntryTextSlot.RollbackTitle);
+            _rollbackMessage.text = model.GetText(RunEntryTextSlot.RollbackMessage);
+            _rollbackConfirmText.text = model.GetText(RunEntryTextSlot.RollbackConfirm);
+            _rollbackCancelText.text = model.GetText(RunEntryTextSlot.Cancel);
         }
 
         /// <summary>仅供 EditMode 测试显式建立与 Awake 相同的 UI。</summary>
@@ -186,7 +224,7 @@ namespace TinySpire.UI.Run
                 : throw new InvalidOperationException($"Run entry button '{objectName}' does not exist.");
         }
 
-        /// <summary>建立 Canvas、事件系统及七个互斥页面；重复调用不再绑定监听。</summary>
+        /// <summary>建立 Canvas、事件系统及十个互斥页面；重复调用不再绑定监听。</summary>
         private void EnsureBuilt()
         {
             if (_built)
@@ -219,6 +257,9 @@ namespace TinySpire.UI.Run
             BuildComingSoonPage(surface, RunEntryPage.Statistics);
             BuildMapPage(surface);
             BuildFailurePage(surface);
+            BuildAbandonConfirmationPage(surface);
+            BuildSaveFailurePage(surface);
+            BuildRollbackConfirmationPage(surface);
 
             foreach (GameObject page in _pages.Values)
                 page.SetActive(false);
@@ -258,31 +299,54 @@ namespace TinySpire.UI.Run
             return canvasObject.GetComponent<RectTransform>();
         }
 
-        /// <summary>建立包含标题和四个功能入口的主菜单页。</summary>
+        /// <summary>建立包含继续、开始与既有辅助入口的主菜单页。</summary>
         private void BuildMainMenuPage(RectTransform parent)
         {
             RectTransform page = CreatePage(RunEntryPage.MainMenu, parent);
-            _mainTitle = CreateText("MainTitle", page, 52f, FontStyles.Bold, PrimaryTextColor, 250f, 700f, 80f);
+            _mainTitle = CreateText("MainTitle", page, 52f, FontStyles.Bold, PrimaryTextColor, 285f, 700f, 80f);
+            (_continueGameButton, _continueGameText) = CreateButton(
+                "ContinueGameButton",
+                page,
+                new RunEntryAction(RunEntryActionKind.ContinueGame),
+                150f);
             _startGameText = CreateButton(
                 "StartGameButton",
                 page,
                 new RunEntryAction(RunEntryActionKind.StartGame),
-                115f).label;
+                60f).label;
             _settingsMenuText = CreateButton(
                 "SettingsButton",
                 page,
                 new RunEntryAction(RunEntryActionKind.OpenSettings),
-                25f).label;
+                -30f).label;
             _compendiumMenuText = CreateButton(
                 "CompendiumButton",
                 page,
                 new RunEntryAction(RunEntryActionKind.OpenCompendium),
-                -65f).label;
+                -120f).label;
             _statisticsMenuText = CreateButton(
                 "StatisticsButton",
                 page,
                 new RunEntryAction(RunEntryActionKind.OpenStatistics),
-                -155f).label;
+                -210f).label;
+            _saveIssueText = CreateText(
+                "SaveIssue",
+                page,
+                18f,
+                FontStyles.Normal,
+                SecondaryTextColor,
+                -325f,
+                820f,
+                68f);
+            _saveIssueTitleText = CreateText(
+                "SaveIssueTitle",
+                page,
+                19f,
+                FontStyles.Bold,
+                PrimaryTextColor,
+                -275f,
+                820f,
+                34f);
         }
 
         /// <summary>建立两名可选 Hero、一个禁用未来槽位与确认/返回的角色选择页。</summary>
@@ -421,6 +485,111 @@ namespace TinySpire.UI.Run
                 page,
                 new RunEntryAction(RunEntryActionKind.RestartBattle),
                 -35f).label;
+        }
+
+        /// <summary>建立删除现有可用或不可用单槽前的明确确认页。</summary>
+        private void BuildAbandonConfirmationPage(RectTransform parent)
+        {
+            RectTransform page = CreatePage(RunEntryPage.AbandonConfirmation, parent);
+            _confirmationTitle = CreateText(
+                "ConfirmationTitle",
+                page,
+                44f,
+                FontStyles.Bold,
+                PrimaryTextColor,
+                205f,
+                760f,
+                70f);
+            _confirmationMessage = CreateText(
+                "ConfirmationMessage",
+                page,
+                26f,
+                FontStyles.Normal,
+                SecondaryTextColor,
+                75f,
+                780f,
+                130f);
+            _confirmationConfirmText = CreateButton(
+                "ConfirmAbandonButton",
+                page,
+                new RunEntryAction(RunEntryActionKind.ConfirmAbandon),
+                -80f).label;
+            _confirmationCancelText = CreateButton(
+                "AbandonCancelButton",
+                page,
+                new RunEntryAction(RunEntryActionKind.Back),
+                -175f,
+                width: 300f).label;
+        }
+
+        /// <summary>建立 checkpoint commit 失败后的重试与请求退出页。</summary>
+        private void BuildSaveFailurePage(RectTransform parent)
+        {
+            RectTransform page = CreatePage(RunEntryPage.SaveFailure, parent);
+            _saveFailureMessage = CreateText(
+                "SaveFailureMessage",
+                page,
+                46f,
+                FontStyles.Bold,
+                PrimaryTextColor,
+                205f,
+                760f,
+                74f);
+            _saveFailureHealth = CreateText(
+                "SaveFailureHealth",
+                page,
+                26f,
+                FontStyles.Normal,
+                SecondaryTextColor,
+                105f,
+                520f,
+                50f);
+            _retrySaveText = CreateButton(
+                "RetrySaveButton",
+                page,
+                new RunEntryAction(RunEntryActionKind.RetrySave),
+                -35f).label;
+            _saveFailureExitText = CreateButton(
+                "SaveFailureExitButton",
+                page,
+                new RunEntryAction(RunEntryActionKind.RequestExitAfterSaveFailure),
+                -130f,
+                width: 300f).label;
+        }
+
+        /// <summary>建立退出未保存 Run 前的回退检查点警告确认页。</summary>
+        private void BuildRollbackConfirmationPage(RectTransform parent)
+        {
+            RectTransform page = CreatePage(RunEntryPage.RollbackConfirmation, parent);
+            _rollbackTitle = CreateText(
+                "RollbackTitle",
+                page,
+                44f,
+                FontStyles.Bold,
+                PrimaryTextColor,
+                220f,
+                760f,
+                70f);
+            _rollbackMessage = CreateText(
+                "RollbackMessage",
+                page,
+                25f,
+                FontStyles.Normal,
+                SecondaryTextColor,
+                70f,
+                800f,
+                190f);
+            _rollbackConfirmText = CreateButton(
+                "ConfirmRollbackButton",
+                page,
+                new RunEntryAction(RunEntryActionKind.ConfirmRollback),
+                -105f).label;
+            _rollbackCancelText = CreateButton(
+                "RollbackCancelButton",
+                page,
+                new RunEntryAction(RunEntryActionKind.Back),
+                -200f,
+                width: 300f).label;
         }
 
         /// <summary>创建一个铺满内容面的互斥页面。</summary>

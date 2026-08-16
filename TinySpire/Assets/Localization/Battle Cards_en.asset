@@ -2702,7 +2702,7 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 6047014798913549
-    m_Localized: Cleared
+    m_Localized: Node cleared; later content is not connected yet
     m_Metadata:
       m_Items: []
   - m_Id: 6047014798913550
@@ -2716,6 +2716,98 @@ MonoBehaviour:
       m_Items: []
   - m_Id: 6047014798913552
     m_Localized: Restart Battle
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156689980682240
+    m_Localized: Continue
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985408
+    m_Localized: Cancel
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985409
+    m_Localized: Abandon current Run?
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985410
+    m_Localized: The current save will be deleted before starting a new Run.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985411
+    m_Localized: Abandon Run
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985412
+    m_Localized: Save Unavailable
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985413
+    m_Localized: The save file contains invalid JSON. Continue is unavailable.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985414
+    m_Localized: The save data is incomplete or invalid. Continue is unavailable.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985415
+    m_Localized: This save version is unknown or cannot be migrated. Continue is
+      unavailable.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985416
+    m_Localized: An interrupted save was detected. Continue is unavailable.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985417
+    m_Localized: The save could not be read. Continue is unavailable.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985418
+    m_Localized: The save references missing {kind} configuration ID {id}. Continue
+      is unavailable.
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 6156690051985419
+    m_Localized: Delete unusable save?
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985420
+    m_Localized: This save will be permanently deleted. This cannot be undone.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985421
+    m_Localized: Delete Save
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985422
+    m_Localized: The save could not be deleted. Retry or cancel.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985423
+    m_Localized: Save failed. Retry.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985424
+    m_Localized: Retry Save
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985425
+    m_Localized: Exit
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985426
+    m_Localized: Exit without saving?
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985427
+    m_Localized: If you exit now, Continue will return to the last successfully saved
+      map checkpoint. If no checkpoint was saved, this Run cannot be recovered.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 6156690051985428
+    m_Localized: Exit and Roll Back
     m_Metadata:
       m_Items: []
   references:
@@ -3063,3 +3155,4 @@ MonoBehaviour:
         - id: 4654058116378651
         - id: 4654058116378652
         - id: 6047014798913550
+        - id: 6156690051985418

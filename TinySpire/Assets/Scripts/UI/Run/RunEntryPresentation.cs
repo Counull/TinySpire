@@ -21,6 +21,9 @@ namespace TinySpire.UI.Run
         Statistics,
         Map,
         Failure,
+        AbandonConfirmation,
+        SaveFailure,
+        RollbackConfirmation,
     }
 
     /// <summary>入口 View 可提交给 Presenter 的有限动作集合。</summary>
@@ -35,6 +38,11 @@ namespace TinySpire.UI.Run
         ConfirmHero,
         EnterBattle,
         RestartBattle,
+        ContinueGame,
+        ConfirmAbandon,
+        RetrySave,
+        RequestExitAfterSaveFailure,
+        ConfirmRollback,
     }
 
     /// <summary>入口投影中每个 TMP 文本的稳定槽位。</summary>
@@ -60,6 +68,19 @@ namespace TinySpire.UI.Run
         Health,
         FailureTitle,
         RestartBattle,
+        ContinueGame,
+        Cancel,
+        ConfirmationTitle,
+        ConfirmationMessage,
+        ConfirmationConfirm,
+        SaveIssueTitle,
+        SaveIssue,
+        SaveFailureMessage,
+        RetrySave,
+        Exit,
+        RollbackTitle,
+        RollbackMessage,
+        RollbackConfirm,
     }
 
     /// <summary>View 发出的单个不可变入口动作；只有选择动作携带 Hero 模板标识。</summary>
@@ -111,6 +132,9 @@ namespace TinySpire.UI.Run
         /// <summary>唯一战斗节点是否已经完成。</summary>
         public bool BattleNodeCompleted { get; }
 
+        /// <summary>主菜单继续游戏按钮是否可用。</summary>
+        public bool ContinueEnabled { get; }
+
         /// <summary>冻结当前页面、交互状态与全部本地化文本。</summary>
         public RunEntryViewModel(
             RunEntryPage page,
@@ -118,7 +142,8 @@ namespace TinySpire.UI.Run
             int? selectedHeroTemplateId,
             bool confirmEnabled,
             bool battleNodeInteractable,
-            bool battleNodeCompleted)
+            bool battleNodeCompleted,
+            bool continueEnabled = false)
         {
             if (texts == null)
                 throw new ArgumentNullException(nameof(texts));
@@ -128,6 +153,7 @@ namespace TinySpire.UI.Run
             ConfirmEnabled = confirmEnabled;
             BattleNodeInteractable = battleNodeInteractable;
             BattleNodeCompleted = battleNodeCompleted;
+            ContinueEnabled = continueEnabled;
             _texts = new ReadOnlyDictionary<RunEntryTextSlot, string>(
                 new Dictionary<RunEntryTextSlot, string>(texts));
         }
@@ -160,6 +186,7 @@ namespace TinySpire.UI.Run
 
         private const string MainTitleKey = "run.entry.title";
         private const string StartGameKey = "run.entry.menu.start";
+        private const string ContinueGameKey = "run.entry.menu.continue";
         private const string SettingsKey = "run.entry.menu.settings";
         private const string CompendiumKey = "run.entry.menu.compendium";
         private const string StatisticsKey = "run.entry.menu.statistics";
@@ -176,6 +203,28 @@ namespace TinySpire.UI.Run
         private const string HealthKey = "run.entry.map.health";
         private const string FailureTitleKey = "run.entry.failure.title";
         private const string RestartBattleKey = "run.entry.failure.restart";
+        private const string CancelKey = "run.entry.common.cancel";
+        private const string AbandonTitleKey = "run.entry.abandon.title";
+        private const string AbandonMessageKey = "run.entry.abandon.message";
+        private const string AbandonConfirmKey = "run.entry.abandon.confirm";
+        private const string DeleteTitleKey = "run.entry.save.delete.title";
+        private const string DeleteMessageKey = "run.entry.save.delete.message";
+        private const string DeleteConfirmKey = "run.entry.save.delete.confirm";
+        private const string SaveIssueTitleKey = "run.entry.save.issue.title";
+        private const string InvalidJsonKey = "run.entry.save.issue.invalid_json";
+        private const string InvalidDocumentKey = "run.entry.save.issue.invalid_document";
+        private const string UnsupportedSchemaKey = "run.entry.save.issue.unsupported_schema";
+        private const string InterruptedCommitKey = "run.entry.save.issue.interrupted_commit";
+        private const string IoFailureKey = "run.entry.save.issue.io_failure";
+        private const string MissingConfigurationKey =
+            "run.entry.save.issue.missing_configuration";
+        private const string DeleteFailedKey = "run.entry.save.delete.failed";
+        private const string CommitFailedKey = "run.entry.save.commit_failed";
+        private const string RetrySaveKey = "run.entry.save.retry";
+        private const string ExitKey = "run.entry.save.exit";
+        private const string RollbackTitleKey = "run.entry.save.rollback.title";
+        private const string RollbackMessageKey = "run.entry.save.rollback.message";
+        private const string RollbackConfirmKey = "run.entry.save.rollback.confirm";
 
         private readonly IRunEntryView _view;
         private readonly RunStateStore _store;
@@ -235,8 +284,10 @@ namespace TinySpire.UI.Run
 
             _initialized = true;
             _view.ActionRequested += HandleAction;
+            _flow.PersistenceChanged += HandlePersistenceChanged;
             _stateSubscription = _store.State.Subscribe(_ => Render());
             _localeSubscription = _localeChanges.Subscribe(_ => Render());
+            _flow.RefreshSaveAvailability();
             Render();
         }
 
@@ -248,7 +299,10 @@ namespace TinySpire.UI.Run
 
             _disposed = true;
             if (_initialized)
+            {
                 _view.ActionRequested -= HandleAction;
+                _flow.PersistenceChanged -= HandlePersistenceChanged;
+            }
             _stateSubscription?.Dispose();
             _localeSubscription?.Dispose();
         }
@@ -274,9 +328,16 @@ namespace TinySpire.UI.Run
             switch (action.Kind)
             {
                 case RunEntryActionKind.StartGame when _localPage == RunEntryPage.MainMenu:
-                    _localPage = RunEntryPage.HeroSelection;
+                    _localPage = _flow.Persistence.HasStoredData
+                        ? RunEntryPage.AbandonConfirmation
+                        : RunEntryPage.HeroSelection;
                     _selectedHeroTemplateId = null;
                     Render();
+                    break;
+                case RunEntryActionKind.ContinueGame
+                    when _localPage == RunEntryPage.MainMenu &&
+                         _flow.Persistence.CanContinue:
+                    _flow.ContinueSavedRun();
                     break;
                 case RunEntryActionKind.OpenSettings when _localPage == RunEntryPage.MainMenu:
                     _localPage = RunEntryPage.Settings;
@@ -302,6 +363,15 @@ namespace TinySpire.UI.Run
                     when _localPage == RunEntryPage.HeroSelection && _selectedHeroTemplateId.HasValue:
                     _flow.CreateNewRun(_selectedHeroTemplateId.Value);
                     break;
+                case RunEntryActionKind.ConfirmAbandon
+                    when _localPage == RunEntryPage.AbandonConfirmation:
+                    RunSaveDeleteResult delete = _flow.AbandonSavedRun();
+                    _localPage = delete.Status == RunSaveDeleteStatus.Success
+                        ? RunEntryPage.HeroSelection
+                        : RunEntryPage.MainMenu;
+                    _selectedHeroTemplateId = null;
+                    Render();
+                    break;
             }
         }
 
@@ -318,6 +388,31 @@ namespace TinySpire.UI.Run
                      state.NodeStatus == RunNodeStatus.Failed)
             {
                 _flow.RestartFailedBattleAsync().Forget();
+            }
+            else if (action.Kind == RunEntryActionKind.RetrySave &&
+                     _flow.Persistence.Status == RunPersistenceStatus.CommitFailed)
+            {
+                _flow.RetryPendingCommit();
+            }
+            else if (action.Kind == RunEntryActionKind.RequestExitAfterSaveFailure &&
+                     _flow.Persistence.Status == RunPersistenceStatus.CommitFailed)
+            {
+                _localPage = RunEntryPage.RollbackConfirmation;
+                Render();
+            }
+            else if (action.Kind == RunEntryActionKind.Back &&
+                     _localPage == RunEntryPage.RollbackConfirmation)
+            {
+                _localPage = RunEntryPage.SaveFailure;
+                Render();
+            }
+            else if (action.Kind == RunEntryActionKind.ConfirmRollback &&
+                     _flow.Persistence.Status == RunPersistenceStatus.CommitFailed)
+            {
+                _localPage = RunEntryPage.MainMenu;
+                _selectedHeroTemplateId = null;
+                _flow.ExitPendingRunToMenu();
+                Render();
             }
         }
 
@@ -340,7 +435,9 @@ namespace TinySpire.UI.Run
             RunState state = _store.Current;
             RunEntryPage page = ResolvePage(state);
             bool nodeCompleted = state?.NodeStatus == RunNodeStatus.Completed;
-            bool nodeInteractable = state?.NodeStatus == RunNodeStatus.Available;
+            bool nodeInteractable = state?.NodeStatus == RunNodeStatus.Available &&
+                                    _flow.Persistence.Status != RunPersistenceStatus.CommitPending &&
+                                    _flow.Persistence.Status != RunPersistenceStatus.CommitFailed;
             int? selectedHero = state == null ? _selectedHeroTemplateId : state.HeroTemplateId;
             var texts = BuildTexts(state);
 
@@ -352,7 +449,10 @@ namespace TinySpire.UI.Run
                                 page == RunEntryPage.HeroSelection &&
                                 _selectedHeroTemplateId.HasValue,
                 battleNodeInteractable: nodeInteractable,
-                battleNodeCompleted: nodeCompleted));
+                battleNodeCompleted: nodeCompleted,
+                continueEnabled: state == null &&
+                                 page == RunEntryPage.MainMenu &&
+                                 _flow.Persistence.CanContinue));
         }
 
         /// <summary>让 RunState 决定地图或失败页；尚未创建 Run 时才使用场景内导航。</summary>
@@ -360,6 +460,13 @@ namespace TinySpire.UI.Run
         {
             if (state == null)
                 return _localPage;
+
+            if (_flow.Persistence.Status == RunPersistenceStatus.CommitFailed)
+            {
+                return _localPage == RunEntryPage.RollbackConfirmation
+                    ? RunEntryPage.RollbackConfirmation
+                    : RunEntryPage.SaveFailure;
+            }
 
             return state.NodeStatus == RunNodeStatus.Failed
                 ? RunEntryPage.Failure
@@ -380,11 +487,15 @@ namespace TinySpire.UI.Run
                 ["current"] = state?.CurrentHealth ?? 0,
                 ["max"] = state?.MaxHealth ?? 0,
             };
+            bool deletingUnusableSave = _flow.Persistence.HasStoredData &&
+                                        !_flow.Persistence.CanContinue;
+            string saveIssue = BuildSaveIssueText();
 
             return new Dictionary<RunEntryTextSlot, string>
             {
                 [RunEntryTextSlot.MainTitle] = Localize(MainTitleKey),
                 [RunEntryTextSlot.StartGame] = Localize(StartGameKey),
+                [RunEntryTextSlot.ContinueGame] = Localize(ContinueGameKey),
                 [RunEntryTextSlot.Settings] = Localize(SettingsKey),
                 [RunEntryTextSlot.Compendium] = Localize(CompendiumKey),
                 [RunEntryTextSlot.Statistics] = Localize(StatisticsKey),
@@ -403,7 +514,63 @@ namespace TinySpire.UI.Run
                 [RunEntryTextSlot.Health] = _localize(HealthKey, healthArguments),
                 [RunEntryTextSlot.FailureTitle] = Localize(FailureTitleKey),
                 [RunEntryTextSlot.RestartBattle] = Localize(RestartBattleKey),
+                [RunEntryTextSlot.Cancel] = Localize(CancelKey),
+                [RunEntryTextSlot.ConfirmationTitle] = Localize(
+                    deletingUnusableSave ? DeleteTitleKey : AbandonTitleKey),
+                [RunEntryTextSlot.ConfirmationMessage] = Localize(
+                    deletingUnusableSave ? DeleteMessageKey : AbandonMessageKey),
+                [RunEntryTextSlot.ConfirmationConfirm] = Localize(
+                    deletingUnusableSave ? DeleteConfirmKey : AbandonConfirmKey),
+                [RunEntryTextSlot.SaveIssueTitle] = saveIssue.Length == 0
+                    ? string.Empty
+                    : Localize(SaveIssueTitleKey),
+                [RunEntryTextSlot.SaveIssue] = saveIssue,
+                [RunEntryTextSlot.SaveFailureMessage] = Localize(CommitFailedKey),
+                [RunEntryTextSlot.RetrySave] = Localize(RetrySaveKey),
+                [RunEntryTextSlot.Exit] = Localize(ExitKey),
+                [RunEntryTextSlot.RollbackTitle] = Localize(RollbackTitleKey),
+                [RunEntryTextSlot.RollbackMessage] = Localize(RollbackMessageKey),
+                [RunEntryTextSlot.RollbackConfirm] = Localize(RollbackConfirmKey),
             };
+        }
+
+        /// <summary>把类型化存档故障转换为玩家可见的当前语言说明。</summary>
+        private string BuildSaveIssueText()
+        {
+            switch (_flow.Persistence.Status)
+            {
+                case RunPersistenceStatus.InvalidJson:
+                    return Localize(InvalidJsonKey);
+                case RunPersistenceStatus.InvalidDocument:
+                    return Localize(InvalidDocumentKey);
+                case RunPersistenceStatus.UnsupportedSchema:
+                    return Localize(UnsupportedSchemaKey);
+                case RunPersistenceStatus.InterruptedCommit:
+                    return Localize(InterruptedCommitKey);
+                case RunPersistenceStatus.IoFailure:
+                    return Localize(IoFailureKey);
+                case RunPersistenceStatus.DeleteFailed:
+                    return Localize(DeleteFailedKey);
+                case RunPersistenceStatus.MissingHeroTemplate:
+                case RunPersistenceStatus.MissingDeckTemplate:
+                case RunPersistenceStatus.MissingEncounterTemplate:
+                    return _localize(
+                        MissingConfigurationKey,
+                        new Dictionary<string, object>
+                        {
+                            ["kind"] = _flow.Persistence.MissingConfigurationKind,
+                            ["id"] = _flow.Persistence.MissingConfigurationId ?? 0,
+                        });
+                default:
+                    return string.Empty;
+            }
+        }
+
+        /// <summary>存档状态变化时重建当前入口页面投影。</summary>
+        private void HandlePersistenceChanged()
+        {
+            if (!_disposed)
+                Render();
         }
 
         /// <summary>读取无 Smart 参数的当前语言文本。</summary>

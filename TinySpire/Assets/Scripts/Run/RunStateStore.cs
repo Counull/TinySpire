@@ -33,6 +33,36 @@ namespace TinySpire.Run
             return Current;
         }
 
+        /// <summary>只在没有 active Run 时发布一份已验证的地图稳定读档状态。</summary>
+        public RunState RestoreRun(RunRestoreOptions options)
+        {
+            if (options == null)
+                throw new ArgumentNullException(nameof(options));
+            if (Current != null)
+                throw new InvalidOperationException("An active run already exists.");
+
+            Publish(new RunState(options));
+            return Current;
+        }
+
+        /// <summary>只在没有战斗暂存事实的稳定页显式销毁当前进程 Run。</summary>
+        public void ClearStableRun()
+        {
+            RunState state = Current;
+            if (state == null)
+                return;
+            if (state.ActiveBattle != null ||
+                state.BattleSnapshot != null ||
+                (state.NodeStatus != RunNodeStatus.Available &&
+                 state.NodeStatus != RunNodeStatus.Completed))
+            {
+                throw new InvalidOperationException(
+                    "Only a map-stable Run can be cleared outside battle.");
+            }
+
+            _state.Value = null;
+        }
+
         /// <summary>从唯一可进入节点冻结恢复快照，并签发新的单场战斗输入。</summary>
         public RunBattleInput BeginBattle()
         {

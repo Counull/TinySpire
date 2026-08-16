@@ -121,7 +121,8 @@ public sealed class BattleResultRunBridgeTests
             store,
             () => null,
             scenes,
-            new UnusedRunEntropySource());
+            new UnusedRunEntropySource(),
+            new InMemoryRunSaveStore());
     }
 
     /// <summary>创建与测试 Run Hero 对应的单玩家稳定战斗结果。</summary>

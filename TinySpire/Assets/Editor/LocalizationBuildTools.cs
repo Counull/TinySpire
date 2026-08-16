@@ -81,7 +81,29 @@ public static class LocalizationBuildTools
         "run.entry.map.cleared",
         "run.entry.map.health",
         "run.entry.failure.title",
-        "run.entry.failure.restart"
+        "run.entry.failure.restart",
+        "run.entry.menu.continue",
+        "run.entry.common.cancel",
+        "run.entry.abandon.title",
+        "run.entry.abandon.message",
+        "run.entry.abandon.confirm",
+        "run.entry.save.issue.title",
+        "run.entry.save.issue.invalid_json",
+        "run.entry.save.issue.invalid_document",
+        "run.entry.save.issue.unsupported_schema",
+        "run.entry.save.issue.interrupted_commit",
+        "run.entry.save.issue.io_failure",
+        "run.entry.save.issue.missing_configuration",
+        "run.entry.save.delete.title",
+        "run.entry.save.delete.message",
+        "run.entry.save.delete.confirm",
+        "run.entry.save.delete.failed",
+        "run.entry.save.commit_failed",
+        "run.entry.save.retry",
+        "run.entry.save.exit",
+        "run.entry.save.rollback.title",
+        "run.entry.save.rollback.message",
+        "run.entry.save.rollback.confirm"
     };
 
     /// <summary>

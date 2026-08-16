@@ -1,5 +1,6 @@
 using UnityEngine;
 using TinySpire.Battle;
+using TinySpire.Infrastructure.Persistence;
 using TinySpire.Run;
 using VContainer;
 using VContainer.Unity;
@@ -33,6 +34,8 @@ public sealed class Bootstrap : LifetimeScope
             .AsSelf()
             .As<ISceneFlowService>();
         builder.Register<RunStateStore>(Lifetime.Singleton);
+        builder.RegisterInstance<IRunSaveStore>(
+            new AtomicJsonRunSaveStore(Application.persistentDataPath));
         builder.Register<SystemRunEntropySource>(Lifetime.Singleton)
             .As<IRunEntropySource>();
         builder.Register<RunFlowService>(Lifetime.Singleton)

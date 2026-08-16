@@ -21,6 +21,16 @@ namespace TinySpire.Run
         private readonly Func<Tables> _tablesProvider;
         private readonly ISceneFlowService _scenes;
         private readonly IRunEntropySource _entropy;
+        private readonly IRunSaveStore _saveStore;
+
+        private RunSaveDocument _continuableDocument;
+        private RunSaveDocument _pendingCommitDocument;
+
+        /// <summary>存档发现、校验与提交状态变化时通知当前入口 Presenter。</summary>
+        public event Action PersistenceChanged;
+
+        /// <summary>当前单槽对 UI 可见的不可变状态。</summary>
+        public RunPersistenceState Persistence { get; private set; }
 
         /// <summary>当前是否确有一份可由 Battle child Scope 冻结的 Run attempt。</summary>
         internal bool HasActiveBattleInput
@@ -40,27 +50,39 @@ namespace TinySpire.Run
             RunStateStore store,
             ConfigService configs,
             ISceneFlowService scenes,
-            IRunEntropySource entropy)
-            : this(store, CreateTablesProvider(configs), scenes, entropy)
+            IRunEntropySource entropy,
+            IRunSaveStore saveStore)
+            : this(store, CreateTablesProvider(configs), scenes, entropy, saveStore)
         {
         }
 
-        /// <summary>以显式配置表提供器建立可在 EditMode 直接验证的 Run 编排。</summary>
+        /// <summary>以显式配置与存档 port 建立可验证完整检查点语义的 Run 编排。</summary>
         internal RunFlowService(
             RunStateStore store,
             Func<Tables> tablesProvider,
             ISceneFlowService scenes,
-            IRunEntropySource entropy)
+            IRunEntropySource entropy,
+            IRunSaveStore saveStore)
         {
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _tablesProvider = tablesProvider ?? throw new ArgumentNullException(nameof(tablesProvider));
             _scenes = scenes ?? throw new ArgumentNullException(nameof(scenes));
             _entropy = entropy ?? throw new ArgumentNullException(nameof(entropy));
+            _saveStore = saveStore ?? throw new ArgumentNullException(nameof(saveStore));
+            Persistence = RunPersistenceState.Unchecked();
         }
 
         /// <summary>从两名冻结候选 Hero 的配置创建唯一新 Run，不触发额外场景切换。</summary>
         public RunState CreateNewRun(int heroTemplateId)
         {
+            if (Persistence.Status == RunPersistenceStatus.Unchecked)
+                RefreshSaveAvailability();
+            if (Persistence.HasStoredData)
+            {
+                throw new InvalidOperationException(
+                    "The stored Run must be explicitly abandoned before creating a new Run.");
+            }
+
             if (heroTemplateId != 1001 && heroTemplateId != 1002)
                 throw new ArgumentOutOfRangeException(nameof(heroTemplateId));
 
@@ -73,7 +95,7 @@ namespace TinySpire.Run
                 throw new InvalidOperationException($"Encounter template {EncounterTemplateId} does not exist.");
 
             RunEntropy entropy = _entropy.Next();
-            return _store.CreateNewRun(new RunCreationOptions(
+            RunState created = _store.CreateNewRun(new RunCreationOptions(
                 entropy.RunId,
                 hero.Id,
                 hero.MaxHealth,
@@ -81,11 +103,21 @@ namespace TinySpire.Run
                 hero.InitialDeckId,
                 EncounterTemplateId,
                 entropy.RandomRootSeed));
+            BeginCheckpointCommit(RunSaveDocumentMapper.Create(created));
+            CommitPendingCheckpoint();
+            return created;
         }
 
         /// <summary>冻结进战 snapshot 与本战输入后，请求进入既有 BattleScene。</summary>
         public async UniTask<RunBattleInput> EnterBattleNodeAsync()
         {
+            if (Persistence.Status == RunPersistenceStatus.CommitPending ||
+                Persistence.Status == RunPersistenceStatus.CommitFailed)
+            {
+                throw new InvalidOperationException(
+                    "The current stable checkpoint must be saved before entering battle.");
+            }
+
             RunBattleInput input = _store.BeginBattle();
             await _scenes.LoadSceneWithLoadingAsync(RunSceneAddresses.Battle);
             return input;
@@ -144,12 +176,15 @@ namespace TinySpire.Run
             switch (result.Kind)
             {
                 case BattleResultKind.Victory:
-                    _store.ApplyVictory(
+                    RunState completed = _store.ApplyVictory(
                         battleId,
                         player.TemplateId,
                         player.Health,
                         player.MaxHealth);
-                    break;
+                    BeginCheckpointCommit(RunSaveDocumentMapper.Create(completed));
+                    await _scenes.LoadSceneWithLoadingAsync(RunSceneAddresses.RunEntry);
+                    CommitPendingCheckpoint();
+                    return;
                 case BattleResultKind.Defeat:
                     _store.RecordDefeat(
                         battleId,
@@ -162,6 +197,244 @@ namespace TinySpire.Run
             }
 
             await _scenes.LoadSceneWithLoadingAsync(RunSceneAddresses.RunEntry);
+        }
+
+        /// <summary>在没有 active Run 时发现并配置校验最近成功的地图检查点，但不自动 hydrate。</summary>
+        public RunPersistenceState RefreshSaveAvailability()
+        {
+            if (_store.Current != null ||
+                Persistence.Status == RunPersistenceStatus.CommitPending ||
+                Persistence.Status == RunPersistenceStatus.CommitFailed)
+            {
+                return Persistence;
+            }
+
+            RunSaveLoadResult load = _saveStore.Load();
+            _continuableDocument = null;
+            switch (load.Status)
+            {
+                case RunSaveLoadStatus.NotFound:
+                    SetPersistence(RunPersistenceState.NotFound());
+                    break;
+                case RunSaveLoadStatus.Success:
+                    ApplyLoadedDocument(load);
+                    break;
+                case RunSaveLoadStatus.InvalidJson:
+                    SetPersistence(RunPersistenceState.Unavailable(
+                        RunPersistenceStatus.InvalidJson,
+                        load.Detail,
+                        load.HasStoredData,
+                        load.HasPendingTemporaryFile));
+                    break;
+                case RunSaveLoadStatus.InvalidDocument:
+                    SetPersistence(RunPersistenceState.Unavailable(
+                        RunPersistenceStatus.InvalidDocument,
+                        load.Detail,
+                        load.HasStoredData,
+                        load.HasPendingTemporaryFile));
+                    break;
+                case RunSaveLoadStatus.UnsupportedSchema:
+                    SetPersistence(RunPersistenceState.Unavailable(
+                        RunPersistenceStatus.UnsupportedSchema,
+                        load.Detail,
+                        load.HasStoredData,
+                        load.HasPendingTemporaryFile));
+                    break;
+                case RunSaveLoadStatus.InterruptedCommit:
+                    SetPersistence(RunPersistenceState.Unavailable(
+                        RunPersistenceStatus.InterruptedCommit,
+                        load.Detail,
+                        load.HasStoredData,
+                        load.HasPendingTemporaryFile));
+                    break;
+                case RunSaveLoadStatus.IoFailure:
+                    SetPersistence(RunPersistenceState.Unavailable(
+                        RunPersistenceStatus.IoFailure,
+                        load.Detail,
+                        load.HasStoredData,
+                        load.HasPendingTemporaryFile));
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(load.Status), load.Status, null);
+            }
+
+            return Persistence;
+        }
+
+        /// <summary>只在玩家明确选择 Continue 后把已验证文档恢复到唯一 RunStateStore。</summary>
+        public RunState ContinueSavedRun()
+        {
+            if (!Persistence.CanContinue || _continuableDocument == null)
+                throw new InvalidOperationException("No validated Run checkpoint is available to continue.");
+            if (_store.Current != null)
+                throw new InvalidOperationException("An active Run already exists.");
+
+            RunSaveRestoreResult restore = RunSaveDocumentMapper.CreateRestore(
+                _continuableDocument,
+                new TablesRunSaveConfigurationCatalog(RequireTables()));
+            if (restore.Status != RunSaveRestoreStatus.Success)
+            {
+                SetRestoreFailure(restore, _continuableDocument);
+                throw new InvalidOperationException(restore.Detail);
+            }
+
+            return _store.RestoreRun(restore.Options);
+        }
+
+        /// <summary>仅在 UI 已取得玩家确认后删除单槽；失败时保留原数据与当前状态。</summary>
+        public RunSaveDeleteResult AbandonSavedRun()
+        {
+            if (_store.Current != null)
+                throw new InvalidOperationException("An active Run cannot be deleted from the cold-start menu.");
+
+            bool canContinueAfterFailure = Persistence.CanContinue &&
+                                           _continuableDocument != null;
+            bool hadPendingTemporaryFile = Persistence.HasPendingTemporaryFile;
+            RunSaveDeleteResult result = _saveStore.Delete();
+            if (result.Status == RunSaveDeleteStatus.Success)
+            {
+                _continuableDocument = null;
+                SetPersistence(RunPersistenceState.NotFound());
+            }
+            else
+            {
+                SetPersistence(RunPersistenceState.DeleteFailed(
+                    result.Detail,
+                    canContinueAfterFailure,
+                    hadPendingTemporaryFile));
+            }
+
+            return result;
+        }
+
+        /// <summary>重试已缓存的同一 S0/S1 文档，不重放结果、不重取 entropy。</summary>
+        public RunSaveCommitResult RetryPendingCommit()
+        {
+            if (Persistence.Status != RunPersistenceStatus.CommitFailed ||
+                _pendingCommitDocument == null)
+            {
+                throw new InvalidOperationException("No failed Run checkpoint is available to retry.");
+            }
+
+            SetPersistence(RunPersistenceState.CommitPending(Persistence.HasStoredData));
+            return CommitPendingCheckpoint();
+        }
+
+        /// <summary>仅在玩家确认回退警告后丢弃内存未保存进度，并重新发现上一成功档。</summary>
+        public void ExitPendingRunToMenu()
+        {
+            if (Persistence.Status != RunPersistenceStatus.CommitFailed)
+                throw new InvalidOperationException("The current Run does not have a failed checkpoint commit.");
+
+            _pendingCommitDocument = null;
+            _continuableDocument = null;
+            _store.ClearStableRun();
+            SetPersistence(RunPersistenceState.Unchecked());
+            RefreshSaveAvailability();
+        }
+
+        /// <summary>配置校验成功后缓存可继续文档；失败时只发布类型化原因。</summary>
+        private void ApplyLoadedDocument(RunSaveLoadResult load)
+        {
+            RunSaveRestoreResult restore = RunSaveDocumentMapper.CreateRestore(
+                load.Document,
+                new TablesRunSaveConfigurationCatalog(RequireTables()));
+            if (restore.Status != RunSaveRestoreStatus.Success)
+            {
+                SetRestoreFailure(
+                    restore,
+                    load.Document,
+                    load.HasPendingTemporaryFile);
+                return;
+            }
+
+            _continuableDocument = load.Document;
+            SetPersistence(RunPersistenceState.Available(
+                load.HasPendingTemporaryFile,
+                load.Detail));
+        }
+
+        /// <summary>把配置引用失败映射为 UI 可区分且禁止 Continue 的状态。</summary>
+        private void SetRestoreFailure(
+            RunSaveRestoreResult restore,
+            RunSaveDocument document,
+            bool hasPendingTemporaryFile = false)
+        {
+            RunPersistenceStatus status;
+            string missingKind = null;
+            int? missingId = null;
+            switch (restore.Status)
+            {
+                case RunSaveRestoreStatus.InvalidDocument:
+                    status = RunPersistenceStatus.InvalidDocument;
+                    break;
+                case RunSaveRestoreStatus.MissingHeroTemplate:
+                    status = RunPersistenceStatus.MissingHeroTemplate;
+                    missingKind = "Hero";
+                    missingId = document?.HeroTemplateId;
+                    break;
+                case RunSaveRestoreStatus.MissingDeckTemplate:
+                    status = RunPersistenceStatus.MissingDeckTemplate;
+                    missingKind = "Deck";
+                    missingId = document?.DeckTemplateId;
+                    break;
+                case RunSaveRestoreStatus.MissingEncounterTemplate:
+                    status = RunPersistenceStatus.MissingEncounterTemplate;
+                    missingKind = "Encounter";
+                    missingId = document?.EncounterTemplateId;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(restore.Status), restore.Status, null);
+            }
+
+            _continuableDocument = null;
+            SetPersistence(RunPersistenceState.Unavailable(
+                status,
+                restore.Detail,
+                hasStoredData: true,
+                hasPendingTemporaryFile: hasPendingTemporaryFile,
+                missingConfigurationKind: missingKind,
+                missingConfigurationId: missingId));
+        }
+
+        /// <summary>缓存本次完整稳定文档并先发布阻断推进的 Pending 状态。</summary>
+        private void BeginCheckpointCommit(RunSaveDocument document)
+        {
+            _pendingCommitDocument = document
+                ?? throw new ArgumentNullException(nameof(document));
+            SetPersistence(RunPersistenceState.CommitPending(Persistence.HasStoredData));
+        }
+
+        /// <summary>提交缓存的同一稳定文档，并保留失败文档供明确重试。</summary>
+        private RunSaveCommitResult CommitPendingCheckpoint()
+        {
+            if (_pendingCommitDocument == null)
+                throw new InvalidOperationException("No pending Run checkpoint exists.");
+
+            RunSaveDocument document = _pendingCommitDocument;
+            RunSaveCommitResult result = _saveStore.Commit(document);
+            if (result.Status == RunSaveCommitStatus.Success)
+            {
+                _pendingCommitDocument = null;
+                _continuableDocument = document;
+                SetPersistence(RunPersistenceState.Available(
+                    hasPendingTemporaryFile: false));
+                return result;
+            }
+
+            RunSaveLoadResult fallback = _saveStore.Load();
+            SetPersistence(RunPersistenceState.CommitFailed(
+                result.Detail,
+                fallback.HasStoredData,
+                fallback.HasPendingTemporaryFile));
+            return result;
+        }
+
+        /// <summary>替换存档状态并同步通知当前场景 Presenter。</summary>
+        private void SetPersistence(RunPersistenceState state)
+        {
+            Persistence = state ?? throw new ArgumentNullException(nameof(state));
+            PersistenceChanged?.Invoke();
         }
 
         /// <summary>从已初始化配置服务创建延迟读取表格的生产提供器。</summary>
@@ -192,6 +465,44 @@ namespace TinySpire.Run
             }
 
             return state.ActiveBattle;
+        }
+    }
+
+    /// <summary>以当前 Luban 表实现读档所需的稳定配置 ID 存在性目录。</summary>
+    internal sealed class TablesRunSaveConfigurationCatalog : IRunSaveConfigurationCatalog
+    {
+        private readonly Tables _tables;
+
+        /// <summary>冻结一次已初始化的配置表引用。</summary>
+        public TablesRunSaveConfigurationCatalog(Tables tables)
+        {
+            _tables = tables ?? throw new ArgumentNullException(nameof(tables));
+        }
+
+        /// <summary>判断 Hero 模板是否仍存在。</summary>
+        public bool HeroExists(int templateId)
+        {
+            return _tables.TbHero.GetOrDefault(templateId) != null;
+        }
+
+        /// <summary>读取已确认存在的 Hero 当前生命上限。</summary>
+        public int GetHeroMaxHealth(int templateId)
+        {
+            cfg.battle.Hero hero = _tables.TbHero.GetOrDefault(templateId)
+                ?? throw new InvalidOperationException($"Hero template {templateId} does not exist.");
+            return hero.MaxHealth;
+        }
+
+        /// <summary>判断 Deck 模板是否仍存在。</summary>
+        public bool DeckExists(int templateId)
+        {
+            return _tables.TbDeck.GetOrDefault(templateId) != null;
+        }
+
+        /// <summary>判断 Encounter 模板是否仍存在。</summary>
+        public bool EncounterExists(int templateId)
+        {
+            return _tables.TbEncounter.GetOrDefault(templateId) != null;
         }
     }
 }

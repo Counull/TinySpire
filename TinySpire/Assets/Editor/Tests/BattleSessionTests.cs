@@ -87,7 +87,8 @@ public sealed class BattleSessionTests
             store,
             new ConfigService(),
             new NoOpSceneFlow(),
-            new UnusedRunEntropySource());
+            new UnusedRunEntropySource(),
+            new InMemoryRunSaveStore());
         var parentBuilder = new ContainerBuilder();
         parentBuilder.RegisterInstance(flow)
             .AsSelf()

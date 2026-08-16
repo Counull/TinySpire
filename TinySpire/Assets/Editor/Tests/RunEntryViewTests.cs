@@ -11,6 +11,71 @@ using UnityEngine.UI;
 
 public sealed class RunEntryViewTests
 {
+    /// <summary>主菜单继续按钮按 ViewModel 启用，并只发布一次 ContinueGame 意图。</summary>
+    [Test]
+    public void RenderMainMenu_EnabledContinueButton_EmitsContinueAction()
+    {
+        var root = new GameObject("RunEntryViewRoot");
+        try
+        {
+            var view = root.AddComponent<RunEntryView>();
+            view.BuildForTesting();
+            var actions = new List<RunEntryAction>();
+            view.ActionRequested += actions.Add;
+
+            view.Render(CreateModel(
+                RunEntryPage.MainMenu,
+                selectedHeroTemplateId: null,
+                confirmEnabled: false,
+                nodeInteractable: false,
+                nodeCompleted: false,
+                continueEnabled: true));
+
+            Button continueButton = view.GetButtonForTesting("ContinueGameButton");
+            Assert.That(continueButton.interactable, Is.True);
+            continueButton.onClick.Invoke();
+
+            Assert.That(actions, Has.Count.EqualTo(1));
+            Assert.That(actions[0].Kind, Is.EqualTo(RunEntryActionKind.ContinueGame));
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(root);
+        }
+    }
+
+    /// <summary>主菜单没有可恢复检查点时继续按钮必须禁用，直接调用也不得发布动作。</summary>
+    [Test]
+    public void RenderMainMenu_DisabledContinueButton_DoesNotEmitAction()
+    {
+        var root = new GameObject("RunEntryViewRoot");
+        try
+        {
+            var view = root.AddComponent<RunEntryView>();
+            view.BuildForTesting();
+            var actions = new List<RunEntryAction>();
+            view.ActionRequested += actions.Add;
+
+            view.Render(CreateModel(
+                RunEntryPage.MainMenu,
+                selectedHeroTemplateId: null,
+                confirmEnabled: false,
+                nodeInteractable: false,
+                nodeCompleted: false,
+                continueEnabled: false));
+
+            Button continueButton = view.GetButtonForTesting("ContinueGameButton");
+            Assert.That(continueButton.interactable, Is.False);
+            continueButton.onClick.Invoke();
+
+            Assert.That(actions, Is.Empty);
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(root);
+        }
+    }
+
     /// <summary>运行时几何入口必须只使用 TMP 文本，并创建可工作的 Input System UI 事件链。</summary>
     [Test]
     public void Build_CreatesTmpOnlyUiAndInputSystemEventModule()
@@ -99,6 +164,62 @@ public sealed class RunEntryViewTests
         }
     }
 
+    /// <summary>新增确认与存档故障页保持互斥，关键按钮每次点击只发布一个确定动作。</summary>
+    [TestCase(
+        RunEntryPage.AbandonConfirmation,
+        "ConfirmAbandonButton",
+        RunEntryActionKind.ConfirmAbandon)]
+    [TestCase(
+        RunEntryPage.SaveFailure,
+        "RetrySaveButton",
+        RunEntryActionKind.RetrySave)]
+    [TestCase(
+        RunEntryPage.SaveFailure,
+        "SaveFailureExitButton",
+        RunEntryActionKind.RequestExitAfterSaveFailure)]
+    [TestCase(
+        RunEntryPage.RollbackConfirmation,
+        "ConfirmRollbackButton",
+        RunEntryActionKind.ConfirmRollback)]
+    public void RenderPersistencePage_ActivatesOnlyTargetAndEmitsActionOnce(
+        RunEntryPage targetPage,
+        string buttonName,
+        RunEntryActionKind expectedAction)
+    {
+        var root = new GameObject("RunEntryViewRoot");
+        try
+        {
+            var view = root.AddComponent<RunEntryView>();
+            view.BuildForTesting();
+            var actions = new List<RunEntryAction>();
+            view.ActionRequested += actions.Add;
+
+            view.Render(CreateModel(
+                targetPage,
+                selectedHeroTemplateId: 1001,
+                confirmEnabled: false,
+                nodeInteractable: false,
+                nodeCompleted: false));
+
+            foreach (RunEntryPage page in Enum.GetValues(typeof(RunEntryPage)))
+            {
+                Assert.That(
+                    view.GetPageForTesting(page).activeSelf,
+                    Is.EqualTo(page == targetPage),
+                    page.ToString());
+            }
+
+            view.GetButtonForTesting(buttonName).onClick.Invoke();
+
+            Assert.That(actions, Has.Count.EqualTo(1));
+            Assert.That(actions[0].Kind, Is.EqualTo(expectedAction));
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(root);
+        }
+    }
+
     /// <summary>完成地图节点必须显示已完成文案且不可点击；失败页只暴露重开动作。</summary>
     [Test]
     public void RenderCompletedMapAndFailure_AppliesFrozenInteractionState()
@@ -122,7 +243,7 @@ public sealed class RunEntryViewTests
             Assert.That(node.interactable, Is.False);
             Assert.That(
                 node.GetComponentInChildren<TMP_Text>(true).text,
-                Is.EqualTo("Cleared"));
+                Is.EqualTo("节点已清除、后续内容未接入"));
             node.onClick.Invoke();
             Assert.That(actions, Is.Empty);
 
@@ -149,11 +270,18 @@ public sealed class RunEntryViewTests
         int? selectedHeroTemplateId,
         bool confirmEnabled,
         bool nodeInteractable,
-        bool nodeCompleted)
+        bool nodeCompleted,
+        bool continueEnabled = false)
     {
         var texts = new Dictionary<RunEntryTextSlot, string>();
         foreach (RunEntryTextSlot slot in Enum.GetValues(typeof(RunEntryTextSlot)))
-            texts.Add(slot, slot == RunEntryTextSlot.Cleared ? "Cleared" : slot.ToString());
+        {
+            texts.Add(
+                slot,
+                slot == RunEntryTextSlot.Cleared
+                    ? "节点已清除、后续内容未接入"
+                    : slot.ToString());
+        }
 
         return new RunEntryViewModel(
             page,
@@ -161,6 +289,7 @@ public sealed class RunEntryViewTests
             selectedHeroTemplateId,
             confirmEnabled,
             nodeInteractable,
-            nodeCompleted);
+            nodeCompleted,
+            continueEnabled);
     }
 }

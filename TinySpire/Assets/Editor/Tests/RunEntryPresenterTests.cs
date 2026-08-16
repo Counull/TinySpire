@@ -12,6 +12,246 @@ using UnityEngine.Localization;
 
 public sealed class RunEntryPresenterTests
 {
+    /// <summary>冷启动发现有效档时仍停留主菜单，只有玩家点继续才 hydrate 并进入地图。</summary>
+    [Test]
+    public void ColdStartValidSave_EnablesContinueAndHydratesOnlyAfterAction()
+    {
+        using var store = new RunStateStore();
+        using var localeChanges = new Subject<Locale>();
+        var saves = new InMemoryRunSaveStore();
+        saves.Commit(new RunSaveDocument(
+            RunSaveDocument.CurrentSchemaVersion,
+            "13572468-2468-1357-2468-135724681357",
+            heroTemplateId: 1001,
+            currentHealth: 46,
+            maxHealth: 80,
+            deckTemplateId: 1001,
+            encounterTemplateId: 5001,
+            randomRootSeed: 919191u,
+            RunSaveNodeStatus.Available,
+            battleAttemptSequence: 0));
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            CreateFlow(store, new RecordingSceneFlow(), randomRootSeed: 1u, saves),
+            CreateTables,
+            Localize,
+            localeChanges);
+
+        presenter.Initialize();
+
+        Assert.That(store.Current, Is.Null);
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.MainMenu));
+        Assert.That(view.LastModel.ContinueEnabled, Is.True);
+
+        view.Emit(new RunEntryAction(RunEntryActionKind.ContinueGame));
+
+        Assert.That(store.Current, Is.Not.Null);
+        Assert.That(store.Current.CurrentHealth, Is.EqualTo(46));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Map));
+    }
+
+    /// <summary>有效单槽存在时新开局必须先确认放弃；取消不删档，确认后才进入角色选择。</summary>
+    [Test]
+    public void ValidSave_StartGame_RequiresConfirmedAbandonBeforeHeroSelection()
+    {
+        using var store = new RunStateStore();
+        using var localeChanges = new Subject<Locale>();
+        var saves = new ScriptedRunSaveStore(CreateSaveDocument());
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            CreateFlow(store, new RecordingSceneFlow(), randomRootSeed: 11u, saves),
+            CreateTables,
+            Localize,
+            localeChanges);
+
+        presenter.Initialize();
+        view.Emit(new RunEntryAction(RunEntryActionKind.StartGame));
+
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.AbandonConfirmation));
+        Assert.That(saves.DeleteCount, Is.Zero);
+
+        view.Emit(new RunEntryAction(RunEntryActionKind.Back));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.MainMenu));
+        Assert.That(saves.DeleteCount, Is.Zero);
+        Assert.That(saves.Load().Status, Is.EqualTo(RunSaveLoadStatus.Success));
+
+        view.Emit(new RunEntryAction(RunEntryActionKind.StartGame));
+        view.Emit(new RunEntryAction(RunEntryActionKind.ConfirmAbandon));
+
+        Assert.That(saves.DeleteCount, Is.EqualTo(1));
+        Assert.That(saves.Load().Status, Is.EqualTo(RunSaveLoadStatus.NotFound));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.HeroSelection));
+        Assert.That(store.Current, Is.Null);
+    }
+
+    /// <summary>不可恢复单槽必须禁用继续并显示类型化说明；同样只有玩家确认后才删除。</summary>
+    [TestCase("invalid_json", "run.entry.save.issue.invalid_json")]
+    [TestCase("unsupported_schema", "run.entry.save.issue.unsupported_schema")]
+    [TestCase("missing_config", "Missing Hero 9999")]
+    public void UnusableSave_DisablesContinueExplainsIssueAndDeletesOnlyAfterConfirmation(
+        string issueKind,
+        string expectedIssue)
+    {
+        using var store = new RunStateStore();
+        using var localeChanges = new Subject<Locale>();
+        ScriptedRunSaveStore saves;
+        switch (issueKind)
+        {
+            case "invalid_json":
+                saves = new ScriptedRunSaveStore(RunSaveLoadResult.Failed(
+                    RunSaveLoadStatus.InvalidJson,
+                    "Malformed JSON.",
+                    hasStoredData: true));
+                break;
+            case "unsupported_schema":
+                saves = new ScriptedRunSaveStore(RunSaveLoadResult.Failed(
+                    RunSaveLoadStatus.UnsupportedSchema,
+                    "Schema 99 cannot be migrated.",
+                    hasStoredData: true));
+                break;
+            case "missing_config":
+                saves = new ScriptedRunSaveStore(CreateSaveDocument(heroTemplateId: 9999));
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(issueKind));
+        }
+
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            CreateFlow(store, new RecordingSceneFlow(), randomRootSeed: 12u, saves),
+            CreateTables,
+            Localize,
+            localeChanges);
+
+        presenter.Initialize();
+
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.MainMenu));
+        Assert.That(view.LastModel.ContinueEnabled, Is.False);
+        Assert.That(view.LastModel.GetText(RunEntryTextSlot.SaveIssue), Is.EqualTo(expectedIssue));
+        Assert.That(saves.DeleteCount, Is.Zero);
+
+        view.Emit(new RunEntryAction(RunEntryActionKind.StartGame));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.AbandonConfirmation));
+        Assert.That(saves.DeleteCount, Is.Zero);
+
+        view.Emit(new RunEntryAction(RunEntryActionKind.Back));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.MainMenu));
+        Assert.That(saves.DeleteCount, Is.Zero);
+
+        view.Emit(new RunEntryAction(RunEntryActionKind.StartGame));
+        view.Emit(new RunEntryAction(RunEntryActionKind.ConfirmAbandon));
+
+        Assert.That(saves.DeleteCount, Is.EqualTo(1));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.HeroSelection));
+    }
+
+    /// <summary>S0 提交失败必须阻止推进；重试提交同一 Run 后返回地图且不重取身份或随机输入。</summary>
+    [Test]
+    public void InitialCommitFailure_RetrySave_ReturnsSameRunToMap()
+    {
+        using var store = new RunStateStore();
+        using var localeChanges = new Subject<Locale>();
+        var saves = new ScriptedRunSaveStore();
+        saves.EnqueueCommitResult(RunSaveCommitResult.Failed(
+            RunSaveCommitStatus.IoFailure,
+            "Injected commit failure."));
+        saves.EnqueueCommitResult(RunSaveCommitResult.Succeeded());
+        var entropy = new CountingRunEntropySource(new RunEntropy(
+            new RunId(Guid.Parse("12345678-90ab-cdef-1234-567890abcdef")),
+            13u));
+        var flow = new RunFlowService(
+            store,
+            CreateTables,
+            new RecordingSceneFlow(),
+            entropy,
+            saves);
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            flow,
+            CreateTables,
+            Localize,
+            localeChanges);
+
+        presenter.Initialize();
+        view.Emit(new RunEntryAction(RunEntryActionKind.StartGame));
+        view.Emit(new RunEntryAction(RunEntryActionKind.SelectHero, 1001));
+        view.Emit(new RunEntryAction(RunEntryActionKind.ConfirmHero));
+        RunState failedRun = store.Current;
+
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.SaveFailure));
+        Assert.That(view.LastModel.BattleNodeInteractable, Is.False);
+        Assert.That(saves.CommitCount, Is.EqualTo(1));
+        Assert.That(entropy.NextCount, Is.EqualTo(1));
+
+        view.Emit(new RunEntryAction(RunEntryActionKind.RetrySave));
+
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Map));
+        Assert.That(view.LastModel.BattleNodeInteractable, Is.True);
+        Assert.That(store.Current, Is.SameAs(failedRun));
+        Assert.That(saves.CommitCount, Is.EqualTo(2));
+        Assert.That(saves.CommittedDocuments[1], Is.SameAs(saves.CommittedDocuments[0]));
+        Assert.That(entropy.NextCount, Is.EqualTo(1));
+    }
+
+    /// <summary>S1 提交失败退出前必须二次确认；取消保留未保存 Run，确认才回到上一成功检查点。</summary>
+    [Test]
+    public async System.Threading.Tasks.Task CompletedCommitFailure_ExitRequiresConfirmationAndReturnsPreviousCheckpoint()
+    {
+        using var store = new RunStateStore();
+        using var localeChanges = new Subject<Locale>();
+        RunSaveDocument previousCheckpoint = CreateSaveDocument();
+        var saves = new ScriptedRunSaveStore(previousCheckpoint);
+        saves.EnqueueCommitResult(RunSaveCommitResult.Failed(
+            RunSaveCommitStatus.IoFailure,
+            "Injected S1 failure."));
+        var scenes = new RecordingSceneFlow();
+        var flow = CreateFlow(store, scenes, randomRootSeed: 14u, saves);
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            flow,
+            CreateTables,
+            Localize,
+            localeChanges);
+
+        presenter.Initialize();
+        view.Emit(new RunEntryAction(RunEntryActionKind.ContinueGame));
+        view.Emit(new RunEntryAction(RunEntryActionKind.EnterBattle));
+        RunBattleId battleId = flow.BindBattleAttempt(flow.CreateBattleSetupOptions());
+        await flow.HandleBattleResultAsync(
+            battleId,
+            CreateBattleResult(BattleResultKind.Victory, heroTemplateId: 1001, health: 30, maxHealth: 80));
+        RunState unsavedCompletedRun = store.Current;
+
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.SaveFailure));
+        Assert.That(unsavedCompletedRun.NodeStatus, Is.EqualTo(RunNodeStatus.Completed));
+
+        view.Emit(new RunEntryAction(RunEntryActionKind.RequestExitAfterSaveFailure));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.RollbackConfirmation));
+
+        view.Emit(new RunEntryAction(RunEntryActionKind.Back));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.SaveFailure));
+        Assert.That(store.Current, Is.SameAs(unsavedCompletedRun));
+        Assert.That(saves.Load().Document, Is.SameAs(previousCheckpoint));
+
+        view.Emit(new RunEntryAction(RunEntryActionKind.RequestExitAfterSaveFailure));
+        view.Emit(new RunEntryAction(RunEntryActionKind.ConfirmRollback));
+
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.MainMenu));
+        Assert.That(view.LastModel.ContinueEnabled, Is.True);
+        Assert.That(store.Current, Is.Null);
+        Assert.That(saves.Load().Document, Is.SameAs(previousCheckpoint));
+    }
+
     /// <summary>主菜单进入角色选择后，两名配置 Hero 都可分别确认并创建对应的单角色 Run。</summary>
     [TestCase(1001)]
     [TestCase(1002)]
@@ -179,6 +419,9 @@ public sealed class RunEntryPresenterTests
         Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Map));
         Assert.That(view.LastModel.BattleNodeCompleted, Is.True);
         Assert.That(view.LastModel.BattleNodeInteractable, Is.False);
+        Assert.That(
+            view.LastModel.GetText(RunEntryTextSlot.Cleared),
+            Is.EqualTo("v0:节点已清除、后续内容未接入"));
 
         view.Emit(new RunEntryAction(RunEntryActionKind.EnterBattle));
         localizationVersion = 1;
@@ -227,7 +470,8 @@ public sealed class RunEntryPresenterTests
     private static RunFlowService CreateFlow(
         RunStateStore store,
         RecordingSceneFlow scenes,
-        uint randomRootSeed)
+        uint randomRootSeed,
+        IRunSaveStore saveStore = null)
     {
         return new RunFlowService(
             store,
@@ -235,7 +479,8 @@ public sealed class RunEntryPresenterTests
             scenes,
             new FixedRunEntropySource(new RunEntropy(
                 new RunId(Guid.Parse("12345678-90ab-cdef-1234-567890abcdef")),
-                randomRootSeed)));
+                randomRootSeed)),
+            saveStore ?? new InMemoryRunSaveStore());
     }
 
     /// <summary>创建两名候选 Hero、两副起始牌组与唯一遭遇的最小 Luban 表。</summary>
@@ -269,9 +514,32 @@ public sealed class RunEntryPresenterTests
                 return "Machine Gunner";
             case "run.entry.map.health":
                 return $"HP {arguments["current"]}/{arguments["max"]}";
+            case "run.entry.map.cleared":
+                return "节点已清除、后续内容未接入";
+            case "run.entry.save.issue.missing_configuration":
+                return $"Missing {arguments["kind"]} {arguments["id"]}";
             default:
                 return key;
         }
+    }
+
+    /// <summary>创建一份可恢复的稳定 S0 文档，允许单独替换引用 ID 制造失配。</summary>
+    private static RunSaveDocument CreateSaveDocument(
+        int heroTemplateId = 1001,
+        int deckTemplateId = 1001,
+        int encounterTemplateId = 5001)
+    {
+        return new RunSaveDocument(
+            RunSaveDocument.CurrentSchemaVersion,
+            "13572468-2468-1357-2468-135724681357",
+            heroTemplateId,
+            currentHealth: 46,
+            maxHealth: 80,
+            deckTemplateId,
+            encounterTemplateId,
+            randomRootSeed: 919191u,
+            RunSaveNodeStatus.Available,
+            battleAttemptSequence: 0);
     }
 
     /// <summary>冻结一个单玩家稳定 BattleResult，模拟队列完成表现后的唯一发布。</summary>
@@ -350,6 +618,104 @@ public sealed class RunEntryPresenterTests
         public RunEntropy Next()
         {
             return _entropy;
+        }
+    }
+
+    /// <summary>记录 entropy 请求次数，证明存档重试不会偷偷创建第二个 Run。</summary>
+    private sealed class CountingRunEntropySource : IRunEntropySource
+    {
+        private readonly RunEntropy _entropy;
+
+        /// <summary>累计业务请求随机根输入的次数。</summary>
+        public int NextCount { get; private set; }
+
+        /// <summary>保存每次应返回的同一确定输入。</summary>
+        public CountingRunEntropySource(RunEntropy entropy)
+        {
+            _entropy = entropy;
+        }
+
+        /// <summary>记录请求并返回确定输入。</summary>
+        public RunEntropy Next()
+        {
+            NextCount++;
+            return _entropy;
+        }
+    }
+
+    /// <summary>以脚本化 load/commit/delete 结果验证 Presenter 的系统边界行为。</summary>
+    private sealed class ScriptedRunSaveStore : IRunSaveStore
+    {
+        private readonly Queue<RunSaveCommitResult> _commitResults =
+            new Queue<RunSaveCommitResult>();
+        private RunSaveDocument _document;
+        private RunSaveLoadResult _forcedLoadResult;
+
+        /// <summary>累计 commit 调用次数。</summary>
+        public int CommitCount { get; private set; }
+
+        /// <summary>累计玩家确认后的 delete 调用次数。</summary>
+        public int DeleteCount { get; private set; }
+
+        /// <summary>记录每次提交的文档引用，供重试身份断言。</summary>
+        public List<RunSaveDocument> CommittedDocuments { get; } =
+            new List<RunSaveDocument>();
+
+        /// <summary>创建空单槽。</summary>
+        public ScriptedRunSaveStore()
+        {
+        }
+
+        /// <summary>创建含一份最近成功检查点的单槽。</summary>
+        public ScriptedRunSaveStore(RunSaveDocument document)
+        {
+            _document = document ?? throw new ArgumentNullException(nameof(document));
+        }
+
+        /// <summary>创建每次 load 都先返回指定故障的单槽。</summary>
+        public ScriptedRunSaveStore(RunSaveLoadResult forcedLoadResult)
+        {
+            _forcedLoadResult = forcedLoadResult
+                ?? throw new ArgumentNullException(nameof(forcedLoadResult));
+        }
+
+        /// <summary>安排下一次 commit 的确定结果。</summary>
+        public void EnqueueCommitResult(RunSaveCommitResult result)
+        {
+            _commitResults.Enqueue(result ?? throw new ArgumentNullException(nameof(result)));
+        }
+
+        /// <summary>返回脚本化故障、当前成功检查点或空槽。</summary>
+        public RunSaveLoadResult Load()
+        {
+            if (_forcedLoadResult != null)
+                return _forcedLoadResult;
+
+            return _document == null
+                ? RunSaveLoadResult.NotFound()
+                : RunSaveLoadResult.Succeeded(_document);
+        }
+
+        /// <summary>按队列返回提交结果，并只在成功时替换最近检查点。</summary>
+        public RunSaveCommitResult Commit(RunSaveDocument document)
+        {
+            CommitCount++;
+            CommittedDocuments.Add(document);
+            RunSaveCommitResult result = _commitResults.Count > 0
+                ? _commitResults.Dequeue()
+                : RunSaveCommitResult.Succeeded();
+            if (result.Status == RunSaveCommitStatus.Success)
+                _document = document;
+            return result;
+        }
+
+        /// <summary>模拟玩家确认后的幂等删除，并清除故障发现结果。</summary>
+        public RunSaveDeleteResult Delete()
+        {
+            DeleteCount++;
+            _document = null;
+            _forcedLoadResult = null;
+            return RunSaveDeleteResult.Succeeded();
         }
     }
 }
