@@ -16,6 +16,10 @@ using VContainer;
 public sealed class RunEntrySceneContractTests
 {
     private const string BootstrapScenePath = "Assets/Scenes/BootstrapScene.unity";
+    private const string EntryBackgroundPath =
+        "Assets/Arts/Runtime/UI/RunEntry/ui_run_entry_background.png";
+    private const string EntryPaperTexturePath =
+        "Assets/Arts/Runtime/UI/RunEntry/ui_run_entry_paper_grain.png";
 
     /// <summary>生产 Addressables 配置源必须精确列出 Loading、RunEntry 与 Battle 三个场景。</summary>
     [Test]
@@ -70,6 +74,53 @@ public sealed class RunEntrySceneContractTests
             if (openedHere && scene.IsValid() && scene.isLoaded)
                 EditorSceneManager.CloseScene(scene, removeScene: true);
         }
+    }
+
+    /// <summary>RunEntryScene 必须直接序列化两项入口视觉资源，随场景依赖打包而不新建运行时加载链。</summary>
+    [Test]
+    public void RunEntryScene_SerializesBackgroundAndSharedPaperTexture()
+    {
+        Scene scene = LoadSceneForTest(RunSceneAddresses.RunEntry, out bool openedHere);
+        try
+        {
+            RunEntryView view = FindComponents<RunEntryView>(scene).Single();
+            var serialized = new SerializedObject(view);
+            SerializedProperty background = serialized.FindProperty("_entryBackground");
+            SerializedProperty paper = serialized.FindProperty("_entryPaperTexture");
+
+            Assert.That(background, Is.Not.Null);
+            Assert.That(paper, Is.Not.Null);
+            Assert.That(background.objectReferenceValue, Is.Not.Null);
+            Assert.That(paper.objectReferenceValue, Is.Not.Null);
+            Assert.That(
+                AssetDatabase.GetAssetPath(background.objectReferenceValue),
+                Is.EqualTo(EntryBackgroundPath));
+            Assert.That(
+                AssetDatabase.GetAssetPath(paper.objectReferenceValue),
+                Is.EqualTo(EntryPaperTexturePath));
+        }
+        finally
+        {
+            if (openedHere && scene.IsValid() && scene.isLoaded)
+                EditorSceneManager.CloseScene(scene, removeScene: true);
+        }
+    }
+
+    /// <summary>入口背景与共享纸纹必须使用冻结的无 mip、不可读、Clamp/Bilinear 导入合同。</summary>
+    [Test]
+    public void RunEntryVisualAssets_UseFrozenImportSettings()
+    {
+        TextureImporter background = AssetImporter.GetAtPath(EntryBackgroundPath) as TextureImporter;
+        TextureImporter paper = AssetImporter.GetAtPath(EntryPaperTexturePath) as TextureImporter;
+
+        Assert.That(background, Is.Not.Null);
+        Assert.That(background.textureType, Is.EqualTo(TextureImporterType.Sprite));
+        Assert.That(background.spriteImportMode, Is.EqualTo(SpriteImportMode.Single));
+        AssertImporter(background, expectedMaxSize: 2048);
+
+        Assert.That(paper, Is.Not.Null);
+        Assert.That(paper.textureType, Is.EqualTo(TextureImporterType.Default));
+        AssertImporter(paper, expectedMaxSize: 1024);
     }
 
     /// <summary>RunEntry 场景 Scope 必须把唯一 View 暴露给接口并启动 Presenter entry point。</summary>
@@ -199,5 +250,20 @@ public sealed class RunEntrySceneContractTests
         return scene.GetRootGameObjects()
             .SelectMany(root => root.GetComponentsInChildren<T>(includeInactive: true))
             .ToArray();
+    }
+
+    /// <summary>断言入口位图共同的色彩、采样、内存与无损压缩设置。</summary>
+    private static void AssertImporter(TextureImporter importer, int expectedMaxSize)
+    {
+        Assert.That(importer.sRGBTexture, Is.True);
+        Assert.That(importer.mipmapEnabled, Is.False);
+        Assert.That(importer.isReadable, Is.False);
+        Assert.That(importer.wrapMode, Is.EqualTo(TextureWrapMode.Clamp));
+        Assert.That(importer.filterMode, Is.EqualTo(FilterMode.Bilinear));
+        Assert.That(importer.alphaSource, Is.EqualTo(TextureImporterAlphaSource.None));
+        Assert.That(importer.npotScale, Is.EqualTo(TextureImporterNPOTScale.None));
+        Assert.That(importer.maxTextureSize, Is.EqualTo(expectedMaxSize));
+        Assert.That(importer.textureCompression, Is.EqualTo(TextureImporterCompression.Uncompressed));
+        Assert.That(importer.crunchedCompression, Is.False);
     }
 }

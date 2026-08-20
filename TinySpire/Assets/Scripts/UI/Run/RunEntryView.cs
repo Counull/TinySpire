@@ -34,6 +34,13 @@ namespace TinySpire.UI.Run
         private static readonly Color32 PrimaryTextColor = new Color32(235, 242, 250, 255);
         private static readonly Color32 SecondaryTextColor = new Color32(166, 181, 202, 255);
 
+        [Header("Run Entry Visuals")]
+        [SerializeField]
+        private Sprite _entryBackground;
+
+        [SerializeField]
+        private Texture2D _entryPaperTexture;
+
         private readonly Dictionary<RunEntryPage, GameObject> _pages =
             new Dictionary<RunEntryPage, GameObject>();
         private readonly Dictionary<string, Button> _buttons =
@@ -43,6 +50,8 @@ namespace TinySpire.UI.Run
         private TMP_FontAsset _fontAsset;
         private bool _ownsFontAsset;
         private bool _built;
+        private EntryPaperStackView _entryPaperStack;
+        private GameObject _secondarySurface;
 
         private TMP_Text _mainTitle;
         private TMP_Text _continueGameText;
@@ -131,6 +140,15 @@ namespace TinySpire.UI.Run
             EnsureBuilt();
             foreach (KeyValuePair<RunEntryPage, GameObject> page in _pages)
                 page.Value.SetActive(page.Key == model.Page);
+            if (_secondarySurface != null)
+                _secondarySurface.SetActive(model.Page != RunEntryPage.MainMenu);
+            if (_entryPaperStack != null)
+            {
+                if (model.Page == RunEntryPage.MainMenu)
+                    _entryPaperStack.TryPlayEntrance();
+                else
+                    _entryPaperStack.ResolveWithoutEntrance();
+            }
 
             _mainTitle.text = model.GetText(RunEntryTextSlot.MainTitle);
             _continueGameText.text = model.GetText(RunEntryTextSlot.ContinueGame);
@@ -205,6 +223,27 @@ namespace TinySpire.UI.Run
             EnsureBuilt();
         }
 
+        /// <summary>仅供 EditMode 测试在 Awake 前注入临时视觉资产，生产引用仍来自 Scene 序列化。</summary>
+        internal void ConfigureVisualAssetsForTesting(Sprite background, Texture2D paperTexture)
+        {
+            if (_built)
+                throw new InvalidOperationException("Visual assets must be configured before RunEntryView is built.");
+
+            _entryBackground = background != null
+                ? background
+                : throw new ArgumentNullException(nameof(background));
+            _entryPaperTexture = paperTexture != null
+                ? paperTexture
+                : throw new ArgumentNullException(nameof(paperTexture));
+        }
+
+        /// <summary>仅供 EditMode 视觉测试读取动态建立的纸叠组件。</summary>
+        internal EntryPaperStackView GetPaperStackForTesting()
+        {
+            EnsureBuilt();
+            return _entryPaperStack;
+        }
+
         /// <summary>仅供 EditMode 合约测试读取指定页面对象。</summary>
         internal GameObject GetPageForTesting(RunEntryPage page)
         {
@@ -235,22 +274,28 @@ namespace TinySpire.UI.Run
 
             CreateEventSystem();
             RectTransform canvas = CreateCanvas();
-            RectTransform background = CreatePanel(
-                "Background",
-                canvas,
-                BackgroundColor,
-                Vector2.zero,
-                Vector2.zero,
-                stretch: true);
+            _entryPaperStack = CreateEntryPaperStack(canvas);
+            if (_entryPaperStack == null)
+            {
+                CreatePanel(
+                    "Background",
+                    canvas,
+                    BackgroundColor,
+                    Vector2.zero,
+                    Vector2.zero,
+                    stretch: true);
+            }
+
+            RectTransform pagesRoot = CreateContainer("PagesRoot", canvas, stretch: true);
             RectTransform surface = CreatePanel(
                 "ContentSurface",
-                background,
+                pagesRoot,
                 SurfaceColor,
                 Vector2.zero,
                 new Vector2(940f, 760f),
                 stretch: false);
 
-            BuildMainMenuPage(surface);
+            BuildMainMenuPage(_entryPaperStack != null ? pagesRoot : surface);
             BuildHeroSelectionPage(surface);
             BuildSettingsPage(surface);
             BuildComingSoonPage(surface, RunEntryPage.Compendium);
@@ -264,6 +309,28 @@ namespace TinySpire.UI.Run
             foreach (GameObject page in _pages.Values)
                 page.SetActive(false);
             _pages[RunEntryPage.MainMenu].SetActive(true);
+            if (_entryPaperStack != null)
+            {
+                _secondarySurface = surface.gameObject;
+                _secondarySurface.SetActive(false);
+            }
+        }
+
+        /// <summary>资产成对存在时在动态 Canvas 上建立纯视觉纸叠；测试缺省仍保留功能性旧背景。</summary>
+        private EntryPaperStackView CreateEntryPaperStack(RectTransform canvas)
+        {
+            if (_entryBackground == null && _entryPaperTexture == null)
+                return null;
+            if (_entryBackground == null || _entryPaperTexture == null)
+            {
+                Debug.LogError(
+                    "RunEntry visual assets are only partially configured; using the functional fallback UI.");
+                return null;
+            }
+
+            var paperStack = canvas.gameObject.AddComponent<EntryPaperStackView>();
+            paperStack.Compose(_entryBackground, _entryPaperTexture);
+            return paperStack;
         }
 
         /// <summary>创建只消费 Input System 默认 UI Actions 的场景级 EventSystem。</summary>
@@ -299,8 +366,17 @@ namespace TinySpire.UI.Run
             return canvasObject.GetComponent<RectTransform>();
         }
 
-        /// <summary>建立包含继续、开始与既有辅助入口的主菜单页。</summary>
+        /// <summary>建立包含继续、开始与既有辅助入口的主菜单页，并按资产是否配置选择视觉或功能性布局。</summary>
         private void BuildMainMenuPage(RectTransform parent)
+        {
+            if (_entryPaperStack == null)
+                BuildFallbackMainMenuPage(parent);
+            else
+                BuildVisualMainMenuPage(parent);
+        }
+
+        /// <summary>为无生产资产的 EditMode seam 保留原有功能性主菜单几何与配色。</summary>
+        private void BuildFallbackMainMenuPage(RectTransform parent)
         {
             RectTransform page = CreatePage(RunEntryPage.MainMenu, parent);
             _mainTitle = CreateText("MainTitle", page, 52f, FontStyles.Bold, PrimaryTextColor, 285f, 700f, 80f);
@@ -347,6 +423,74 @@ namespace TinySpire.UI.Run
                 -275f,
                 820f,
                 34f);
+        }
+
+        /// <summary>按 ENTRY-OVERALL-V06 的左侧安全区建立五个既有菜单控件，不新增文案或动作。</summary>
+        private void BuildVisualMainMenuPage(RectTransform parent)
+        {
+            RectTransform page = CreatePage(RunEntryPage.MainMenu, parent);
+            RectTransform content = CreateContainer(
+                "MainMenuContent",
+                page,
+                stretch: false,
+                size: new Vector2(620f, 900f));
+            CanvasGroup canvasGroup = content.gameObject.AddComponent<CanvasGroup>();
+            _entryPaperStack.BindMainMenuContent(content, canvasGroup);
+            Color primary = _entryPaperStack.MenuPrimaryTextColor;
+            Color secondary = _entryPaperStack.MenuSecondaryTextColor;
+
+            _mainTitle = CreateText(
+                "MainTitle",
+                content,
+                58f,
+                FontStyles.Bold,
+                primary,
+                305f,
+                520f,
+                90f);
+            (_continueGameButton, _continueGameText) = CreateVisualMainMenuButton(
+                "ContinueGameButton",
+                content,
+                new RunEntryAction(RunEntryActionKind.ContinueGame),
+                104f);
+            _startGameText = CreateVisualMainMenuButton(
+                "StartGameButton",
+                content,
+                new RunEntryAction(RunEntryActionKind.StartGame),
+                -8f).label;
+            _settingsMenuText = CreateVisualMainMenuButton(
+                "SettingsButton",
+                content,
+                new RunEntryAction(RunEntryActionKind.OpenSettings),
+                -120f).label;
+            _compendiumMenuText = CreateVisualMainMenuButton(
+                "CompendiumButton",
+                content,
+                new RunEntryAction(RunEntryActionKind.OpenCompendium),
+                -232f).label;
+            _statisticsMenuText = CreateVisualMainMenuButton(
+                "StatisticsButton",
+                content,
+                new RunEntryAction(RunEntryActionKind.OpenStatistics),
+                -344f).label;
+            _saveIssueTitleText = CreateText(
+                "SaveIssueTitle",
+                content,
+                19f,
+                FontStyles.Bold,
+                primary,
+                -435f,
+                520f,
+                34f);
+            _saveIssueText = CreateText(
+                "SaveIssue",
+                content,
+                18f,
+                FontStyles.Normal,
+                secondary,
+                -485f,
+                540f,
+                68f);
         }
 
         /// <summary>建立两名可选 Hero、一个禁用未来槽位与确认/返回的角色选择页。</summary>
@@ -623,7 +767,25 @@ namespace TinySpire.UI.Run
                 Stretch(rect);
             else
                 SetCenteredRect(rect, anchoredPosition, size);
-            panelObject.GetComponent<Image>().color = color;
+            Image image = panelObject.GetComponent<Image>();
+            image.color = color;
+            return rect;
+        }
+
+        /// <summary>创建不带 Graphic 的布局节点，可选全拉伸或中心固定尺寸。</summary>
+        private static RectTransform CreateContainer(
+            string objectName,
+            RectTransform parent,
+            bool stretch,
+            Vector2 size = default)
+        {
+            var containerObject = new GameObject(objectName, typeof(RectTransform));
+            containerObject.transform.SetParent(parent, worldPositionStays: false);
+            RectTransform rect = containerObject.GetComponent<RectTransform>();
+            if (stretch)
+                Stretch(rect);
+            else
+                SetCenteredRect(rect, Vector2.zero, size);
             return rect;
         }
 
@@ -693,6 +855,54 @@ namespace TinySpire.UI.Run
                 0f,
                 width - 30f,
                 height - 12f);
+            BindButton(button, action);
+            _buttons.Add(objectName, button);
+            return (button, label);
+        }
+
+        /// <summary>创建主菜单专用透明纸面八边形，并继续复用原有动作发布与 TMP 标签。</summary>
+        private (Button button, TMP_Text label) CreateVisualMainMenuButton(
+            string objectName,
+            RectTransform parent,
+            RunEntryAction action,
+            float y)
+        {
+            var buttonObject = new GameObject(
+                objectName,
+                typeof(RectTransform),
+                typeof(CanvasRenderer),
+                typeof(EntryOctagonGraphic),
+                typeof(Button));
+            buttonObject.transform.SetParent(parent, worldPositionStays: false);
+            RectTransform rect = buttonObject.GetComponent<RectTransform>();
+            SetCenteredRect(
+                rect,
+                new Vector2(0f, y),
+                new Vector2(
+                    EntryPaperStackView.MainMenuButtonWidth,
+                    EntryPaperStackView.MainMenuButtonHeight));
+
+            EntryOctagonGraphic graphic = buttonObject.GetComponent<EntryOctagonGraphic>();
+            _entryPaperStack.ConfigureMainMenuButton(graphic);
+            Button button = buttonObject.GetComponent<Button>();
+            button.targetGraphic = graphic;
+            ColorBlock colors = button.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = new Color32(248, 244, 235, 255);
+            colors.pressedColor = new Color32(205, 196, 181, 255);
+            colors.disabledColor = new Color32(132, 126, 116, 170);
+            colors.fadeDuration = 0.08f;
+            button.colors = colors;
+
+            TMP_Text label = CreateText(
+                $"{objectName}Label",
+                rect,
+                25f,
+                FontStyles.Bold,
+                _entryPaperStack.MenuPrimaryTextColor,
+                0f,
+                EntryPaperStackView.MainMenuButtonWidth - 42f,
+                72f);
             BindButton(button, action);
             _buttons.Add(objectName, button);
             return (button, label);

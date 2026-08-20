@@ -3,17 +3,17 @@ created: 2026-07-06
 updated: 2026-08-17
 ---
 
-## 当前 Run 路线状态（as of 2026-08-16 / `fa14889` + G2-A working tree）
+## 当前 Run 路线状态（as of 2026-08-17 / `637f0ac` + RunEntry visual working tree）
 
 | 维度 | 当前事实 |
 |---|---|
 | Current phase | **G2 · completed** |
 | G1 phase | `completed`；完成依据为 G1-A `verified` |
-| Current slice | **G2-A · Run Persistence 与继续游戏** |
-| Slice status | `verified`；G2-A1 → A2 → A3 已串行完成，不存在 G2-B |
-| Next candidate action | Theseus 审阅 G2-A diff 与验证证据；G3+ 必须另行 Grill、计划和授权 |
-| Implementation authorization | G2-A 授权已完成；G3+、Platform Save Spike 与平台能力均未授权 |
-| Current acceptance evidence | `06_testing/2026-08-16-g2a-run-persistence.md` |
+| Current slice | **RunEntryScene 主入口视觉切片**（独立表现轨，不是 G3） |
+| Slice status | `verified`；背景、三纸、既有菜单视觉与一次性入场已完成 |
+| Next candidate action | 用户审阅 16:9 实拍；G3+ 必须另行 Grill、计划和授权 |
+| Implementation authorization | 本视觉切片授权已完成；G3+、Platform Save Spike 与平台能力均未授权 |
+| Current acceptance evidence | `06_testing/2026-08-17-run-entry-visual-slice.md` |
 
 ## 2026-08-17 BattleCommandQueue 提交接口深化（implemented-and-verified）
 
@@ -21,6 +21,15 @@ updated: 2026-08-17
 - `BattleCommandRuntimeDriver`、`BattleTurnHudView`、`HandCardContainer` 不再注入或调用 concrete coordinator；结构性拒绝不发布 lifecycle，因此 UI 不再需要手工 pending 回滚。coordinator 的注册、匹配、取消、对账与 lifecycle 源降为 internal implementation；Queue 的权威序号、迭代 drain、FIFO continuation、system token、表现屏障、completion 与 fault 语义均未改变。
 - 测试侧删除共享 `SubmitRegistered` 扩展和 Queue→coordinator registry；普通测试只调用生产 `Submit`，只有 internal scheduling 合同测试继续直测预注册算法。RED 先锁定 lifecycle 缺少原始 Command，迁移中又由重复预注册失败暴露旧 helper；最终 M8B 11/11、相关聚合 116/116、完整 EditMode job `09c7b62ffe5c4bcfa8d239b99e30f51a` 为 **953/953 passed**，Unity Console 编译 error=0，`git diff --check` 通过。
 - 本轮没有修改 `BattleCardPlayEvaluation`、Run、存档、DataTables/GameData、Localization、Scene/Prefab、ProjectSettings、asmdef 或包依赖；没有运行 PlayMode、Player build、Addressables 或人工 BattleScene smoke。本轮按用户授权作为本地提交收口，不 push；既有 RunEntry visual 与其他用户 WIP 保持原状态。决定见 CD-115，方案与验证见 `plans/2026-08-17-battle-command-submission-interface-deepening.md`、`06_testing/2026-08-17-battle-command-submission-interface-deepening.md`。
+
+## 2026-08-17 RunEntryScene 主入口视觉切片（verified，待用户视觉审阅）
+
+- 先完成 Scene/Canvas/菜单/加载/DOTween seam audit：RunEntry 仍由现有 `RunEntryView` 动态组装单一 Overlay Canvas，CanvasScaler 保持 1920×1080、match 0.5；新增视觉只在 View 的生产资产 seam 创建，不修改 Presenter、RunStateStore、RunFlow、Battle、存档或导航规则。
+- 已把确认的 `ENTRY-BG-002` 字节级复制到 Runtime UI 美术目录；从外部 v06 ivory 临时源裁取并中和为一张 1024² 共享细颗粒纹理，三张完整纸只以 tint 区分。三纸不接收 raycast，菜单与标题不在旋转根下；V06 基线米白边约 38.88%、总纸叠约 44.97%，没有放大为 60% 左侧大面。
+- 五个既有 Button/TMP/Action 全部保留，视觉改为 459×99、27 px 对称切角、透明纸面内芯与细边线。红/黑/米白依次在 0/.12/.24s 入场，米白 1.00s 停稳，内容 1.10s 开始淡入；私有 DOTween Sequence 只播放一次并独立清理，无粒子、循环、视差、镜头或弹跳。
+- Unity 6000.5.5f1 定向 EditMode job `c42339825cab4bc684c7df34b549e45e` 为 22/22；`Build Local Content` 20.569 秒成功。BuildLayout 证明背景/纸纹均为 RunEntryScene 的 `DataFromOtherAsset`，与场景同 bundle、Group=`TinySpire Scenes`、Provider=`AssetBundleProvider`，没有新 AddressableName。
+- Packed Play 从 Bootstrap 实际进入 RunEntryScene，1920×1080 最终内容 alpha/交互、三纸共享不挡点击、17.52° 构图均通过；Settings → Back 往返成功且 `EntrancePlayCount=1`、无 active Sequence，Console error=0。截图与完整 importer/响应式/风险记录见 `06_testing/2026-08-17-run-entry-visual-slice.md`；决定见 CD-114。
+- 21:9/窄窗已有几何自动化：超宽保留左侧基准构图区并裁背景上下，窄窗缩放菜单、右缘对齐背景以保护主塔；本轮只保留 16:9 实拍。未运行 Player build，也未实现 G3、地图、FishNet/多人、战斗、存档、GameData 或菜单业务重写。未 commit、未 push、未 stage/unstage；既有 Hermes staged/WIP 与三个 GameData 修改保持原状态。
 
 ## 2026-08-16 G2-A Run Persistence 与继续游戏（verified，待 Theseus 审查）
 

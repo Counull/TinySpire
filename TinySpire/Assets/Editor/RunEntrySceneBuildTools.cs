@@ -14,6 +14,10 @@ public static class RunEntrySceneBuildTools
 {
     private const string BootstrapScenePath = "Assets/Scenes/BootstrapScene.unity";
     private const string InitialScenePropertyName = "initialSceneName";
+    private const string EntryBackgroundPath =
+        "Assets/Arts/Runtime/UI/RunEntry/ui_run_entry_background.png";
+    private const string EntryPaperTexturePath =
+        "Assets/Arts/Runtime/UI/RunEntry/ui_run_entry_paper_grain.png";
 
     /// <summary>创建缺失的 RunEntryScene，并把 BootstrapScene 入口原子切换到该场景。</summary>
     [MenuItem("TinySpire/Run/Create G1-A Run Entry Scene")]
@@ -59,7 +63,8 @@ public static class RunEntrySceneBuildTools
             scope.parentReference = ParentReference.Create<Bootstrap>();
 
             var viewObject = new GameObject(nameof(RunEntryView));
-            viewObject.AddComponent<RunEntryView>();
+            RunEntryView view = viewObject.AddComponent<RunEntryView>();
+            AssignEntryVisualAssets(view);
 
             Camera camera = RequireSingle<Camera>(scene, "Camera");
             if (!camera.CompareTag("MainCamera"))
@@ -80,6 +85,27 @@ public static class RunEntrySceneBuildTools
             if (!replacesCleanUntitledScene && scene.IsValid() && scene.isLoaded)
                 EditorSceneManager.CloseScene(scene, removeScene: true);
         }
+    }
+
+    /// <summary>给新建入口场景写入两项直接场景依赖，不引入 Resources 或额外 Addressables 地址。</summary>
+    private static void AssignEntryVisualAssets(RunEntryView view)
+    {
+        Sprite background = AssetDatabase.LoadAssetAtPath<Sprite>(EntryBackgroundPath)
+            ?? throw new InvalidOperationException(
+                $"Run entry background is missing: {EntryBackgroundPath}");
+        Texture2D paperTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(EntryPaperTexturePath)
+            ?? throw new InvalidOperationException(
+                $"Run entry paper texture is missing: {EntryPaperTexturePath}");
+
+        var serialized = new SerializedObject(view);
+        SerializedProperty backgroundProperty = serialized.FindProperty("_entryBackground")
+            ?? throw new InvalidOperationException("RunEntryView._entryBackground was not found.");
+        SerializedProperty paperProperty = serialized.FindProperty("_entryPaperTexture")
+            ?? throw new InvalidOperationException("RunEntryView._entryPaperTexture was not found.");
+        backgroundProperty.objectReferenceValue = background;
+        paperProperty.objectReferenceValue = paperTexture;
+        serialized.ApplyModifiedPropertiesWithoutUndo();
+        EditorUtility.SetDirty(view);
     }
 
     /// <summary>仅允许替换唯一、干净且未命名的 Editor 占位场景。</summary>

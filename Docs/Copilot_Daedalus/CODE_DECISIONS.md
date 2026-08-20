@@ -1265,6 +1265,16 @@ Run 规划采用递归切片门禁：每个可执行切片先处于 `needs-grill
 
 **UI 与边界**：启动只探测存档，不自动 hydrate；Continue 是显式用户意图。有效档或不可用档阻止直接新开局并要求确认放弃；坏 JSON、非法 UTF-8、未知 schema、缺失/不兼容配置与 IO 错误禁用 Continue、显示原因，只有确认后才删除。删除有效档失败仍保留 Continue 能力。当前 Completed 节点保留 S1 并显示“节点已清除、后续内容未接入”；CD-112 的失败页、snapshot 与新 seed 重开保持原语义。本决定不授权 G3+、平台 Save Spike、平台 SDK、云存档、多槽、奖励、地图生成或永久死亡。最终完整 EditMode `0004316410dc4b1e9db8d80312499dc4` 为 947/947；Luban、本地 Addressables 构建与唯一 Editor 的 S0 / Continue / 战中不写盘 / S1 / 冷启动恢复 / 确认删除主链通过。完整证据见 `06_testing/2026-08-16-g2a-run-persistence.md`。
 
+## CD-114：RunEntry 视觉使用场景直接依赖、共享纸纹与纯表现一次性时间线
+
+**问题**：`RunEntryScene` 的 Canvas、页面和菜单全部由 `RunEntryView` 在运行时创建，Scene YAML 没有可直接装饰的菜单层级。若另建 Canvas/Prefab 会形成竞争交互树；若视觉组件读取 RunState 或重新实现按钮动作，会改变 CD-112/113 的事实所有权；若把三张彩纸各自做成 1920×1080 位图或独立 Addressable，又会复制相同颗粒并增加无必要的加载生命周期。
+
+**选择**：`RunEntryView` 只新增两个场景序列化资源字段：完整 `ENTRY-BG-002` Sprite 与一张 1024² 中性共享纸纹 Texture2D。它们作为 `RunEntryScene` 的直接依赖进入同一 bundle，不新增 AddressableName、Resources 路径或运行时 release 责任。运行时新增 `EntryPaperStackView` 只创建背景、三张完整 RawImage、V06 响应式几何和私有 DOTween Sequence；三纸共用纹理并以 tint 得到米白/炭黑/砖红，全部 `raycastTarget=false`。`EntryOctagonGraphic` 只绘制透明纸面内芯与细切角边线；真实 Button/TMP、五项文案和 `RunEntryAction` 仍归既有 View/Presenter。
+
+**构图与生命周期**：1920×1080 使用 V06 的 `+17.52°` 与实测边界：米白 top/mid/bottom 约 `576/746.5/916.7`，黑、红中线外边约 `812.5/863.5`；标题和菜单是 `PagesRoot` 的稳定子层，不在旋转 `PaperStackRoot` 下。红/黑/米白从 `0/.12/.24s` 开始，以 0.76s OutCubic 到位；米白 `1.00s` 停稳，内容 `1.10s` 开始淡入。Sequence 使用私有 ID，首次主菜单只播放一次，非主菜单/禁用/销毁只收口或 Kill 自有 Tween，不读写任何 Run、Battle、存档或导航事实。CanvasScaler 继续为 1920×1080、match 0.5；超宽保留左侧基准构图区，窄窗缩放菜单而不扩大米白纸，背景 cover 在窄窗右缘对齐保护主塔。
+
+**边界与验收**：本决定不授权 G3+、地图、FishNet/多人、战斗、存档、GameData、菜单业务重写、ProjectSettings/asmdef 或新包。当前唯一 Unity 6000.5.5f1 Editor 已完成 22/22 定向 EditMode、Local Addressables、BuildLayout 同 bundle/AssetBundleProvider 证明、Bootstrap Packed Play 1920×1080 截图与 Settings 往返；21:9/窄窗已有几何自动化但没有各自截图，也没有 Player/目标平台字体与 DPI 验收。完整来源、importer、job 与风险见 `06_testing/2026-08-17-run-entry-visual-slice.md`。
+
 ## CD-115：BattleCommandQueue 隐藏提交预注册协议并以 Queued 生命周期建立 UI pending
 
 **问题**：CD-043/045 为解决同步执行早于 UI pending 登记的问题，引入了正确的 opaque handle 与 Queue-owned lifecycle，但生产调用者必须先向 concrete `BattleCommandSubmissionCoordinator` 以同一命令引用 `PreRegister`，再自行建立 pending、调用 `Queue.Submit`，并在拒绝时回滚。该隐藏顺序协议同时泄漏到 `BattleCommandRuntimeDriver`、`BattleTurnHudView`、`HandCardContainer` 和共享测试扩展；漏一步或换一个命令引用都会失败，使名义上的单一 `Submit` seam 实际需要两个模块协作。
