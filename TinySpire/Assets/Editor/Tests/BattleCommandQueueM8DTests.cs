@@ -25,7 +25,7 @@ public sealed class BattleCommandQueueM8DTests
             scenario.ApplyBlock(scenario.Player.Id, scenario.Player.Id, amount: 4);
 
             BattleCommandSubmissionResult submission =
-                scenario.Queue.SubmitRegistered(new StartBattleCommand());
+                scenario.Queue.Submit(new StartBattleCommand());
 
             Assert.That(submission.Accepted, Is.True);
             Assert.That(scenario.Presentation.Results, Has.Count.EqualTo(1));
@@ -76,7 +76,7 @@ public sealed class BattleCommandQueueM8DTests
                 .Subscribe(_ => layoutPublicationCount++);
 
             BattleCommandSubmissionResult submission =
-                scenario.Queue.SubmitRegistered(new StartBattleCommand());
+                scenario.Queue.Submit(new StartBattleCommand());
             BattleCommandLifecycleEvent terminal = lifecycle.RequireTerminal(submission);
 
             Assert.That(submission.Accepted, Is.True);
@@ -114,7 +114,7 @@ public sealed class BattleCommandQueueM8DTests
             int enemyHealthBefore = scenario.FirstEnemy.CurrentHealth;
             EnemyIntentLayoutData intentBefore = scenario.Intents.Layout.CurrentValue;
 
-            scenario.Queue.SubmitRegistered(new EndPlayerActionCommand(scenario.Player.Id));
+            scenario.Queue.Submit(new EndPlayerActionCommand(scenario.Player.Id));
 
             BattleCommandExecutionResult result = scenario.Presentation.Results[1];
             Assert.That(result.Succeeded, Is.True);
@@ -153,7 +153,7 @@ public sealed class BattleCommandQueueM8DTests
             scenario.ApplyVulnerable(scenario.Player.Id, scenario.FirstEnemy.Id, amount: 2);
             scenario.ApplyBlock(scenario.FirstEnemy.Id, scenario.Player.Id, amount: 2);
 
-            scenario.Queue.SubmitRegistered(new EndPlayerActionCommand(scenario.Player.Id));
+            scenario.Queue.Submit(new EndPlayerActionCommand(scenario.Player.Id));
             scenario.Presentation.CompleteNext();
 
             Assert.That(scenario.Presentation.Results, Has.Count.EqualTo(3));
@@ -219,7 +219,7 @@ public sealed class BattleCommandQueueM8DTests
             Assert.That(openingHand, Has.Length.EqualTo(2));
             Assert.That(scenario.Zones.DrawPile, Is.Empty);
 
-            scenario.Queue.SubmitRegistered(new EndPlayerActionCommand(scenario.Player.Id));
+            scenario.Queue.Submit(new EndPlayerActionCommand(scenario.Player.Id));
 
             Assert.That(scenario.Zones.Hand, Is.Empty);
             Assert.That(scenario.Zones.DiscardPile, Is.EqualTo(openingHand));
@@ -307,7 +307,7 @@ public sealed class BattleCommandQueueM8DTests
             scenario.StartAndCompleteFeedback();
             int secondBehaviorBefore = scenario.GetBehaviorId(scenario.SecondEnemy.Id);
 
-            scenario.Queue.SubmitRegistered(new EndPlayerActionCommand(scenario.Player.Id));
+            scenario.Queue.Submit(new EndPlayerActionCommand(scenario.Player.Id));
             scenario.Presentation.CompleteNext();
 
             Assert.That(scenario.Presentation.Results, Has.Count.EqualTo(3));
@@ -347,7 +347,7 @@ public sealed class BattleCommandQueueM8DTests
             Assert.That(scenario.Queue.Turn.CurrentValue.CurrentActingEnemyId, Is.Null);
             Assert.That(scenario.Queue.Turn.CurrentValue.RoundNumber, Is.EqualTo(2));
 
-            BattleCommandSubmissionResult blockedPlayerCommand = scenario.Queue.SubmitRegistered(
+            BattleCommandSubmissionResult blockedPlayerCommand = scenario.Queue.Submit(
                 new PlayCardCommand(
                     scenario.Player.Id,
                     new CardInstanceId(9999),
@@ -381,10 +381,10 @@ public sealed class BattleCommandQueueM8DTests
         using (BattleCommandLifecycleExecutionRecorder lifecycle = scenario.Queue.RecordExecutionLifecycle())
         {
             scenario.StartAndCompleteFeedback();
-            scenario.Queue.SubmitRegistered(new EndPlayerActionCommand(scenario.Player.Id));
-            BattleCommandSubmissionResult secondEnd = scenario.Queue.SubmitRegistered(
+            scenario.Queue.Submit(new EndPlayerActionCommand(scenario.Player.Id));
+            BattleCommandSubmissionResult secondEnd = scenario.Queue.Submit(
                 new EndPlayerActionCommand(scenario.SecondPlayer.Id));
-            BattleCommandSubmissionResult acceptedTail = scenario.Queue.SubmitRegistered(
+            BattleCommandSubmissionResult acceptedTail = scenario.Queue.Submit(
                 new StartBattleCommand());
 
             Assert.That(secondEnd.Accepted, Is.True);
@@ -461,7 +461,7 @@ public sealed class BattleCommandQueueM8DTests
                         combatant.CurrentVulnerable)),
                 Is.EqualTo(combatantFactsBefore));
 
-            BattleCommandSubmissionResult rejectedAfterFault = scenario.Queue.SubmitRegistered(
+            BattleCommandSubmissionResult rejectedAfterFault = scenario.Queue.Submit(
                 new EndPlayerActionCommand(scenario.Player.Id));
             Assert.That(rejectedAfterFault.Accepted, Is.False);
             Assert.That(rejectedAfterFault.AuthoritySequence, Is.Null);
@@ -480,13 +480,13 @@ public sealed class BattleCommandQueueM8DTests
         using (var first = new M8DQueueScenario(enemyCount: 2, autoCompletePresentation: true, battleSeed: 2468))
         using (var second = new M8DQueueScenario(enemyCount: 2, autoCompletePresentation: true, battleSeed: 2468))
         {
-            first.Queue.SubmitRegistered(new StartBattleCommand());
-            second.Queue.SubmitRegistered(new StartBattleCommand());
+            first.Queue.Submit(new StartBattleCommand());
+            second.Queue.Submit(new StartBattleCommand());
 
             for (int round = 0; round < 2; round++)
             {
-                first.Queue.SubmitRegistered(new EndPlayerActionCommand(first.Player.Id));
-                second.Queue.SubmitRegistered(new EndPlayerActionCommand(second.Player.Id));
+                first.Queue.Submit(new EndPlayerActionCommand(first.Player.Id));
+                second.Queue.Submit(new EndPlayerActionCommand(second.Player.Id));
             }
 
             AssertEquivalentResults(first.Presentation.Results, second.Presentation.Results);
@@ -523,7 +523,7 @@ public sealed class BattleCommandQueueM8DTests
         {
             scenario.StartAndCompleteFeedback();
             scenario.ApplyVulnerable(scenario.Player.Id, scenario.FirstEnemy.Id, amount: 2);
-            scenario.Queue.SubmitRegistered(new EndPlayerActionCommand(scenario.Player.Id));
+            scenario.Queue.Submit(new EndPlayerActionCommand(scenario.Player.Id));
             BattleEffectStateTestDriver.Kill(
                 scenario.Combatants,
                 scenario.Player.Id,
@@ -586,7 +586,7 @@ public sealed class BattleCommandQueueM8DTests
             });
             BattleEnemyIntentAuthoritySnapshot secondIntentBefore =
                 scenario.Intents.CaptureAuthoritySnapshot(scenario.SecondEnemy.Id);
-            scenario.Queue.SubmitRegistered(new EndPlayerActionCommand(scenario.Player.Id));
+            scenario.Queue.Submit(new EndPlayerActionCommand(scenario.Player.Id));
 
             scenario.Presentation.CompleteNext();
 
@@ -645,7 +645,7 @@ public sealed class BattleCommandQueueM8DTests
             scenario.StartAndCompleteFeedback();
             CardInstanceId lethalCard = scenario.Zones.Hand[0];
 
-            scenario.Queue.SubmitRegistered(new PlayCardCommand(
+            scenario.Queue.Submit(new PlayCardCommand(
                 scenario.Player.Id,
                 lethalCard,
                 scenario.FirstEnemy.Id));
@@ -699,7 +699,7 @@ public sealed class BattleCommandQueueM8DTests
                    }))
             {
                 CardInstanceId lethalCard = scenario.Zones.Hand[0];
-                BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(
+                BattleCommandSubmissionResult submission = scenario.Queue.Submit(
                     new PlayCardCommand(
                         scenario.Player.Id,
                         lethalCard,
@@ -752,7 +752,7 @@ public sealed class BattleCommandQueueM8DTests
         {
             Assert.That(first.Queue.Result.CurrentValue, Is.Null);
             first.StartAndCompleteFeedback();
-            first.Queue.SubmitRegistered(new PlayCardCommand(
+            first.Queue.Submit(new PlayCardCommand(
                 first.Player.Id,
                 first.Zones.Hand[0],
                 first.FirstEnemy.Id));
@@ -769,7 +769,7 @@ public sealed class BattleCommandQueueM8DTests
         {
             Assert.That(second.Queue.Result.CurrentValue, Is.Null);
             second.StartAndCompleteFeedback();
-            second.Queue.SubmitRegistered(new EndPlayerActionCommand(second.Player.Id));
+            second.Queue.Submit(new EndPlayerActionCommand(second.Player.Id));
             second.Presentation.CompleteNext();
 
             BattleCommandExecutionResult terminalExecution = second.Presentation.Results[2];
@@ -802,11 +802,11 @@ public sealed class BattleCommandQueueM8DTests
                    initialHandCount: 1))
         using (BattleCommandLifecycleExecutionRecorder lifecycle = scenario.Queue.RecordExecutionLifecycle())
         {
-            scenario.Queue.SubmitRegistered(new StartBattleCommand());
+            scenario.Queue.Submit(new StartBattleCommand());
             CardInstanceId lethalCard = scenario.Zones.Hand[0];
-            BattleCommandSubmissionResult lethalSubmission = scenario.Queue.SubmitRegistered(
+            BattleCommandSubmissionResult lethalSubmission = scenario.Queue.Submit(
                 new PlayCardCommand(scenario.Player.Id, lethalCard, scenario.FirstEnemy.Id));
-            BattleCommandSubmissionResult acceptedTail = scenario.Queue.SubmitRegistered(
+            BattleCommandSubmissionResult acceptedTail = scenario.Queue.Submit(
                 new EndPlayerActionCommand(scenario.Player.Id));
 
             Assert.That(lethalSubmission.Accepted, Is.True);
@@ -846,7 +846,7 @@ public sealed class BattleCommandQueueM8DTests
             Assert.That(scenario.Zones.Hand, Is.EqualTo(terminalHand));
             Assert.That(scenario.Zones.DiscardPile, Is.EqualTo(terminalDiscard));
 
-            BattleCommandSubmissionResult rejectedAfterTerminal = scenario.Queue.SubmitRegistered(
+            BattleCommandSubmissionResult rejectedAfterTerminal = scenario.Queue.Submit(
                 new EndPlayerActionCommand(scenario.Player.Id));
 
             Assert.That(rejectedAfterTerminal.Accepted, Is.False);
@@ -1054,7 +1054,7 @@ public sealed class BattleCommandQueueM8DTests
         /// <summary>提交战斗开始并完成它唯一的可见反馈，使测试稳定进入第一轮玩家行动。</summary>
         internal void StartAndCompleteFeedback()
         {
-            BattleCommandSubmissionResult start = Queue.SubmitRegistered(new StartBattleCommand());
+            BattleCommandSubmissionResult start = Queue.Submit(new StartBattleCommand());
             Assert.That(start.Accepted, Is.True);
             Presentation.CompleteNext();
             Assert.That(Queue.Turn.CurrentValue.Phase, Is.EqualTo(BattleTurnPhase.PlayerAction));

@@ -48,7 +48,7 @@ public sealed class BattlePlayerResourceProfileTests
             cfg.battle.Attribute.None,
             configuredValue: 4);
 
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
 
         BattleCommandExecutionResult result = presentation.Results[0];
         Assert.That(result.Succeeded, Is.True);
@@ -106,7 +106,7 @@ public sealed class BattlePlayerResourceProfileTests
             initialHandCount: 5,
             playerResourceProfiles: profiles);
 
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
 
         Assert.That(presentation.Results[0].Succeeded, Is.True);
         Assert.That(zones.Hand, Has.Count.EqualTo(5));
@@ -142,9 +142,9 @@ public sealed class BattlePlayerResourceProfileTests
             enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
             playerResourceProfiles: profiles);
 
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
         presentation.CompleteNext();
-        queue.SubmitRegistered(new EndPlayerActionCommand(player.Id));
+        queue.Submit(new EndPlayerActionCommand(player.Id));
         presentation.CompleteNext();
 
         Assert.That(presentation.Results, Has.Count.EqualTo(3));

@@ -25,7 +25,7 @@ public sealed class BattleSettlementContractTests
                        combatants,
                        presentation))
             {
-                queue.SubmitRegistered(new StartBattleCommand());
+                queue.Submit(new StartBattleCommand());
 
                 IReadOnlyList<BattleSettlementRecord> settlements =
                     presentation.Results[0].Settlements;
@@ -54,13 +54,13 @@ public sealed class BattleSettlementContractTests
                        combatants,
                        presentation))
             {
-                queue.SubmitRegistered(new StartBattleCommand());
+                queue.Submit(new StartBattleCommand());
                 presentation.CompleteNext();
                 using BattleCommandLifecycleExecutionRecorder recorder =
                     queue.RecordExecutionLifecycle();
 
                 BattleCommandSubmissionResult submission =
-                    queue.SubmitRegistered(new StartBattleCommand());
+                    queue.Submit(new StartBattleCommand());
                 BattleCommandLifecycleEvent result = recorder.RequireTerminal(submission);
 
                 Assert.That(result.Stage, Is.EqualTo(BattleCommandLifecycleStage.ExecutionFailed));

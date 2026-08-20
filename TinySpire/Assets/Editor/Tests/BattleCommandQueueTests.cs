@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using cfg;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
@@ -25,7 +24,7 @@ public sealed class BattleCommandQueueTests
         var presentation = new RejectUnexpectedPresentation();
         BattleCommandQueue queue = BattleCommandQueueTestFactory.Create(combatants, presentation);
 
-        BattleCommandSubmissionResult result = queue.SubmitRegistered(new EndPlayerActionCommand(player.Id));
+        BattleCommandSubmissionResult result = queue.Submit(new EndPlayerActionCommand(player.Id));
 
         Assert.That(result.Accepted, Is.False);
         Assert.That(result.AuthoritySequence, Is.Null);
@@ -48,7 +47,7 @@ public sealed class BattleCommandQueueTests
         var presentation = new ControllableBattleCommandPresentation();
         BattleCommandQueue queue = BattleCommandQueueTestFactory.Create(combatants, presentation);
 
-        BattleCommandSubmissionResult result = queue.SubmitRegistered(new StartBattleCommand());
+        BattleCommandSubmissionResult result = queue.Submit(new StartBattleCommand());
 
         Assert.That(result.Accepted, Is.True);
         Assert.That(result.AuthoritySequence, Is.EqualTo(1));
@@ -77,13 +76,13 @@ public sealed class BattleCommandQueueTests
         PlayerCombatantData secondPlayer = combatants.AddPlayer(templateId: 102, maxHealth: 28, strength: 0);
         var presentation = new ControllableBattleCommandPresentation();
         BattleCommandQueue queue = BattleCommandQueueTestFactory.Create(combatants, presentation);
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
         BattleTurnData turnAfterStart = queue.Turn.CurrentValue;
 
         BattleCommandSubmissionResult firstSubmission =
-            queue.SubmitRegistered(new EndPlayerActionCommand(firstPlayer.Id));
+            queue.Submit(new EndPlayerActionCommand(firstPlayer.Id));
         BattleCommandSubmissionResult secondSubmission =
-            queue.SubmitRegistered(new EndPlayerActionCommand(secondPlayer.Id));
+            queue.Submit(new EndPlayerActionCommand(secondPlayer.Id));
 
         Assert.That(firstSubmission.Accepted, Is.True);
         Assert.That(firstSubmission.AuthoritySequence, Is.EqualTo(2));
@@ -110,9 +109,9 @@ public sealed class BattleCommandQueueTests
         var presentation = new ControllableBattleCommandPresentation();
         BattleCommandQueue queue = BattleCommandQueueTestFactory.Create(combatants, presentation);
         using BattleCommandLifecycleExecutionRecorder lifecycle = queue.RecordExecutionLifecycle();
-        queue.SubmitRegistered(new StartBattleCommand());
-        BattleCommandSubmissionResult second = queue.SubmitRegistered(new StartBattleCommand());
-        BattleCommandSubmissionResult third = queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
+        BattleCommandSubmissionResult second = queue.Submit(new StartBattleCommand());
+        BattleCommandSubmissionResult third = queue.Submit(new StartBattleCommand());
 
         presentation.CompleteNext();
 
@@ -146,13 +145,13 @@ public sealed class BattleCommandQueueTests
         EnemyCombatantData enemy = combatants.AddEnemy(templateId: 201, maxHealth: 20, strength: 0);
         var presentation = new ControllableBattleCommandPresentation();
         BattleCommandQueue queue = BattleCommandQueueTestFactory.Create(combatants, presentation);
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
         BattleTurnData turnAfterStart = queue.Turn.CurrentValue;
 
         BattleCommandSubmissionResult rejected =
-            queue.SubmitRegistered(new CompleteEnemyActionCommand(enemy.Id));
+            queue.Submit(new CompleteEnemyActionCommand(enemy.Id));
         BattleCommandSubmissionResult nextPlayerCommand =
-            queue.SubmitRegistered(new EndPlayerActionCommand(player.Id));
+            queue.Submit(new EndPlayerActionCommand(player.Id));
 
         Assert.That(rejected.Accepted, Is.False);
         Assert.That(rejected.AuthoritySequence, Is.Null);
@@ -191,12 +190,12 @@ public sealed class BattleCommandQueueTests
             enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
             initialHandCount: 2);
         using BattleCommandLifecycleExecutionRecorder lifecycle = queue.RecordExecutionLifecycle();
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
         presentation.CompleteNext();
 
-        queue.SubmitRegistered(new EndPlayerActionCommand(firstPlayer.Id));
+        queue.Submit(new EndPlayerActionCommand(firstPlayer.Id));
         BattleCommandSubmissionResult repeated =
-            queue.SubmitRegistered(new EndPlayerActionCommand(firstPlayer.Id));
+            queue.Submit(new EndPlayerActionCommand(firstPlayer.Id));
 
         Assert.That(presentation.Results[1].Succeeded, Is.True);
         Assert.That(firstZones.Hand, Is.Empty);
@@ -245,13 +244,13 @@ public sealed class BattleCommandQueueTests
             new Dictionary<int, int> { [3001] = 1 },
             enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
             initialHandCount: 2);
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
         CardInstanceId secondPlayerCardId = secondZones.Hand[0];
         presentation.CompleteNext();
 
-        queue.SubmitRegistered(new EndPlayerActionCommand(firstPlayer.Id));
+        queue.Submit(new EndPlayerActionCommand(firstPlayer.Id));
         BattleCommandSubmissionResult secondSubmission =
-            queue.SubmitRegistered(new PlayCardCommand(secondPlayer.Id, secondPlayerCardId, secondPlayer.Id));
+            queue.Submit(new PlayCardCommand(secondPlayer.Id, secondPlayerCardId, secondPlayer.Id));
 
         Assert.That(presentation.Results[1].Succeeded, Is.True);
         Assert.That(queue.Turn.CurrentValue.Phase, Is.EqualTo(BattleTurnPhase.PlayerAction));
@@ -299,14 +298,14 @@ public sealed class BattleCommandQueueTests
             enemyCombatantIdsInEncounterOrder: new[] { secondEnemy.Id, firstEnemy.Id },
             initialHandCount: 1);
         using BattleCommandLifecycleExecutionRecorder lifecycle = queue.RecordExecutionLifecycle();
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
         CardInstanceId lateCardId = firstZones.Hand[0];
         presentation.CompleteNext();
 
-        queue.SubmitRegistered(new EndPlayerActionCommand(firstPlayer.Id));
-        queue.SubmitRegistered(new EndPlayerActionCommand(secondPlayer.Id));
+        queue.Submit(new EndPlayerActionCommand(firstPlayer.Id));
+        queue.Submit(new EndPlayerActionCommand(secondPlayer.Id));
         BattleCommandSubmissionResult latePlay =
-            queue.SubmitRegistered(new PlayCardCommand(firstPlayer.Id, lateCardId, firstPlayer.Id));
+            queue.Submit(new PlayCardCommand(firstPlayer.Id, lateCardId, firstPlayer.Id));
         BattleEffectStateTestDriver.Kill(combatants, secondEnemy.Id, firstPlayer.Id);
 
         Assert.That(queue.Turn.CurrentValue.Phase, Is.EqualTo(BattleTurnPhase.PlayerAction));
@@ -354,12 +353,12 @@ public sealed class BattleCommandQueueTests
             new Dictionary<CombatantId, BattleCardZonesData> { [player.Id] = zones },
             enemyCombatantIdsInEncounterOrder: new[] { enemy.Id });
         using BattleCommandLifecycleExecutionRecorder lifecycle = queue.RecordExecutionLifecycle();
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
         presentation.CompleteNext();
 
-        queue.SubmitRegistered(new EndPlayerActionCommand(player.Id));
+        queue.Submit(new EndPlayerActionCommand(player.Id));
         BattleCommandSubmissionResult duplicate =
-            queue.SubmitRegistered(new EndPlayerActionCommand(player.Id));
+            queue.Submit(new EndPlayerActionCommand(player.Id));
 
         Assert.That(queue.Queue.CurrentValue.PendingCount, Is.EqualTo(2));
 
@@ -406,13 +405,13 @@ public sealed class BattleCommandQueueTests
             new[] { enemy.Id },
             initialHandCount: 1);
         using BattleCommandLifecycleExecutionRecorder lifecycle = queue.RecordExecutionLifecycle();
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
         presentation.CompleteNext();
         CardInstanceId queuedCardId = zones.Hand[0];
 
-        queue.SubmitRegistered(new EndPlayerActionCommand(player.Id));
+        queue.Submit(new EndPlayerActionCommand(player.Id));
         BattleCommandSubmissionResult stalePlay =
-            queue.SubmitRegistered(new PlayCardCommand(player.Id, queuedCardId, player.Id));
+            queue.Submit(new PlayCardCommand(player.Id, queuedCardId, player.Id));
 
         presentation.CompleteNext();
 
@@ -459,10 +458,10 @@ public sealed class BattleCommandQueueTests
                 firstLivingEnemy.Id,
                 secondLivingEnemy.Id
             });
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
         presentation.CompleteNext();
         BattleEffectStateTestDriver.Kill(combatants, player.Id, deadEnemy.Id);
-        queue.SubmitRegistered(new EndPlayerActionCommand(player.Id));
+        queue.Submit(new EndPlayerActionCommand(player.Id));
 
         Assert.That(queue.Turn.CurrentValue.CurrentActingEnemyId, Is.EqualTo(firstLivingEnemy.Id));
         Assert.That(presentation.Results, Has.Count.EqualTo(2));
@@ -507,7 +506,7 @@ public sealed class BattleCommandQueueTests
             new[] { enemy.Id },
             initialHandCount: 2);
 
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
 
         Assert.That(queue.Turn.CurrentValue.RoundNumber, Is.EqualTo(1));
         Assert.That(queue.Turn.CurrentValue.Players[player.Id].Energy, Is.EqualTo(3));
@@ -515,13 +514,13 @@ public sealed class BattleCommandQueueTests
 
         presentation.CompleteNext();
         CardInstanceId playedCardId = zones.Hand[0];
-        queue.SubmitRegistered(new PlayCardCommand(player.Id, playedCardId, player.Id));
+        queue.Submit(new PlayCardCommand(player.Id, playedCardId, player.Id));
 
         Assert.That(queue.Turn.CurrentValue.Players[player.Id].Energy, Is.EqualTo(2));
         Assert.That(zones.Hand.Count, Is.EqualTo(1));
 
         presentation.CompleteNext();
-        queue.SubmitRegistered(new EndPlayerActionCommand(player.Id));
+        queue.Submit(new EndPlayerActionCommand(player.Id));
 
         Assert.That(queue.Turn.CurrentValue.Phase, Is.EqualTo(BattleTurnPhase.EnemyAction));
         Assert.That(zones.Hand, Is.Empty);
@@ -562,7 +561,7 @@ public sealed class BattleCommandQueueTests
             coordinator: coordinator);
         using (coordinator.Lifecycle.Subscribe(lifecycle.Add))
         {
-            var driver = new BattleCommandRuntimeDriver(queue, coordinator);
+            var driver = new BattleCommandRuntimeDriver(queue);
             driver.Start();
 
             Assert.That(presentation.Results, Has.Count.EqualTo(1));
@@ -570,7 +569,7 @@ public sealed class BattleCommandQueueTests
             Assert.That(queue.Queue.CurrentValue.IsWaitingForPresentation, Is.True);
 
             presentation.CompleteNext();
-            queue.SubmitRegistered(new EndPlayerActionCommand(player.Id));
+            queue.Submit(new EndPlayerActionCommand(player.Id));
 
             Assert.That(presentation.Results, Has.Count.EqualTo(2));
             Assert.That(queue.Turn.CurrentValue.Phase, Is.EqualTo(BattleTurnPhase.EnemyAction));
@@ -637,15 +636,15 @@ public sealed class BattleCommandQueueTests
             cardCosts,
             enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
             initialHandCount: 2);
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
         CardInstanceId oneCostCardId = FindCardByTemplate(zones, 3001);
         CardInstanceId twoCostCardId = FindCardByTemplate(zones, 3002);
         presentation.CompleteNext();
 
         BattleCommandSubmissionResult firstSubmission =
-            queue.SubmitRegistered(new PlayCardCommand(player.Id, oneCostCardId, player.Id));
+            queue.Submit(new PlayCardCommand(player.Id, oneCostCardId, player.Id));
         BattleCommandSubmissionResult secondSubmission =
-            queue.SubmitRegistered(new PlayCardCommand(player.Id, twoCostCardId, player.Id));
+            queue.Submit(new PlayCardCommand(player.Id, twoCostCardId, player.Id));
 
         Assert.That(firstSubmission.AuthoritySequence, Is.EqualTo(2));
         Assert.That(secondSubmission.AuthoritySequence, Is.EqualTo(3));
@@ -690,14 +689,14 @@ public sealed class BattleCommandQueueTests
             cardCosts,
             enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
             initialHandCount: 1);
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
         CardInstanceId firstCardId = firstZones.Hand[0];
         CardInstanceId secondCardId = secondZones.Hand[0];
         presentation.CompleteNext();
-        queue.SubmitRegistered(new PlayCardCommand(firstPlayer.Id, firstCardId, firstPlayer.Id));
+        queue.Submit(new PlayCardCommand(firstPlayer.Id, firstCardId, firstPlayer.Id));
 
         BattleCommandSubmissionResult secondSubmission =
-            queue.SubmitRegistered(new PlayCardCommand(secondPlayer.Id, secondCardId, secondPlayer.Id));
+            queue.Submit(new PlayCardCommand(secondPlayer.Id, secondCardId, secondPlayer.Id));
 
         Assert.That(secondSubmission.Accepted, Is.True);
         Assert.That(secondSubmission.AuthoritySequence, Is.EqualTo(3));
@@ -739,13 +738,13 @@ public sealed class BattleCommandQueueTests
             enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
             initialHandCount: 2);
         using BattleCommandLifecycleExecutionRecorder lifecycle = queue.RecordExecutionLifecycle();
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
         CardInstanceId firstCardId = zones.Hand[0];
         CardInstanceId secondCardId = zones.Hand[1];
         presentation.CompleteNext();
-        queue.SubmitRegistered(new PlayCardCommand(player.Id, firstCardId, player.Id));
+        queue.Submit(new PlayCardCommand(player.Id, firstCardId, player.Id));
         BattleCommandSubmissionResult overspend =
-            queue.SubmitRegistered(new PlayCardCommand(player.Id, secondCardId, player.Id));
+            queue.Submit(new PlayCardCommand(player.Id, secondCardId, player.Id));
         BattleTurnData turnAfterFirstCard = queue.Turn.CurrentValue;
         CardZoneLayoutData layoutAfterFirstCard = zones.Layout.CurrentValue;
 
@@ -787,10 +786,10 @@ public sealed class BattleCommandQueueTests
             enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
             initialHandCount: 1);
         using BattleCommandLifecycleExecutionRecorder lifecycle = queue.RecordExecutionLifecycle();
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
         CardInstanceId cardId = zones.Hand[0];
         BattleCommandSubmissionResult stalePlay =
-            queue.SubmitRegistered(new PlayCardCommand(player.Id, cardId, player.Id));
+            queue.Submit(new PlayCardCommand(player.Id, cardId, player.Id));
         zones.DiscardFromHand(cardId);
         BattleTurnData turnBeforeExecution = queue.Turn.CurrentValue;
         CardZoneLayoutData layoutBeforeExecution = zones.Layout.CurrentValue;
@@ -838,10 +837,10 @@ public sealed class BattleCommandQueueTests
             initialHandCount: 1,
             cardTargetRules: targetRules);
         using BattleCommandLifecycleExecutionRecorder lifecycle = queue.RecordExecutionLifecycle();
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
         CardInstanceId cardId = zones.Hand[0];
         BattleCommandSubmissionResult playSubmission =
-            queue.SubmitRegistered(new PlayCardCommand(player.Id, cardId, enemy.Id));
+            queue.Submit(new PlayCardCommand(player.Id, cardId, enemy.Id));
         BattleEffectStateTestDriver.Kill(combatants, player.Id, enemy.Id);
         BattleTurnData turnBeforeExecution = queue.Turn.CurrentValue;
         CardZoneLayoutData layoutBeforeExecution = zones.Layout.CurrentValue;
@@ -896,13 +895,13 @@ public sealed class BattleCommandQueueTests
             enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
             initialHandCount: 1,
             cardTargetRules: targetRules);
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
         CardInstanceId cardId = zones.Hand[0];
         presentation.CompleteNext();
         var healthBeforeExecution = enemy.Health;
         int healthValueBeforeExecution = enemy.CurrentHealth;
 
-        queue.SubmitRegistered(new PlayCardCommand(player.Id, cardId, enemy.Id));
+        queue.Submit(new PlayCardCommand(player.Id, cardId, enemy.Id));
 
         Assert.That(presentation.Results[1].Succeeded, Is.True);
         Assert.That(queue.Turn.CurrentValue.Players[player.Id].Energy, Is.EqualTo(2));
@@ -941,14 +940,14 @@ public sealed class BattleCommandQueueTests
             cardCosts,
             initialHandCount: 1);
         using BattleCommandLifecycleExecutionRecorder lifecycle = queue.RecordExecutionLifecycle();
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
         CardInstanceId cardId = zones.Hand[0];
         presentation.CompleteNext();
         BattleTurnData turnBeforeExecution = queue.Turn.CurrentValue;
         CardZoneLayoutData layoutBeforeExecution = zones.Layout.CurrentValue;
 
         BattleCommandSubmissionResult invalidActor =
-            queue.SubmitRegistered(new PlayCardCommand(enemy.Id, cardId, enemy.Id));
+            queue.Submit(new PlayCardCommand(enemy.Id, cardId, enemy.Id));
 
         BattleCommandLifecycleEvent invalidActorTerminal = lifecycle.RequireTerminal(invalidActor);
         Assert.That(
@@ -982,7 +981,7 @@ public sealed class BattleCommandQueueTests
             cardCosts,
             initialHandCount: 1);
         using BattleCommandLifecycleExecutionRecorder lifecycle = queue.RecordExecutionLifecycle();
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
         CardInstanceId cardId = zones.Hand[0];
         presentation.CompleteNext();
         BattleEffectStateTestDriver.Kill(combatants, player.Id, player.Id);
@@ -990,7 +989,7 @@ public sealed class BattleCommandQueueTests
         CardZoneLayoutData layoutBeforeExecution = zones.Layout.CurrentValue;
 
         BattleCommandSubmissionResult deadPlayerPlay =
-            queue.SubmitRegistered(new PlayCardCommand(player.Id, cardId, player.Id));
+            queue.Submit(new PlayCardCommand(player.Id, cardId, player.Id));
 
         BattleCommandLifecycleEvent deadPlayerTerminal = lifecycle.RequireTerminal(deadPlayerPlay);
         Assert.That(
@@ -1026,12 +1025,12 @@ public sealed class BattleCommandQueueTests
             cardCosts: cardCosts,
             enemyCombatantIdsInEncounterOrder: new[] { enemy.Id });
         using BattleCommandLifecycleExecutionRecorder lifecycle = queue.RecordExecutionLifecycle();
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
         presentation.CompleteNext();
         BattleTurnData turnBeforeExecution = queue.Turn.CurrentValue;
 
         BattleCommandSubmissionResult missingZonesPlay =
-            queue.SubmitRegistered(new PlayCardCommand(player.Id, cardId, player.Id));
+            queue.Submit(new PlayCardCommand(player.Id, cardId, player.Id));
 
         BattleCommandLifecycleEvent missingZonesTerminal = lifecycle.RequireTerminal(missingZonesPlay);
         Assert.That(
@@ -1065,14 +1064,14 @@ public sealed class BattleCommandQueueTests
             enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
             initialHandCount: 1);
         using BattleCommandLifecycleExecutionRecorder lifecycle = queue.RecordExecutionLifecycle();
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
         CardInstanceId cardId = zones.Hand[0];
         presentation.CompleteNext();
         BattleTurnData turnBeforeExecution = queue.Turn.CurrentValue;
         CardZoneLayoutData layoutBeforeExecution = zones.Layout.CurrentValue;
 
         BattleCommandSubmissionResult missingTemplatePlay =
-            queue.SubmitRegistered(new PlayCardCommand(player.Id, cardId, player.Id));
+            queue.Submit(new PlayCardCommand(player.Id, cardId, player.Id));
 
         BattleCommandLifecycleEvent missingTemplateTerminal = lifecycle.RequireTerminal(missingTemplatePlay);
         Assert.That(
@@ -1108,12 +1107,12 @@ public sealed class BattleCommandQueueTests
                    if (turn.Phase != BattleTurnPhase.BattleStart)
                        return;
 
-                   firstSubmission = queue.SubmitRegistered(new EndPlayerActionCommand(firstPlayer.Id));
-                   secondSubmission = queue.SubmitRegistered(new EndPlayerActionCommand(secondPlayer.Id));
+                   firstSubmission = queue.Submit(new EndPlayerActionCommand(firstPlayer.Id));
+                   secondSubmission = queue.Submit(new EndPlayerActionCommand(secondPlayer.Id));
                    queueDuringExecution = queue.Queue.CurrentValue;
                }))
         {
-            queue.SubmitRegistered(new StartBattleCommand());
+            queue.Submit(new StartBattleCommand());
         }
 
         Assert.That(firstSubmission.Accepted, Is.True);
@@ -1151,9 +1150,9 @@ public sealed class BattleCommandQueueTests
                 [secondPlayer.Id] = secondZones,
             },
             initialHandCount: 1);
-        queue.SubmitRegistered(new StartBattleCommand());
-        queue.SubmitRegistered(new EndPlayerActionCommand(firstPlayer.Id));
-        queue.SubmitRegistered(new EndPlayerActionCommand(secondPlayer.Id));
+        queue.Submit(new StartBattleCommand());
+        queue.Submit(new EndPlayerActionCommand(firstPlayer.Id));
+        queue.Submit(new EndPlayerActionCommand(secondPlayer.Id));
 
         presentation.CompleteNext();
         presentation.CompleteLastAgain();
@@ -1197,8 +1196,6 @@ internal static class BattleCommandQueueTestFactory
 {
     private static readonly List<BattleEnemyIntentsData> OwnedEnemyIntents =
         new List<BattleEnemyIntentsData>();
-    private static readonly ConditionalWeakTable<BattleCommandQueue, BattleCommandSubmissionCoordinator>
-        Coordinators = new ConditionalWeakTable<BattleCommandQueue, BattleCommandSubmissionCoordinator>();
 
     /// <summary>用最小静态表和可选玩家卡区创建只供纯模型测试使用的命令队列。</summary>
     internal static BattleCommandQueue Create(
@@ -1261,32 +1258,7 @@ internal static class BattleCommandQueueTestFactory
                 presentation,
                 resolvedCoordinator,
                 cardTargetRandomSeed: battleSeed);
-        TrackCoordinator(queue, resolvedCoordinator);
         return queue;
-    }
-
-    /// <summary>把自建 Queue 与其唯一 coordinator 登记给共享预注册提交扩展。</summary>
-    internal static void TrackCoordinator(
-        BattleCommandQueue queue,
-        BattleCommandSubmissionCoordinator coordinator)
-    {
-        if (queue == null)
-            throw new ArgumentNullException(nameof(queue));
-        if (coordinator == null)
-            throw new ArgumentNullException(nameof(coordinator));
-
-        Coordinators.Add(queue, coordinator);
-    }
-
-    /// <summary>读取测试工厂与指定 Queue 共同持有的唯一提交协调器。</summary>
-    internal static BattleCommandSubmissionCoordinator GetCoordinator(BattleCommandQueue queue)
-    {
-        if (queue == null)
-            throw new ArgumentNullException(nameof(queue));
-        if (!Coordinators.TryGetValue(queue, out BattleCommandSubmissionCoordinator coordinator))
-            throw new InvalidOperationException("Battle command queue was not created by the shared test factory.");
-
-        return coordinator;
     }
 
     /// <summary>释放当前用例中由工厂创建、但不归命令队列所有的敌人意图聚合。</summary>
@@ -1384,34 +1356,17 @@ internal static class BattleCommandQueueTestFactory
     }
 }
 
-internal static class BattleCommandQueueTestSubmissionExtensions
+internal static class BattleCommandQueueTestLifecycleExtensions
 {
-    /// <summary>通过共享 coordinator 预注册同一命令引用，再调用生产唯一 Submit seam。</summary>
-    internal static BattleCommandSubmissionResult SubmitRegistered(
-        this BattleCommandQueue queue,
-        BattleCommand command)
-    {
-        if (queue == null)
-            throw new ArgumentNullException(nameof(queue));
-        if (command == null)
-            throw new ArgumentNullException(nameof(command));
-
-        BattleCommandSubmissionCoordinator coordinator =
-            BattleCommandQueueTestFactory.GetCoordinator(queue);
-        coordinator.PreRegister(command);
-        return queue.Submit(command);
-    }
-
     /// <summary>订阅指定 Queue 的真实 lifecycle，供普通失败零表现测试读取终态。</summary>
     internal static BattleCommandLifecycleExecutionRecorder RecordExecutionLifecycle(
         this BattleCommandQueue queue)
     {
-        return new BattleCommandLifecycleExecutionRecorder(
-            BattleCommandQueueTestFactory.GetCoordinator(queue));
+        return new BattleCommandLifecycleExecutionRecorder(queue);
     }
 }
 
-/// <summary>只记录 coordinator 发布的真实执行终态，不伪造 presentation result。</summary>
+/// <summary>只记录 Queue 发布的真实执行终态，不伪造 presentation result。</summary>
 internal sealed class BattleCommandLifecycleExecutionRecorder : IDisposable
 {
     private readonly IDisposable _subscription;
@@ -1421,14 +1376,13 @@ internal sealed class BattleCommandLifecycleExecutionRecorder : IDisposable
     /// <summary>按 Queue 发布顺序暴露测试期生命周期事件。</summary>
     internal IReadOnlyList<BattleCommandLifecycleEvent> Events => _events;
 
-    /// <summary>订阅本场唯一 coordinator 的生命周期流。</summary>
-    internal BattleCommandLifecycleExecutionRecorder(
-        BattleCommandSubmissionCoordinator coordinator)
+    /// <summary>订阅指定 Queue 的生命周期流。</summary>
+    internal BattleCommandLifecycleExecutionRecorder(BattleCommandQueue queue)
     {
-        if (coordinator == null)
-            throw new ArgumentNullException(nameof(coordinator));
+        if (queue == null)
+            throw new ArgumentNullException(nameof(queue));
 
-        _subscription = coordinator.Lifecycle.Subscribe(_events.Add);
+        _subscription = queue.Lifecycle.Subscribe(_events.Add);
     }
 
     /// <summary>按已接受序号取得唯一非 Queued 终态；尚未终结或重复终态时立即失败。</summary>

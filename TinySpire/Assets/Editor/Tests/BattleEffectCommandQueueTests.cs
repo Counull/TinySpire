@@ -31,7 +31,7 @@ public sealed class BattleEffectCommandQueueTests
         {
             CardInstanceId cardId = scenario.FindCard(3001);
 
-            scenario.Queue.SubmitRegistered(new PlayCardCommand(
+            scenario.Queue.Submit(new PlayCardCommand(
                 scenario.Player.Id,
                 cardId,
                 scenario.Player.Id));
@@ -101,7 +101,7 @@ public sealed class BattleEffectCommandQueueTests
             scenario.ExecuteSetupCardEffects(3998, scenario.Enemy.Id);
             CardInstanceId cardId = scenario.FindCard(3002);
 
-            scenario.Queue.SubmitRegistered(new PlayCardCommand(
+            scenario.Queue.Submit(new PlayCardCommand(
                 scenario.Player.Id,
                 cardId,
                 scenario.Enemy.Id));
@@ -158,7 +158,7 @@ public sealed class BattleEffectCommandQueueTests
         {
             CardInstanceId cardId = scenario.FindCard(3003);
 
-            scenario.Queue.SubmitRegistered(new PlayCardCommand(
+            scenario.Queue.Submit(new PlayCardCommand(
                 scenario.Player.Id,
                 cardId,
                 scenario.Player.Id));
@@ -214,7 +214,7 @@ public sealed class BattleEffectCommandQueueTests
         {
             CardInstanceId cardId = scenario.FindCard(3004);
 
-            scenario.Queue.SubmitRegistered(new PlayCardCommand(
+            scenario.Queue.Submit(new PlayCardCommand(
                 scenario.Player.Id,
                 cardId,
                 scenario.Enemy.Id));
@@ -276,7 +276,7 @@ public sealed class BattleEffectCommandQueueTests
         {
             CardInstanceId cardId = scenario.FindCard(3118);
 
-            scenario.Queue.SubmitRegistered(new PlayCardCommand(
+            scenario.Queue.Submit(new PlayCardCommand(
                 scenario.Player.Id,
                 cardId,
                 scenario.Enemy.Id));
@@ -336,7 +336,7 @@ public sealed class BattleEffectCommandQueueTests
         {
             CardInstanceId cardId = scenario.FindCard(3123);
 
-            scenario.Queue.SubmitRegistered(new PlayCardCommand(
+            scenario.Queue.Submit(new PlayCardCommand(
                 scenario.Player.Id,
                 cardId,
                 scenario.Enemy.Id));
@@ -393,7 +393,7 @@ public sealed class BattleEffectCommandQueueTests
         {
             CardInstanceId cardId = scenario.FindCard(3120);
 
-            scenario.Queue.SubmitRegistered(new PlayCardCommand(
+            scenario.Queue.Submit(new PlayCardCommand(
                 scenario.Player.Id,
                 cardId,
                 scenario.Enemy.Id));
@@ -465,7 +465,7 @@ public sealed class BattleEffectCommandQueueTests
             using BattleCommandLifecycleExecutionRecorder recorder =
                 scenario.Queue.RecordExecutionLifecycle();
 
-            BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(
+            BattleCommandSubmissionResult submission = scenario.Queue.Submit(
                 new PlayCardCommand(
                     scenario.Player.Id,
                     cardId,
@@ -572,7 +572,7 @@ public sealed class BattleEffectCommandQueueTests
             using BattleCommandLifecycleExecutionRecorder recorder =
                 scenario.Queue.RecordExecutionLifecycle();
 
-            BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(
+            BattleCommandSubmissionResult submission = scenario.Queue.Submit(
                 new PlayCardCommand(
                     scenario.Player.Id,
                     cardId,
@@ -645,7 +645,7 @@ public sealed class BattleEffectCommandQueueTests
             using BattleCommandLifecycleExecutionRecorder recorder =
                 scenario.Queue.RecordExecutionLifecycle();
 
-            BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(
+            BattleCommandSubmissionResult submission = scenario.Queue.Submit(
                 new PlayCardCommand(
                     scenario.Player.Id,
                     cardId,
@@ -752,7 +752,7 @@ public sealed class BattleEffectCommandQueueTests
             using BattleCommandLifecycleExecutionRecorder recorder =
                 scenario.Queue.RecordExecutionLifecycle();
 
-            BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(
+            BattleCommandSubmissionResult submission = scenario.Queue.Submit(
                 new PlayCardCommand(
                     scenario.Player.Id,
                     cardId,
@@ -842,7 +842,7 @@ public sealed class BattleEffectCommandQueueTests
 
             using BattleCommandLifecycleExecutionRecorder recorder =
                 scenario.Queue.RecordExecutionLifecycle();
-            BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(
+            BattleCommandSubmissionResult submission = scenario.Queue.Submit(
                 new PlayCardCommand(
                     scenario.Player.Id,
                     cardId,
@@ -920,7 +920,7 @@ public sealed class BattleEffectCommandQueueTests
 
             using BattleCommandLifecycleExecutionRecorder recorder =
                 scenario.Queue.RecordExecutionLifecycle();
-            BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(
+            BattleCommandSubmissionResult submission = scenario.Queue.Submit(
                 new PlayCardCommand(
                     scenario.Player.Id,
                     cardId,
@@ -1009,7 +1009,7 @@ public sealed class BattleEffectCommandQueueTests
             using BattleCommandLifecycleExecutionRecorder recorder =
                 scenario.Queue.RecordExecutionLifecycle();
 
-            BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(
+            BattleCommandSubmissionResult submission = scenario.Queue.Submit(
                 new PlayCardCommand(
                     scenario.Player.Id,
                     cardId,
@@ -1086,7 +1086,7 @@ public sealed class BattleEffectCommandQueueTests
             using BattleCommandLifecycleExecutionRecorder recorder =
                 scenario.Queue.RecordExecutionLifecycle();
 
-            BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(
+            BattleCommandSubmissionResult submission = scenario.Queue.Submit(
                 new PlayCardCommand(
                     scenario.Player.Id,
                     cardId,
@@ -1197,7 +1197,7 @@ public sealed class BattleEffectCommandQueueTests
             using (scenario.Zones.Layout.Skip(1).Subscribe(_ => layoutPublicationCount++))
             using (scenario.Player.Health.Skip(1).Subscribe(_ => healthPublicationCount++))
             {
-                submission = scenario.Queue.SubmitRegistered(
+                submission = scenario.Queue.Submit(
                     new PlayCardCommand(
                         scenario.Player.Id,
                         cardId,
@@ -1293,7 +1293,7 @@ public sealed class BattleEffectCommandQueueTests
             BattleCommandSubmissionResult submission;
             using (scenario.Zones.Layout.Skip(1).Subscribe(_ => layoutPublicationCount++))
             {
-                submission = scenario.Queue.SubmitRegistered(new PlayCardCommand(
+                submission = scenario.Queue.Submit(new PlayCardCommand(
                     scenario.Player.Id,
                     sourceCardId,
                     scenario.Player.Id,
@@ -1406,7 +1406,7 @@ public sealed class BattleEffectCommandQueueTests
             BattleCommandSubmissionResult submission;
             using (onlySource.Zones.Layout.Skip(1).Subscribe(_ => layoutPublicationCount++))
             {
-                submission = onlySource.Queue.SubmitRegistered(new PlayCardCommand(
+                submission = onlySource.Queue.Submit(new PlayCardCommand(
                     onlySource.Player.Id,
                     sourceCardId,
                     onlySource.Player.Id));
@@ -1478,7 +1478,7 @@ public sealed class BattleEffectCommandQueueTests
             BattleCommandSubmissionResult submission;
             using (fullHand.Zones.Layout.Skip(1).Subscribe(_ => layoutPublicationCount++))
             {
-                submission = fullHand.Queue.SubmitRegistered(new PlayCardCommand(
+                submission = fullHand.Queue.Submit(new PlayCardCommand(
                     fullHand.Player.Id,
                     sourceCardId,
                     fullHand.Player.Id,
@@ -1580,7 +1580,7 @@ public sealed class BattleEffectCommandQueueTests
             BattleCommandSubmissionResult submission;
             using (scenario.Queue.Turn.Skip(1).Subscribe(_ => turnPublicationCount++))
             using (scenario.Zones.Layout.Skip(1).Subscribe(_ => layoutPublicationCount++))
-                submission = scenario.Queue.SubmitRegistered(command);
+                submission = scenario.Queue.Submit(command);
             BattleCommandLifecycleEvent terminal = recorder.RequireTerminal(submission);
 
             Assert.That(submission.Accepted, Is.True);
@@ -1846,7 +1846,7 @@ public sealed class BattleEffectCommandQueueTests
                 BattleCommandSubmissionResult submission;
                 using (scenario.Queue.Turn.Skip(1).Subscribe(_ => turnPublicationCount++))
                 using (scenario.Zones.Layout.Skip(1).Subscribe(_ => layoutPublicationCount++))
-                    submission = scenario.Queue.SubmitRegistered(command);
+                    submission = scenario.Queue.Submit(command);
                 BattleCommandLifecycleEvent terminal = recorder.RequireTerminal(submission);
 
                 Assert.That(submission.Accepted, Is.True, grammarCase.Name);
@@ -1909,7 +1909,7 @@ public sealed class BattleEffectCommandQueueTests
         {
             CardInstanceId cardId = scenario.FindCard(3120);
 
-            scenario.Queue.SubmitRegistered(new PlayCardCommand(
+            scenario.Queue.Submit(new PlayCardCommand(
                 scenario.Player.Id,
                 cardId,
                 scenario.Enemy.Id));
@@ -1976,7 +1976,7 @@ public sealed class BattleEffectCommandQueueTests
             CardInstanceId oldDiscardId = reshuffle.Zones.Hand[1];
             reshuffle.Zones.DiscardFromHand(oldDiscardId);
 
-            reshuffle.Queue.SubmitRegistered(new PlayCardCommand(
+            reshuffle.Queue.Submit(new PlayCardCommand(
                 reshuffle.Player.Id,
                 cardId,
                 reshuffle.Enemy.Id));
@@ -2026,7 +2026,7 @@ public sealed class BattleEffectCommandQueueTests
             uint shuffleBefore = fullHand.Zones.ShuffleRandomState;
             CardInstanceId drawPileCardId = fullHand.Zones.DrawPile[0];
 
-            fullHand.Queue.SubmitRegistered(new PlayCardCommand(
+            fullHand.Queue.Submit(new PlayCardCommand(
                 fullHand.Player.Id,
                 cardId,
                 fullHand.Enemy.Id));
@@ -2080,7 +2080,7 @@ public sealed class BattleEffectCommandQueueTests
                 insufficientEnergy.Queue.RecordExecutionLifecycle();
 
             BattleCommandLifecycleEvent terminal = recorder.RequireTerminal(
-                insufficientEnergy.Queue.SubmitRegistered(new PlayCardCommand(
+                insufficientEnergy.Queue.Submit(new PlayCardCommand(
                     insufficientEnergy.Player.Id,
                     cardId,
                     insufficientEnergy.Enemy.Id)));
@@ -2135,7 +2135,7 @@ public sealed class BattleEffectCommandQueueTests
                 missingTarget.Queue.RecordExecutionLifecycle();
 
             BattleCommandLifecycleEvent terminal = recorder.RequireTerminal(
-                missingTarget.Queue.SubmitRegistered(new PlayCardCommand(
+                missingTarget.Queue.Submit(new PlayCardCommand(
                     missingTarget.Player.Id,
                     cardId,
                     targetId: null)));
@@ -2195,7 +2195,7 @@ public sealed class BattleEffectCommandQueueTests
                 scenario.Queue.RecordExecutionLifecycle();
 
             BattleCommandLifecycleEvent terminal = recorder.RequireTerminal(
-                scenario.Queue.SubmitRegistered(new PlayCardCommand(
+                scenario.Queue.Submit(new PlayCardCommand(
                     scenario.Player.Id,
                     cardId,
                     scenario.Enemy.Id)));
@@ -2251,7 +2251,7 @@ public sealed class BattleEffectCommandQueueTests
             CardInstanceId sourceId = lethal.FindCard(3113);
             CardInstanceId drawnCardId = lethal.Zones.DrawPile[0];
 
-            lethal.Queue.SubmitRegistered(new PlayCardCommand(
+            lethal.Queue.Submit(new PlayCardCommand(
                 lethal.Player.Id,
                 sourceId,
                 lethal.Enemy.Id));
@@ -2319,7 +2319,7 @@ public sealed class BattleEffectCommandQueueTests
             CardInstanceId sourceId = projected.FindCard(3981);
             CardInstanceId drawnCardId = projected.Zones.DrawPile[0];
 
-            projected.Queue.SubmitRegistered(new PlayCardCommand(
+            projected.Queue.Submit(new PlayCardCommand(
                 projected.Player.Id,
                 sourceId,
                 projected.Player.Id));
@@ -2401,7 +2401,7 @@ public sealed class BattleEffectCommandQueueTests
             CardInstanceId drawPileCardId = scenario.Zones.DrawPile[0];
             uint shuffleBefore = scenario.Zones.ShuffleRandomState;
 
-            scenario.Queue.SubmitRegistered(new PlayCardCommand(
+            scenario.Queue.Submit(new PlayCardCommand(
                 scenario.Player.Id,
                 sourceId,
                 scenario.Player.Id));
@@ -2455,7 +2455,7 @@ public sealed class BattleEffectCommandQueueTests
         {
             CardInstanceId cardId = scenario.FindCard(3004);
 
-            scenario.Queue.SubmitRegistered(new PlayCardCommand(
+            scenario.Queue.Submit(new PlayCardCommand(
                 scenario.Player.Id,
                 cardId,
                 scenario.Enemy.Id));
@@ -2529,7 +2529,7 @@ public sealed class BattleEffectCommandQueueTests
 
             using BattleCommandLifecycleExecutionRecorder recorder =
                 scenario.Queue.RecordExecutionLifecycle();
-            BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(new PlayCardCommand(
+            BattleCommandSubmissionResult submission = scenario.Queue.Submit(new PlayCardCommand(
                 scenario.Player.Id,
                 havocCardId,
                 scenario.Player.Id));
@@ -2637,7 +2637,7 @@ public sealed class BattleEffectCommandQueueTests
             using (BattleCommandLifecycleExecutionRecorder recorder =
                    scenario.Queue.RecordExecutionLifecycle())
             {
-                BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(
+                BattleCommandSubmissionResult submission = scenario.Queue.Submit(
                     new PlayCardCommand(
                         scenario.Player.Id,
                         juggernautCardId,
@@ -2661,7 +2661,7 @@ public sealed class BattleEffectCommandQueueTests
             using (BattleCommandLifecycleExecutionRecorder recorder =
                    scenario.Queue.RecordExecutionLifecycle())
             {
-                BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(
+                BattleCommandSubmissionResult submission = scenario.Queue.Submit(
                     new PlayCardCommand(
                         scenario.Player.Id,
                         gainBlockCardId,
@@ -2766,7 +2766,7 @@ public sealed class BattleEffectCommandQueueTests
             CardInstanceId setupCardId = scenario.FindCard(setupTemplateId);
             CardInstanceId barricadeCardId = scenario.FindCard(barricadeTemplateId);
 
-            scenario.Queue.SubmitRegistered(new PlayCardCommand(
+            scenario.Queue.Submit(new PlayCardCommand(
                 scenario.Player.Id,
                 setupCardId,
                 scenario.Player.Id));
@@ -2777,7 +2777,7 @@ public sealed class BattleEffectCommandQueueTests
 
             using BattleCommandLifecycleExecutionRecorder recorder =
                 scenario.Queue.RecordExecutionLifecycle();
-            BattleCommandSubmissionResult barricadeSubmission = scenario.Queue.SubmitRegistered(
+            BattleCommandSubmissionResult barricadeSubmission = scenario.Queue.Submit(
                 new PlayCardCommand(
                     scenario.Player.Id,
                     barricadeCardId,
@@ -2796,7 +2796,7 @@ public sealed class BattleEffectCommandQueueTests
             Assert.That(scenario.Zones.PowerPile, Is.EqualTo(new[] { barricadeCardId }));
 
             int resultCountBeforeEnd = scenario.Presentation.Results.Count;
-            scenario.Queue.SubmitRegistered(new EndPlayerActionCommand(scenario.Player.Id));
+            scenario.Queue.Submit(new EndPlayerActionCommand(scenario.Player.Id));
             BattleCommandExecutionResult endPlayerAction =
                 scenario.Presentation.Results[resultCountBeforeEnd];
             Assert.That(endPlayerAction.Succeeded, Is.True);
@@ -2851,7 +2851,7 @@ public sealed class BattleEffectCommandQueueTests
             Assert.That(start.Settlements[3], Is.TypeOf<BattlePhaseChangedSettlement>());
 
             CardInstanceId[] handBeforeEnd = new List<CardInstanceId>(scenario.Zones.Hand).ToArray();
-            scenario.Queue.SubmitRegistered(new EndPlayerActionCommand(scenario.Player.Id));
+            scenario.Queue.Submit(new EndPlayerActionCommand(scenario.Player.Id));
             BattleCommandExecutionResult end = scenario.Presentation.Results[1];
             Assert.That(end.Succeeded, Is.True);
             Assert.That(end.Settlements.Count, Is.EqualTo(3));
@@ -2956,7 +2956,7 @@ public sealed class BattleEffectCommandQueueTests
 
             using BattleCommandLifecycleExecutionRecorder recorder =
                 scenario.Queue.RecordExecutionLifecycle();
-            BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(
+            BattleCommandSubmissionResult submission = scenario.Queue.Submit(
                 new PlayCardCommand(
                     scenario.Player.Id,
                     cardId,
@@ -3021,7 +3021,7 @@ public sealed class BattleEffectCommandQueueTests
 
             using BattleCommandLifecycleExecutionRecorder recorder =
                 scenario.Queue.RecordExecutionLifecycle();
-            BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(new PlayCardCommand(
+            BattleCommandSubmissionResult submission = scenario.Queue.Submit(new PlayCardCommand(
                 scenario.Player.Id,
                 cardId,
                 scenario.Player.Id));
@@ -3076,7 +3076,7 @@ public sealed class BattleEffectCommandQueueTests
 
             using BattleCommandLifecycleExecutionRecorder recorder =
                 scenario.Queue.RecordExecutionLifecycle();
-            BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(
+            BattleCommandSubmissionResult submission = scenario.Queue.Submit(
                 new PlayCardCommand(
                     scenario.Player.Id,
                     cardId,
@@ -3132,7 +3132,7 @@ public sealed class BattleEffectCommandQueueTests
 
             using BattleCommandLifecycleExecutionRecorder recorder =
                 scenario.Queue.RecordExecutionLifecycle();
-            BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(
+            BattleCommandSubmissionResult submission = scenario.Queue.Submit(
                 new PlayCardCommand(
                     scenario.Player.Id,
                     cardId,
@@ -3308,7 +3308,7 @@ public sealed class BattleEffectCommandQueueTests
                 enemyIntents: EnemyIntents,
                 tables: Tables,
                 battleSeed: battleSeed);
-            Queue.SubmitRegistered(new StartBattleCommand());
+            Queue.Submit(new StartBattleCommand());
             Presentation.CompleteNext();
         }
 

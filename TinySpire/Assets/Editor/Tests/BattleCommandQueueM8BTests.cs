@@ -14,12 +14,15 @@ public sealed class BattleCommandQueueM8BTests
         BattleCommandQueueTestFactory.DisposeOwnedEnemyIntents();
     }
 
-    /// <summary>验证未预注册命令不会进入权威顺序，也不会发布任何生命周期。</summary>
+    /// <summary>验证结构性拒绝由 Queue 内部撤销注册，不分配序号或发布生命周期。</summary>
     [Test]
-    public void Submit_WithoutPreRegistration_RejectsWithoutSequenceOrLifecycle()
+    public void Submit_BeforeBattleRejectsWithoutSequenceOrLifecycle()
     {
         using var combatants = new BattleCombatantsData();
-        combatants.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
+        PlayerCombatantData player = combatants.AddPlayer(
+            templateId: 101,
+            maxHealth: 30,
+            strength: 0);
         var coordinator = new BattleCommandSubmissionCoordinator();
         var presentation = new M8BControllableBattleCommandPresentation();
         var lifecycles = new List<BattleCommandLifecycleEvent>();
@@ -29,13 +32,14 @@ public sealed class BattleCommandQueueM8BTests
             presentation,
             coordinator: coordinator);
 
-        BattleCommandSubmissionResult result = queue.Submit(new StartBattleCommand());
+        BattleCommandSubmissionResult result = queue.Submit(
+            new EndPlayerActionCommand(player.Id));
 
         Assert.That(result.Accepted, Is.False);
         Assert.That(result.AuthoritySequence, Is.Null);
         Assert.That(
             result.FailureReason,
-            Is.EqualTo(BattleCommandSubmissionFailureReason.InvalidSubmissionHandle));
+            Is.EqualTo(BattleCommandSubmissionFailureReason.BattleNotStarted));
         Assert.That(lifecycles, Is.Empty);
         Assert.That(presentation.Results, Is.Empty);
         Assert.That(presentation.PendingCompletionCount, Is.Zero);
@@ -60,15 +64,14 @@ public sealed class BattleCommandQueueM8BTests
             coordinator: coordinator);
         var command = new StartBattleCommand();
 
-        BattleCommandSubmissionResult result = SubmitRegistered(
-            coordinator,
-            queue,
-            command,
-            out BattleCommandHandle handle);
+        BattleCommandSubmissionResult result = queue.Submit(command);
 
         Assert.That(result.Accepted, Is.True);
         Assert.That(result.AuthoritySequence, Is.EqualTo(1));
         Assert.That(lifecycles, Has.Count.EqualTo(2));
+        BattleCommandHandle handle = lifecycles[0].Handle;
+        Assert.That(lifecycles[0].Command, Is.SameAs(command));
+        Assert.That(lifecycles[1].Command, Is.SameAs(command));
         AssertLifecycle(lifecycles[0], handle, 1, BattleCommandLifecycleStage.Queued);
         AssertLifecycle(lifecycles[1], handle, 1, BattleCommandLifecycleStage.ExecutionCompleted);
         Assert.That(lifecycles[0].Settlements, Is.Empty);
@@ -109,14 +112,12 @@ public sealed class BattleCommandQueueM8BTests
             combatants,
             presentation,
             coordinator: coordinator);
-        SubmitRegistered(coordinator, queue, new StartBattleCommand(), out _);
+        SubmitAndCaptureHandle(queue, new StartBattleCommand(), out _);
         presentation.CompleteNext();
         lifecycles.Clear();
         int presentedCountBeforeFailure = presentation.Results.Count;
 
-        BattleCommandSubmissionResult result = SubmitRegistered(
-            coordinator,
-            queue,
+        BattleCommandSubmissionResult result = SubmitAndCaptureHandle(queue,
             new StartBattleCommand(),
             out BattleCommandHandle handle);
 
@@ -160,16 +161,12 @@ public sealed class BattleCommandQueueM8BTests
                 return;
             }
 
-            nestedSubmission = SubmitRegistered(
-                coordinator,
-                queue,
+            nestedSubmission = SubmitAndCaptureHandle(queue,
                 new StartBattleCommand(),
                 out nestedHandle);
         });
 
-        BattleCommandSubmissionResult firstSubmission = SubmitRegistered(
-            coordinator,
-            queue,
+        BattleCommandSubmissionResult firstSubmission = SubmitAndCaptureHandle(queue,
             new StartBattleCommand(),
             out BattleCommandHandle firstHandle);
 
@@ -198,7 +195,6 @@ public sealed class BattleCommandQueueM8BTests
         Assert.That(coordinator.IsPending(nestedHandle), Is.True);
 
         var rejectedCommand = new StartBattleCommand();
-        BattleCommandHandle rejectedHandle = coordinator.PreRegister(rejectedCommand);
         BattleCommandSubmissionResult rejected = queue.Submit(rejectedCommand);
 
         Assert.That(rejected.Accepted, Is.False);
@@ -206,7 +202,7 @@ public sealed class BattleCommandQueueM8BTests
         Assert.That(
             rejected.FailureReason,
             Is.EqualTo(BattleCommandSubmissionFailureReason.QueueFaulted));
-        Assert.That(coordinator.IsPending(rejectedHandle), Is.False);
+        Assert.That(queue.Queue.CurrentValue.PendingCount, Is.EqualTo(1));
         Assert.That(lifecycles, Has.Count.EqualTo(3));
     }
 
@@ -239,17 +235,13 @@ public sealed class BattleCommandQueueM8BTests
 
             submittedFromCallback = true;
             phaseBeforeNestedSubmit = queue.Turn.CurrentValue.Phase;
-            callbackSubmission = SubmitRegistered(
-                coordinator,
-                queue,
+            callbackSubmission = SubmitAndCaptureHandle(queue,
                 new StartBattleCommand(),
                 out _);
             phaseAfterNestedSubmit = queue.Turn.CurrentValue.Phase;
         });
 
-        BattleCommandSubmissionResult firstSubmission = SubmitRegistered(
-            coordinator,
-            queue,
+        BattleCommandSubmissionResult firstSubmission = SubmitAndCaptureHandle(queue,
             new StartBattleCommand(),
             out _);
 
@@ -307,14 +299,12 @@ public sealed class BattleCommandQueueM8BTests
                 return;
 
             submittedFromSnapshot = true;
-            SubmitRegistered(
-                coordinator,
-                queue,
+            SubmitAndCaptureHandle(queue,
                 new StartBattleCommand(),
                 out _);
         });
 
-        SubmitRegistered(coordinator, queue, new StartBattleCommand(), out _);
+        SubmitAndCaptureHandle(queue, new StartBattleCommand(), out _);
 
         Assert.That(
             lifecycles.Select(item => (item.AuthoritySequence, item.Stage)),
@@ -346,14 +336,12 @@ public sealed class BattleCommandQueueM8BTests
             new Dictionary<CombatantId, BattleCardZonesData> { [player.Id] = zones },
             enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
             coordinator: coordinator);
-        SubmitRegistered(coordinator, queue, new StartBattleCommand(), out _);
+        SubmitAndCaptureHandle(queue, new StartBattleCommand(), out _);
         presentation.CompleteNext();
         lifecycles.Clear();
 
         var forgedSystemCommand = new CompleteEnemyActionCommand(enemy.Id);
-        BattleCommandSubmissionResult forgedSubmission = SubmitRegistered(
-            coordinator,
-            queue,
+        BattleCommandSubmissionResult forgedSubmission = SubmitAndCaptureHandle(queue,
             forgedSystemCommand,
             out BattleCommandHandle forgedHandle);
 
@@ -365,9 +353,7 @@ public sealed class BattleCommandQueueM8BTests
         Assert.That(coordinator.IsPending(forgedHandle), Is.False);
         Assert.That(lifecycles, Is.Empty);
 
-        BattleCommandSubmissionResult endSubmission = SubmitRegistered(
-            coordinator,
-            queue,
+        BattleCommandSubmissionResult endSubmission = SubmitAndCaptureHandle(queue,
             new EndPlayerActionCommand(player.Id),
             out BattleCommandHandle endHandle);
 
@@ -422,7 +408,7 @@ public sealed class BattleCommandQueueM8BTests
             coordinator: coordinator);
         var lifecycles = new List<BattleCommandLifecycleEvent>();
         using IDisposable lifecycleSubscription = coordinator.Lifecycle.Subscribe(lifecycles.Add);
-        SubmitRegistered(coordinator, queue, new StartBattleCommand(), out _);
+        SubmitAndCaptureHandle(queue, new StartBattleCommand(), out _);
         presentation.CompleteNext();
         lifecycles.Clear();
 
@@ -434,9 +420,7 @@ public sealed class BattleCommandQueueM8BTests
                 return;
 
             acceptedDuringExecution = true;
-            executionCallbackSubmission = SubmitRegistered(
-                coordinator,
-                queue,
+            executionCallbackSubmission = SubmitAndCaptureHandle(queue,
                 new StartBattleCommand(),
                 out _);
         });
@@ -449,16 +433,12 @@ public sealed class BattleCommandQueueM8BTests
                 return;
 
             acceptedDuringPresentation = true;
-            presentationCallbackSubmission = SubmitRegistered(
-                coordinator,
-                queue,
+            presentationCallbackSubmission = SubmitAndCaptureHandle(queue,
                 new StartBattleCommand(),
                 out _);
         };
 
-        BattleCommandSubmissionResult endSubmission = SubmitRegistered(
-            coordinator,
-            queue,
+        BattleCommandSubmissionResult endSubmission = SubmitAndCaptureHandle(queue,
             new EndPlayerActionCommand(player.Id),
             out _);
 
@@ -532,7 +512,7 @@ public sealed class BattleCommandQueueM8BTests
             new Dictionary<CombatantId, BattleCardZonesData> { [player.Id] = zones },
             enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
             coordinator: coordinator);
-        SubmitRegistered(coordinator, queue, new StartBattleCommand(), out _);
+        SubmitAndCaptureHandle(queue, new StartBattleCommand(), out _);
         presentation.CompleteNext();
         lifecycles.Clear();
         bool submittedFromContinuationSnapshot = false;
@@ -547,16 +527,12 @@ public sealed class BattleCommandQueueM8BTests
             }
 
             submittedFromContinuationSnapshot = true;
-            SubmitRegistered(
-                coordinator,
-                queue,
+            SubmitAndCaptureHandle(queue,
                 new StartBattleCommand(),
                 out _);
         });
 
-        SubmitRegistered(
-            coordinator,
-            queue,
+        SubmitAndCaptureHandle(queue,
             new EndPlayerActionCommand(player.Id),
             out _);
 
@@ -598,14 +574,12 @@ public sealed class BattleCommandQueueM8BTests
             },
             enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
             coordinator: coordinator);
-        SubmitRegistered(coordinator, queue, new StartBattleCommand(), out _);
+        SubmitAndCaptureHandle(queue, new StartBattleCommand(), out _);
         presentation.CompleteNext();
         lifecycles.Clear();
         int presentedCountBeforeEnd = presentation.Results.Count;
 
-        BattleCommandSubmissionResult result = SubmitRegistered(
-            coordinator,
-            queue,
+        BattleCommandSubmissionResult result = SubmitAndCaptureHandle(queue,
             new EndPlayerActionCommand(firstPlayer.Id),
             out BattleCommandHandle handle);
 
@@ -642,10 +616,8 @@ public sealed class BattleCommandQueueM8BTests
             initialHandCount: 1,
             coordinator: coordinator);
 
-        SubmitRegistered(coordinator, queue, new StartBattleCommand(), out _);
-        BattleCommandSubmissionResult endSubmission = SubmitRegistered(
-            coordinator,
-            queue,
+        SubmitAndCaptureHandle(queue, new StartBattleCommand(), out _);
+        BattleCommandSubmissionResult endSubmission = SubmitAndCaptureHandle(queue,
             new EndPlayerActionCommand(player.Id),
             out _);
 
@@ -678,15 +650,31 @@ public sealed class BattleCommandQueueM8BTests
         Assert.That(queue.Queue.CurrentValue.IsWaitingForPresentation, Is.False);
     }
 
-    /// <summary>通过统一 coordinator 预注册命令，再只调用既有 Queue Submit seam。</summary>
-    private static BattleCommandSubmissionResult SubmitRegistered(
-        BattleCommandSubmissionCoordinator coordinator,
+    /// <summary>通过 Queue 的公开生命周期捕获同一命令引用对应的句柄。</summary>
+    private static BattleCommandSubmissionResult SubmitAndCaptureHandle(
         BattleCommandQueue queue,
         BattleCommand command,
         out BattleCommandHandle handle)
     {
-        handle = coordinator.PreRegister(command);
-        return queue.Submit(command);
+        if (queue == null)
+            throw new ArgumentNullException(nameof(queue));
+        if (command == null)
+            throw new ArgumentNullException(nameof(command));
+
+        BattleCommandHandle capturedHandle = null;
+        using IDisposable subscription = queue.Lifecycle.Subscribe(lifecycle =>
+        {
+            if (capturedHandle == null &&
+                lifecycle.Stage == BattleCommandLifecycleStage.Queued &&
+                ReferenceEquals(lifecycle.Command, command))
+            {
+                capturedHandle = lifecycle.Handle;
+            }
+        });
+
+        BattleCommandSubmissionResult result = queue.Submit(command);
+        handle = capturedHandle;
+        return result;
     }
 
     /// <summary>断言生命周期始终携带预注册句柄、权威序号与稳定阶段。</summary>

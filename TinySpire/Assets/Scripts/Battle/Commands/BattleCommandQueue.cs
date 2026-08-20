@@ -32,6 +32,9 @@ namespace TinySpire.Battle
         /// <summary>表现屏障完成后公开的单场战斗结果；战斗进行中为空。</summary>
         public ReadOnlyReactiveProperty<BattleResult> Result { get; }
 
+        /// <summary>按 Queue 权威顺序公开命令的 Queued 与唯一终态。</summary>
+        public Observable<BattleCommandLifecycleEvent> Lifecycle => _coordinator.Lifecycle;
+
         /// <summary>返回队列执行时使用的同一出牌规则读取入口。</summary>
         internal BattleCardPlayRules CardPlayRules => _turnController.CardPlayRules;
 
@@ -117,16 +120,13 @@ namespace TinySpire.Battle
             Result = _result.ToReadOnlyReactiveProperty();
         }
 
-        /// <summary>消费同一命令引用的预注册句柄，并通过唯一迭代 drain 接受或执行命令。</summary>
+        /// <summary>内部签发对账句柄，并通过唯一迭代 drain 接受或执行命令。</summary>
         public BattleCommandSubmissionResult Submit(BattleCommand command)
         {
             if (command == null)
                 throw new ArgumentNullException(nameof(command));
-            if (!_coordinator.TryResolvePreRegistered(command, out BattleCommandHandle handle))
-            {
-                return BattleCommandSubmissionResult.Rejected(
-                    BattleCommandSubmissionFailureReason.InvalidSubmissionHandle);
-            }
+
+            BattleCommandHandle handle = _coordinator.PreRegister(command);
 
             BattleCommandSchedulingAcceptance acceptance;
             BattleTurnPhase phase = Turn.CurrentValue.Phase;

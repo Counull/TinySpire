@@ -360,7 +360,7 @@ public sealed class HandCardTargetFocusTests
                 enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
                 initialHandCount: 1,
                 tables: tables);
-            queue.SubmitRegistered(new StartBattleCommand());
+            queue.Submit(new StartBattleCommand());
             BattleTurnData turnBefore = queue.Turn.CurrentValue;
             CardZoneLayoutData layoutBefore = zones.Layout.CurrentValue;
 
@@ -506,7 +506,6 @@ public sealed class HandCardTargetFocusTests
                 commandPresentation,
                 coordinator);
             var startCommand = new StartBattleCommand();
-            coordinator.PreRegister(startCommand);
             Assert.That(queue.Submit(startCommand).Accepted, Is.True);
             Assert.That(queue.Queue.CurrentValue.IsWaitingForPresentation, Is.True);
             CardInstanceId cardId = session.CardZones.Hand[0];
@@ -585,9 +584,6 @@ public sealed class HandCardTargetFocusTests
             typeof(HandCardContainer).GetField(
                 "_commandQueue",
                 BindingFlags.Instance | BindingFlags.NonPublic)?.SetValue(container, queue);
-            typeof(HandCardContainer).GetField(
-                "_commandCoordinator",
-                BindingFlags.Instance | BindingFlags.NonPublic)?.SetValue(container, coordinator);
             typeof(HandCardContainer).GetField(
                 "_participantPresenter",
                 BindingFlags.Instance | BindingFlags.NonPublic)?.SetValue(container, presenter);

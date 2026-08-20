@@ -42,9 +42,9 @@ public sealed class BattleCommandPresentationAdapterTests
             initialHandCount: 0,
             coordinator: coordinator);
         var command = new StartBattleCommand();
-        BattleCommandHandle handle = coordinator.PreRegister(command);
 
         BattleCommandSubmissionResult submission = queue.Submit(command);
+        BattleCommandHandle handle = lifecycles[0].Handle;
 
         Assert.That(submission.Accepted, Is.True);
         Assert.That(lifecycles, Has.Count.EqualTo(2));
@@ -101,7 +101,7 @@ public sealed class BattleCommandPresentationAdapterTests
             energyPerRound: 3,
             initialHandCount: 2,
             coordinator: coordinator);
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
         deltaTime = 10f;
         adapter.Tick();
         lifecycles.Clear();
@@ -110,11 +110,11 @@ public sealed class BattleCommandPresentationAdapterTests
         CardInstanceId firstCardId = zones.Hand[0];
         CardInstanceId secondCardId = zones.Hand[1];
         var firstCommand = new PlayCardCommand(player.Id, firstCardId, player.Id);
-        BattleCommandHandle firstHandle = coordinator.PreRegister(firstCommand);
         BattleCommandSubmissionResult firstSubmission = queue.Submit(firstCommand);
+        BattleCommandHandle firstHandle = lifecycles[0].Handle;
         var secondCommand = new PlayCardCommand(player.Id, secondCardId, player.Id);
-        BattleCommandHandle secondHandle = coordinator.PreRegister(secondCommand);
         BattleCommandSubmissionResult secondSubmission = queue.Submit(secondCommand);
+        BattleCommandHandle secondHandle = lifecycles[2].Handle;
 
         Assert.That(firstSubmission.Accepted, Is.True);
         Assert.That(secondSubmission.Accepted, Is.True);
@@ -178,14 +178,14 @@ public sealed class BattleCommandPresentationAdapterTests
             energyPerRound: 0,
             initialHandCount: 1,
             coordinator: coordinator);
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
         adapter.Tick();
         lifecycles.Clear();
 
         CardInstanceId cardId = zones.Hand[0];
         var command = new PlayCardCommand(player.Id, cardId, player.Id);
-        BattleCommandHandle handle = coordinator.PreRegister(command);
         BattleCommandSubmissionResult submission = queue.Submit(command);
+        BattleCommandHandle handle = lifecycles[0].Handle;
 
         Assert.That(submission.Accepted, Is.True);
         Assert.That(
@@ -238,13 +238,13 @@ public sealed class BattleCommandPresentationAdapterTests
             enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
             initialHandCount: 0,
             coordinator: coordinator);
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
         adapter.Tick();
         lifecycles.Clear();
 
         var command = new EndPlayerActionCommand(firstPlayer.Id);
-        BattleCommandHandle handle = coordinator.PreRegister(command);
         BattleCommandSubmissionResult submission = queue.Submit(command);
+        BattleCommandHandle handle = lifecycles[0].Handle;
 
         Assert.That(submission.Accepted, Is.True);
         Assert.That(
@@ -1476,9 +1476,8 @@ public sealed class BattleCommandPresentationAdapterTests
     [Test]
     public void CardVisual_OlderFailureDoesNotClearNewerPendingHandle()
     {
-        using var coordinator = new BattleCommandSubmissionCoordinator();
-        BattleCommandHandle olderHandle = coordinator.PreRegister(new StartBattleCommand());
-        BattleCommandHandle newerHandle = coordinator.PreRegister(new StartBattleCommand());
+        var olderHandle = new BattleCommandHandle();
+        var newerHandle = new BattleCommandHandle();
         var cardObject = new GameObject("PendingHandleTestCard");
         HandCardVisual visual = cardObject.AddComponent<HandCardVisual>();
         try

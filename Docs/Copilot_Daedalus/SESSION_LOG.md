@@ -1,6 +1,6 @@
 ---
 created: 2026-07-06
-updated: 2026-08-16
+updated: 2026-08-17
 ---
 
 ## 当前 Run 路线状态（as of 2026-08-16 / `fa14889` + G2-A working tree）
@@ -14,6 +14,13 @@ updated: 2026-08-16
 | Next candidate action | Theseus 审阅 G2-A diff 与验证证据；G3+ 必须另行 Grill、计划和授权 |
 | Implementation authorization | G2-A 授权已完成；G3+、Platform Save Spike 与平台能力均未授权 |
 | Current acceptance evidence | `06_testing/2026-08-16-g2a-run-persistence.md` |
+
+## 2026-08-17 BattleCommandQueue 提交接口深化（implemented-and-verified）
+
+- 本轮是独立架构维护，不改变 Run 当前 phase、slice 或 G3+ 授权状态。删除了生产调用者必须知道的 `PreRegister → 建立 pending → Submit → 拒绝回滚` 隐藏协议：`BattleCommandQueue.Submit` 现在内部签发 handle，Queue 公开只读 `Lifecycle`，其 `Queued` 事件携带原始不可变命令供 Hand/HUD 建立精确 pending。
+- `BattleCommandRuntimeDriver`、`BattleTurnHudView`、`HandCardContainer` 不再注入或调用 concrete coordinator；结构性拒绝不发布 lifecycle，因此 UI 不再需要手工 pending 回滚。coordinator 的注册、匹配、取消、对账与 lifecycle 源降为 internal implementation；Queue 的权威序号、迭代 drain、FIFO continuation、system token、表现屏障、completion 与 fault 语义均未改变。
+- 测试侧删除共享 `SubmitRegistered` 扩展和 Queue→coordinator registry；普通测试只调用生产 `Submit`，只有 internal scheduling 合同测试继续直测预注册算法。RED 先锁定 lifecycle 缺少原始 Command，迁移中又由重复预注册失败暴露旧 helper；最终 M8B 11/11、相关聚合 116/116、完整 EditMode job `09c7b62ffe5c4bcfa8d239b99e30f51a` 为 **953/953 passed**，Unity Console 编译 error=0，`git diff --check` 通过。
+- 本轮没有修改 `BattleCardPlayEvaluation`、Run、存档、DataTables/GameData、Localization、Scene/Prefab、ProjectSettings、asmdef 或包依赖；没有运行 PlayMode、Player build、Addressables 或人工 BattleScene smoke。本轮按用户授权作为本地提交收口，不 push；既有 RunEntry visual 与其他用户 WIP 保持原状态。决定见 CD-115，方案与验证见 `plans/2026-08-17-battle-command-submission-interface-deepening.md`、`06_testing/2026-08-17-battle-command-submission-interface-deepening.md`。
 
 ## 2026-08-16 G2-A Run Persistence 与继续游戏（verified，待 Theseus 审查）
 

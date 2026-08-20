@@ -110,7 +110,6 @@ public sealed class HandCardVisualPlayabilityTests
         GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(CardPrefabPath);
         GameObject instance = Object.Instantiate(prefab);
         using var zones = new BattleCardZonesData(new[] { 3001 }, shuffleSeed: 1);
-        using var coordinator = new BattleCommandSubmissionCoordinator();
         try
         {
             zones.Draw(1);
@@ -143,7 +142,7 @@ public sealed class HandCardVisualPlayabilityTests
             Assert.That(canvasGroup.interactable, Is.False);
             Assert.That(canvasGroup.blocksRaycasts, Is.True);
 
-            BattleCommandHandle pendingHandle = coordinator.PreRegister(new StartBattleCommand());
+            var pendingHandle = new BattleCommandHandle();
             visual.SetCommandPending(pendingHandle);
             visual.SetInteractionPresentation(
                 HandCardInteractionMode.Disabled,

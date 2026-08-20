@@ -7123,7 +7123,7 @@ public sealed class MachineGunnerStarterRuntimeTests
             using BattleCommandLifecycleExecutionRecorder lifecycle =
                 missingScenario.Queue.RecordExecutionLifecycle();
 
-            BattleCommandSubmissionResult submission = missingScenario.Queue.SubmitRegistered(
+            BattleCommandSubmissionResult submission = missingScenario.Queue.Submit(
                 new PlayCardCommand(missingScenario.Player.Id, playedCardId, targetId: null));
             BattleCommandLifecycleEvent terminal = lifecycle.RequireTerminal(submission);
 
@@ -7924,7 +7924,7 @@ public sealed class MachineGunnerStarterRuntimeTests
         using BattleCommandLifecycleExecutionRecorder lifecycle =
             scenario.Queue.RecordExecutionLifecycle();
 
-        BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(
+        BattleCommandSubmissionResult submission = scenario.Queue.Submit(
             new StartBattleCommand());
         BattleCommandLifecycleEvent terminal = lifecycle.RequireTerminal(submission);
 
@@ -8210,7 +8210,7 @@ public sealed class MachineGunnerStarterRuntimeTests
 
         BattleCommandSubmissionResult submission;
         using (scenario.Zones.Layout.Skip(1).Subscribe(_ => layoutPublicationCount++))
-            submission = scenario.Queue.SubmitRegistered(command);
+            submission = scenario.Queue.Submit(command);
         BattleCommandLifecycleEvent terminal = lifecycle.RequireTerminal(submission);
 
         Assert.That(command.SelectedCardIds, Is.EqualTo(new[] { selectedCardId }));
@@ -8315,7 +8315,7 @@ public sealed class MachineGunnerStarterRuntimeTests
         BattleCommandSubmissionResult submission;
         using (scenario.Queue.Turn.Skip(1).Subscribe(_ => turnPublicationCount++))
         using (scenario.Zones.Layout.Skip(1).Subscribe(_ => layoutPublicationCount++))
-            submission = scenario.Queue.SubmitRegistered(command);
+            submission = scenario.Queue.Submit(command);
         BattleCommandLifecycleEvent terminal = lifecycle.RequireTerminal(submission);
 
         Assert.That(submission.Accepted, Is.True);
@@ -8441,7 +8441,7 @@ public sealed class MachineGunnerStarterRuntimeTests
 
         BattleCommandSubmissionResult submission;
         using (scenario.Zones.Layout.Skip(1).Subscribe(_ => layoutPublicationCount++))
-            submission = scenario.Queue.SubmitRegistered(command);
+            submission = scenario.Queue.Submit(command);
         BattleCommandLifecycleEvent terminal = lifecycle.RequireTerminal(submission);
 
         Assert.That(submission.Accepted, Is.True);
@@ -8505,7 +8505,7 @@ public sealed class MachineGunnerStarterRuntimeTests
         using BattleCommandLifecycleExecutionRecorder lifecycle =
             scenario.Queue.RecordExecutionLifecycle();
 
-        BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(command);
+        BattleCommandSubmissionResult submission = scenario.Queue.Submit(command);
         BattleCommandLifecycleEvent terminal = lifecycle.RequireTerminal(submission);
 
         Assert.That(submission.Accepted, Is.True);
@@ -8616,7 +8616,7 @@ public sealed class MachineGunnerStarterRuntimeTests
         using BattleCommandLifecycleExecutionRecorder lifecycle =
             scenario.Queue.RecordExecutionLifecycle();
 
-        BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(
+        BattleCommandSubmissionResult submission = scenario.Queue.Submit(
             new PlayCardCommand(scenario.Player.Id, opportunisticId, targetId: null));
         BattleCommandLifecycleEvent parentTerminal = lifecycle.RequireTerminal(submission);
 
@@ -8673,7 +8673,7 @@ public sealed class MachineGunnerStarterRuntimeTests
             scenario.Queue.RecordExecutionLifecycle();
 
         BattleCommandSubmissionResult activationSubmission =
-            scenario.Queue.SubmitRegistered(new PlayCardCommand(
+            scenario.Queue.Submit(new PlayCardCommand(
                 scenario.Player.Id,
                 unstoppableCardId,
                 targetId: null));
@@ -8694,7 +8694,7 @@ public sealed class MachineGunnerStarterRuntimeTests
         using BattleCommandLifecycleExecutionRecorder lifecycle =
             scenario.Queue.RecordExecutionLifecycle();
 
-        BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(
+        BattleCommandSubmissionResult submission = scenario.Queue.Submit(
             new PlayCardCommand(scenario.Player.Id, shootCardId, scenario.FirstEnemy.Id));
         BattleCommandLifecycleEvent parentTerminal = lifecycle.RequireTerminal(submission);
 
@@ -8762,7 +8762,7 @@ public sealed class MachineGunnerStarterRuntimeTests
             .Single(cardId => scenario.Zones.Cards[cardId].TemplateId == 3250);
 
         BattleCommandSubmissionResult activationSubmission =
-            scenario.Queue.SubmitRegistered(new PlayCardCommand(
+            scenario.Queue.Submit(new PlayCardCommand(
                 scenario.Player.Id,
                 unstoppableCardId,
                 targetId: null));
@@ -8774,7 +8774,7 @@ public sealed class MachineGunnerStarterRuntimeTests
         using BattleCommandLifecycleExecutionRecorder lifecycle =
             scenario.Queue.RecordExecutionLifecycle();
 
-        BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(
+        BattleCommandSubmissionResult submission = scenario.Queue.Submit(
             new PlayCardCommand(scenario.Player.Id, shootCardId, scenario.FirstEnemy.Id));
         BattleCommandLifecycleEvent parentTerminal = lifecycle.RequireTerminal(submission);
 
@@ -8888,7 +8888,7 @@ public sealed class MachineGunnerStarterRuntimeTests
         using BattleCommandLifecycleExecutionRecorder lifecycle =
             scenario.Queue.RecordExecutionLifecycle();
 
-        BattleCommandSubmissionResult submission = scenario.Queue.SubmitRegistered(command);
+        BattleCommandSubmissionResult submission = scenario.Queue.Submit(command);
         BattleCommandLifecycleEvent terminal = lifecycle.RequireTerminal(submission);
 
         Assert.That(submission.Accepted, Is.True);
@@ -9002,7 +9002,6 @@ public sealed class MachineGunnerStarterRuntimeTests
                 _presentation,
                 coordinator,
                 Session.MachineGunnerRuntime);
-            BattleCommandQueueTestFactory.TrackCoordinator(Queue, coordinator);
         }
 
         /// <summary>从未开始阶段经唯一 Queue 启动本场战斗。</summary>
@@ -9015,7 +9014,7 @@ public sealed class MachineGunnerStarterRuntimeTests
         internal BattleCommandExecutionResult StartBattleResult()
         {
             int resultCountBefore = _presentation.Results.Count;
-            BattleCommandSubmissionResult submission = Queue.SubmitRegistered(
+            BattleCommandSubmissionResult submission = Queue.Submit(
                 new StartBattleCommand());
             Assert.That(submission.Accepted, Is.True);
             Assert.That(_presentation.Results.Count, Is.EqualTo(resultCountBefore + 1));
@@ -9038,7 +9037,7 @@ public sealed class MachineGunnerStarterRuntimeTests
         internal BattleCommandSubmissionResult Submit(int templateId, CombatantId? targetId)
         {
             CardInstanceId cardId = FindCardInHand(templateId);
-            return Queue.SubmitRegistered(new PlayCardCommand(Player.Id, cardId, targetId));
+            return Queue.Submit(new PlayCardCommand(Player.Id, cardId, targetId));
         }
 
         /// <summary>结束当前玩家行动并同步推进敌人及下一玩家回合。</summary>
@@ -9051,7 +9050,7 @@ public sealed class MachineGunnerStarterRuntimeTests
         internal BattleCommandExecutionResult EndPlayerActionResult()
         {
             int resultCountBefore = _presentation.Results.Count;
-            BattleCommandSubmissionResult submission = Queue.SubmitRegistered(
+            BattleCommandSubmissionResult submission = Queue.Submit(
                 new EndPlayerActionCommand(Player.Id));
             Assert.That(submission.Accepted, Is.True);
             Assert.That(_presentation.Results.Count, Is.GreaterThan(resultCountBefore));

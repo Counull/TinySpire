@@ -20,7 +20,7 @@ public sealed class BattleTurnControllerTests
         var presentation = new ControllableBattleCommandPresentation();
         BattleCommandQueue queue = BattleCommandQueueTestFactory.Create(combatants, presentation);
 
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
 
         BattleTurnData turn = queue.Turn.CurrentValue;
         Assert.That(turn.Players.Count, Is.EqualTo(2));
@@ -44,12 +44,12 @@ public sealed class BattleTurnControllerTests
         PlayerCombatantData player = combatants.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
         var presentation = new ControllableBattleCommandPresentation();
         BattleCommandQueue queue = BattleCommandQueueTestFactory.Create(combatants, presentation);
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
         BattleTurnData turnAfterStart = queue.Turn.CurrentValue;
 
         using BattleCommandLifecycleExecutionRecorder recorder =
             queue.RecordExecutionLifecycle();
-        BattleCommandSubmissionResult duplicateSubmission = queue.SubmitRegistered(new StartBattleCommand());
+        BattleCommandSubmissionResult duplicateSubmission = queue.Submit(new StartBattleCommand());
         presentation.CompleteNext();
         BattleCommandLifecycleEvent duplicateResult = recorder.RequireTerminal(duplicateSubmission);
 

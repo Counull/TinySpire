@@ -17,9 +17,9 @@ public sealed class BattleEnemyIntentQueueTests
             presentation,
             enemyCount: 2,
             noCandidate: false);
-        context.Queue.SubmitRegistered(new StartBattleCommand());
+        context.Queue.Submit(new StartBattleCommand());
         presentation.CompleteNext();
-        context.Queue.SubmitRegistered(new EndPlayerActionCommand(context.Player.Id));
+        context.Queue.Submit(new EndPlayerActionCommand(context.Player.Id));
         CombatantId firstEnemyId = context.EnemyIds[0];
         CombatantId secondEnemyId = context.EnemyIds[1];
         int firstBehaviorBefore = GetBehaviorId(context.Intents, firstEnemyId);
@@ -54,14 +54,14 @@ public sealed class BattleEnemyIntentQueueTests
         CombatantId firstEnemyId = context.EnemyIds[0];
         CombatantId secondEnemyId = context.EnemyIds[1];
 
-        context.Queue.SubmitRegistered(new StartBattleCommand());
+        context.Queue.Submit(new StartBattleCommand());
         presentation.CompleteNext();
         EnemyIntentLayoutData playerPhaseLayout = context.Intents.Layout.CurrentValue;
         uint playerPhaseRandomState = context.Intents.RandomState;
         BattleTurnData playerPhaseTurn = context.Queue.Turn.CurrentValue;
 
         BattleCommandSubmissionResult playerPhaseRejection =
-            context.Queue.SubmitRegistered(new CompleteEnemyActionCommand(firstEnemyId));
+            context.Queue.Submit(new CompleteEnemyActionCommand(firstEnemyId));
 
         Assert.That(
             playerPhaseRejection.FailureReason,
@@ -72,12 +72,12 @@ public sealed class BattleEnemyIntentQueueTests
         Assert.That(context.Intents.RandomState, Is.EqualTo(playerPhaseRandomState));
         Assert.That(context.Queue.Turn.CurrentValue, Is.SameAs(playerPhaseTurn));
 
-        context.Queue.SubmitRegistered(new EndPlayerActionCommand(context.Player.Id));
+        context.Queue.Submit(new EndPlayerActionCommand(context.Player.Id));
         EnemyIntentLayoutData enemyPhaseLayout = context.Intents.Layout.CurrentValue;
         uint enemyPhaseRandomState = context.Intents.RandomState;
         BattleTurnData enemyPhaseTurn = context.Queue.Turn.CurrentValue;
         BattleCommandSubmissionResult wrongEnemyRejection =
-            context.Queue.SubmitRegistered(new CompleteEnemyActionCommand(secondEnemyId));
+            context.Queue.Submit(new CompleteEnemyActionCommand(secondEnemyId));
 
         Assert.That(
             wrongEnemyRejection.FailureReason,
@@ -97,7 +97,7 @@ public sealed class BattleEnemyIntentQueueTests
         BattleTurnData turnAfterValidCompletion = context.Queue.Turn.CurrentValue;
 
         BattleCommandSubmissionResult repeatedEnemyRejection =
-            context.Queue.SubmitRegistered(new CompleteEnemyActionCommand(firstEnemyId));
+            context.Queue.Submit(new CompleteEnemyActionCommand(firstEnemyId));
 
         Assert.That(
             repeatedEnemyRejection.FailureReason,
@@ -122,13 +122,13 @@ public sealed class BattleEnemyIntentQueueTests
         int deadBehaviorBefore = GetBehaviorId(context.Intents, deadEnemyId);
         EnemyIntentLayoutData initialLayout = context.Intents.Layout.CurrentValue;
 
-        context.Queue.SubmitRegistered(new StartBattleCommand());
+        context.Queue.Submit(new StartBattleCommand());
         presentation.CompleteNext();
         BattleEffectStateTestDriver.Kill(
             context.Combatants,
             context.Player.Id,
             deadEnemyId);
-        context.Queue.SubmitRegistered(new EndPlayerActionCommand(context.Player.Id));
+        context.Queue.Submit(new EndPlayerActionCommand(context.Player.Id));
 
         Assert.That(context.Queue.Turn.CurrentValue.CurrentActingEnemyId, Is.EqualTo(livingEnemyId));
         Assert.That(context.Intents.Layout.CurrentValue, Is.SameAs(initialLayout));
@@ -150,7 +150,7 @@ public sealed class BattleEnemyIntentQueueTests
             enemyCount: 1,
             noCandidate: true);
         CombatantId enemyId = context.EnemyIds[0];
-        context.Queue.SubmitRegistered(new StartBattleCommand());
+        context.Queue.Submit(new StartBattleCommand());
         EnemyIntentLayoutData layoutBefore = context.Intents.Layout.CurrentValue;
         uint randomStateBefore = context.Intents.RandomState;
         BattleTurnData enemyTurnBeforeAction = null;
@@ -166,7 +166,7 @@ public sealed class BattleEnemyIntentQueueTests
             .Subscribe(lifecycles.Add);
 
         BattleCommandSubmissionResult endSubmission =
-            context.Queue.SubmitRegistered(new EndPlayerActionCommand(context.Player.Id));
+            context.Queue.Submit(new EndPlayerActionCommand(context.Player.Id));
         BattleCommandLifecycleEvent faulted = lifecycles.Find(
             lifecycle => lifecycle.Stage == BattleCommandLifecycleStage.Faulted);
 
@@ -205,10 +205,8 @@ public sealed class BattleEnemyIntentQueueTests
             new ImmediateBattleCommandPresentation(),
             enemyCount: 2,
             noCandidate: false);
-        var driver = new BattleCommandRuntimeDriver(context.Queue, context.Coordinator);
-        var replayDriver = new BattleCommandRuntimeDriver(
-            replayContext.Queue,
-            replayContext.Coordinator);
+        var driver = new BattleCommandRuntimeDriver(context.Queue);
+        var replayDriver = new BattleCommandRuntimeDriver(replayContext.Queue);
         CombatantId firstEnemyId = context.EnemyIds[0];
         CombatantId secondEnemyId = context.EnemyIds[1];
         CombatantId replayFirstEnemyId = replayContext.EnemyIds[0];
@@ -227,8 +225,8 @@ public sealed class BattleEnemyIntentQueueTests
 
         driver.Start();
         replayDriver.Start();
-        context.Queue.SubmitRegistered(new EndPlayerActionCommand(context.Player.Id));
-        replayContext.Queue.SubmitRegistered(
+        context.Queue.Submit(new EndPlayerActionCommand(context.Player.Id));
+        replayContext.Queue.Submit(
             new EndPlayerActionCommand(replayContext.Player.Id));
 
         Assert.That(GetBehaviorId(context.Intents, firstEnemyId), Is.Not.EqualTo(firstInitialBehavior));
@@ -243,8 +241,8 @@ public sealed class BattleEnemyIntentQueueTests
         Assert.That(context.Queue.Turn.CurrentValue.RoundNumber, Is.EqualTo(2));
         Assert.That(context.Queue.Turn.CurrentValue.Phase, Is.EqualTo(BattleTurnPhase.PlayerAction));
 
-        context.Queue.SubmitRegistered(new EndPlayerActionCommand(context.Player.Id));
-        replayContext.Queue.SubmitRegistered(
+        context.Queue.Submit(new EndPlayerActionCommand(context.Player.Id));
+        replayContext.Queue.Submit(
             new EndPlayerActionCommand(replayContext.Player.Id));
 
         Assert.That(GetBehaviorId(context.Intents, firstEnemyId), Is.EqualTo(firstInitialBehavior));
@@ -338,7 +336,6 @@ public sealed class BattleEnemyIntentQueueTests
                 initialHandCount: 0,
                 presentation,
                 Coordinator);
-            BattleCommandQueueTestFactory.TrackCoordinator(Queue, Coordinator);
         }
 
         /// <summary>按命令队列、意图、卡区、参与者的依赖顺序释放测试资源。</summary>

@@ -32,7 +32,7 @@ public sealed class BattleCardPlayRulesTests
             enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
             initialHandCount: 1,
             tables: tables);
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
         CardInstanceId cardId = zones.Hand[0];
         BattleTurnData turnBeforeEvaluation = queue.Turn.CurrentValue;
         CardZoneLayoutData layoutBeforeEvaluation = zones.Layout.CurrentValue;
@@ -88,7 +88,7 @@ public sealed class BattleCardPlayRulesTests
             initialHandCount: 1,
             enemyIntents: enemyIntents,
             tables: tables);
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
         CardInstanceId cardId = zones.Hand[0];
         BattleTurnData turnBeforeEvaluation = queue.Turn.CurrentValue;
         CardZoneLayoutData layoutBeforeEvaluation = zones.Layout.CurrentValue;
@@ -374,7 +374,7 @@ public sealed class BattleCardPlayRulesTests
                 enemyCombatantIdsInEncounterOrder: enemyIds,
                 initialHandCount: 1,
                 tables: tables);
-            Queue.SubmitRegistered(new StartBattleCommand());
+            Queue.Submit(new StartBattleCommand());
             CardId = Zones.Hand[0];
             Rules = new BattleCardPlayRules(Combatants, cardZones, enemyIds, tables);
         }

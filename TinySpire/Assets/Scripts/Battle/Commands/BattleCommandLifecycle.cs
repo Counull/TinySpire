@@ -6,7 +6,7 @@ using R3;
 
 namespace TinySpire.Battle
 {
-    /// <summary>提交方在进入 Queue 前取得的引用身份；它不暴露或替代权威序号。</summary>
+    /// <summary>Queue 在接受判断前签发的引用身份；它不暴露或替代权威序号。</summary>
     public sealed class BattleCommandHandle
     {
         /// <summary>只允许统一提交协调器签发不透明句柄。</summary>
@@ -27,17 +27,20 @@ namespace TinySpire.Battle
     /// <summary>Queue 生命周期中一次不可变反馈；fault 元数据不会混入战斗结算。</summary>
     public sealed class BattleCommandLifecycleEvent
     {
-        /// <summary>提交前已签发、用于对账的同一不透明句柄。</summary>
+        /// <summary>Queue 为该命令签发、用于生命周期对账的同一不透明句柄。</summary>
         public BattleCommandHandle Handle { get; }
 
         /// <summary>Queue 接受命令时分配的权威序号。</summary>
         public long AuthoritySequence { get; }
 
-        /// <summary>反馈对应的稳定命令类型。</summary>
-        public BattleCommandType CommandType { get; }
+        /// <summary>反馈对应的原始不可变命令；调用方可据此在 Queued 阶段建立精确 pending。</summary>
+        public BattleCommand Command { get; }
 
-        /// <summary>反馈对应的命令提交者；系统命令为空。</summary>
-        public CombatantId? SubmitterId { get; }
+        /// <summary>从原始命令派生反馈对应的稳定命令类型。</summary>
+        public BattleCommandType CommandType => Command.Type;
+
+        /// <summary>从原始命令派生提交者；系统命令为空。</summary>
+        public CombatantId? SubmitterId => Command.SubmitterId;
 
         /// <summary>本条反馈的稳定生命周期阶段。</summary>
         public BattleCommandLifecycleStage Stage { get; }
@@ -55,8 +58,7 @@ namespace TinySpire.Battle
         private BattleCommandLifecycleEvent(
             BattleCommandHandle handle,
             long authoritySequence,
-            BattleCommandType commandType,
-            CombatantId? submitterId,
+            BattleCommand command,
             BattleCommandLifecycleStage stage,
             BattleCommandExecutionFailureReason failureReason,
             IEnumerable<BattleSettlementRecord> settlements,
@@ -66,13 +68,14 @@ namespace TinySpire.Battle
                 throw new ArgumentNullException(nameof(handle));
             if (authoritySequence <= 0)
                 throw new ArgumentOutOfRangeException(nameof(authoritySequence));
+            if (command == null)
+                throw new ArgumentNullException(nameof(command));
             if (settlements == null)
                 throw new ArgumentNullException(nameof(settlements));
 
             Handle = handle;
             AuthoritySequence = authoritySequence;
-            CommandType = commandType;
-            SubmitterId = submitterId;
+            Command = command;
             Stage = stage;
             FailureReason = failureReason;
             Settlements = new ReadOnlyCollection<BattleSettlementRecord>(
@@ -92,8 +95,7 @@ namespace TinySpire.Battle
             return new BattleCommandLifecycleEvent(
                 handle,
                 authoritySequence,
-                command.Type,
-                command.SubmitterId,
+                command,
                 BattleCommandLifecycleStage.Queued,
                 BattleCommandExecutionFailureReason.None,
                 Array.Empty<BattleSettlementRecord>(),
@@ -124,8 +126,7 @@ namespace TinySpire.Battle
             return new BattleCommandLifecycleEvent(
                 handle,
                 authoritySequence,
-                command.Type,
-                command.SubmitterId,
+                command,
                 failureReason == BattleCommandExecutionFailureReason.None
                     ? BattleCommandLifecycleStage.ExecutionCompleted
                     : BattleCommandLifecycleStage.ExecutionFailed,
@@ -148,8 +149,7 @@ namespace TinySpire.Battle
             return new BattleCommandLifecycleEvent(
                 handle,
                 fault.AuthoritySequence,
-                command.Type,
-                command.SubmitterId,
+                command,
                 BattleCommandLifecycleStage.Faulted,
                 BattleCommandExecutionFailureReason.None,
                 Array.Empty<BattleSettlementRecord>(),
@@ -157,7 +157,7 @@ namespace TinySpire.Battle
         }
     }
 
-    /// <summary>只管理提交前句柄注册与后续生命周期对账，不分配权威序号。</summary>
+    /// <summary>只管理 Queue 内部接受前的句柄注册与后续生命周期对账，不分配权威序号。</summary>
     public sealed class BattleCommandSubmissionCoordinator : IDisposable
     {
         private readonly Dictionary<BattleCommandHandle, Registration> _pending =
@@ -168,10 +168,10 @@ namespace TinySpire.Battle
             new Subject<BattleCommandLifecycleEvent>();
 
         /// <summary>只读发布由 Queue 形成并完成对账的唯一命令生命周期。</summary>
-        public Observable<BattleCommandLifecycleEvent> Lifecycle => _lifecycle;
+        internal Observable<BattleCommandLifecycleEvent> Lifecycle => _lifecycle;
 
-        /// <summary>在调用 Queue 前为本次具体命令注册唯一不透明句柄。</summary>
-        public BattleCommandHandle PreRegister(BattleCommand command)
+        /// <summary>只允许 Queue implementation 在接受判断前为具体命令注册唯一不透明句柄。</summary>
+        internal BattleCommandHandle PreRegister(BattleCommand command)
         {
             if (command == null)
                 throw new ArgumentNullException(nameof(command));
@@ -188,7 +188,7 @@ namespace TinySpire.Battle
         }
 
         /// <summary>判断指定句柄是否仍等待拒绝、完成、失败或 fault 对账。</summary>
-        public bool IsPending(BattleCommandHandle handle)
+        internal bool IsPending(BattleCommandHandle handle)
         {
             return handle != null && _pending.ContainsKey(handle);
         }
@@ -201,16 +201,6 @@ namespace TinySpire.Battle
                    _pending.TryGetValue(handle, out Registration registration) &&
                    ReferenceEquals(registration.Command, command) &&
                    !registration.AuthoritySequence.HasValue;
-        }
-
-        /// <summary>按同一命令引用解析唯一尚未绑定序号的预注册句柄。</summary>
-        internal bool TryResolvePreRegistered(
-            BattleCommand command,
-            out BattleCommandHandle handle)
-        {
-            handle = null;
-            return command != null &&
-                   _unboundHandlesByCommand.TryGetValue(command, out handle);
         }
 
         /// <summary>在 Queue 分配序号后把预注册句柄绑定到唯一 accepted 命令。</summary>
@@ -242,14 +232,13 @@ namespace TinySpire.Battle
         }
 
         /// <summary>按 handle 与序号对账生命周期；旧终态不能影响其他新句柄。</summary>
-        public bool Reconcile(BattleCommandLifecycleEvent lifecycleEvent)
+        internal bool Reconcile(BattleCommandLifecycleEvent lifecycleEvent)
         {
             if (lifecycleEvent == null)
                 throw new ArgumentNullException(nameof(lifecycleEvent));
             if (!_pending.TryGetValue(lifecycleEvent.Handle, out Registration registration) ||
                 registration.AuthoritySequence != lifecycleEvent.AuthoritySequence ||
-                registration.Command.Type != lifecycleEvent.CommandType ||
-                registration.Command.SubmitterId != lifecycleEvent.SubmitterId)
+                !ReferenceEquals(registration.Command, lifecycleEvent.Command))
             {
                 return false;
             }

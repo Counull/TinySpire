@@ -51,7 +51,7 @@ public sealed class HandCardSelectionSessionTests
             initialHandCount: 2,
             enemyIntents: enemyIntents,
             tables: tables);
-        queue.SubmitRegistered(new StartBattleCommand());
+        queue.Submit(new StartBattleCommand());
         presentation.CompleteNext();
         CardInstanceId sourceCardId = zones.Hand[0];
         CardInstanceId selectedCardId = zones.Hand[1];
@@ -92,7 +92,7 @@ public sealed class HandCardSelectionSessionTests
             new[] { resolution.TargetCardId.Value });
         Assert.That(command.SelectedCardIds, Is.EqualTo(new[] { selectedCardId }));
         using BattleCommandLifecycleExecutionRecorder recorder = queue.RecordExecutionLifecycle();
-        BattleCommandSubmissionResult submission = queue.SubmitRegistered(command);
+        BattleCommandSubmissionResult submission = queue.Submit(command);
         BattleCommandLifecycleEvent terminal = recorder.RequireTerminal(submission);
         BattleCardMovedSettlement[] moves = terminal.Settlements
             .OfType<BattleCardMovedSettlement>()
@@ -263,8 +263,6 @@ public sealed class HandCardSelectionSessionTests
                 legalVisual.CardContent.gameObject.AddComponent<CanvasGroup>());
             sourceVisual.SetBasePoseImmediately(new HandCardPose(new Vector2(0f, 0f), 0f, 1));
             legalVisual.SetBasePoseImmediately(new HandCardPose(new Vector2(260f, -380f), 0f, 0));
-            BattleCommandSubmissionCoordinator coordinator =
-                BattleCommandQueueTestFactory.GetCoordinator(scenario.Queue);
             typeof(HandCardContainer).GetField(
                 "_player",
                 BindingFlags.Instance | BindingFlags.NonPublic)?.SetValue(container, scenario.Player);
@@ -274,9 +272,6 @@ public sealed class HandCardSelectionSessionTests
             typeof(HandCardContainer).GetField(
                 "_commandQueue",
                 BindingFlags.Instance | BindingFlags.NonPublic)?.SetValue(container, scenario.Queue);
-            typeof(HandCardContainer).GetField(
-                "_commandCoordinator",
-                BindingFlags.Instance | BindingFlags.NonPublic)?.SetValue(container, coordinator);
             typeof(HandCardContainer).GetField(
                 "_participantPresenter",
                 BindingFlags.Instance | BindingFlags.NonPublic)?.SetValue(container, presenter);
@@ -400,8 +395,6 @@ public sealed class HandCardSelectionSessionTests
                 legalVisual.CardContent.gameObject.AddComponent<CanvasGroup>());
             sourceVisual.SetBasePoseImmediately(new HandCardPose(new Vector2(0f, 0f), 0f, 1));
             legalVisual.SetBasePoseImmediately(new HandCardPose(new Vector2(260f, -380f), 0f, 0));
-            BattleCommandSubmissionCoordinator coordinator =
-                BattleCommandQueueTestFactory.GetCoordinator(scenario.Queue);
             typeof(HandCardContainer).GetField(
                 "_player",
                 BindingFlags.Instance | BindingFlags.NonPublic)?.SetValue(container, scenario.Player);
@@ -411,9 +404,6 @@ public sealed class HandCardSelectionSessionTests
             typeof(HandCardContainer).GetField(
                 "_commandQueue",
                 BindingFlags.Instance | BindingFlags.NonPublic)?.SetValue(container, scenario.Queue);
-            typeof(HandCardContainer).GetField(
-                "_commandCoordinator",
-                BindingFlags.Instance | BindingFlags.NonPublic)?.SetValue(container, coordinator);
             typeof(HandCardContainer).GetField(
                 "_participantPresenter",
                 BindingFlags.Instance | BindingFlags.NonPublic)?.SetValue(container, presenter);
@@ -443,7 +433,7 @@ public sealed class HandCardSelectionSessionTests
             layoutSubscription = scenario.Zones.Layout
                 .Skip(1)
                 .Subscribe(_ => rebuildCards.Invoke(container, new object[] { false }));
-            lifecycleSubscription = coordinator.Lifecycle.Subscribe(lifecycle =>
+            lifecycleSubscription = scenario.Queue.Lifecycle.Subscribe(lifecycle =>
                 handleLifecycle.Invoke(container, new object[] { lifecycle }));
 
             container.HandleBeginDrag(sourceVisual);
@@ -645,11 +635,6 @@ public sealed class HandCardSelectionSessionTests
             typeof(HandCardContainer).GetField(
                 "_commandQueue",
                 BindingFlags.Instance | BindingFlags.NonPublic)?.SetValue(container, scenario.Queue);
-            typeof(HandCardContainer).GetField(
-                "_commandCoordinator",
-                BindingFlags.Instance | BindingFlags.NonPublic)?.SetValue(
-                container,
-                BattleCommandQueueTestFactory.GetCoordinator(scenario.Queue));
             typeof(HandCardContainer).GetField(
                 "_participantPresenter",
                 BindingFlags.Instance | BindingFlags.NonPublic)?.SetValue(container, presenter);

@@ -146,22 +146,17 @@ namespace TinySpire.Battle
     public sealed class BattleCommandRuntimeDriver : IStartable
     {
         private readonly BattleCommandQueue _queue;
-        private readonly BattleCommandSubmissionCoordinator _coordinator;
 
-        /// <summary>保存生产 Queue 与其唯一提交协调器，仅负责场景启动命令。</summary>
-        public BattleCommandRuntimeDriver(
-            BattleCommandQueue queue,
-            BattleCommandSubmissionCoordinator coordinator)
+        /// <summary>保存生产 Queue，仅负责场景启动命令。</summary>
+        public BattleCommandRuntimeDriver(BattleCommandQueue queue)
         {
             _queue = queue ?? throw new ArgumentNullException(nameof(queue));
-            _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
         }
 
         /// <summary>在 BattleLifetimeScope 启动时提交唯一的开始战斗命令。</summary>
         public void Start()
         {
             var command = new StartBattleCommand();
-            _coordinator.PreRegister(command);
             BattleCommandSubmissionResult result = _queue.Submit(command);
             if (!result.Accepted)
                 throw new InvalidOperationException("Battle command queue rejected StartBattleCommand.");

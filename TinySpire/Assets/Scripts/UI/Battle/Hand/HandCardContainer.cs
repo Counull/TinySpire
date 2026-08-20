@@ -50,7 +50,6 @@ public sealed class HandCardContainer : MonoBehaviour
     private CardTextFormatter _cardTextFormatter;
     private LocalizationService _localization;
     private BattleCommandQueue _commandQueue;
-    private BattleCommandSubmissionCoordinator _commandCoordinator;
     private BattleParticipantPresenter _participantPresenter;
     private BattleCardPlayRules _cardPlayRules;
 
@@ -107,7 +106,6 @@ public sealed class HandCardContainer : MonoBehaviour
         CardTextFormatter cardTextFormatter,
         LocalizationService localization,
         BattleCommandQueue commandQueue,
-        BattleCommandSubmissionCoordinator commandCoordinator,
         BattleParticipantPresenter participantPresenter)
     {
         _session = session;
@@ -115,7 +113,6 @@ public sealed class HandCardContainer : MonoBehaviour
         _cardTextFormatter = cardTextFormatter;
         _localization = localization;
         _commandQueue = commandQueue;
-        _commandCoordinator = commandCoordinator;
         _participantPresenter = participantPresenter;
     }
 
@@ -148,7 +145,6 @@ public sealed class HandCardContainer : MonoBehaviour
             || _cardTextFormatter == null
             || _localization == null
              || _commandQueue == null
-             || _commandCoordinator == null
              || _participantPresenter == null
              || _targetingArrow == null
              || _targetFocusAnchor == null)
@@ -203,7 +199,7 @@ public sealed class HandCardContainer : MonoBehaviour
         _localization.LocaleChanged.Subscribe(_ => RefreshCardTexts()).AddTo(this);
         _commandQueue.Turn.Subscribe(HandleTurnChanged).AddTo(this);
         _commandQueue.Queue.Subscribe(HandleQueueChanged).AddTo(this);
-        _commandCoordinator.Lifecycle.Subscribe(HandleCommandLifecycle).AddTo(this);
+        _commandQueue.Lifecycle.Subscribe(HandleCommandLifecycle).AddTo(this);
         foreach (CombatantData combatant in _session.Combatants.All.Values)
         {
             combatant.Health
@@ -515,15 +511,9 @@ public sealed class HandCardContainer : MonoBehaviour
             return;
         }
 
-        BattleCommandHandle handle = _commandCoordinator.PreRegister(command);
-        _pendingPlayCards.Add(handle, cardId);
-        card.SetCommandPending(handle);
         BattleCommandSubmissionResult submission = _commandQueue.Submit(command);
         if (!submission.Accepted || !submission.AuthoritySequence.HasValue)
         {
-            _pendingPlayCards.Remove(handle);
-            if (card != null)
-                card.ClearCommandPending(handle);
             LayoutCards(immediate: false);
             RefreshCardPlayPresentation();
             return;
@@ -535,6 +525,12 @@ public sealed class HandCardContainer : MonoBehaviour
     /// <summary>按精确句柄处理出牌终态；旧生命周期不能清除新的待定视觉。</summary>
     private void HandleCommandLifecycle(BattleCommandLifecycleEvent lifecycle)
     {
+        if (lifecycle.Stage == BattleCommandLifecycleStage.Queued)
+        {
+            TrackQueuedPlayCard(lifecycle);
+            return;
+        }
+
         if (lifecycle.Stage == BattleCommandLifecycleStage.ExecutionFailed
             || lifecycle.Stage == BattleCommandLifecycleStage.Faulted)
         {
@@ -542,8 +538,7 @@ public sealed class HandCardContainer : MonoBehaviour
             CancelActiveDrag(reflow: true);
         }
 
-        if (lifecycle.Stage == BattleCommandLifecycleStage.Queued ||
-            !_pendingPlayCards.TryGetValue(lifecycle.Handle, out CardInstanceId cardId))
+        if (!_pendingPlayCards.TryGetValue(lifecycle.Handle, out CardInstanceId cardId))
         {
             return;
         }
@@ -560,6 +555,25 @@ public sealed class HandCardContainer : MonoBehaviour
 
         LayoutCards(immediate: false);
         RefreshCardPlayPresentation();
+    }
+
+    /// <summary>从 Queue 的 Queued 事实识别当前玩家可见出牌，并在任何同步终态前建立精确 pending。</summary>
+    private void TrackQueuedPlayCard(BattleCommandLifecycleEvent lifecycle)
+    {
+        if (!(lifecycle.Command is PlayCardCommand command) ||
+            _player == null ||
+            command.ActorId != _player.Id ||
+            _pendingPlayCards.ContainsKey(lifecycle.Handle))
+        {
+            return;
+        }
+
+        HandCardVisual card = FindCardById(command.CardId);
+        if (card == null)
+            return;
+
+        _pendingPlayCards.Add(lifecycle.Handle, command.CardId);
+        card.SetCommandPending(lifecycle.Handle);
     }
 
     /// <summary>阶段或当前玩家结束事实变化时，立即派生全部手牌的输入可用性。</summary>
@@ -1180,7 +1194,7 @@ public sealed class HandCardContainer : MonoBehaviour
         _transientCards.Clear();
     }
 
-    /// <summary>返回指定卡牌实例当前唯一待定的预注册句柄。</summary>
+    /// <summary>返回指定卡牌实例当前唯一待定的 Queue 生命周期句柄。</summary>
     private bool TryGetPendingPlayHandle(
         CardInstanceId cardId,
         out BattleCommandHandle handle)

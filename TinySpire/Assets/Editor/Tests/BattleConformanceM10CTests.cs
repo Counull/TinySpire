@@ -198,7 +198,6 @@ internal static class M10BattleReplayHarness
         int activeTweenCountBefore = DOTween.TotalActiveTweens();
         BattleCommandSubmissionResult startSubmission = Submit(
             queue,
-            coordinator,
             new StartBattleCommand());
         if (!startSubmission.Accepted)
             throw new InvalidOperationException("Default BattleScene rejected StartBattleCommand.");
@@ -280,7 +279,6 @@ internal static class M10BattleReplayHarness
 
         BattleCommandSubmissionResult startSubmission = Submit(
             queue,
-            coordinator,
             new StartBattleCommand());
         if (!startSubmission.Accepted)
             throw new InvalidOperationException("Default BattleScene rejected StartBattleCommand.");
@@ -291,7 +289,6 @@ internal static class M10BattleReplayHarness
             .Single();
         BattleCommandSubmissionResult endSubmission = Submit(
             queue,
-            coordinator,
             new EndPlayerActionCommand(player.Id));
         if (!endSubmission.Accepted)
             throw new InvalidOperationException("Default BattleScene rejected EndPlayerActionCommand.");
@@ -341,13 +338,11 @@ internal static class M10BattleReplayHarness
         };
     }
 
-    /// <summary>按生产提交前的既有协调器登记要求调用唯一 Queue.Submit 写入入口。</summary>
+    /// <summary>通过生产唯一 Queue.Submit 写入入口提交命令。</summary>
     private static BattleCommandSubmissionResult Submit(
         BattleCommandQueue queue,
-        BattleCommandSubmissionCoordinator coordinator,
         BattleCommand command)
     {
-        coordinator.PreRegister(command);
         return queue.Submit(command);
     }
 

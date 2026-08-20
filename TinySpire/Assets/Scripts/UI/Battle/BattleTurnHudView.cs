@@ -44,7 +44,6 @@ namespace TinySpire.UI.Battle
         private BattleSession _session;
         private ConfigService _configs;
         private BattleCommandQueue _queue;
-        private BattleCommandSubmissionCoordinator _coordinator;
         private BattleParticipantPresenter _participantPresenter;
         private PlayerCombatantData _player;
         private BattleCommandHandle _pendingEndActionHandle;
@@ -55,19 +54,17 @@ namespace TinySpire.UI.Battle
         private bool _terminalActionSubmitted;
         private bool _showLegacyTerminalActions = true;
 
-        /// <summary>接收当前战斗事实、统一命令入口和生命周期协调器。</summary>
+        /// <summary>接收当前战斗事实，以及同时公开提交与生命周期的统一 Queue interface。</summary>
         [Inject]
         public void Construct(
             BattleSession session,
             ConfigService configs,
             BattleCommandQueue queue,
-            BattleCommandSubmissionCoordinator coordinator,
             BattleParticipantPresenter participantPresenter)
         {
             _session = session ?? throw new ArgumentNullException(nameof(session));
             _configs = configs ?? throw new ArgumentNullException(nameof(configs));
             _queue = queue ?? throw new ArgumentNullException(nameof(queue));
-            _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
             _participantPresenter = participantPresenter
                 ?? throw new ArgumentNullException(nameof(participantPresenter));
         }
@@ -368,7 +365,7 @@ namespace TinySpire.UI.Battle
         {
             ValidateReferences();
             if (_session == null || _configs?.GameConfig == null || _queue == null ||
-                _coordinator == null || _participantPresenter == null)
+                _participantPresenter == null)
             {
                 throw new InvalidOperationException(
                     "BattleTurnHudView did not receive all initialized battle dependencies.");
@@ -379,7 +376,7 @@ namespace TinySpire.UI.Battle
             _endActionButton.onClick.AddListener(SubmitEndPlayerAction);
             _queue.Turn.Subscribe(RefreshTurn).AddTo(this);
             _queue.Queue.Subscribe(_ => RefreshTurn(_queue.Turn.CurrentValue)).AddTo(this);
-            _coordinator.Lifecycle.Subscribe(HandleCommandLifecycle).AddTo(this);
+            _queue.Lifecycle.Subscribe(HandleCommandLifecycle).AddTo(this);
             RefreshTurn(_queue.Turn.CurrentValue);
         }
 
@@ -413,15 +410,9 @@ namespace TinySpire.UI.Battle
             }
 
             var command = new EndPlayerActionCommand(_player.Id);
-            BattleCommandHandle handle = _coordinator.PreRegister(command);
-            _pendingEndActionHandle = handle;
-            RefreshTurn(turn);
-
             BattleCommandSubmissionResult submission = _queue.Submit(command);
             if (!submission.Accepted || !submission.AuthoritySequence.HasValue)
             {
-                if (ReferenceEquals(_pendingEndActionHandle, handle))
-                    _pendingEndActionHandle = null;
                 _commandStatusText.text = $"Rejected · {submission.FailureReason}";
                 RefreshTurn(_queue.Turn.CurrentValue);
                 return;
@@ -462,11 +453,20 @@ namespace TinySpire.UI.Battle
         private void HandleCommandLifecycle(BattleCommandLifecycleEvent feedback)
         {
             _commandStatusText.text = BattleTurnHudPresentation.FormatFeedback(feedback);
-            if (!ReferenceEquals(feedback.Handle, _pendingEndActionHandle) ||
-                feedback.Stage == BattleCommandLifecycleStage.Queued)
+            if (feedback.Stage == BattleCommandLifecycleStage.Queued)
             {
+                if (feedback.Command is EndPlayerActionCommand command &&
+                    command.ActorId == _player.Id)
+                {
+                    _pendingEndActionHandle = feedback.Handle;
+                    RefreshTurn(_queue.Turn.CurrentValue);
+                }
+
                 return;
             }
+
+            if (!ReferenceEquals(feedback.Handle, _pendingEndActionHandle))
+                return;
 
             _pendingEndActionHandle = null;
             RefreshTurn(_queue.Turn.CurrentValue);

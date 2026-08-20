@@ -67,9 +67,9 @@ public sealed class BattleParticipantFeedbackRoutingTests
                 new ImmediateBattleCommandPresentation(),
                 coordinator);
             var command = new StartBattleCommand();
-            BattleCommandHandle handle = coordinator.PreRegister(command);
 
             BattleCommandSubmissionResult result = queue.Submit(command);
+            BattleCommandHandle handle = lifecycles[0].Handle;
 
             Assert.That(result.Accepted, Is.True);
             Assert.That(result.AuthoritySequence, Is.EqualTo(1));
@@ -574,7 +574,7 @@ public sealed class BattleParticipantFeedbackRoutingTests
             Assert.That(prefab, Is.Not.Null);
             turnHudObject = Object.Instantiate(prefab);
             BattleTurnHudView turnHud = turnHudObject.GetComponent<BattleTurnHudView>();
-            turnHud.Construct(session, configs, queue, coordinator, presenter);
+            turnHud.Construct(session, configs, queue, presenter);
             InvokePrivate(turnHud, "Start");
             Button endActionButton = GetPrivateField<Button>(turnHud, "_endActionButton");
             Image phaseBanner = GetPrivateField<Image>(turnHud, "_playerTurnBanner");
@@ -779,7 +779,6 @@ public sealed class BattleParticipantFeedbackRoutingTests
                 new ImmediateBattleCommandPresentation(),
                 coordinator);
             var startCommand = new StartBattleCommand();
-            coordinator.PreRegister(startCommand);
             Assert.That(queue.Submit(startCommand).Accepted, Is.True);
             Assert.That(zones.Hand, Has.Count.EqualTo(2));
 
@@ -1853,7 +1852,6 @@ public sealed class BattleParticipantFeedbackRoutingTests
             new ImmediateBattleCommandPresentation(),
             coordinator);
         var command = new StartBattleCommand();
-        coordinator.PreRegister(command);
         BattleCommandSubmissionResult result = queue.Submit(command);
         Assert.That(result.Accepted, Is.True);
         Assert.That(queue.Turn.CurrentValue.Phase, Is.EqualTo(BattleTurnPhase.PlayerAction));

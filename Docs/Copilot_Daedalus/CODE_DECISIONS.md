@@ -1,6 +1,6 @@
 ---
 created: 2026-07-06
-updated: 2026-08-16
+updated: 2026-08-17
 ---
 
 # Daedalus · 代码决策记录
@@ -1264,3 +1264,13 @@ Run 规划采用递归切片门禁：每个可执行切片先处于 `needs-grill
 **持久化与失败语义**：唯一生产 Adapter 位于 Infrastructure，以 `Application.persistentDataPath` 构造单槽 versioned JSON。提交先在同目录创建 temp，durable flush 后重新解析、迁移、校验并与输入等价比较；首次提交同卷 Move，已有正式档使用 `File.Replace`，任何平台/IO/校验失败都不得退化为删除旧档后覆盖。Hero 确认提交 S0；胜利只在 BattleResult 已完整结算、清除 transient 并返回地图后提交 S1；BeginBattle、战斗过程、失败和 G1 重开不调用 save port。重试复用缓存的同一 Document，不重取 entropy、不重放 BattleResult；确认退出时清除未提交内存态并恢复上一成功 checkpoint。
 
 **UI 与边界**：启动只探测存档，不自动 hydrate；Continue 是显式用户意图。有效档或不可用档阻止直接新开局并要求确认放弃；坏 JSON、非法 UTF-8、未知 schema、缺失/不兼容配置与 IO 错误禁用 Continue、显示原因，只有确认后才删除。删除有效档失败仍保留 Continue 能力。当前 Completed 节点保留 S1 并显示“节点已清除、后续内容未接入”；CD-112 的失败页、snapshot 与新 seed 重开保持原语义。本决定不授权 G3+、平台 Save Spike、平台 SDK、云存档、多槽、奖励、地图生成或永久死亡。最终完整 EditMode `0004316410dc4b1e9db8d80312499dc4` 为 947/947；Luban、本地 Addressables 构建与唯一 Editor 的 S0 / Continue / 战中不写盘 / S1 / 冷启动恢复 / 确认删除主链通过。完整证据见 `06_testing/2026-08-16-g2a-run-persistence.md`。
+
+## CD-115：BattleCommandQueue 隐藏提交预注册协议并以 Queued 生命周期建立 UI pending
+
+**问题**：CD-043/045 为解决同步执行早于 UI pending 登记的问题，引入了正确的 opaque handle 与 Queue-owned lifecycle，但生产调用者必须先向 concrete `BattleCommandSubmissionCoordinator` 以同一命令引用 `PreRegister`，再自行建立 pending、调用 `Queue.Submit`，并在拒绝时回滚。该隐藏顺序协议同时泄漏到 `BattleCommandRuntimeDriver`、`BattleTurnHudView`、`HandCardContainer` 和共享测试扩展；漏一步或换一个命令引用都会失败，使名义上的单一 `Submit` seam 实际需要两个模块协作。
+
+**选择**：`BattleCommandQueue.Submit` 在内部接受判断前签发 handle；调用者只提交不可变 `BattleCommand`。已接受命令仍先发布唯一 `Queued`，生命周期事件同时携带该次原始命令引用，Hand/HUD 在 `Queued` 回调中识别自己关心的 `PlayCardCommand` / `EndPlayerActionCommand` 并建立精确 handle pending；同步普通终态或 fault 随后按同一 handle 清除。结构性拒绝不分配权威序号、不发布生命周期，也不会让 UI 建立需要回滚的 pending。Queue 公开只读 `Lifecycle`；coordinator 的注册、匹配、取消、对账与生命周期源均降为 internal implementation，生产 View 与 runtime driver 不再注入它。
+
+**保留边界**：本决定只 supersede CD-043/045 中“生产调用者必须预注册 concrete coordinator”和“coordinator 是 View 的生命周期入口”两项接口口径。权威序号分配、唯一迭代 drain、callback 非重入、FIFO continuation、system token、普通失败空 settlement、表现屏障、completion 与 fault 诊断继续由既有 Queue/scheduling core 独占，语义和顺序不变。internal scheduling 合同测试继续直接覆盖预注册/拒绝/伪造 token；普通 Queue、UI 与业务测试只调用 `Submit`。没有新增 interface、模块、Scene/Prefab、配置表或包依赖，也没有修改 `BattleCardPlayEvaluation`。
+
+**影响与验收**：三个生产调用点和 13 个旧 `SubmitRegistered` 测试消费者已迁移；共享测试 coordinator registry/扩展已删除。新增 RED 首先证明 lifecycle 缺少原始 Command，随后旧 helper 的重复预注册暴露迁移遗漏；最终 M8B 11/11、相关聚合 116/116、完整 EditMode 953/953 均通过，Unity 编译 Console 0 error，`git diff --check` 通过。未运行 PlayMode、Player build、Addressables 或人工 BattleScene smoke；本次不含资产/配置变更。完整方案与证据见 `plans/2026-08-17-battle-command-submission-interface-deepening.md` 和 `06_testing/2026-08-17-battle-command-submission-interface-deepening.md`。
