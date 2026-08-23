@@ -12,7 +12,7 @@ status_source: ../STATUS.md
 
 ## 最近记录
 
-- [ByteRover 项目知识关联](2026-08-24-byterover-project-context.md) — 空树 query、curate 外部处理授权阻塞与事实源保护证据；尚无成功 seed/来源回查。
+- [ByteRover 项目知识关联](2026-08-24-byterover-project-context.md) — verified local；5 文件 seed、4/4 confirmed、带精确来源回查与本地 context-tree commit 通过，未配置云同步。
 - [LLM 项目知识工作流 V2](2026-08-24-llm-project-knowledge-workflow-v2.md) — Status 路由、预算、链接与离线校验器。
 - [G3 确定性尖塔式 Act 地图](2026-08-24-g3-deterministic-act-map.md) — 当前 G3 权威验收：完整 EditMode 993/993、Sync/Local Addressables、Packed Play 双链与 Console 0。
 - [BattleCommandQueue 提交接口深化](2026-08-17-battle-command-submission-interface-deepening.md) — 相关 116/116、完整 EditMode 953/953。

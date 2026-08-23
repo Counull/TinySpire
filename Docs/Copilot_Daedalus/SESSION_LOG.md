@@ -17,11 +17,11 @@ status_source: STATUS.md
 - 离线脚本、相对链接、UTF-8/BOM 与 `git diff --check` 通过；具体数字见 `06_testing/2026-08-24-llm-project-knowledge-workflow-v2.md`。这些结构检查不替代 Unity 或内容链路验收。
 - 公共 `llm-workflow` 同时完成供应商无关的 Interface 精简、GPT-family 输出适配与 Optional Retrieval Adapter；独立只读审计通过后以 `310edca` 推送 `origin/main`，父项目只更新 submodule 指针，不把 TinySpire 语义写回公共仓库。
 
-## 2026-08-24 ByteRover 项目检索适配（等待显式外部处理授权）
+## 2026-08-24 ByteRover 项目检索适配（verified local）
 
-- MCP/CLI 项目链路可达，空 context tree query 成功返回 `No matching knowledge / Sources: None`；Account/Space 未连接只阻塞 BRV 云同步，不阻塞本地 query。
-- 已建立项目私有 `08_tools/BYTEROVER.md`，固定“小型路由 seed → 精确仓库相对来源 → 打开原文核验”；公共 `llm-workflow` 只保留供应商无关的 Optional Retrieval Adapter，`.brv/` 由父仓库忽略。
-- 首次 5 文件 curate 因外部处理私有项目文档的安全门被拒绝，未提交任何文件且没有绕过。成功 seed 与带来源回查仍等待用户对这 5 份文档作明确批准，详见 `06_testing/2026-08-24-byterover-project-context.md`。
+- MCP/CLI 链路与初始空树 RED 已验证；用户明确批准后，5 份小型路由骨架成功 curate 为 4 个知识主题，任务 `f8289d91-6021-4b95-b17f-fc082c7d3666` 为 4/4 confirmed、0 failed。
+- 带来源回查正确返回 `STATUS.md` 唯一状态源、G3 completed/verified、无已授权 active slice 与 G4-A 仅为 candidate，并给出 `STATUS.md`、`RUN_ROADMAP.md`、`README.md` 三个精确仓库相对路径；原文逐项核对一致。
+- 生成知识由 BRV 自有 VC 先以 `70c49b4` 保存，验收索引刷新再以 `2eb1b37` 保存，最终 context-tree clean；`.brv/` 继续由父仓库忽略。Account/Space 与 BRV remote 未配置，因此本轮只证明本地检索闭环，不声称云同步。完整证据见 `06_testing/2026-08-24-byterover-project-context.md`。
 
 ## 2026-08-24 G3 确定性尖塔式 Act 地图（verified）
 
