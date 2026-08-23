@@ -1,67 +1,40 @@
 ---
-title: Copilot_Daedalus · Agent 入口
+title: Copilot_Daedalus · Agent 局部规则
 project: TinySpire
-page_type: entry
+page_type: instruction
 lifecycle: active
 updated: 2026-08-24
 ---
 
-# Copilot_Daedalus · Agent 入口（AGENTS.md）
+# Copilot_Daedalus · Agent 局部规则
 
-> 本文件是进入 Daedalus 文档库的最短入口。它不是完整工作流手册；规则以 canonical workflow 为准。
+> 本文件只保存 Daedalus 的项目私有硬约束。知识导航唯一入口是 [README.md](README.md)；可复用规则只引用 [LLM Workflow](../_external/llm-workflow/LLM_WORKFLOW.md)，不在这里复制。
 
-## 1. Canonical Workflow（只引用，不复制）
+## 开始任务
 
-- 可复用工作流协议：`../_external/llm-workflow/LLM_WORKFLOW.md`
-- 公共仓库：<https://github.com/Counull/LLM-Workflow.git>
-- 本文档库遵循其分层与读取策略，**不得把 TinySpire 私有语义写回 `_external/llm-workflow/`**。
+1. 先遵守根 [AGENTS.md](../../AGENTS.md)、[协作事实源](../COLLABORATION_SOURCE_OF_TRUTH.md) 与 [AI 协作规则](../AI_COLLABORATION_RULES.md)。
+2. 读取 [README.md](README.md) → [STATUS.md](STATUS.md)。
+3. 实现、运行时或架构任务再预检 [ARCHITECTURE_CONVENTIONS.md](ARCHITECTURE_CONVENTIONS.md)。
+4. 随后只读取一份直接相关的计划、决策或验收；仅在缺失证据、精确溯源或冲突裁决时继续下钻。
 
-## 2. 本地入口
+[AGENT_PROFILE.md](AGENT_PROFILE.md) 只说明角色，[AGENT_PROMPT.md](AGENT_PROMPT.md) 只提供调用模板，均不属于普通任务默认上下文。
 
-- 目录索引（先读）：[README.md](README.md) — `index` 路由页
-- 状态源（当前进度、授权、阻塞、下一步）：[STATUS.md](STATUS.md)
-- 身份说明：[AGENT_PROFILE.md](AGENT_PROFILE.md)
-- 调用模板：[AGENT_PROMPT.md](AGENT_PROMPT.md)
-- 代码决策：[CODE_DECISIONS.md](CODE_DECISIONS.md)
+## 写回落点
 
-## 3. 项目约束与来源
+| 变化 | 唯一落点 |
+|---|---|
+| 当前执行状态、授权、阻塞、下一步 | [STATUS.md](STATUS.md) |
+| 代码决定 | [CODE_DECISIONS.md](CODE_DECISIONS.md) 的精确 CD |
+| 实施方案 | [plans/](plans/) |
+| 真实测试与验收 | [06_testing/](06_testing/) |
+| 历史过程 | [SESSION_LOG.md](SESSION_LOG.md) |
 
-- 全局规则：`../COLLABORATION_SOURCE_OF_TRUTH.md`、`../AI_COLLABORATION_RULES.md`
-- 设计 / 数值来源（只读）：`../Hermes_Pegasus/design/`
-- 创意 / 文本来源（只读）：`../Gemini_Calliope/`（若已建立）
-- 实现目标：`../../TinySpire/`（Unity 6.5 · C#）
-- 路径一律相对；机器绝对路径只进 `~/.llm-wiki/instances.json`，不进本库。
+只写回耐久变化；不为普通对话、上下文压缩或工具过程建立第二份状态记录。
 
-## 4. 公私边界
+## 硬边界
 
-- 通用工作流改动 → 提到 `LLM-Workflow` 公共仓库。
-- TinySpire 事实、实现决策、原始来源 → 留在本私有实例。
-- 二者不互相复制。
-
-## 5. llm-workflow 实例布局（本地化）
-
-> 本库是每个 AI 各自维护的一份 llm-workflow 实例。角色采用标准布局，但**已有文件就地充当对应角色**，只为缺失角色新建目录，避免重复。
-
-| llm-workflow 角色 | 本库落点 | 说明 |
-|---|---|---|
-| `02_index` | `README.md`（根） | 路由入口 |
-| `status` | `STATUS.md`（根） | **唯一当前可变状态源** |
-| `05_development-log` | `SESSION_LOG.md`（根） | 按需读取的历史 changelog |
-| `03_design` | `plans/` | 实现计划 |
-| `decision` | `CODE_DECISIONS.md`（根） | **正式事实源**，路径不可变（见 `../AI_COLLABORATION_RULES.md` §4） |
-| `00_inbox` | `00_inbox/` | 待消化任务 / 来源 |
-| `01_requirements` | `01_requirements/` | 上游需求 digest（Pegasus / Calliope） |
-| `04_research` | `04_research/` | 技术调研（Luban、R3 等） |
-| `06_testing` | `06_testing/` | 测试记录 / 验收 |
-| `07_retrospective` | `07_retrospective/` | 复盘 |
-| `08_tools` | `08_tools/` | 工具链笔记 |
-| `10_communication` | `10_communication/` | 对其他 Agent 的 hand-off |
-| `99_archive` | `99_archive/` | 归档 |
-| `09_meetings` | — | 不适用（实现 Agent 无会议），未建目录 |
-
-> 每个数字目录内有 `README.md` 说明其角色。默认上下文是 `README.md` → `STATUS.md`；随后只读至多一份与任务直接相关的计划、决策或验收。`SESSION_LOG.md` 与整本 `CODE_DECISIONS.md` 仅在追溯或冲突裁决时按需读取。
-
-## 6. 边界提醒
-
-- 我的输出默认是 proposal，非事实源；经 Theseus 确认或写入正式事实源才成立。
-- 提交前按 `../AI_COLLABORATION_RULES.md` §3 展示审查包，不静默 commit / push。
+- 目录职责不等于写入授权。讨论与评审保持只读；修改、commit、push 分别服从当前用户请求和根规则。
+- Roadmap、计划状态或旧任务授权都不产生新的实施权限；当前权限只查 [STATUS.md](STATUS.md) 与当前用户请求。
+- TinySpire 私有语义不得写入公共 `_external/llm-workflow/`；公共规则也不得复制回本实例。
+- Pegasus / Calliope 文档默认只读；发现设计冲突时停止该语义分支并交给用户裁决。
+- 文档使用项目相对路径；保护脏工作区，只精确暂存本轮审核文件。

@@ -1,11 +1,12 @@
 ---
 title: RunEntryScene 主入口视觉切片实施计划
 page_type: plan
-lifecycle: active
+lifecycle: archived
 date: 2026-08-17
+updated: 2026-08-24
 scope: RunEntry presentation only
 source: Docs/Hermes_Pegasus/art/entry-paper-stack-responsive-motion.md
-status_source: ../SESSION_LOG.md
+status_source: ../STATUS.md
 implementation_status: verified
 ---
 

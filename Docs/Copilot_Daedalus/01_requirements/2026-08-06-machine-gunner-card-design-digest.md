@@ -3,10 +3,10 @@ title: 机枪兵卡牌设计需求摘要
 page_type: requirement
 lifecycle: superseded
 created: 2026-08-06
-updated: 2026-08-06
+updated: 2026-08-24
 status: superseded-by-2026-08-07-marine-game-card-requirement-digest
-status_source: ../SESSION_LOG.md
-source: ../00_inbox/卡牌设计-机枪兵.json
+status_source: ../STATUS.md
+source: original 00_inbox JSON is unavailable; this historical digest is the retained working record
 superseded_by: 2026-08-07-marine-game-card-requirement-digest.md
 confidence: mixed-source-stated-and-code-observed
 related_plan: ../plans/2026-08-06-machine-gunner-card-pool-integration.md
@@ -14,7 +14,7 @@ related_plan: ../plans/2026-08-06-machine-gunner-card-pool-integration.md
 
 # 机枪兵卡牌设计需求摘要
 
-> 日常实施先读本文与关联计划；需要精确字段时再读取 source-only 的 [`../00_inbox/卡牌设计-机枪兵.json`](../00_inbox/卡牌设计-机枪兵.json)。本文不把对话设计稿伪装成已生效的表格或运行时事实。
+> **已被取代，仅供历史追溯。** 当前需求先读 [2026-08-07 摘要](2026-08-07-marine-game-card-requirement-digest.md)。原始 `00_inbox/卡牌设计-机枪兵.json` 从未进入 Git，当前仓库不可用；本文只保留当时归一化结果，不能用于核对原始精确字段。
 
 ## 1. MG0 结论与实施边界
 
@@ -126,7 +126,7 @@ related_plan: ../plans/2026-08-06-machine-gunner-card-pool-integration.md
 
 - 原始设计稿总计 **28** 个模板：5 个 starter + 23 个 reward；starter 实例数为 **12**。
 - 上表覆盖全部 28 个源 ID；源中明示 **5** 个奖励升级、**18** 个奖励升级未声明。
-- 原始文件保持在 `00_inbox/`，未被改写；本文只有摘要、分类和未决项。
+- 原始 JSON 当前不可用；上述计数是本历史 digest 当时记录的归一化结果，不能冒充仍可回查的 source-only 原文。
 
 ## 5. MG1 已确认规则与验收结果
 

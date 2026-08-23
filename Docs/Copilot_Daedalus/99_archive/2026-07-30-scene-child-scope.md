@@ -1,16 +1,17 @@
---
+---
 title: 场景子 LifetimeScope 代码创建验证记录
 page_type: testing
 lifecycle: archived
 date: 2026-07-30
+updated: 2026-08-24
 scope: TinySpire/Assets/Scripts/Core/SceneFlowService.cs
 superseded_by: CD-008（CODE_DECISIONS.md）
-status_source: ../SESSION_LOG.md
+status_source: ../STATUS.md
 ---
 
 # 场景子 LifetimeScope 代码创建验证记录（已归档）
 
-> 本文档描述的“`SceneFlowService` 用 `CreateChild` 动态创建/持有场景子 Scope”方案已被用户撤回、代码已还原，当前仓库不存在对应实现。原文件头的 `source: CD-008` 是错误引用（当时 `CODE_DECISIONS.md` 里从未真正存在过 CD-008）。正确结论见 `CODE_DECISIONS.md` 的 CD-008：场景级服务应改为“挂载在场景内的 `LifetimeScope`”，不由代码动态创建/销毁。本文件仅作历史记录保留，不代表当前架构。
+> 本文档描述的“`SceneFlowService` 用 `CreateChild` 动态创建/持有场景子 Scope”方案已被用户撤回、代码已还原，当前仓库不存在对应实现。原文件头的 `source: CD-008` 是错误引用（当时 `CODE_DECISIONS.md` 里从未真正存在过 CD-008）。正确结论见 [CODE_DECISIONS.md](../CODE_DECISIONS.md) 的 CD-008：场景级服务应改为“挂载在场景内的 `LifetimeScope`”，不由代码动态创建/销毁。本文件仅作历史记录保留，不代表当前架构。
 
 ## 已完成验证
 

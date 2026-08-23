@@ -1,8 +1,9 @@
 ---
 title: LLM 项目知识工作流 V2 试点计划
 page_type: plan
-lifecycle: completed
+lifecycle: archived
 date: 2026-08-24
+updated: 2026-08-24
 scope: Docs/Copilot_Daedalus local instance only
 status_source: ../STATUS.md
 source: 用户完成局部 Grill 后的明确优化授权；Docs/_external/llm-workflow/LLM_WORKFLOW.md

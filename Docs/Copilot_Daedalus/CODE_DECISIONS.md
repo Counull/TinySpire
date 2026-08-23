@@ -1,11 +1,15 @@
 ---
+title: Daedalus · 代码决策记录
+page_type: decision
+lifecycle: active
 created: 2026-07-06
 updated: 2026-08-24
+status_source: STATUS.md
 ---
 
 # Daedalus · 代码决策记录
 
-> 代码级决策，补充 `Hermes_Pegasus/design/decisions.md`（玩法级决策）。
+> 本页是按需读取的代码决策账本，补充 `Hermes_Pegasus/design/decisions.md`（玩法级决策）。当前执行状态只查 [STATUS.md](STATUS.md)；先从状态、计划或验收取得精确 `CD-NNN`，再按标题搜索对应区段，不要默认加载全文。旧口径只有在显式修订或 supersede 关系下失效。
 
 ## CD-001：LoadingScene 采用最短展示时间
 

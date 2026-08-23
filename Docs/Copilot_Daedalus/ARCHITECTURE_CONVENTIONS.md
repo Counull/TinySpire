@@ -110,7 +110,7 @@ UI 需要随着某项运行时事实变化而更新时，订阅流必须携带�
 
 - 未来是否所有最小运行时数据聚合（`BattleCardZonesData` 等）都要合并成同一个 `BattleCombatantsData` 的子聚合，还是保持多个独立聚合并存？
 - 聚合类之间（例如手牌聚合 vs 未来的战场聚合）如何互相引用，是否需要一个统一的聚合根？
-- G1～G3 已在 Bootstrap root 上落实 `RunStateStore` / `RunFlowService`、child Scene Scope、recipe-only persistence 与冻结地图所有权；当前权威边界见 `CD-112`、`CD-113`、`CD-116`。G4+ 不得从这些已完成 seam 推断奖励、遗物或新 Scope 已获授权。
+- `CD-112`、`CD-113`、`CD-116` 已在 Bootstrap root 上落实 `RunStateStore` / `RunFlowService`、child Scene Scope、recipe-only persistence 与冻结地图所有权。这些是实现约定，不授予后续奖励、遗物、新 Scope 或任何新切片的写入权限；当前授权只查 `STATUS.md` 与用户请求。
 
 ## 6. Reopen 流程
 

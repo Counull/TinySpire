@@ -19,7 +19,7 @@ source: SESSION_LOG.md 2026-08-24 G3 verified entry; RUN_ROADMAP.md; G3 plan and
 | Phase | **G3 · completed**；G1、G2、G3 均已 completed。 |
 | Active slice | 无；G3「确定性尖塔式 Act 地图」已 `verified`。下一候选为 G4-A `candidate`，尚未 Grill、计划或授权。 |
 | 已有证据 | 最终完整 Unity EditMode job `8e910a98b14f4fe4b4901ba78bf060dc` 为 **993/993 passed**；`Sync and Build All` 与 Local Addressables 成功；Packed Play 的多节点胜利→Boss 门、失败终局→进程级冷启动→确认删除两条生产链均通过，产品 Console Error=0。 |
-| 已授权 | 已完成的 G3 实现、所需测试数据与验收；没有由此继承新的实施授权。 |
+| 当前写入授权 | 无；G3 的历史授权已随验收结束。任何新实现或文档维护都必须来自当前用户请求，不能从旧状态继承。 |
 | 未授权 | 真实 Boss 战/奖励/遗物实际效果、G4+、多人、云/多槽、战中存档；也不因 G3 状态自动获得新范围授权。 |
 | 当前阻塞 | 无。验收使用的临时档已删除，用户原 schema v1 存档已按原 SHA-256 恢复；Addressables Play Mode 已恢复 Fast Mode。 |
 | 下一步 | 如需推进 Run，先对 G4-A 做独立局部 Grill，再形成窄计划并取得实施授权；G3 完成状态不自动授权 G4。 |

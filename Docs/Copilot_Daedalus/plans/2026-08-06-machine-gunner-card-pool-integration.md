@@ -3,11 +3,12 @@ title: 机枪兵单场战斗内容接入
 page_type: plan
 lifecycle: superseded
 created: 2026-08-06
-updated: 2026-08-06
+updated: 2026-08-24
 scope: 机枪兵作为新增候选 Hero 的单场战斗规则、卡池与配置接入；不含 Run 或奖励界面
 status: superseded-by-2026-08-07-marine-game-card-only-integration
-status_source: ../SESSION_LOG.md
-source: ../00_inbox/卡牌设计-机枪兵.json
+status_source: ../STATUS.md
+source: ../01_requirements/2026-08-06-machine-gunner-card-design-digest.md
+source_status: original 00_inbox JSON is unavailable
 superseded_by: 2026-08-07-marine-game-card-only-integration.md
 depends_on:
   - 2026-08-06-sts2-v01071-ironclad-card-pool.md (I5-I11 shared capabilities)
@@ -15,13 +16,13 @@ depends_on:
 
 # 机枪兵单场战斗内容接入
 
-> 本文是实施 proposal，不是已通过的玩法规格、更不是运行时证据。只有用户逐切片确认后才可实施；当前状态以 `../SESSION_LOG.md` 为准。
+> **已被取代，仅供历史追溯。** 当前内容计划见 [2026-08-07 继任计划](2026-08-07-marine-game-card-only-integration.md)，当前状态只查 [STATUS.md](../STATUS.md)。本文旧停止点和授权措辞不得用于启动新实施。
 
 ## 1. 目标、来源与硬边界
 
 目标是在不破坏默认战士和 M10 黄金基线的前提下，把机枪兵做成一个**新增的、可独立装配的单场战斗 Hero**：拥有自己的基础数值、12 张初始牌组、战斗内资源与状态，并按已确认的通用机制逐张翻转为 `Implemented`。
 
-唯一输入来源是 [`../00_inbox/卡牌设计-机枪兵.json`](../00_inbox/卡牌设计-机枪兵.json)。它是对话产出的 `source-only` 设计稿，不能直接作为运行时 JSON 加载，也不能因本计划被视为已确认的表格、数值或美术事实。
+本计划当时依据的原始 `00_inbox/卡牌设计-机枪兵.json` 从未进入 Git，当前仓库不可用；可追溯的工作摘要仅保留在 [2026-08-06 需求 digest](../01_requirements/2026-08-06-machine-gunner-card-design-digest.md)。该历史摘要不能直接作为运行时 JSON，也不能被视为当前表格、数值或美术事实。
 
 本计划默认采用以下边界；若策划选择不同产品形态，须先回到 MG0 更新本计划：
 

@@ -1,13 +1,13 @@
 ---
 title: BattleCommandQueue 提交接口深化
 page_type: plan
-lifecycle: completed
+lifecycle: archived
 created: 2026-08-17
-updated: 2026-08-17
+updated: 2026-08-24
 status: implemented-and-verified
 scope: Battle command submission interface only
 source: improve-codebase-architecture seam audit；2026-08-17 用户实施授权
-status_source: ../SESSION_LOG.md
+status_source: ../STATUS.md
 ---
 
 # BattleCommandQueue 提交接口深化

@@ -9,6 +9,14 @@ status_source: STATUS.md
 
 > 当前可变状态只查 [STATUS.md](STATUS.md)。本页保留按日期排列的审计与恢复线索；其中旧状态快照不构成当前事实。
 
+## 2026-08-24 LLM workflow 第二轮文档维护（verified）
+
+- 授权边界已统一：目录 ownership 只表示获当前任务写入授权后的落点，不构成常驻编辑权；旧状态、Roadmap、计划、约定或 owner 字段都不能授予新工作，commit/push 仍需当前任务明确指令。
+- Daedalus Agent 接口压缩为单一路由入口、角色职责和宿主调用 adapter；失效链接、重复验收副本、计划 lifecycle 与 `DEP-012` 历史状态已按现有来源修正，未删除底层证据。
+- 公共 `llm-workflow` 补齐 testing route、上下文压缩恢复、检索回退和模板分组一致性，并以 `4491bb4` 推送 `origin/main`；TinySpire 私有语义仍只留在项目实例。授权接口、历史迁移与公共 workflow 三路独立复核均为 PASS。
+- 离线验证新增全目录相对链接、授权语义、归档唯一性与计划 lifecycle 检查。完整结果见 `06_testing/2026-08-24-llm-project-knowledge-workflow-v2.md`；本轮不涉及 Unity、Luban、Addressables 或运行时代码。
+- ByteRover 仅定向刷新 Status 与 Architecture 路由：查询能返回正确授权边界和精确原始路径；BRV 解析错误如实保留，人工复核后的 4 个文件以本地提交 `82117ba` 保存。无关 `testing_index` 改动未暂存，且没有 BRV 云同步。
+
 ## 2026-08-24 LLM 项目知识工作流 V2 试点（已验证文档结构）
 
 - 新增 `STATUS.md` 作为唯一当前可变状态源；默认集收敛为 `README → STATUS → 至多一份相关页`，不再加载完整 changelog 或整本决策集。

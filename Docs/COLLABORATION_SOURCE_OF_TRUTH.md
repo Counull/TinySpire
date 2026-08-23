@@ -85,7 +85,7 @@ Docs/Hermes_Pegasus/AGENT_PROFILE.md
 Docs/Gemini_Calliope/README.md
 ```
 
-## 4. Directory Ownership
+## 4. Directory Responsibility
 
 ```text
 E:/Project/                    # unique Git root
@@ -97,9 +97,9 @@ E:/Project/                    # unique Git root
     Copilot_Daedalus/                # coding-agent docs owned by Daedalus
 ```
 
-Ownership means default write authority, not exclusive access.
+Ownership 只表示责任归属，以及当前任务已获用户明确写入授权后的允许落点；它本身不授予修改、commit 或 push 权限，也不限制其他 Agent 的只读访问。
 
-### Calliope may edit
+### Calliope 的授权写入落点
 
 ```text
 Docs/Gemini_Calliope/**
@@ -107,7 +107,7 @@ Docs/Gemini_Calliope/**
 
 Calliope should not silently promote brainstorms, flavor text, or visual concepts into locked design decisions. Confirmed concepts should be handed to Pegasus for system/design integration.
 
-### Pegasus may edit
+### Pegasus 的授权写入落点
 
 ```text
 Docs/Hermes_Pegasus/**
@@ -117,7 +117,7 @@ Docs/AI_COLLABORATION_RULES.md
 
 Pegasus should not silently rewrite Daedalus implementation notes unless correcting names/paths or merging an explicit request.
 
-### Daedalus may edit
+### Daedalus 的授权写入落点
 
 ```text
 Docs/Copilot_Daedalus/**
@@ -134,14 +134,14 @@ Git 提交规范见：
 Docs/AI_COLLABORATION_RULES.md
 ```
 
-Before editing:
+Before editing，先确认当前用户请求明确包含写入；讨论、评审或可行性分析保持只读。获得写入授权后仍须先检查：
 
 ```bash
 git status
 git diff
 ```
 
-Before committing or pushing, every AI must show the intended file list, diff stat, excluded/unrelated files, and commit message, then wait for explicit user approval. Do not use broad `git add .` when untracked files or generated assets are present.
+Commit / push 也需要当前任务的明确用户授权。若用户已在当前任务中给出“完成后提交并 push”之类的清晰指令，不需要对同一已审查范围重复索取授权；否则必须先展示目标文件、diff stat、排除项与 commit message，再等待确认。任何授权都不扩展到无关文件、force push 或 broad stage；存在未跟踪文件或生成资源时不得使用 `git add .`。
 
 After approval:
 
@@ -195,19 +195,15 @@ E:\Project\...          # absolute machine path
 
 Machine-specific absolute paths may appear only in temporary troubleshooting notes or local environment files.
 
-## 8. Current Project Focus
+## 8. Current Project Focus Route
 
-Current phase:
-
-```text
-Run MVP：G3 completed / verified；当前没有 active slice
-```
-
-Primary target:
+当前 phase、active slice、授权、阻塞、最新证据与下一步只查：
 
 ```text
-下一候选为 G4-A；它尚未 Grill、计划或获得实施授权
+Docs/Copilot_Daedalus/STATUS.md
 ```
+
+本节不复制可变项目快照，避免全局协作规则与实现状态形成两个维护点。
 
 Current collaboration model:
 
