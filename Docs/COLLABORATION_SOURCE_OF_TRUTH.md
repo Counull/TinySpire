@@ -1,7 +1,7 @@
 ---
 title: TinySpire Docs · Collaboration Source of Truth
 created: 2026-07-06
-updated: 2026-07-08
+updated: 2026-08-24
 status: active
 ---
 
@@ -40,8 +40,8 @@ Docs/Copilot_Daedalus/RUN_ROADMAP.md
 
 `Docs/Copilot_Daedalus/ROADMAP.md` is the frozen BattleScene MVP archive. Read it
 only when tracing M0–M10 history or its acceptance evidence; do not treat it as
-the current implementation entrypoint. Dynamic progress remains in
-`Docs/Copilot_Daedalus/SESSION_LOG.md`.
+the current implementation entrypoint. Current implementation status, authorization,
+blockers, and next action live only in `Docs/Copilot_Daedalus/STATUS.md`.
 
 ## 2. Agent Roles
 
@@ -54,41 +54,35 @@ the current implementation entrypoint. Dynamic progress remains in
 
 ## 3. Required Reading Order
 
-任何 Agent 开始 TinySpire 工作前，按顺序读取：
+任何 Agent 开始 TinySpire 工作前，先读取两份全局规则：
 
 ```text
 Docs/COLLABORATION_SOURCE_OF_TRUTH.md
 Docs/AI_COLLABORATION_RULES.md
-Docs/Gemini_Calliope/README.md
-Docs/Hermes_Pegasus/AGENT_PROFILE.md
-Docs/Hermes_Pegasus/AGENT_HANDOFF.md
-Docs/Hermes_Pegasus/STATUS.md
-Docs/Hermes_Pegasus/SYNC_PROTOCOL.md
 ```
 
-Calliope 还需要读取：
+随后只进入本次任务所属角色的入口与当前状态，再按任务下钻至多一份直接相关的计划、决策或验收页；不得把完整历史、整本决策集或所有角色目录作为默认上下文。
 
-```text
-Docs/Gemini_Calliope/README.md
-```
-
-Pegasus 还需要读取：
-
-```text
-Docs/Hermes_Pegasus/design/project-definition.md
-Docs/Hermes_Pegasus/design/decision-locks.md
-Docs/Hermes_Pegasus/design/decisions.md
-Docs/Hermes_Pegasus/art/art-style.md
-Docs/Hermes_Pegasus/architecture.md
-```
-
-Daedalus 还需要读取：
+Daedalus 默认读取：
 
 ```text
 Docs/Copilot_Daedalus/README.md
-Docs/Copilot_Daedalus/RUN_ROADMAP.md
-Docs/Copilot_Daedalus/SESSION_LOG.md
-Docs/Copilot_Daedalus/CODE_DECISIONS.md
+Docs/Copilot_Daedalus/STATUS.md
+```
+
+涉及实现、运行时或架构时，再读取：
+
+```text
+Docs/Copilot_Daedalus/ARCHITECTURE_CONVENTIONS.md
+```
+
+上述全局规则与实现约定属于规则预检，不占“一份任务知识页”的额度；只有缺失证据或发现冲突时，才允许从该任务页继续下钻。
+
+设计、创意或美术任务先进入对应角色索引，再读取直接相关的设计决定、来源或资源页：
+
+```text
+Docs/Hermes_Pegasus/AGENT_PROFILE.md
+Docs/Gemini_Calliope/README.md
 ```
 
 ## 4. Directory Ownership
@@ -172,11 +166,13 @@ Code-level decisions go here:
 Docs/Copilot_Daedalus/CODE_DECISIONS.md
 ```
 
-Current status/checklist goes here:
+Current implementation status, authorization, blockers, and next action go here:
 
 ```text
-Docs/Hermes_Pegasus/STATUS.md
+Docs/Copilot_Daedalus/STATUS.md
 ```
+
+Pegasus gameplay/design decisions remain in `Docs/Hermes_Pegasus/design/decisions.md` and `decision-locks.md`. `Docs/Hermes_Pegasus/STATUS.md` is a legacy design-sync checklist; it does not override the current implementation status.
 
 ## 7. Path Policy
 
@@ -204,13 +200,13 @@ Machine-specific absolute paths may appear only in temporary troubleshooting not
 Current phase:
 
 ```text
-Run MVP：G1 首片 Grill 尚未开始（needs-grill）
+Run MVP：G3 completed / verified；当前没有 active slice
 ```
 
 Primary target:
 
 ```text
-最小 Run 生命周期与 Battle 进出契约；具体首片尚未提名
+下一候选为 G4-A；它尚未 Grill、计划或获得实施授权
 ```
 
 Current collaboration model:
@@ -234,5 +230,5 @@ Rules:
 - Do not create a GitHub Issue for every small implementation step.
 - Do not use Hermes Kanban for TinySpire at the current project scale.
 - A phase-level Issue links to the relevant Docs pages; it does not duplicate the full design.
-- `Docs/Hermes_Pegasus/STATUS.md` remains the current task/status entry for the project.
+- `Docs/Copilot_Daedalus/STATUS.md` is the current implementation task/status entry; design decisions remain with Pegasus.
 - When this workflow changes, update this section first. Other Agent prompts must point back here rather than copying a second version.

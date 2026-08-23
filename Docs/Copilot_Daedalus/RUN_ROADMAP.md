@@ -5,16 +5,16 @@ page_type: roadmap
 lifecycle: active
 created: 2026-08-14
 updated: 2026-08-24
-status_source: SESSION_LOG.md
+status_source: STATUS.md
 predecessor: ROADMAP.md
 note: 本文件承担 BattleScene 之后的 Run 阶段结果、候选切片、依赖与门禁；任何阶段或切片都不因出现在本文而获得实施授权。
 ---
 
 # TinySpire · Run MVP 路线图
 
-> **当前路线入口。** 后续任务中提到“Roadmap / 跑路线图”，默认指向本文；旧 `ROADMAP.md` 只用于追溯已冻结的 BattleScene MVP（M0～M10）。当前动态状态仍查 `SESSION_LOG.md`。
+> **当前路线入口。** 后续任务中提到“Roadmap / 跑路线图”，默认指向本文；旧 `ROADMAP.md` 只用于追溯已冻结的 BattleScene MVP（M0～M10）。当前动态状态只查 [STATUS.md](STATUS.md)。
 
-> BattleScene MVP 的冻结路线见 [ROADMAP.md](ROADMAP.md)。当前动态状态只查 [SESSION_LOG.md](SESSION_LOG.md)。**G1、G2、G3 均已由对应 verified 结果完成。** G4+ 仍未开始，也不因 G3 完成而自动获得 Grill、计划或实施授权。
+> BattleScene MVP 的冻结路线见 [ROADMAP.md](ROADMAP.md)。当前状态、授权和阻塞只查 [STATUS.md](STATUS.md)；G4+ 不因任何阶段开始而自动获得 Grill、计划或实施授权。
 
 ## 1. 当前起点与终点
 
@@ -55,8 +55,8 @@ Run MVP 的终点不是“把所有 STS 内容做完”，而是至少用一个�
 
 | 阶段 | Phase status | 当前/首个切片 | 玩家可见的阶段结果 | 阶段完成门槛 | 硬能力入口 |
 |---|---|---|---|---|---|
-| G1 | `completed` | G1-A `verified` | 从主菜单创建 Run，进入首战，胜利回图，失败可恢复 snapshot 后新 seed 重开 | G1-A 的完整测试、构建与手测证据通过 | BattleScene MVP checkpoint |
-| G2 | `completed` | G2-A `verified` | 关闭并重启游戏后，可从最近稳定地图检查点继续同一个 Run | 单槽存档可原子写入、坏档安全失败、恢复事实与后续随机一致 | G1 的 Run 生命周期、snapshot、setup/result seam |
+| G1 | `completed` | G1-A `verified` | 从主菜单创建 Run、选择 Hero、进入首战并经稳定结果回到 Run 入口 | G1-A 的完整测试、构建与手测证据通过 | BattleScene MVP checkpoint |
+| G2 | `completed` | G2-A `verified` | 关闭并重启游戏后，可从最近稳定地图检查点继续同一个 Run | 单槽存档可原子写入、坏档安全失败、恢复事实与后续随机一致 | G1 的 Run 生命周期与 setup/result seam |
 | G3 | `completed` | G3 `verified` | 生成并游玩一张可保存、可复现、开局明牌的确定性 Act 地图，胜利推进至 Boss 门，普通战斗失败立即终结 Run | 合法路线可完整推进至 `BossGateReached`；recipe 重建、失败终局冷启动与完整 Unity 验收均通过 | G2 的持久化 Run facts 与随机边界；决策 012～016 |
 | G4 | `not-started` | G4-A `candidate` | 胜利后选择/跳过冻结奖励，Run 牌组变化真实进入下一战 | 奖励不重随机、不重复领取，逐卡实例与升级事实可保存 | G1 结果 bridge、G2 schema；节点绑定时依赖 G3 |
 | G5 | `not-started` | G5-A `candidate` | 获得并跨战使用至少一个遗物和一个药水 | 触发顺序稳定、消费 exactly-once、保存/重开语义明确 | G2 持久化、G4 奖励/实例 seam |
@@ -66,53 +66,17 @@ Run MVP 的终点不是“把所有 STS 内容做完”，而是至少用一个�
 
 当前事实：G1 没有“剩余范围”。G1-A 当时明确排除的内容属于后续阶段：存档/继续在 G2；多节点 Act 地图、明牌 Boss 终点与 `BossGateReached` 在 G3；奖励与卡牌实例在 G4；遗物/药水在 G5；非战斗节点在 G6；真实 Boss 战、Boss 阶段与最终 Run 结算在 G7；真实设置/教程/统计/产品表现收口在 G8。联网和多人不属于当前 G1～G8 Run MVP。
 
-## 4. G1 · 最小 Run 生命周期（completed）
+## 4. 已完成基础 · G1～G3（按需历史）
 
-G1-A「基础入口 → 角色选择 → 临时单节点地图 → 首战 → 胜利回图 / 失败可 SL 重开」是 G1 的完成切片，而不是 G1 的一部分占位：
-
-- Bootstrap 默认进入单一 `RunEntryScene`；主菜单、设置/占位页、双 Hero 单选、临时地图和失败页都在该 Scene 内切换。
-- `RunStateStore` 唯一拥有跨场景事实与 snapshot；`RunFlowService` 只编排。Battle 经现有 setup seam 消费 Hero、当前生命、牌组模板与 seed；Battle 只经稳定 `BattleResult` bridge 写回。
-- 1001 胜利后以 17/30 回图并完成节点；1002 失败后恢复 70/70 snapshot，重开签发新 attempt/new seed 且创建干净 BattleSession。
-- `Sync and Build All`、Packed Play Mode 真实 bundle 链和完整 EditMode 873/873 已通过。详细证据见 [G1-A 验收记录](06_testing/2026-08-16-g1a-entry-first-battle-run-lifecycle.md)。
-
-G1-A 的实现提交为 `fa14889`，已位于 `main` 与 `origin/main`。后续阶段不能把 G1 的实现授权自动继承过去。
-
-## 5. G2 · Run Persistence、恢复与确定性
-
-**阶段结果：** 玩家可在进程/Editor 重启后继续最近一份地图稳定态；战斗中间态不进入存档，恢复后后续随机结果与未中断路径一致。
-
-[G2-A Grill 记录](../Hermes_Pegasus/design/2026-08-16-g2a-run-persistence-grill.md) 是本切片的冻结设计源。G2-A 已按 A1 → A2 → A3 串行实施并验证；以下 A1～A3 始终是同一个 G2-A 竖切的串行停止点，不是三个独立 Goal，也不存在 G2-B。
-
-| 切片 | 具体做什么 | 主要交付物 | 通过标准 |
+| 阶段 | 保留的当前能力 | 权威验收 | 已被后续取代的历史口径 |
 |---|---|---|---|
-| G2-A1 · Save Document 契约 | 冻结 v1 只保存哪些 Run 事实、schema/version/migration 与坏档规则 | 显式 Save DTO、领域映射、校验器、可替换 save-store seam、内存 fake | S0/S1 round-trip 等价；BattleSession、ActiveBattle、手牌、敌人、队列和 Unity Object 无法进入存档；坏 JSON/版本/配置 ID 明确失败 |
-| G2-A2 · 原子本地单槽 | 在 `persistentDataPath` 提供一个版本化 JSON 槽，临时写入并校验后再提交 | load/commit/delete Adapter、临时文件与错误结果、文件 IO 定向测试 | 写入失败不覆盖上一份有效存档；不可写、坏正式文件、残留临时文件均有可诊断结果，不静默删档 |
-| G2-A3 · 检查点与继续游戏 | Hero 确认后保存 S0，节点完整结算后保存 S1；主菜单提供继续、放弃确认和保存失败重试 | RunFlow 编排、继续/放弃/错误 UI、冷启动恢复与生命周期测试 | 冷启动可恢复 S0/S1；战斗中断回最近稳定检查点；非稳定态不写盘；commit 失败阻断继续推进；G1 胜败/重开仍通过 |
+| G1 | 唯一 Store/Flow、attempt 身份、父级 Battle setup 与 child-scope Result bridge | [G1-A](06_testing/2026-08-16-g1a-entry-first-battle-run-lifecycle.md) · 873/873 | snapshot / 同节点 Restart 仅为当时事实 |
+| G2 | 原子单槽、稳定检查点、显式 Continue、坏档与提交失败保护 | [G2-A](06_testing/2026-08-16-g2a-run-persistence.md) · 947/947 | schema v1、Defeat 不写盘仅为当时事实 |
+| G3 | 冻结确定性 Act 图、recipe-only schema v2、BossGate、`Terminal(Defeat)` | [G3](06_testing/2026-08-24-g3-deterministic-act-map.md) · 993/993 | CD-116 已显式 supersede 上述 G1/G2 失败与存档口径 |
 
-G2-A 的最终验收记录见 [2026-08-16 G2-A Run Persistence 与继续游戏](06_testing/2026-08-16-g2a-run-persistence.md)：完整 EditMode 947/947、Luban 与本地 Addressables 构建、唯一 Editor 的 S0 / Continue / 战中不写盘 / S1 / 冷启动恢复 / 确认删除主链均已通过。
+G1～G3 的完整计划、RED→GREEN、BuildLayout 与 Packed Play 细节保留在对应计划、验收和 `SESSION_LOG.md`，不再复制到活跃 Roadmap。当前没有 active slice；G4-A 仍只是未授权 candidate。
 
-**G2 完成门槛：** 当前最小 Run 能跨进程恢复；存档损坏或不兼容时安全失败；恢复后的 Hero、HP、模板 ID、节点事实与随机事实不漂移；同一稳定检查点的下一次地图/战斗/奖励随机输入与未中断路径一致。
-
-**明确不做：** 战斗中途保存、云存档、多槽、跨设备、账号/平台 SDK、反作弊、真实多节点地图、奖励和永久死亡。战斗中断后 attempt/seed 的精确恢复规则必须在 G2-A 计划前再次核对，不能由 Adapter 暗定。
-
-## 6. G3 · 确定性尖塔式 Act 地图与统一节点流程
-
-**阶段结果：** 用开局完整生成并冻结、可保存、可复现、可验证的分层 DAG 替换 G1 的单个布尔节点。玩家从不可进入的 Start 选择明牌普通战斗路线，胜利回图并最终抵达可保存的 Boss 门；普通战斗失败立即形成不可继续的 `Terminal(Defeat)`。
-
-| 切片 | 具体做什么 | 主要交付物 | 通过标准 |
-|---|---|---|---|
-| G3-A · 纯地图模型、配置与生成器 | 用固定 `ActMapProfile` 层/槽配置和独立 map seed 一次生成整张分层 DAG；冻结普通节点 `EncounterId`、Boss 候选子集和终点 `BossId` | 稳定 `NodeId + Layer + Slot`、不可变 Map/Node/Edge、纯 C# generator 与 validator | 同 recipe 同图；无环、无重复 ID、边引用有效；所有普通节点从 Start 可达且能通向 Boss；每个候选 Boss 普通可达；地图 RNG 不影响 Battle/Reward RNG |
-| G3-B · 节点权威与纯可达性 | `RunStateStore` 持有冻结 MapDefinition 和唯一可变进度；普通模式只允许直接出边，并预留“下一层任意已生成节点”的 WingBoots 纯规则 | 原子 RunState 迁移、Node/attempt 关联、普通/WingBoots reachability、完整后继与可达 Boss 查询 | 过期/锁定/重复输入零写入；旧 BattleResult 不能结算新节点；UI 与 `node.Outgoing` 不成为可选性事实源 |
-| G3-C · 功能性明牌地图、Boss 门与失败终局 | 在现有 `RunEntryScene` 投影完整拓扑、Encounter/Boss 身份和 hover 后半程预览；普通战斗胜利回图，Boss 终点进入 `BossGateReached`；失败进入 `Terminal(Defeat)` | Map projection/presenter、点击命令、Encounter 输入、Battle 往返、Boss 门、失败页与确认删除 | 多条路线可实际入战；胜利推进；hover 高亮完整后继和可达 Boss；失败节点不完成、无同节点重试、Continue 禁用，冷启动恢复失败页 |
-| G3-D · recipe-only 存档与完整回归 | 存 seed、generator version、profile/config ID、SHA-256 fingerprint、path/phase/终局必要事实；attempt 由 path+phase 推导，不存整图/UI/派生集合 | schema v2、terminal-intent recovery artifact、typed restore failure、round-trip、scene re-entry、Packed Play 证据 | 冷启动恢复同一图和位置；fingerprint/version/profile/path 漂移 fail-fast；终局不复活旧 Continue；无歧义迁移不了的 v1 明确失败且不静默重掷；Console Error 为 0 |
-
-**G3 完成门槛：** 玩家能从新 Run 的明牌确定性地图选择多节点合法路线，经普通战斗胜利回图并抵达 `BossGateReached`；关闭再继续后通过 recipe 重建的地图拓扑、Encounter/Boss 身份、当前位置与路径完全一致。另一条真实链必须证明普通战斗失败原子保存为 `Terminal(Defeat)`、不可 Continue、冷启动仍为失败页且只有确认离开才删档。Generator/validator/可达性/存档/失败终局定向测试、完整 EditMode、`Sync and Build All`、Addressables/Packed Play 或等价 Unity 手测与 Console Error 0 均取得本轮真实证据后，G3 才可标记 completed / verified。
-
-**G3 完成证据（2026-08-24）：** seam audit、五组纯 C#/Mono 定向与 View 13/13 均通过；最终交互式完整 EditMode job `8e910a98b14f4fe4b4901ba78bf060dc` 为 **993/993 passed**。`Sync and Build All` 与 Local Addressables 成功，BuildLayout 的 12 个 bundle 均使用 `AssetBundleProvider`。Packed Play 实走两个普通节点胜利后进入并冷启动恢复 `BossGateReached`；另一新 Run 实走普通战斗失败、原子 `Terminal(Defeat)`、进程级冷启动失败页和确认删除。各产品检查点 Console Error=0；详细证据见 [G3 验收记录](06_testing/2026-08-24-g3-deterministic-act-map.md)。
-
-**明确不做：** 真实 Boss 战、Boss 阶段、奖励、Run 胜利、遗物实际效果/库存/次数/UI、正式地图美术、滚动大地图、精英、商店、事件、休息点和宝箱；也不做多人/FishNet、云/多槽或战中存档。Boss 身份和门属于 G3 的冻结 MapDefinition，但真实 Boss Encounter 与 RunOutcome 仍由 G7 接入。
-
-## 7. G4 · 战斗奖励、Run 牌组与卡牌实例
+## 5. G4 · 战斗奖励、Run 牌组与卡牌实例
 
 **阶段结果：** 胜利后由 Run 冻结卡牌奖励，选择或跳过后原子修改逐卡实例牌组；新增/升级实例真实进入下一场 Battle。
 
@@ -127,7 +91,7 @@ G2-A 的最终验收记录见 [2026-08-16 G2-A Run Persistence 与继续游戏](
 
 **明确不做：** 遗物、药水、大型奖励池、奖励动画、删牌/转化、通用任意卡升级。玩家主动升级的首个入口属于 G6 休息点；G4 只先交付实例与规则能力。
 
-## 8. G5 · 遗物、药水与跨战时机
+## 6. G5 · 遗物、药水与跨战时机
 
 **阶段结果：** Run 拥有至少一个遗物和一个可消耗药水，它们经明确的 Battle 输入、结算和 snapshot 语义跨越战斗，UI 不拥有业务状态。
 
@@ -142,7 +106,7 @@ G2-A 的最终验收记录见 [2026-08-16 G2-A Run Persistence 与继续游戏](
 
 **明确不做：** 大型随机池、装备/制作、通用事件总线、持久充能遗物、选择目标药水、重构 Battle 队列或 DI。
 
-## 9. G6 · 商店、事件、休息点与宝箱
+## 7. G6 · 商店、事件、休息点与宝箱
 
 **阶段结果：** 复用 G3 的节点生命周期和一套冻结/认领事务，分别交付四类非战斗节点的一个真实样本。
 
@@ -158,7 +122,7 @@ G2-A 的最终验收记录见 [2026-08-16 G2-A Run Persistence 与继续游戏](
 
 **明确不做：** 动态经济、出售/回购/刷新、事件脚本语言、大事件池、连锁事件、复杂动画和多人投票。
 
-## 10. G7 · 单 Act、精英、Boss 与 Run 终局
+## 8. G7 · 单 Act、精英、Boss 与 Run 终局
 
 **阶段结果：** 把前述能力组合成一个确定性的单 Act，至少包含一个精英和一个 Boss，Boss 后产生一次权威 RunOutcome 并返回主菜单。
 
@@ -174,7 +138,7 @@ G2-A 的最终验收记录见 [2026-08-16 G2-A Run Persistence 与继续游戏](
 
 **明确不做：** 多 Act、Ascension、每日挑战、多个真实 Boss Encounter / 多 Boss 战内容、通用 Boss DSL、全量内容目录、联网排行榜和多人；G3 已冻结的多候选 Boss 身份与多个 Boss 终点不属于此排除项。
 
-## 11. G8 · 产品化与发布门禁
+## 9. G8 · 产品化与发布门禁
 
 **阶段结果：** 在不改变 Run/Battle 权威边界的前提下，把完整单 Act 竖切收口成可发布、可复验的产品基线。
 
@@ -191,7 +155,7 @@ G2-A 的最终验收记录见 [2026-08-16 G2-A Run Persistence 与继续游戏](
 
 **明确不做：** 云同步、成就、遥测、商业化、联网/多人、多平台同时首发、全语种、全量配音或大型过场；这些需要另建并 Grill 新 Roadmap。
 
-## 12. 所有阶段共用的不可破坏门禁
+## 10. 所有阶段共用的不可破坏门禁
 
 - `RunStateStore` 继续是跨场景 Run 业务事实的唯一写入口；`RunFlowService` 只编排；View 只提交意图和渲染 projection。
 - Battle 输入继续走 `IBattleSetupOptionsSource / BattleSetupOptions`；Battle 对 Run 的持久影响继续合并进唯一稳定 `BattleResult` bridge。
@@ -203,7 +167,7 @@ G2-A 的最终验收记录见 [2026-08-16 G2-A Run Persistence 与继续游戏](
 
 表现债务继续独立管理：局部可读性/可操作性阻塞当前切片时做最小修复；大范围视觉语言、HUD 重排、动效节奏和正式资源替换留给独立表现切片及 G8，不抢占 G2～G7 的业务事实闭环。
 
-## 13. 下一步
+## 11. 下一步
 
 G3「确定性尖塔式 Act 地图」已完成并 `verified`；最终完整 EditMode 993/993、`Sync and Build All`、Local Addressables、Packed Play 胜利到 BossGate 与失败终局两条生产链、进程级冷启动和 Console Error 0 均已取得本轮证据。下一候选是 G4-A，但仍为 `candidate`，必须先完成独立局部 Grill、窄计划和明确实施授权。
 

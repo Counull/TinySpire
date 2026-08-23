@@ -2,8 +2,8 @@
 title: TinySpire 战斗领域术语
 page_type: glossary
 lifecycle: active
-updated: 2026-08-05
-status_source: SESSION_LOG.md
+updated: 2026-08-24
+status_source: STATUS.md
 ---
 
 # TinySpire 战斗领域术语

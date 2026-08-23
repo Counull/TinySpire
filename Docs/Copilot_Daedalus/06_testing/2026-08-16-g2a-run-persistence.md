@@ -1,14 +1,16 @@
 ---
 title: G2-A Run Persistence 与继续游戏验收
 page_type: testing
-lifecycle: active
+lifecycle: archived
 date: 2026-08-16
 scope: G2-A only
-status_source: ../SESSION_LOG.md
+status_source: ../STATUS.md
 source: Docs/Hermes_Pegasus/design/2026-08-16-g2a-run-persistence-grill.md
 ---
 
 # G2-A Run Persistence 与继续游戏验收
+
+> **历史验收：** 本页证明 G2 当时的 schema v1 与稳定态单槽；当前写入 schema、Defeat 与 Restart 语义已由 [CD-116](../CODE_DECISIONS.md#cd-116g3-以冻结-mapdefinitionrecipe-only-存档和-terminaldefeat-贯通单-act-地图) 取代。原子 IO 与旧档保护证据仍保留。
 
 ## 1. 结论
 

@@ -5,13 +5,13 @@ page_type: roadmap
 lifecycle: archived
 created: 2026-07-29
 updated: 2026-08-14
-status_source: SESSION_LOG.md
+status_source: STATUS.md
 note: 本文件固定保存已完成的 BattleScene MVP 路线；Run 阶段由 RUN_ROADMAP.md 承接。
 ---
 
 # TinySpire · BattleScene MVP 路线图（冻结归档）
 
-> **已归档。** BattleScene MVP 已于 2026-08-14 形成 Git 检查点 `e07e39a`，标签为 `milestone-battlescene-mvp-2026-08-14`。本文固定保存 M0～M10 的目标、依赖顺序和验收口径，不再承载 Run 阶段规划；当前状态只查 `SESSION_LOG.md`，后续路线见 [RUN_ROADMAP.md](RUN_ROADMAP.md)。
+> **已归档。** BattleScene MVP 已于 2026-08-14 形成 Git 检查点 `e07e39a`，标签为 `milestone-battlescene-mvp-2026-08-14`。本文固定保存 M0～M10 的目标、依赖顺序和验收口径，不再承载 Run 阶段规划；当前状态只查 [STATUS.md](STATUS.md)，后续路线见 [RUN_ROADMAP.md](RUN_ROADMAP.md)。
 
 ## 1. MVP 终点
 
@@ -98,13 +98,13 @@ note: 本文件固定保存已完成的 BattleScene MVP 路线；Run 阶段由 R
 
 ### M0～M1 · 前置切片
 
-当前实施状态与完成历史只查 `SESSION_LOG.md`，具体设计/验收查：
+当前实施状态只查 `STATUS.md`，历史过程与具体设计/验收按需查：
 
 - `plans/2026-07-30-battle-config-runtime-integration.md`
 - `06_testing/2026-07-30-battle-config-runtime-integration.md`
 - `06_testing/2026-07-30-battlescene-drag-to-play-minimal.md`
 
-`DEP-006` 已由 M2 运行时数据切片解决：初始卡组的全部卡牌先实例化到 `BattleCardZonesData`，经过确定性洗牌后再抽取初始手牌。当前实施状态与剩余 UI/回合接入仍以 `SESSION_LOG.md` 为准。
+`DEP-006` 已由 M2 运行时数据切片解决：初始卡组的全部卡牌先实例化到 `BattleCardZonesData`，经过确定性洗牌后再抽取初始手牌。当前实施状态以 `STATUS.md` 为准。
 
 ### M2 · 卡牌区域与确定性洗牌
 
@@ -140,7 +140,7 @@ note: 本文件固定保存已完成的 BattleScene MVP 路线；Run 阶段由 R
 
 ### M2A · 卡牌本地化文本与动态参数
 
-实现口径：使用 Unity Localization 1.5.12 + Smart Strings，并统一进入 Addressables 本地内容构建；完成状态只查 `SESSION_LOG.md`。
+实现口径：使用 Unity Localization 1.5.12 + Smart Strings，并统一进入 Addressables 本地内容构建；完成状态只查 `STATUS.md`。
 
 这一阶段只负责“如何正确显示卡牌文字”，不执行卡牌效果。
 
@@ -337,7 +337,7 @@ M6A～M6D 已串行完成：显式 Self/Enemy 目标、UI/队首共享规则、�
 
 ### M7 · Effect 执行器（已完成）
 
-M7A～M7E 已按唯一实施计划 `plans/2026-08-02-m7-effect-executor.md` 串行完成；最终自动验证、Bootstrap、真实 Game View、范围审计与双轴复审见 `06_testing/2026-08-02-m7e-full-validation-review.md`。当前动态状态仍只查 `SESSION_LOG.md`。
+M7A～M7E 已按唯一实施计划 `plans/2026-08-02-m7-effect-executor.md` 串行完成；最终自动验证、Bootstrap、真实 Game View、范围审计与双轴复审见 `06_testing/2026-08-02-m7e-full-validation-review.md`。当前动态状态只查 `STATUS.md`。
 
 效果器是纯计算/状态写入边界，不负责动画、拖拽或查找场景对象。
 
@@ -368,7 +368,7 @@ MVP 效果类型：
 
 ### M8 · 敌人行动与完整循环
 
-唯一实施计划：[`plans/2026-08-02-m8-enemy-actions-status-timing-battle-loop.md`](plans/2026-08-02-m8-enemy-actions-status-timing-battle-loop.md)，现已归档。M8A～M8E 已按串行停止点完成；最终自动验证、Bootstrap、真实 Game View、范围审计与双轴复审见 [`06_testing/2026-08-02-m8e-full-validation-review.md`](06_testing/2026-08-02-m8e-full-validation-review.md)，动态状态仍只见 `SESSION_LOG.md`。
+唯一实施计划：[`plans/2026-08-02-m8-enemy-actions-status-timing-battle-loop.md`](plans/2026-08-02-m8-enemy-actions-status-timing-battle-loop.md)，现已归档。M8A～M8E 已按串行停止点完成；最终自动验证、Bootstrap、真实 Game View、范围审计与双轴复审见 [`06_testing/2026-08-02-m8e-full-validation-review.md`](06_testing/2026-08-02-m8e-full-validation-review.md)，当前动态状态只见 `STATUS.md`。
 
 敌人行为已走与卡牌相同的 ordered Effect、显式目标和共享公式边界，没有复制第二套伤害写链。
 
@@ -387,7 +387,7 @@ MVP 效果类型：
 
 ### M9 · STS 式反馈、胜负与重开
 
-归档计划：[`plans/2026-08-02-m9-sts-feedback-outcome-restart.md`](plans/2026-08-02-m9-sts-feedback-outcome-restart.md)。M9A～M9G 已串行完成；ordered settlement 表现、M3E HUD、目标聚焦、卡区运动、阶段横幅、终局面板、同种子重开与退出应用均已接入。M9G 自动/生产重跑、仓库外 Player 退出、范围审计与 Standards / Spec 零 finding 见 `06_testing/2026-08-02-m9g-full-validation-review.md`；M3E/M9 完成，动态状态只见 `SESSION_LOG.md`。
+归档计划：[`plans/2026-08-02-m9-sts-feedback-outcome-restart.md`](plans/2026-08-02-m9-sts-feedback-outcome-restart.md)。M9A～M9G 已串行完成；ordered settlement 表现、M3E HUD、目标聚焦、卡区运动、阶段横幅、终局面板、同种子重开与退出应用均已接入。M9G 自动/生产重跑、仓库外 Player 退出、范围审计与 Standards / Spec 零 finding 见 `06_testing/2026-08-02-m9g-full-validation-review.md`；M3E/M9 完成，当前动态状态只见 `STATUS.md`。
 
 表现层至少包含：
 

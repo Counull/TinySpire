@@ -1,15 +1,17 @@
 ---
 title: G2-A Run Persistence 与继续游戏实施计划
 page_type: plan
-lifecycle: active
+lifecycle: archived
 date: 2026-08-16
 scope: G2-A only
 source: Docs/Hermes_Pegasus/design/2026-08-16-g2a-run-persistence-grill.md
-status_source: ../SESSION_LOG.md
+status_source: ../STATUS.md
 implementation_status: verified
 ---
 
 # G2-A Run Persistence 与继续游戏
+
+> **历史计划：** 本页保留 G2 当时的 schema v1、Defeat 不写盘与 Restart 口径；当前写入与失败终局已由 [CD-116](../CODE_DECISIONS.md#cd-116g3-以冻结-mapdefinitionrecipe-only-存档和-terminaldefeat-贯通单-act-地图) 取代。原子单槽与稳定检查点 seam 仍有效。
 
 ## 1. 范围与 seam audit 结论
 

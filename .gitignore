@@ -32,3 +32,6 @@ Thumbs.db
 
 # Excel lock/temp files
 ~$*.xlsx
+
+# ByteRover local context tree has its own version-control metadata.
+.brv/

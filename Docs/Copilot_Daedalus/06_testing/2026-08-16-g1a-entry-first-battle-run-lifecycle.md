@@ -1,14 +1,16 @@
 ---
 title: G1-A 基础入口到首战 Run 生命周期验收
 page_type: testing
-lifecycle: active
+lifecycle: archived
 date: 2026-08-16
 scope: G1-A entry-first-battle minimal Run lifecycle
-status_source: ../SESSION_LOG.md
+status_source: ../STATUS.md
 source: Docs/Hermes_Pegasus/design/2026-08-15-g1a-entry-first-battle-grill.md
 ---
 
 # G1-A 基础入口到首战 Run 生命周期验收
+
+> **历史验收：** 本页保留 G1 当时的 snapshot / Restart 事实；这些失败语义已由 [CD-116](../CODE_DECISIONS.md#cd-116g3-以冻结-mapdefinitionrecipe-only-存档和-terminaldefeat-贯通单-act-地图) 与 G3 验收取代。Store/Flow、attempt 与 child-scope Result bridge 证据仍有效。
 
 ## 1. 结论
 

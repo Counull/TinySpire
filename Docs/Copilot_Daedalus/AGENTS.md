@@ -3,7 +3,7 @@ title: Copilot_Daedalus · Agent 入口
 project: TinySpire
 page_type: entry
 lifecycle: active
-updated: 2026-07-08
+updated: 2026-08-24
 ---
 
 # Copilot_Daedalus · Agent 入口（AGENTS.md）
@@ -19,7 +19,7 @@ updated: 2026-07-08
 ## 2. 本地入口
 
 - 目录索引（先读）：[README.md](README.md) — `index` 路由页
-- 状态源（当前进度）：[SESSION_LOG.md](SESSION_LOG.md)
+- 状态源（当前进度、授权、阻塞、下一步）：[STATUS.md](STATUS.md)
 - 身份说明：[AGENT_PROFILE.md](AGENT_PROFILE.md)
 - 调用模板：[AGENT_PROMPT.md](AGENT_PROMPT.md)
 - 代码决策：[CODE_DECISIONS.md](CODE_DECISIONS.md)
@@ -45,7 +45,8 @@ updated: 2026-07-08
 | llm-workflow 角色 | 本库落点 | 说明 |
 |---|---|---|
 | `02_index` | `README.md`（根） | 路由入口 |
-| `05_development-log` | `SESSION_LOG.md`（根） | **状态源** |
+| `status` | `STATUS.md`（根） | **唯一当前可变状态源** |
+| `05_development-log` | `SESSION_LOG.md`（根） | 按需读取的历史 changelog |
 | `03_design` | `plans/` | 实现计划 |
 | `decision` | `CODE_DECISIONS.md`（根） | **正式事实源**，路径不可变（见 `../AI_COLLABORATION_RULES.md` §4） |
 | `00_inbox` | `00_inbox/` | 待消化任务 / 来源 |
@@ -58,7 +59,7 @@ updated: 2026-07-08
 | `99_archive` | `99_archive/` | 归档 |
 | `09_meetings` | — | 不适用（实现 Agent 无会议），未建目录 |
 
-> 每个数字目录内有 `README.md` 说明其角色。默认上下文仍是 `README.md` → `SESSION_LOG.md` → `CODE_DECISIONS.md`；数字目录按需读取。
+> 每个数字目录内有 `README.md` 说明其角色。默认上下文是 `README.md` → `STATUS.md`；随后只读至多一份与任务直接相关的计划、决策或验收。`SESSION_LOG.md` 与整本 `CODE_DECISIONS.md` 仅在追溯或冲突裁决时按需读取。
 
 ## 6. 边界提醒
 

@@ -4,7 +4,7 @@ page_type: testing
 lifecycle: active
 date: 2026-08-24
 scope: G3 only
-status_source: ../SESSION_LOG.md
+status_source: ../STATUS.md
 source: Docs/Hermes_Pegasus/design/decisions.md#决策-012g3-地图采用尖塔式分层路线
 implementation_status: verified
 ---

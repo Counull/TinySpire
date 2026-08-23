@@ -2,6 +2,8 @@
 
 > 用于 Pegasus（WSL/Hermes）与 Windows 本地 Agent 同步新增、修改、决策和待办。
 
+> **范围提示（2026-08-24）：** 本页是保留的 Pegasus 设计/美术同步清单，其中 BattleScene 阶段与待办是历史快照，不是当前实现状态。当前实现进度、授权、阻塞和下一步只查 [Daedalus STATUS](../Copilot_Daedalus/STATUS.md)；玩法决定仍以 `design/decisions.md` 与 `design/decision-locks.md` 为准。
+
 ## 当前阶段
 
 ```text

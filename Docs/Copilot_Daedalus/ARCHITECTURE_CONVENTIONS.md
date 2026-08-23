@@ -4,8 +4,8 @@ owner: Daedalus
 page_type: convention
 lifecycle: active
 created: 2026-07-29
-updated: 2026-07-31
-status_source: SESSION_LOG.md
+updated: 2026-08-24
+status_source: STATUS.md
 note: 本文件只锁定代码实现层面的通用约定，不涉及玩法设计决策（玩法决策见 ../Hermes_Pegasus/design/decision-locks.md）。不修改、不复制 architecture.md，只交叉引用。
 ---
 
@@ -110,7 +110,7 @@ UI 需要随着某项运行时事实变化而更新时，订阅流必须携带�
 
 - 未来是否所有最小运行时数据聚合（`BattleCardZonesData` 等）都要合并成同一个 `BattleCombatantsData` 的子聚合，还是保持多个独立聚合并存？
 - 聚合类之间（例如手牌聚合 vs 未来的战场聚合）如何互相引用，是否需要一个统一的聚合根？
-- 存档层 `RunScope`/`RunFlowService`/`RunState`（`CD-009`）目前只是前瞻记录，`RunFlowService` 的具体触发时机、`RunState` 的字段结构、地图是否需要独立 Scope 均未实现，不能当作已落地约定使用。
+- G1～G3 已在 Bootstrap root 上落实 `RunStateStore` / `RunFlowService`、child Scene Scope、recipe-only persistence 与冻结地图所有权；当前权威边界见 `CD-112`、`CD-113`、`CD-116`。G4+ 不得从这些已完成 seam 推断奖励、遗物或新 Scope 已获授权。
 
 ## 6. Reopen 流程
 

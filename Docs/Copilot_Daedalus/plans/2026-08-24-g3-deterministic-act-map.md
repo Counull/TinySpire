@@ -1,15 +1,17 @@
 ---
 title: G3 确定性尖塔式 Act 地图实施计划
 page_type: plan
-lifecycle: active
+lifecycle: archived
 date: 2026-08-24
 scope: G3 only
 source: Docs/Hermes_Pegasus/design/decisions.md#决策-012g3-地图采用尖塔式分层路线
-status_source: ../SESSION_LOG.md
+status_source: ../STATUS.md
 implementation_status: verified
 ---
 
 # G3 确定性尖塔式 Act 地图
+
+> **归档状态：** G3 已完成并 verified；本计划保留为实施与审计来源。当前状态和后续授权只查 [STATUS.md](../STATUS.md)。
 
 ## 1. 目标、决策源与授权
 

@@ -6,7 +6,7 @@ project: TinySpire
 page_type: profile
 status: active
 created: 2026-07-06
-updated: 2026-07-08
+updated: 2026-08-24
 ---
 
 # Daedalus · TinySpire 实现 Agent
@@ -32,9 +32,9 @@ updated: 2026-07-08
 ## 工作方式
 
 1. 接任务前读全局规章：`Docs/COLLABORATION_SOURCE_OF_TRUTH.md`、`Docs/AI_COLLABORATION_RULES.md`
-2. 读本目录 `index`（`README.md`）→ 按 default read set 取 `SESSION_LOG.md`（当前状态）、`CODE_DECISIONS.md`
+2. 读本目录 `index`（`README.md`）→ `STATUS.md`（唯一当前状态）；再按任务读取至多一份相关计划、决策或验收
 3. 按需读 Pegasus 设计：`Docs/Hermes_Pegasus/design/decisions.md`、`decision-locks.md`、`project-definition.md`、`architecture.md`
-4. 在 `plans/` 产出实现计划；代码级决策记入 `CODE_DECISIONS.md`；会话结束更新 `SESSION_LOG.md`
+4. 在 `plans/` 产出实现计划；代码级决策记入 `CODE_DECISIONS.md`；真实状态变化更新 `STATUS.md`，历史过程写入 `SESSION_LOG.md`
 5. 重大架构变更先与 Pegasus 设计文档核对；发现冲突只记录、请 Theseus 裁决，不自行覆盖
 6. 提交前按 `Docs/AI_COLLABORATION_RULES.md` §3 展示审查包，等 Theseus 批准，不静默 commit / push
 
@@ -44,7 +44,7 @@ updated: 2026-07-08
 - 技术栈：VContainer / R3 / MVVM / UniTask / NUnit
 - 架构：计算层(纯C#) → 状态层(R3) → 时序层(UniTask)
 - 数据管线：Excel → Luban → JSON（数据驱动，模板/实例两层）
-- 当前阶段：BattleScene MVP 垂直切片
+- 当前阶段与授权：只查 `Docs/Copilot_Daedalus/STATUS.md`；本 Profile 不复制可变阶段快照
 
 ## 相关
 

@@ -5,7 +5,7 @@ name: Daedalus
 project: TinySpire
 status: draft
 created: 2026-07-08
-updated: 2026-08-14
+updated: 2026-08-24
 note: 本文件为提案性质的 Prompt 模板草案，非事实源。生效前需 Theseus 确认。
 ---
 
@@ -61,8 +61,9 @@ note: 本文件为提案性质的 Prompt 模板草案，非事实源。生效前
 **我的本地目录**
 
 - `Docs/Copilot_Daedalus/AGENT_PROFILE.md`（若存在；暂缺时读 `README.md`）
-- `Docs/Copilot_Daedalus/SESSION_LOG.md` — 上次进度
-- `Docs/Copilot_Daedalus/CODE_DECISIONS.md` — 已有代码决策
+- `Docs/Copilot_Daedalus/STATUS.md` — 当前状态、授权、阻塞与下一步（先读）
+- `Docs/Copilot_Daedalus/SESSION_LOG.md` — 仅在追溯历史或恢复精确时间线时读取
+- `Docs/Copilot_Daedalus/CODE_DECISIONS.md` — 仅按任务定位相关 CD，不默认全文加载
 - `Docs/Copilot_Daedalus/ARCHITECTURE_CONVENTIONS.md` — 代码架构级 Locked/Provisional 约定，**任何交给外部实现 Agent（如 Codex）的 Prompt 都必须显式引用本文件**，不能假设对方已知晓
 - `Docs/Copilot_Daedalus/RUN_ROADMAP.md` — 当前 Run MVP 阶段骨架与逐切片 Grill 门禁；出现于路线图不等于获得实施授权
 - `Docs/Copilot_Daedalus/ROADMAP.md` — 已归档的 BattleScene MVP（M0～M10）固定路线，仅在追溯战斗阶段目标与验收时读取
@@ -72,7 +73,7 @@ note: 本文件为提案性质的 Prompt 模板草案，非事实源。生效前
 **我依赖的其他 Agent 产出（只读）**
 
 - `Docs/Hermes_Pegasus/design/decisions.md`、`decision-locks.md`、`project-definition.md` — Pegasus 的设计与锁定决策
-- `Docs/Hermes_Pegasus/architecture.md`、`STATUS.md`、`AGENT_HANDOFF.md` — 架构与状态
+- `Docs/Hermes_Pegasus/architecture.md`、`AGENT_HANDOFF.md` — 架构与设计交接；实现当前状态仍以 Daedalus `STATUS.md` 为准
 - `Docs/Gemini_Calliope/**` — Calliope 已确认的创意 / 文本概念
 
 > 读到冲突时：**记录冲突并请 Theseus 裁决**，不自行覆盖任何一方。
@@ -85,7 +86,7 @@ note: 本文件为提案性质的 Prompt 模板草案，非事实源。生效前
 
 ```text
 任务目标：<一句话说明要做成什么>
-所属切片 / 阶段：<例如 BattleScene MVP 垂直切片>
+所属切片 / 阶段：<例如 G4-A 候选或独立维护切片>
 关联设计来源：<Pegasus / Calliope 文档路径，或"暂无，用占位">
 明确范围：<要动哪些文件 / 目录；不要动什么>
 约束：<技术栈、分支、是否允许新增依赖 / 程序集>
@@ -142,23 +143,17 @@ note: 本文件为提案性质的 Prompt 模板草案，非事实源。生效前
 
 ## 6. 示例 Prompt（可复制）
 
+> 本例只展示输入格式，不表示对应切片已获授权。
+
 ```text
-Daedalus，执行一个 BattleScene MVP 切片任务。
-
-任务目标：实现 Combatant 运行时状态最小骨架，跑通"改血受 current ≤ max 约束"。
-所属切片：BattleScene MVP 垂直切片。
-关联设计来源：Docs/Hermes_Pegasus/design/decisions.md（模板/实例两层已 Locked）；
-             maxHp/currentHp 字段结论见本次对话，数值用占位（maxHp=50）。
-明确范围：只在 TinySpire 游戏 asmdef 内新增 Combatant 相关类 + 对应 Test asmdef 用例；
-         不碰 UI、不接 R3、不引入 Effect 系统。
-约束：Unity 6.5 / C#；纯 C# 可测；不新增第三方依赖；分支 dev。
-交付形态：先给实现计划（proposal），我确认后再写代码 + NUnit 测试。
-决策状态：
-  - Locked：模板 + 实例两层数据模型
-  - Open Question：max 变化时 current 是否同步（先留 TODO，不擅自定）
-
-请输出：实现计划 + Open Question 清单 + 需要 Pegasus/Calliope 补充的 hand-off（若有）。
-提交前先给我审查包，等我批准再动 Git。
+Daedalus，先评审一个候选切片。
+任务目标：<一个可观察结果>
+所属切片：<Goal / slice>
+关联设计来源：<精确项目相对路径>
+明确范围：<允许与排除路径>
+约束：<Locked / Open / 验收门>
+交付形态：仅评审并给窄计划；未确认前不修改文件。
+请列出冲突、Open Question、验证方式和需要的 hand-off。
 ```
 
 ---

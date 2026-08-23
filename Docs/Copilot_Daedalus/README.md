@@ -3,71 +3,38 @@ title: Copilot_Daedalus · 目录索引
 project: TinySpire
 page_type: index
 lifecycle: active
-updated: 2026-08-14
+updated: 2026-08-24
 ---
 
 # Copilot_Daedalus · 目录索引
 
-Page Type: `index`
-
-> 本页是 Daedalus 工作区的路由入口。进入本目录先读本页，再按 Default Read Set 取所需页面，不必扫描全部文件。
-
-## 概况
-
 Owner: Daedalus / 代达罗斯（实现 Agent）
 
-Status Source: [SESSION_LOG.md](SESSION_LOG.md)
-
-身份说明: [AGENT_PROFILE.md](AGENT_PROFILE.md)
-
-调用方式: [AGENT_PROMPT.md](AGENT_PROMPT.md)
+Status Source: [STATUS.md](STATUS.md)
 
 ## Default Read Set
 
-进入本目录后，通常只需读以下页面（≤ 3-4 篇）。
+1. [STATUS.md](STATUS.md) — 当前进度、授权、阻塞与下一步；唯一当前可变状态源。
+2. [ARCHITECTURE_CONVENTIONS.md](ARCHITECTURE_CONVENTIONS.md) — 仅实现、运行时或架构任务作为规则预检读取；它不占下方的一份任务知识页额度。
+3. [AGENT_PROFILE.md](AGENT_PROFILE.md) — 仅需要 Daedalus 身份、职责或交接格式时读取，不属于普通任务默认集。
 
-| 顺序 | 页面 | 为什么 |
-|---:|---|---|
-| 1 | [SESSION_LOG.md](SESSION_LOG.md) | 当前进度、状态与下一步动作（唯一状态源）。 |
-| 2 | [CODE_DECISIONS.md](CODE_DECISIONS.md) | 已生效的代码级决策，避免重复讨论。 |
-| 3 | [ARCHITECTURE_CONVENTIONS.md](ARCHITECTURE_CONVENTIONS.md) | 代码架构级的 Locked/Provisional 约定，任何新实现（包括交给 Codex 等外部 Agent）默认必须遵守。 |
-| 4 | [AGENT_PROFILE.md](AGENT_PROFILE.md) | Daedalus 身份、职责边界与工作方式。 |
+完成全局/项目规则预检后，只再读取至多一份直接相关的计划、决策或验收页；只有缺失证据或发现冲突时才继续下钻。
 
-战斗术语变更或涉及运行时数据命名时，额外阅读 [CONTEXT.md](CONTEXT.md)。
+## On-Demand Routes
 
-## Optional Deep-Dive Docs
-
-| 页面 | 何时读 |
+| 需要 | 入口 |
 |---|---|
-| [plans/](plans/) | 需要某个切片的完整实现计划时。 |
-| [RUN_ROADMAP.md](RUN_ROADMAP.md) | 需要看当前 Run MVP 的阶段骨架、依赖与逐切片 Grill 门禁时；它不构成实施授权。 |
-| [06_testing/](06_testing/) | 需要查切片自动验证、Bootstrap、真实 Game View 或复审证据时。 |
-| [DEPENDENCIES.md](DEPENDENCIES.md) | 需要查某个 `DEP-NNN` 依赖项的阻塞条件、状态或解决记录时。 |
-| [AGENT_PROMPT.md](AGENT_PROMPT.md) | 需要按标准格式向 Daedalus 派任务时。 |
+| Run 阶段骨架与候选切片 | [RUN_ROADMAP.md](RUN_ROADMAP.md)；路线图不构成授权 |
+| 实施计划 | [plans/](plans/) |
+| 测试与验收 | [06_testing/](06_testing/) |
+| 精确代码决定或冲突 | [CODE_DECISIONS.md](CODE_DECISIONS.md)；只定位相关 CD |
+| 历史与时间线 | [SESSION_LOG.md](SESSION_LOG.md)；按需 changelog |
+| 依赖项 | [DEPENDENCIES.md](DEPENDENCIES.md) |
+| 工具与 ByteRover 检索 | [08_tools/](08_tools/)、[ByteRover adapter](08_tools/BYTEROVER.md) |
+| 过期或被取代内容 | [99_archive/](99_archive/) |
 
-## Archive Docs
+## Boundary
 
-| 页面 | 归档职责 |
-|---|---|
-| [ROADMAP.md](ROADMAP.md) | 已完成的 BattleScene MVP（M0～M10）固定路线与验收历史；Run 阶段不再在此扩写。 |
-
-## Communication Docs
-
-| 目录 | 何时读 |
-|---|---|
-| [10_communication/](10_communication/) | 需要向其他 Agent 外发审计任务、确认问题或素材说明时；不属于默认工程上下文，外部输出也不自动成为项目事实。 |
-
-## 外部依赖（只读）
-
-不属于默认上下文，按任务相关性取。
-
-| 来源 | 用途 |
-|---|---|
-| `Docs/COLLABORATION_SOURCE_OF_TRUTH.md` | 根契约。 |
-| `Docs/AI_COLLABORATION_RULES.md` | 全局协作规则（事实源、提交、决策、安全）。 |
-| `Docs/Hermes_Pegasus/design/` | Pegasus 的设计、数值与锁定决策。 |
-| `Docs/Gemini_Calliope/` | Calliope 的创意 / 文本 / 概念（若已建立）。 |
-
-## 状态标签
-
-- `analysis` · `design` · `development` · `integration` · `testing` · `published` · `archived`
+- 可复用协议只引用 [llm-workflow](../_external/llm-workflow/LLM_WORKFLOW.md)；TinySpire 私有语义只留在本实例。
+- 设计事实读取 [Hermes_Pegasus/design/](../Hermes_Pegasus/design/)；创意/文本读取 [Gemini_Calliope/](../Gemini_Calliope/)。
+- ByteRover 是可选 locator/cache，不是事实源；查询结果必须返回精确项目相对路径并核对原文。

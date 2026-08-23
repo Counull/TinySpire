@@ -1221,6 +1221,8 @@ Tremble 作为 I4 的真实生产代表：1 费、Enemy、`ApplyVulnerable 3`、
 
 ## CD-110：BattleScene Roadmap 固定归档，Run 阶段使用独立 Roadmap 与递归切片 Grill 门
 
+> **2026-08-24 路由修订：** 本决定中“动态阶段只在 `SESSION_LOG.md` 维护”已被项目知识工作流 V2 取代；当前状态只查 `STATUS.md`，`SESSION_LOG.md` 保留为历史 changelog。Roadmap 与 Grill 门禁语义不变。
+
 **问题**：`ROADMAP.md` 的标题和主体职责一直是 BattleScene MVP（M0～M10），但末尾同时承载 G1～G8 的未来 Run 草案。BattleScene 已形成可验证检查点后，继续在同一文件扩写会让历史验收与当前计划争夺“活跃 Roadmap”职责；若现在一次性 Grill 整个 G1，又会在主菜单、Run 生命周期、战斗进出、战后过渡、奖励与存档尚未拆清时制造一个过大的伪实施计划。
 
 **选择**：`ROADMAP.md` 保留原路径并改为 `archived`，固定保存 BattleScene MVP 的目标、依赖和验收历史，不物理迁移，也不再承载 Run 动态规划。新增同层 `RUN_ROADMAP.md` 作为 G1～G8 的阶段骨架；它只记录阶段结果、依赖和门禁，不构成代码、表格、Scene、Prefab 或构建授权。动态阶段仍只在 `SESSION_LOG.md` 维护。
@@ -1232,6 +1234,8 @@ Run 规划采用递归切片门禁：每个可执行切片先处于 `needs-grill
 **检查点与影响**：BattleScene 里程碑 commit 为 `e07e39a`，tag 为 `milestone-battlescene-mvp-2026-08-14`，检查点分支已推送 GitHub；最新完整 Unity EditMode 记录为 807/807 passed。根 `README.md` 对外状态改为 BattleScene MVP complete / Run planning next，并明确当前 UI 与动画仍是 provisional。本决定只改文档职责和规划门禁，不改运行时代码、配置表、生成物、Scene、Prefab 或构建产物。
 
 ## CD-111：Battle 进出边界使用 Queue-owned 终局结果与父 Scope 输入来源
+
+> **后续状态：** 本决定当时保持 open 的 `DEP-007` 已由 CD-112、CD-113 与 CD-116 完成并在依赖账本中标记 resolved；本段仍保留为当时的交接事实。
 
 **问题**：交接审计 B2R-101/201 证明胜负原先只由 internal 终局规则即时派生，UI 为终局文案再次读取参与者事实；未来非 UI Run 消费者没有 typed、exactly-once 的读取点。B2R-102/202 又证明 `BattleLifetimeScope` 无条件用 Inspector 常量创建 `BattleSetupOptions`，未来父 Run 生命周期不能替换 hero / encounter / seed。若 UI 回调成为结果来源，或 Run 分别写 seed、HP、牌组，会产生第二事实源；若终局刚进入 `BattleEnded` 就对外发布，又会早于当前表现屏障的稳定结束语义。
 
@@ -1245,6 +1249,8 @@ Run 规划采用递归切片门禁：每个可执行切片先处于 `needs-grill
 
 ## CD-112：G1-A 以唯一 RunState、attempt snapshot 与 child-scope Result bridge 贯通首战
 
+> **部分 superseded by CD-116：** `RunBattleSnapshot / RestartBattle`、Defeat 恢复 snapshot 与同节点重开仅是 G1 当时事实。child-scope Result bridge、attempt 身份和唯一 Store/Flow 所有权仍有效。
+
 **问题**：G1-A 需要在 Bootstrap、入口 Scene 与 BattleScene 之间保存一局 Run 的 Hero、生命、牌组、节点和本战随机输入，同时允许失败后恢复进战前状态并用新随机输入重开。若入口 UI、静态单例或 Battle Scene 临时变量各保存一份状态，胜败与重开会产生冲突事实；若 Battle UI 直接判胜或写 Run，会绕过 CD-111 的稳定 `BattleResult` 边界；若 bridge 放在 root，又会让旧 Battle Scope 的迟到回调污染新 attempt。
 
 **选择**：`RunStateStore` 是当前进程内唯一 Run 事实写入所有者，发布完整不可变 `RunState`。每次 `BeginBattle` 先冻结 `RunBattleSnapshot`，再以 `RunId + AttemptSequence` 建立 `RunBattleId` 并签发不可变 `RunBattleInput`；`RestartBattle` 先恢复 snapshot，再递增 attempt。seed 使用正整数空间内与 `int.MaxValue` 互素的固定步进映射，保证有效 attempt 序列内不与另一 attempt 重复。`RunFlowService` 只读取配置、调用 Store 迁移并请求 SceneFlow，不保存第二份 Run 业务状态。
@@ -1256,6 +1262,8 @@ Run 规划采用递归切片门禁：每个可执行切片先处于 `needs-grill
 **边界与验收**：本决定只覆盖单人、单节点、首战胜败和失败重开；不建立存档、奖励、退出 Run、永久死亡、多节点、地图生成或多人。最终完整 EditMode job `55272b6354df42b6a0f351975ab58e71` 为 873/873，`Sync and Build All`、Packed Play Mode 的两名 Hero、胜利 17/30 回图、失败恢复 70/70、attempt seed `768055331 → 261103211` 与新 Session 空弃牌/消耗区均通过；当前 OS CJK 字体的跨平台可携带性仍是独立风险。完整证据见 `06_testing/2026-08-16-g1a-entry-first-battle-run-lifecycle.md`。
 
 ## CD-113：G2-A 以稳定态 Save Document、原子单槽 Adapter 与显式恢复编排持久化 Run
+
+> **部分 superseded by CD-116：** 当前写入 schema v1、Defeat 不写盘、失败页同节点重开仅是 G2 当时事实。Bootstrap root、save port、同目录 temp、durable validation、Move/Replace 与失败不覆盖已提交事实仍有效。
 
 **问题**：G2-A 需要跨进程保存最近成功的地图稳定态，同时禁止 Battle 中间态泄漏到磁盘，并在坏档、配置漂移或提交失败时保住旧有效 checkpoint。旧 CD-009 曾前瞻独立 RunScope，但现行 CD-112 和生产 Scene parent seam 已由 Bootstrap root 跨场景持有 Store / Flow；为本片强建新父 Scope 会同时改写两个高影响 Scene，并让“无 active Run 的主菜单如何解析入口 Flow”产生新的生命周期问题。
 

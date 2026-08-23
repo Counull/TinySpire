@@ -1,27 +1,37 @@
 ---
+title: Daedalus · 会话变更日志
+page_type: changelog
+lifecycle: active
 created: 2026-07-06
 updated: 2026-08-24
+status_source: STATUS.md
 ---
+
+> 当前可变状态只查 [STATUS.md](STATUS.md)。本页保留按日期排列的审计与恢复线索；其中旧状态快照不构成当前事实。
+
+## 2026-08-24 LLM 项目知识工作流 V2 试点（已验证文档结构）
+
+- 新增 `STATUS.md` 作为唯一当前可变状态源；默认集收敛为 `README → STATUS → 至多一份相关页`，不再加载完整 changelog 或整本决策集。
+- `SESSION_LOG.md` 改为按需 changelog；G3 计划原路径标 `archived`，G1/G2 被取代口径补 supersede 提示；活跃 Roadmap 将 G1～G3 压成摘要，plans/testing 重复索引从 80/196 行压到 28/28 行，底层证据未删除。
+- 上位协作事实源、Daedalus 入口/Profile/Prompt、架构/术语/依赖与冻结 Battle Roadmap 均改指 `STATUS.md`；`DEP-007` 依据 CD-112/113/116 标 resolved，Pegasus 旧 Status 明确为设计/美术同步历史快照。
+- 离线脚本、相对链接、UTF-8/BOM 与 `git diff --check` 通过；具体数字见 `06_testing/2026-08-24-llm-project-knowledge-workflow-v2.md`。这些结构检查不替代 Unity 或内容链路验收。
+- 公共 `llm-workflow` 同时完成供应商无关的 Interface 精简、GPT-family 输出适配与 Optional Retrieval Adapter；独立只读审计通过后以 `310edca` 推送 `origin/main`，父项目只更新 submodule 指针，不把 TinySpire 语义写回公共仓库。
+
+## 2026-08-24 ByteRover 项目检索适配（等待显式外部处理授权）
+
+- MCP/CLI 项目链路可达，空 context tree query 成功返回 `No matching knowledge / Sources: None`；Account/Space 未连接只阻塞 BRV 云同步，不阻塞本地 query。
+- 已建立项目私有 `08_tools/BYTEROVER.md`，固定“小型路由 seed → 精确仓库相对来源 → 打开原文核验”；公共 `llm-workflow` 只保留供应商无关的 Optional Retrieval Adapter，`.brv/` 由父仓库忽略。
+- 首次 5 文件 curate 因外部处理私有项目文档的安全门被拒绝，未提交任何文件且没有绕过。成功 seed 与带来源回查仍等待用户对这 5 份文档作明确批准，详见 `06_testing/2026-08-24-byterover-project-context.md`。
 
 ## 2026-08-24 G3 确定性尖塔式 Act 地图（verified）
 
-- 已按 Hermes 决策 012～016 完成冻结 MapDefinition、固定 Profile 分层 DAG、纯可达性、明牌 Encounter/Boss、完整后半程 hover、BossGateReached 与失败 `Terminal(Defeat)`；Store 仍是唯一可变事实所有者，Flow 只编排，View 只投影/提交命令。
-- schema v2 只保存 seed、generator version、profile/config ID、fingerprint、path/phase 与终局必要事实；不保存整图、UI 或派生数据。旧 schema v1 无法无歧义迁移，明确 fail-fast；普通战斗失败不再恢复 snapshot 或提供同节点重试。
-- RED→GREEN 定向为 map+store 25/25、save 21/21、atomic 19/19、flow 22/22、presenter 15/15、Unity View 13/13；最终交互式完整 EditMode job `8e910a98b14f4fe4b4901ba78bf060dc` 为 **993/993 passed**、0 failed、0 skipped、44.1991795 秒。
-- `Sync and Build All` 与 Local Addressables 成功，12 个 bundle 均使用 `AssetBundleProvider`。Packed Play 实走多节点普通战斗胜利到 BossGate 并进程级冷启动恢复，以及失败终局、冷启动失败页和确认删除两条生产链；产品 Console Error=0。
-- 测试档已删除，用户原 schema v1 档按原 302 bytes 与 SHA-256 `419058435D82A48EA08DBF3121F6127417EAC700D302388BFFFA4586DFEE54B9` 恢复，Addressables Play Mode 已恢复 Fast Mode。G4+、真实 Boss、奖励和遗物实际效果未获授权。完整证据见 `plans/2026-08-24-g3-deterministic-act-map.md` 与 `06_testing/2026-08-24-g3-deterministic-act-map.md`。
+- G3 已按 Hermes 决策 012～016 完成并关闭：冻结明牌分层 DAG、唯一 Store/Flow、recipe-only schema v2、`BossGateReached` 与原子 `Terminal(Defeat)` 已落地；CD-116 明确取代 G1/G2 的 snapshot、schema v1 当前写入口和失败重开口径。
+- 最终交互式完整 EditMode 为 **993/993 passed**；`Sync and Build All`、Local Addressables、12 个 `AssetBundleProvider` bundle、Packed Play 胜利到 Boss 门与失败终局两条进程级冷启动链均通过，产品 Console Error=0。测试档、旧档恢复与工具侧截图错误均已在验收页如实记录。
+- G3 完成不授权 G4；G4-A 仍须独立 Grill、计划与明确授权。详细方案与证据只查 `plans/2026-08-24-g3-deterministic-act-map.md`、`06_testing/2026-08-24-g3-deterministic-act-map.md` 和 CD-116。
 
-## 当前 Run 路线状态（as of 2026-08-17 / `637f0ac` + RunEntry visual working tree）
+## 2026-08-24 G3 implementing checkpoint（superseded / compressed）
 
-| 维度 | 当前事实 |
-|---|---|
-| Current phase | **G2 · completed** |
-| G1 phase | `completed`；完成依据为 G1-A `verified` |
-| Current slice | **RunEntryScene 主入口视觉切片**（独立表现轨，不是 G3） |
-| Slice status | `verified`；背景、三纸、既有菜单视觉与一次性入场已完成 |
-| Next candidate action | 用户审阅 16:9 实拍；G3+ 必须另行 Grill、计划和授权 |
-| Implementation authorization | 本视觉切片授权已完成；G3+、Platform Save Spike 与平台能力均未授权 |
-| Current acceptance evidence | `06_testing/2026-08-17-run-entry-visual-slice.md` |
+- 本中间快照曾记录 991/993、构建/手测 pending、Editor 与旧档处理等待；这些状态已被上方 `verified` 记录全部取代。详细 RED、修复和最终验收仍完整保留在 G3 验收页，本节不再复制过时状态。
 
 ## 2026-08-17 BattleCommandQueue 提交接口深化（implemented-and-verified）
 
