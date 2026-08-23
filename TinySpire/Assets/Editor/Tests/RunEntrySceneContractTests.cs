@@ -167,6 +167,7 @@ public sealed class RunEntrySceneContractTests
             typeof(RunFlowService),
             typeof(ConfigService),
             typeof(LocalizationService),
+            typeof(IRunMapIdentityCatalog),
         });
 
         Assert.That(constructor, Is.Not.Null);

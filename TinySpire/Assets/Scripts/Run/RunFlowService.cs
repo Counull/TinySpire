@@ -2,6 +2,7 @@ using System;
 using cfg;
 using Cysharp.Threading.Tasks;
 using TinySpire.Battle;
+using TinySpire.Run.Map;
 
 namespace TinySpire.Run
 {
@@ -15,8 +16,6 @@ namespace TinySpire.Run
     /// <summary>只编排 Run 状态迁移、Battle setup 与场景请求，不复制业务事实。</summary>
     public sealed class RunFlowService : IBattleSetupOptionsSource
     {
-        private const int EncounterTemplateId = 5001;
-
         private readonly RunStateStore _store;
         private readonly Func<Tables> _tablesProvider;
         private readonly ISceneFlowService _scenes;
@@ -39,9 +38,8 @@ namespace TinySpire.Run
             {
                 RunState state = _store.Current;
                 return state != null &&
-                       state.NodeStatus == RunNodeStatus.InBattle &&
-                       state.ActiveBattle != null &&
-                       state.BattleSnapshot != null;
+                       state.ProgressPhase == RunProgressPhase.InBattle &&
+                       state.ActiveBattle != null;
             }
         }
 
@@ -91,25 +89,35 @@ namespace TinySpire.Run
                 ?? throw new InvalidOperationException($"Hero template {heroTemplateId} does not exist.");
             if (tables.TbDeck.GetOrDefault(hero.InitialDeckId) == null)
                 throw new InvalidOperationException($"Deck template {hero.InitialDeckId} does not exist.");
-            if (tables.TbEncounter.GetOrDefault(EncounterTemplateId) == null)
-                throw new InvalidOperationException($"Encounter template {EncounterTemplateId} does not exist.");
+            ActMapProfile profile = TinySpireActMapProfiles.Current;
+            foreach (int encounterId in profile.EncounterIds)
+            {
+                if (tables.TbEncounter.GetOrDefault(encounterId) == null)
+                    throw new InvalidOperationException($"Encounter template {encounterId} does not exist.");
+            }
 
             RunEntropy entropy = _entropy.Next();
+            uint mapSeed = RunRandomDomains.DeriveMapSeed(entropy.RandomRootSeed);
+            MapDefinition map = ActMapGenerator.Generate(profile, mapSeed);
+            MapValidationResult validation = ActMapValidator.Validate(map, profile);
+            if (!validation.IsValid)
+                throw new InvalidOperationException(validation.Errors[0].Message);
+
             RunState created = _store.CreateNewRun(new RunCreationOptions(
                 entropy.RunId,
                 hero.Id,
                 hero.MaxHealth,
                 hero.MaxHealth,
                 hero.InitialDeckId,
-                EncounterTemplateId,
-                entropy.RandomRootSeed));
+                entropy.RandomRootSeed,
+                map));
             BeginCheckpointCommit(RunSaveDocumentMapper.Create(created));
             CommitPendingCheckpoint();
             return created;
         }
 
-        /// <summary>冻结进战 snapshot 与本战输入后，请求进入既有 BattleScene。</summary>
-        public async UniTask<RunBattleInput> EnterBattleNodeAsync()
+        /// <summary>提交当前可达节点；Combat 进入 BattleScene，Boss 只保存抵达门的稳定态。</summary>
+        public async UniTask EnterMapNodeAsync(MapNodeId nodeId)
         {
             if (Persistence.Status == RunPersistenceStatus.CommitPending ||
                 Persistence.Status == RunPersistenceStatus.CommitFailed)
@@ -118,17 +126,16 @@ namespace TinySpire.Run
                     "The current stable checkpoint must be saved before entering battle.");
             }
 
-            RunBattleInput input = _store.BeginBattle();
-            await _scenes.LoadSceneWithLoadingAsync(RunSceneAddresses.Battle);
-            return input;
-        }
+            RunState committed = _store.CommitNode(nodeId);
+            if (committed.ProgressPhase == RunProgressPhase.BossGateReached)
+            {
+                BeginCheckpointCommit(RunSaveDocumentMapper.Create(committed));
+                CommitPendingCheckpoint();
+                return;
+            }
 
-        /// <summary>从失败 snapshot 恢复并签发新 attempt 后，再次请求进入 BattleScene。</summary>
-        public async UniTask<RunBattleInput> RestartFailedBattleAsync()
-        {
-            RunBattleInput input = _store.RestartBattle();
+            _store.BeginCommittedBattle();
             await _scenes.LoadSceneWithLoadingAsync(RunSceneAddresses.Battle);
-            return input;
         }
 
         /// <summary>把当前有效本战输入映射为 Battle child Scope 唯一读取的装配参数。</summary>
@@ -186,11 +193,13 @@ namespace TinySpire.Run
                     CommitPendingCheckpoint();
                     return;
                 case BattleResultKind.Defeat:
-                    _store.RecordDefeat(
+                    RunState terminal = _store.RecordDefeat(
                         battleId,
                         player.TemplateId,
                         player.Health,
                         player.MaxHealth);
+                    BeginCheckpointCommit(RunSaveDocumentMapper.Create(terminal));
+                    CommitPendingCheckpoint();
                     break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(result));
@@ -284,8 +293,9 @@ namespace TinySpire.Run
         /// <summary>仅在 UI 已取得玩家确认后删除单槽；失败时保留原数据与当前状态。</summary>
         public RunSaveDeleteResult AbandonSavedRun()
         {
-            if (_store.Current != null)
-                throw new InvalidOperationException("An active Run cannot be deleted from the cold-start menu.");
+            RunState active = _store.Current;
+            if (active != null && active.ProgressPhase != RunProgressPhase.Terminal)
+                throw new InvalidOperationException("Only a terminal active Run can be deleted from a Run page.");
 
             bool canContinueAfterFailure = Persistence.CanContinue &&
                                            _continuableDocument != null;
@@ -294,6 +304,8 @@ namespace TinySpire.Run
             if (result.Status == RunSaveDeleteStatus.Success)
             {
                 _continuableDocument = null;
+                if (active != null)
+                    _store.ClearStableRun();
                 SetPersistence(RunPersistenceState.NotFound());
             }
             else
@@ -325,6 +337,11 @@ namespace TinySpire.Run
         {
             if (Persistence.Status != RunPersistenceStatus.CommitFailed)
                 throw new InvalidOperationException("The current Run does not have a failed checkpoint commit.");
+            if (_store.Current?.ProgressPhase == RunProgressPhase.Terminal)
+            {
+                throw new InvalidOperationException(
+                    "A terminal Run cannot roll back to a previous continuable checkpoint.");
+            }
 
             _pendingCommitDocument = null;
             _continuableDocument = null;
@@ -348,10 +365,21 @@ namespace TinySpire.Run
                 return;
             }
 
-            _continuableDocument = load.Document;
-            SetPersistence(RunPersistenceState.Available(
-                load.HasPendingTemporaryFile,
-                load.Detail));
+            if (restore.Options.ProgressPhase == RunProgressPhase.Terminal)
+            {
+                _continuableDocument = null;
+                _store.RestoreRun(restore.Options);
+                SetPersistence(RunPersistenceState.TerminalDefeat(
+                    load.HasPendingTemporaryFile,
+                    load.Detail));
+            }
+            else
+            {
+                _continuableDocument = load.Document;
+                SetPersistence(RunPersistenceState.Available(
+                    load.HasPendingTemporaryFile,
+                    load.Detail));
+            }
         }
 
         /// <summary>把配置引用失败映射为 UI 可区分且禁止 Continue 的状态。</summary>
@@ -381,7 +409,10 @@ namespace TinySpire.Run
                 case RunSaveRestoreStatus.MissingEncounterTemplate:
                     status = RunPersistenceStatus.MissingEncounterTemplate;
                     missingKind = "Encounter";
-                    missingId = document?.EncounterTemplateId;
+                    break;
+                case RunSaveRestoreStatus.MissingMapProfile:
+                    status = RunPersistenceStatus.MissingMapProfile;
+                    missingKind = "MapProfile";
                     break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(restore.Status), restore.Status, null);
@@ -416,9 +447,18 @@ namespace TinySpire.Run
             if (result.Status == RunSaveCommitStatus.Success)
             {
                 _pendingCommitDocument = null;
-                _continuableDocument = document;
-                SetPersistence(RunPersistenceState.Available(
-                    hasPendingTemporaryFile: false));
+                if (document.ProgressPhase == RunSaveProgressPhase.Terminal)
+                {
+                    _continuableDocument = null;
+                    SetPersistence(RunPersistenceState.TerminalDefeat(
+                        hasPendingTemporaryFile: false));
+                }
+                else
+                {
+                    _continuableDocument = document;
+                    SetPersistence(RunPersistenceState.Available(
+                        hasPendingTemporaryFile: false));
+                }
                 return result;
             }
 
@@ -458,7 +498,7 @@ namespace TinySpire.Run
         {
             RunState state = _store.Current;
             if (state == null ||
-                state.NodeStatus != RunNodeStatus.InBattle ||
+                state.ProgressPhase != RunProgressPhase.InBattle ||
                 state.ActiveBattle == null)
             {
                 throw new InvalidOperationException("No active Run battle input exists.");
@@ -503,6 +543,12 @@ namespace TinySpire.Run
         public bool EncounterExists(int templateId)
         {
             return _tables.TbEncounter.GetOrDefault(templateId) != null;
+        }
+
+        /// <summary>按稳定 ID 读取当前支持的 G3 Act 地图 profile。</summary>
+        public ActMapProfile GetActMapProfile(string profileId)
+        {
+            return TinySpireActMapProfiles.GetById(profileId);
         }
     }
 }

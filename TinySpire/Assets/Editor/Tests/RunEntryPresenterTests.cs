@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 using cfg;
 using Cysharp.Threading.Tasks;
 using Newtonsoft.Json.Linq;
@@ -7,34 +9,48 @@ using NUnit.Framework;
 using R3;
 using TinySpire.Battle;
 using TinySpire.Run;
+using TinySpire.Run.Map;
 using TinySpire.UI.Run;
 using UnityEngine.Localization;
 
 public sealed class RunEntryPresenterTests
 {
-    /// <summary>冷启动发现有效档时仍停留主菜单，只有玩家点继续才 hydrate 并进入地图。</summary>
+    /// <summary>空槽冷启动只投影主菜单，不创建 Run、地图或可继续入口。</summary>
     [Test]
-    public void ColdStartValidSave_EnablesContinueAndHydratesOnlyAfterAction()
+    public void ColdStartWithoutSave_ProjectsEmptyMainMenu()
     {
         using var store = new RunStateStore();
         using var localeChanges = new Subject<Locale>();
-        var saves = new InMemoryRunSaveStore();
-        saves.Commit(new RunSaveDocument(
-            RunSaveDocument.CurrentSchemaVersion,
-            "13572468-2468-1357-2468-135724681357",
-            heroTemplateId: 1001,
-            currentHealth: 46,
-            maxHealth: 80,
-            deckTemplateId: 1001,
-            encounterTemplateId: 5001,
-            randomRootSeed: 919191u,
-            RunSaveNodeStatus.Available,
-            battleAttemptSequence: 0));
         var view = new RecordingRunEntryView();
         using var presenter = new RunEntryPresenter(
             view,
             store,
-            CreateFlow(store, new RecordingSceneFlow(), randomRootSeed: 1u, saves),
+            CreateFlow(store, new RecordingSceneFlow(), randomRootSeed: 1u),
+            CreateTables,
+            Localize,
+            localeChanges);
+
+        presenter.Initialize();
+
+        Assert.That(store.Current, Is.Null);
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.MainMenu));
+        Assert.That(view.LastModel.ContinueEnabled, Is.False);
+        Assert.That(view.LastModel.Map, Is.Null);
+    }
+
+    /// <summary>有效 schema v2 地图档只启用 Continue，玩家确认后才重建同一冻结地图。</summary>
+    [Test]
+    public void ColdStartMapSave_EnablesContinueAndHydratesFrozenMapOnlyAfterAction()
+    {
+        RunSaveDocument document = CreateMapReadyDocument();
+        using var store = new RunStateStore();
+        using var localeChanges = new Subject<Locale>();
+        var saves = new ScriptedRunSaveStore(document);
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            CreateFlow(store, new RecordingSceneFlow(), randomRootSeed: 2u, saves),
             CreateTables,
             Localize,
             localeChanges);
@@ -44,133 +60,266 @@ public sealed class RunEntryPresenterTests
         Assert.That(store.Current, Is.Null);
         Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.MainMenu));
         Assert.That(view.LastModel.ContinueEnabled, Is.True);
+        Assert.That(view.LastModel.Map, Is.Null);
 
         view.Emit(new RunEntryAction(RunEntryActionKind.ContinueGame));
 
         Assert.That(store.Current, Is.Not.Null);
-        Assert.That(store.Current.CurrentHealth, Is.EqualTo(46));
+        Assert.That(store.Current.MapDefinition.Fingerprint, Is.EqualTo(document.MapFingerprint));
         Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Map));
+        Assert.That(view.LastModel.ContinueEnabled, Is.False);
+        Assert.That(view.LastModel.Map.Fingerprint, Is.EqualTo(document.MapFingerprint));
     }
 
-    /// <summary>有效单槽存在时新开局必须先确认放弃；取消不删档，确认后才进入角色选择。</summary>
+    /// <summary>新 Run 一次投影整张冻结图，并明牌位置、内容 ID、明确名称与可区分视觉锚点。</summary>
     [Test]
-    public void ValidSave_StartGame_RequiresConfirmedAbandonBeforeHeroSelection()
+    public void CreateRun_ProjectsWholeFrozenMapWithStablePositionsNamesAndVisualAnchors()
     {
         using var store = new RunStateStore();
         using var localeChanges = new Subject<Locale>();
-        var saves = new ScriptedRunSaveStore(CreateSaveDocument());
+        var flow = CreateFlow(store, new RecordingSceneFlow(), randomRootSeed: 101u);
+        flow.CreateNewRun(heroTemplateId: 1001);
         var view = new RecordingRunEntryView();
         using var presenter = new RunEntryPresenter(
             view,
             store,
-            CreateFlow(store, new RecordingSceneFlow(), randomRootSeed: 11u, saves),
+            flow,
             CreateTables,
             Localize,
             localeChanges);
 
         presenter.Initialize();
-        view.Emit(new RunEntryAction(RunEntryActionKind.StartGame));
 
-        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.AbandonConfirmation));
-        Assert.That(saves.DeleteCount, Is.Zero);
+        MapDefinition frozenMap = store.Current.MapDefinition;
+        RunMapViewModel projectedMap = view.LastModel.Map;
+        RunMapNodeViewModel[] combats = projectedMap.Nodes
+            .Where(node => node.Kind == MapNodeKind.Combat)
+            .ToArray();
+        RunMapNodeViewModel[] bosses = projectedMap.Nodes
+            .Where(node => node.Kind == MapNodeKind.Boss)
+            .ToArray();
 
-        view.Emit(new RunEntryAction(RunEntryActionKind.Back));
-        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.MainMenu));
-        Assert.That(saves.DeleteCount, Is.Zero);
-        Assert.That(saves.Load().Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Map));
+        Assert.That(projectedMap.Fingerprint, Is.EqualTo(frozenMap.Fingerprint));
+        Assert.That(projectedMap.Nodes.Count, Is.EqualTo(frozenMap.Nodes.Count));
+        Assert.That(projectedMap.Edges.Count, Is.EqualTo(frozenMap.Edges.Count));
+        Assert.That(combats, Is.Not.Empty);
+        Assert.That(combats.All(node => node.ContentId == 5001), Is.True);
+        Assert.That(combats.All(node => node.DisplayName == "SLIME PATROL\nTest Slime"), Is.True);
+        Assert.That(
+            combats.All(node => node.VisualAnchorKind == RunMapVisualAnchorKind.EncounterSlimeSilhouette),
+            Is.True);
+        Assert.That(bosses.Length, Is.EqualTo(TinySpireActMapProfiles.Current.BossEndpointCount));
+        Assert.That(
+            bosses.Select(node => node.ContentId).Distinct().Count(),
+            Is.EqualTo(TinySpireActMapProfiles.Current.BossCandidateCount));
+        Assert.That(
+            bosses.GroupBy(node => node.ContentId).Any(group => group.Count() > 1),
+            Is.True);
+        foreach (IGrouping<int, RunMapNodeViewModel> bossGroup in bosses.GroupBy(node => node.ContentId))
+        {
+            Assert.That(bossGroup.Select(node => node.DisplayName).Distinct().Count(), Is.EqualTo(1));
+            Assert.That(bossGroup.Select(node => node.VisualAnchorKind).Distinct().Count(), Is.EqualTo(1));
+        }
+        Assert.That(
+            bosses.Select(node => node.VisualAnchorKind).Distinct().Count(),
+            Is.EqualTo(TinySpireActMapProfiles.Current.BossCandidateCount));
 
-        view.Emit(new RunEntryAction(RunEntryActionKind.StartGame));
-        view.Emit(new RunEntryAction(RunEntryActionKind.ConfirmAbandon));
-
-        Assert.That(saves.DeleteCount, Is.EqualTo(1));
-        Assert.That(saves.Load().Status, Is.EqualTo(RunSaveLoadStatus.NotFound));
-        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.HeroSelection));
-        Assert.That(store.Current, Is.Null);
+        foreach (RunMapNodeViewModel node in projectedMap.Nodes)
+        {
+            Assert.That(node.NodeId, Is.EqualTo(MapNodeId.FromPosition(node.Layer, node.Slot).Value));
+            Assert.That(
+                frozenMap.GetNode(new MapNodeId(node.NodeId)).ContentId,
+                Is.EqualTo(node.ContentId));
+        }
     }
 
-    /// <summary>不可恢复单槽必须禁用继续并显示类型化说明；同样只有玩家确认后才删除。</summary>
-    [TestCase("invalid_json", "run.entry.save.issue.invalid_json")]
-    [TestCase("unsupported_schema", "run.entry.save.issue.unsupported_schema")]
-    [TestCase("missing_config", "Missing Hero 9999")]
-    public void UnusableSave_DisablesContinueExplainsIssueAndDeletesOnlyAfterConfirmation(
-        string issueKind,
-        string expectedIssue)
+    /// <summary>显式 G3 遭遇展示数据必须同时区分可读遭遇名称与首敌程序化剪影。</summary>
+    [Test]
+    public void IdentityCatalog_G3EncounterTestData_DistinguishesNamesAndPrimaryEnemySilhouettes()
+    {
+        var catalog = new RunMapIdentityCatalog(CreateTables, Localize);
+
+        RunMapIdentityDescriptor slimePatrol = catalog.Resolve(MapNodeKind.Combat, 5001);
+        RunMapIdentityDescriptor sentryLine = catalog.Resolve(MapNodeKind.Combat, 5002);
+
+        Assert.That(slimePatrol.DisplayName, Is.EqualTo("SLIME PATROL\nTest Slime"));
+        Assert.That(sentryLine.DisplayName, Is.EqualTo("SENTRY LINE\nTest Sentry"));
+        Assert.That(slimePatrol.VisualAnchorKind, Is.EqualTo(RunMapVisualAnchorKind.EncounterSlimeSilhouette));
+        Assert.That(sentryLine.VisualAnchorKind, Is.EqualTo(RunMapVisualAnchorKind.EncounterSentrySilhouette));
+        Assert.That(slimePatrol.VisualAnchorKind, Is.Not.EqualTo(sentryLine.VisualAnchorKind));
+    }
+
+    /// <summary>G3 测试 Boss 目录必须为三个冻结身份提供明确名称与互不相同的程序化锚点。</summary>
+    [TestCase(9001, "BOSS ALPHA", RunMapVisualAnchorKind.BossAlphaCrown)]
+    [TestCase(9002, "BOSS BETA", RunMapVisualAnchorKind.BossBetaHorns)]
+    [TestCase(9003, "BOSS GAMMA", RunMapVisualAnchorKind.BossGammaEye)]
+    public void IdentityCatalog_G3BossTestData_ResolvesExplicitDistinctIdentity(
+        int bossId,
+        string expectedName,
+        RunMapVisualAnchorKind expectedAnchor)
+    {
+        var catalog = new RunMapIdentityCatalog(CreateTables, Localize);
+
+        RunMapIdentityDescriptor descriptor = catalog.Resolve(MapNodeKind.Boss, bossId);
+
+        Assert.That(descriptor.DisplayName, Is.EqualTo(expectedName));
+        Assert.That(descriptor.VisualAnchorKind, Is.EqualTo(expectedAnchor));
+    }
+
+    /// <summary>可选 Combat 动作只进入一次 Battle；Store 迁到 InBattle 后重复动作立即失效。</summary>
+    [Test]
+    public void SelectableCombatAction_EntersBattleAndImmediatelyBlocksDuplicateAction()
     {
         using var store = new RunStateStore();
         using var localeChanges = new Subject<Locale>();
-        ScriptedRunSaveStore saves;
-        switch (issueKind)
+        var scenes = new RecordingSceneFlow();
+        var flow = CreateFlow(store, scenes, randomRootSeed: 202u);
+        flow.CreateNewRun(heroTemplateId: 1001);
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            flow,
+            CreateTables,
+            Localize,
+            localeChanges);
+        presenter.Initialize();
+        MapNodeId selectedNodeId = GetFirstProjectedNodeId(
+            view.LastModel,
+            RunMapNodePresentationState.Selectable,
+            MapNodeKind.Combat);
+        var action = new RunEntryAction(
+            RunEntryActionKind.EnterMapNode,
+            mapNodeId: selectedNodeId);
+
+        view.Emit(action);
+        view.Emit(action);
+
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.InBattle));
+        Assert.That(store.Current.CommittedNodeId, Is.EqualTo(selectedNodeId));
+        Assert.That(store.Current.ActiveBattle.BattleId.NodeId, Is.EqualTo(selectedNodeId));
+        Assert.That(store.Current.BattleAttemptSequence, Is.EqualTo(1));
+        Assert.That(
+            view.LastModel.Map.Nodes.Any(node =>
+                node.State == RunMapNodePresentationState.Selectable),
+            Is.False);
+        Assert.That(scenes.LoadedAddresses, Is.EqualTo(new[] { RunSceneAddresses.Battle }));
+    }
+
+    /// <summary>战斗胜利后当前位置推进到已选节点，并只投影新当前位置的普通直接出边。</summary>
+    [Test]
+    public async Task Victory_ProjectsNewCurrentNodeAndNextSelectableLayer()
+    {
+        using var store = new RunStateStore();
+        using var localeChanges = new Subject<Locale>();
+        var flow = CreateFlow(store, new RecordingSceneFlow(), randomRootSeed: 303u);
+        flow.CreateNewRun(heroTemplateId: 1001);
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            flow,
+            CreateTables,
+            Localize,
+            localeChanges);
+        presenter.Initialize();
+        MapNodeId selectedNodeId = GetFirstProjectedNodeId(
+            view.LastModel,
+            RunMapNodePresentationState.Selectable,
+            MapNodeKind.Combat);
+
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.EnterMapNode,
+            mapNodeId: selectedNodeId));
+        await CompleteActiveBattleAsync(flow, store, BattleResultKind.Victory, settledHealth: 67);
+
+        string[] expectedSelectable = MapReachability.GetSelectableNodeIds(
+                store.Current.MapDefinition,
+                selectedNodeId,
+                MapTraversalMode.Ordinary)
+            .Select(nodeId => nodeId.Value)
+            .ToArray();
+        string[] actualSelectable = view.LastModel.Map.Nodes
+            .Where(node => node.State == RunMapNodePresentationState.Selectable)
+            .Select(node => node.NodeId)
+            .ToArray();
+        RunMapNodeViewModel current = view.LastModel.Map.Nodes.Single(node =>
+            node.NodeId == selectedNodeId.Value);
+
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(store.Current.CurrentNodeId, Is.EqualTo(selectedNodeId));
+        Assert.That(store.Current.PathNodeIds.Count, Is.EqualTo(2));
+        Assert.That(current.State, Is.EqualTo(RunMapNodePresentationState.Current));
+        Assert.That(actualSelectable, Is.EqualTo(expectedSelectable));
+        Assert.That(actualSelectable.All(nodeId =>
+            store.Current.MapDefinition.GetNode(new MapNodeId(nodeId)).Layer == current.Layer + 1), Is.True);
+    }
+
+    /// <summary>走完普通层后抵达 Boss 终点只保存 BossGateReached，并继续停留地图页。</summary>
+    [Test]
+    public async Task BossSelection_ReachesSavedBossGateWithoutStartingBossBattle()
+    {
+        using var store = new RunStateStore();
+        using var localeChanges = new Subject<Locale>();
+        var scenes = new RecordingSceneFlow();
+        var saves = new ScriptedRunSaveStore();
+        var flow = CreateFlow(store, scenes, randomRootSeed: 404u, saves);
+        flow.CreateNewRun(heroTemplateId: 1001);
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            flow,
+            CreateTables,
+            Localize,
+            localeChanges);
+        presenter.Initialize();
+
+        for (int layer = 1; layer <= TinySpireActMapProfiles.Current.NormalLayerSlotCounts.Count; layer++)
         {
-            case "invalid_json":
-                saves = new ScriptedRunSaveStore(RunSaveLoadResult.Failed(
-                    RunSaveLoadStatus.InvalidJson,
-                    "Malformed JSON.",
-                    hasStoredData: true));
-                break;
-            case "unsupported_schema":
-                saves = new ScriptedRunSaveStore(RunSaveLoadResult.Failed(
-                    RunSaveLoadStatus.UnsupportedSchema,
-                    "Schema 99 cannot be migrated.",
-                    hasStoredData: true));
-                break;
-            case "missing_config":
-                saves = new ScriptedRunSaveStore(CreateSaveDocument(heroTemplateId: 9999));
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(issueKind));
+            MapNodeId combatNodeId = GetFirstProjectedNodeId(
+                view.LastModel,
+                RunMapNodePresentationState.Selectable,
+                MapNodeKind.Combat);
+            view.Emit(new RunEntryAction(
+                RunEntryActionKind.EnterMapNode,
+                mapNodeId: combatNodeId));
+            await CompleteActiveBattleAsync(
+                flow,
+                store,
+                BattleResultKind.Victory,
+                settledHealth: 80 - layer);
         }
 
-        var view = new RecordingRunEntryView();
-        using var presenter = new RunEntryPresenter(
-            view,
-            store,
-            CreateFlow(store, new RecordingSceneFlow(), randomRootSeed: 12u, saves),
-            CreateTables,
-            Localize,
-            localeChanges);
+        MapNodeId bossNodeId = GetFirstProjectedNodeId(
+            view.LastModel,
+            RunMapNodePresentationState.Selectable,
+            MapNodeKind.Boss);
+        int sceneRequestCountBeforeBoss = scenes.LoadedAddresses.Count;
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.EnterMapNode,
+            mapNodeId: bossNodeId));
 
-        presenter.Initialize();
-
-        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.MainMenu));
-        Assert.That(view.LastModel.ContinueEnabled, Is.False);
-        Assert.That(view.LastModel.GetText(RunEntryTextSlot.SaveIssue), Is.EqualTo(expectedIssue));
-        Assert.That(saves.DeleteCount, Is.Zero);
-
-        view.Emit(new RunEntryAction(RunEntryActionKind.StartGame));
-        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.AbandonConfirmation));
-        Assert.That(saves.DeleteCount, Is.Zero);
-
-        view.Emit(new RunEntryAction(RunEntryActionKind.Back));
-        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.MainMenu));
-        Assert.That(saves.DeleteCount, Is.Zero);
-
-        view.Emit(new RunEntryAction(RunEntryActionKind.StartGame));
-        view.Emit(new RunEntryAction(RunEntryActionKind.ConfirmAbandon));
-
-        Assert.That(saves.DeleteCount, Is.EqualTo(1));
-        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.HeroSelection));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.BossGateReached));
+        Assert.That(store.Current.CurrentNodeId, Is.EqualTo(bossNodeId));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Map));
+        Assert.That(
+            view.LastModel.Map.Nodes.Single(node => node.NodeId == bossNodeId.Value).State,
+            Is.EqualTo(RunMapNodePresentationState.BossGateReached));
+        Assert.That(scenes.LoadedAddresses.Count, Is.EqualTo(sceneRequestCountBeforeBoss));
+        Assert.That(saves.Load().Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.BossGateReached));
     }
 
-    /// <summary>S0 提交失败必须阻止推进；重试提交同一 Run 后返回地图且不重取身份或随机输入。</summary>
+    /// <summary>普通战斗失败投影 Failure；玩家确认离开后才删除档与唯一终局 Run。</summary>
     [Test]
-    public void InitialCommitFailure_RetrySave_ReturnsSameRunToMap()
+    public async Task Defeat_ProjectsFailureAndLeaveTerminalRunDeletesSave()
     {
         using var store = new RunStateStore();
         using var localeChanges = new Subject<Locale>();
         var saves = new ScriptedRunSaveStore();
-        saves.EnqueueCommitResult(RunSaveCommitResult.Failed(
-            RunSaveCommitStatus.IoFailure,
-            "Injected commit failure."));
-        saves.EnqueueCommitResult(RunSaveCommitResult.Succeeded());
-        var entropy = new CountingRunEntropySource(new RunEntropy(
-            new RunId(Guid.Parse("12345678-90ab-cdef-1234-567890abcdef")),
-            13u));
-        var flow = new RunFlowService(
-            store,
-            CreateTables,
-            new RecordingSceneFlow(),
-            entropy,
-            saves);
+        var flow = CreateFlow(store, new RecordingSceneFlow(), randomRootSeed: 505u, saves);
+        flow.CreateNewRun(heroTemplateId: 1001);
         var view = new RecordingRunEntryView();
         using var presenter = new RunEntryPresenter(
             view,
@@ -179,41 +328,67 @@ public sealed class RunEntryPresenterTests
             CreateTables,
             Localize,
             localeChanges);
-
         presenter.Initialize();
-        view.Emit(new RunEntryAction(RunEntryActionKind.StartGame));
-        view.Emit(new RunEntryAction(RunEntryActionKind.SelectHero, 1001));
-        view.Emit(new RunEntryAction(RunEntryActionKind.ConfirmHero));
-        RunState failedRun = store.Current;
+        MapNodeId combatNodeId = GetFirstProjectedNodeId(
+            view.LastModel,
+            RunMapNodePresentationState.Selectable,
+            MapNodeKind.Combat);
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.EnterMapNode,
+            mapNodeId: combatNodeId));
 
-        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.SaveFailure));
-        Assert.That(view.LastModel.BattleNodeInteractable, Is.False);
-        Assert.That(saves.CommitCount, Is.EqualTo(1));
-        Assert.That(entropy.NextCount, Is.EqualTo(1));
+        await CompleteActiveBattleAsync(flow, store, BattleResultKind.Defeat, settledHealth: 0);
 
-        view.Emit(new RunEntryAction(RunEntryActionKind.RetrySave));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.Terminal));
+        Assert.That(store.Current.TerminalReason, Is.EqualTo(RunTerminalReason.Defeat));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Failure));
+        Assert.That(view.LastModel.ContinueEnabled, Is.False);
+        Assert.That(saves.DeleteCount, Is.Zero);
 
-        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Map));
-        Assert.That(view.LastModel.BattleNodeInteractable, Is.True);
-        Assert.That(store.Current, Is.SameAs(failedRun));
-        Assert.That(saves.CommitCount, Is.EqualTo(2));
-        Assert.That(saves.CommittedDocuments[1], Is.SameAs(saves.CommittedDocuments[0]));
-        Assert.That(entropy.NextCount, Is.EqualTo(1));
+        view.Emit(new RunEntryAction(RunEntryActionKind.LeaveTerminalRun));
+
+        Assert.That(saves.DeleteCount, Is.EqualTo(1));
+        Assert.That(saves.Load().Status, Is.EqualTo(RunSaveLoadStatus.NotFound));
+        Assert.That(store.Current, Is.Null);
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.MainMenu));
+        Assert.That(view.LastModel.ContinueEnabled, Is.False);
     }
 
-    /// <summary>S1 提交失败退出前必须二次确认；取消保留未保存 Run，确认才回到上一成功检查点。</summary>
+    /// <summary>冷启动读到 Terminal(Defeat) 必须直接恢复失败页，永不暴露 Continue。</summary>
     [Test]
-    public async System.Threading.Tasks.Task CompletedCommitFailure_ExitRequiresConfirmationAndReturnsPreviousCheckpoint()
+    public void ColdStartTerminalSave_RestoresFailurePageWithoutContinue()
+    {
+        RunSaveDocument terminalDocument = CreateTerminalDocument();
+        using var store = new RunStateStore();
+        using var localeChanges = new Subject<Locale>();
+        var saves = new ScriptedRunSaveStore(terminalDocument);
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            CreateFlow(store, new RecordingSceneFlow(), randomRootSeed: 606u, saves),
+            CreateTables,
+            Localize,
+            localeChanges);
+
+        presenter.Initialize();
+
+        Assert.That(store.Current, Is.Not.Null);
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.Terminal));
+        Assert.That(store.Current.TerminalReason, Is.EqualTo(RunTerminalReason.Defeat));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Failure));
+        Assert.That(view.LastModel.ContinueEnabled, Is.False);
+        Assert.That(saves.DeleteCount, Is.Zero);
+    }
+
+    /// <summary>只有当前可选节点携带悬停后半程，且数据精确覆盖纯规则的全部后继边与 Boss。</summary>
+    [Test]
+    public void MapProjection_HoverRouteExistsOnlyForSelectableNodesAndIncludesCompleteBossRoutes()
     {
         using var store = new RunStateStore();
         using var localeChanges = new Subject<Locale>();
-        RunSaveDocument previousCheckpoint = CreateSaveDocument();
-        var saves = new ScriptedRunSaveStore(previousCheckpoint);
-        saves.EnqueueCommitResult(RunSaveCommitResult.Failed(
-            RunSaveCommitStatus.IoFailure,
-            "Injected S1 failure."));
-        var scenes = new RecordingSceneFlow();
-        var flow = CreateFlow(store, scenes, randomRootSeed: 14u, saves);
+        var flow = CreateFlow(store, new RecordingSceneFlow(), randomRootSeed: 707u);
+        flow.CreateNewRun(heroTemplateId: 1001);
         var view = new RecordingRunEntryView();
         using var presenter = new RunEntryPresenter(
             view,
@@ -222,251 +397,138 @@ public sealed class RunEntryPresenterTests
             CreateTables,
             Localize,
             localeChanges);
-
         presenter.Initialize();
-        view.Emit(new RunEntryAction(RunEntryActionKind.ContinueGame));
-        view.Emit(new RunEntryAction(RunEntryActionKind.EnterBattle));
-        RunBattleId battleId = flow.BindBattleAttempt(flow.CreateBattleSetupOptions());
-        await flow.HandleBattleResultAsync(
-            battleId,
-            CreateBattleResult(BattleResultKind.Victory, heroTemplateId: 1001, health: 30, maxHealth: 80));
-        RunState unsavedCompletedRun = store.Current;
+
+        MapDefinition map = store.Current.MapDefinition;
+        RunMapNodeViewModel[] selectable = view.LastModel.Map.Nodes
+            .Where(node => node.State == RunMapNodePresentationState.Selectable)
+            .ToArray();
+        RunMapNodeViewModel[] nonSelectable = view.LastModel.Map.Nodes
+            .Where(node => node.State != RunMapNodePresentationState.Selectable)
+            .ToArray();
+
+        Assert.That(selectable, Is.Not.Empty);
+        foreach (RunMapNodeViewModel node in selectable)
+        {
+            MapDownstreamRoute expected = MapReachability.GetDownstreamRoute(
+                map,
+                new MapNodeId(node.NodeId));
+            string[] expectedNodeIds = expected.NodeIds.Select(nodeId => nodeId.Value).ToArray();
+            string[] expectedEdgeKeys = expected.Edges.Select(edge =>
+                $"{edge.FromNodeId.Value}>{edge.ToNodeId.Value}").ToArray();
+
+            Assert.That(node.DownstreamNodeIds, Is.EqualTo(expectedNodeIds));
+            Assert.That(node.DownstreamEdgeKeys, Is.EqualTo(expectedEdgeKeys));
+            Assert.That(node.DownstreamNodeIds, Does.Contain(node.NodeId));
+            Assert.That(node.DownstreamNodeIds.Any(nodeId =>
+                map.GetNode(new MapNodeId(nodeId)).Kind == MapNodeKind.Boss), Is.True);
+        }
+
+        foreach (RunMapNodeViewModel node in nonSelectable)
+        {
+            Assert.That(node.DownstreamNodeIds, Is.Empty);
+            Assert.That(node.DownstreamEdgeKeys, Is.Empty);
+        }
+    }
+
+    /// <summary>普通胜利检查点提交失败仍允许显式回退到上一成功档。</summary>
+    [Test]
+    public async Task OrdinaryCommitFailure_AllowsConfirmedRollbackToPreviousCheckpoint()
+    {
+        using var store = new RunStateStore();
+        using var localeChanges = new Subject<Locale>();
+        var saves = new ScriptedRunSaveStore();
+        saves.EnqueueCommitResult(RunSaveCommitResult.Succeeded());
+        saves.EnqueueCommitResult(RunSaveCommitResult.Failed(
+            RunSaveCommitStatus.IoFailure,
+            "Injected ordinary checkpoint failure."));
+        var flow = CreateFlow(store, new RecordingSceneFlow(), randomRootSeed: 808u, saves);
+        flow.CreateNewRun(heroTemplateId: 1001);
+        RunSaveDocument previousCheckpoint = saves.Load().Document;
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            flow,
+            CreateTables,
+            Localize,
+            localeChanges);
+        presenter.Initialize();
+        MapNodeId combatNodeId = GetFirstProjectedNodeId(
+            view.LastModel,
+            RunMapNodePresentationState.Selectable,
+            MapNodeKind.Combat);
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.EnterMapNode,
+            mapNodeId: combatNodeId));
+
+        await CompleteActiveBattleAsync(flow, store, BattleResultKind.Victory, settledHealth: 61);
 
         Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.SaveFailure));
-        Assert.That(unsavedCompletedRun.NodeStatus, Is.EqualTo(RunNodeStatus.Completed));
+        Assert.That(view.LastModel.CanRollbackFailedSave, Is.True);
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(saves.Load().Document, Is.SameAs(previousCheckpoint));
 
         view.Emit(new RunEntryAction(RunEntryActionKind.RequestExitAfterSaveFailure));
         Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.RollbackConfirmation));
+        view.Emit(new RunEntryAction(RunEntryActionKind.ConfirmRollback));
 
-        view.Emit(new RunEntryAction(RunEntryActionKind.Back));
+        Assert.That(store.Current, Is.Null);
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.MainMenu));
+        Assert.That(view.LastModel.ContinueEnabled, Is.True);
+        Assert.That(saves.Load().Document, Is.SameAs(previousCheckpoint));
+    }
+
+    /// <summary>Terminal 提交失败只能重试保存，退出与确认回退动作都不得复活旧检查点。</summary>
+    [Test]
+    public async Task TerminalCommitFailure_DisablesRollbackAndPreservesTerminalRun()
+    {
+        using var store = new RunStateStore();
+        using var localeChanges = new Subject<Locale>();
+        var saves = new ScriptedRunSaveStore();
+        saves.EnqueueCommitResult(RunSaveCommitResult.Succeeded());
+        saves.EnqueueCommitResult(RunSaveCommitResult.Failed(
+            RunSaveCommitStatus.IoFailure,
+            "Injected terminal checkpoint failure."));
+        var flow = CreateFlow(store, new RecordingSceneFlow(), randomRootSeed: 909u, saves);
+        flow.CreateNewRun(heroTemplateId: 1001);
+        RunSaveDocument previousCheckpoint = saves.Load().Document;
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            flow,
+            CreateTables,
+            Localize,
+            localeChanges);
+        presenter.Initialize();
+        MapNodeId combatNodeId = GetFirstProjectedNodeId(
+            view.LastModel,
+            RunMapNodePresentationState.Selectable,
+            MapNodeKind.Combat);
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.EnterMapNode,
+            mapNodeId: combatNodeId));
+
+        await CompleteActiveBattleAsync(flow, store, BattleResultKind.Defeat, settledHealth: 0);
+        RunState terminal = store.Current;
+
         Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.SaveFailure));
-        Assert.That(store.Current, Is.SameAs(unsavedCompletedRun));
+        Assert.That(view.LastModel.CanRollbackFailedSave, Is.False);
+        Assert.That(terminal.ProgressPhase, Is.EqualTo(RunProgressPhase.Terminal));
         Assert.That(saves.Load().Document, Is.SameAs(previousCheckpoint));
 
         view.Emit(new RunEntryAction(RunEntryActionKind.RequestExitAfterSaveFailure));
         view.Emit(new RunEntryAction(RunEntryActionKind.ConfirmRollback));
 
-        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.MainMenu));
-        Assert.That(view.LastModel.ContinueEnabled, Is.True);
-        Assert.That(store.Current, Is.Null);
+        Assert.That(store.Current, Is.SameAs(terminal));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.Terminal));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.SaveFailure));
+        Assert.That(view.LastModel.CanRollbackFailedSave, Is.False);
         Assert.That(saves.Load().Document, Is.SameAs(previousCheckpoint));
     }
 
-    /// <summary>主菜单进入角色选择后，两名配置 Hero 都可分别确认并创建对应的单角色 Run。</summary>
-    [TestCase(1001)]
-    [TestCase(1002)]
-    public void MainMenu_SelectHeroAndConfirm_CreatesRunAndShowsMap(int heroTemplateId)
-    {
-        using var store = new RunStateStore();
-        using var localeChanges = new Subject<Locale>();
-        var scenes = new RecordingSceneFlow();
-        var flow = CreateFlow(store, scenes, randomRootSeed: 101u);
-        var view = new RecordingRunEntryView();
-        using var presenter = new RunEntryPresenter(
-            view,
-            store,
-            flow,
-            CreateTables,
-            Localize,
-            localeChanges);
-
-        presenter.Initialize();
-        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.MainMenu));
-
-        view.Emit(new RunEntryAction(RunEntryActionKind.StartGame));
-        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.HeroSelection));
-        Assert.That(view.LastModel.GetText(RunEntryTextSlot.Hero1001Name), Is.EqualTo("Warrior"));
-        Assert.That(view.LastModel.GetText(RunEntryTextSlot.Hero1002Name), Is.EqualTo("Machine Gunner"));
-        Assert.That(view.LastModel.ConfirmEnabled, Is.False);
-
-        view.Emit(new RunEntryAction(RunEntryActionKind.SelectHero, heroTemplateId));
-        Assert.That(view.LastModel.SelectedHeroTemplateId, Is.EqualTo(heroTemplateId));
-        Assert.That(view.LastModel.ConfirmEnabled, Is.True);
-
-        view.Emit(new RunEntryAction(RunEntryActionKind.ConfirmHero));
-
-        Assert.That(store.Current, Is.Not.Null);
-        Assert.That(store.Current.HeroTemplateId, Is.EqualTo(heroTemplateId));
-        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Map));
-        Assert.That(view.LastModel.BattleNodeInteractable, Is.True);
-        Assert.That(view.LastModel.BattleNodeCompleted, Is.False);
-        Assert.That(scenes.LoadedAddresses, Is.Empty);
-    }
-
-    /// <summary>设置、图鉴与统计都是只在入口内切换的可返回页面，不创建 Run。</summary>
-    [TestCase(RunEntryActionKind.OpenSettings, RunEntryPage.Settings)]
-    [TestCase(RunEntryActionKind.OpenCompendium, RunEntryPage.Compendium)]
-    [TestCase(RunEntryActionKind.OpenStatistics, RunEntryPage.Statistics)]
-    public void MainMenu_OpenAuxiliaryPageAndBack_DoesNotCreateRun(
-        RunEntryActionKind actionKind,
-        RunEntryPage expectedPage)
-    {
-        using var store = new RunStateStore();
-        using var localeChanges = new Subject<Locale>();
-        var view = new RecordingRunEntryView();
-        using var presenter = new RunEntryPresenter(
-            view,
-            store,
-            CreateFlow(store, new RecordingSceneFlow(), randomRootSeed: 202u),
-            CreateTables,
-            Localize,
-            localeChanges);
-
-        presenter.Initialize();
-        view.Emit(new RunEntryAction(actionKind));
-        Assert.That(view.LastModel.Page, Is.EqualTo(expectedPage));
-
-        view.Emit(new RunEntryAction(RunEntryActionKind.Back));
-        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.MainMenu));
-        Assert.That(store.Current, Is.Null);
-    }
-
-    /// <summary>地图节点动作只调用 RunFlow；生成的 setup 与进入 BattleScene 的目标仍来自 Run。</summary>
-    [Test]
-    public void Map_EnterBattleNode_UsesRunFlowAndDisablesNodeImmediately()
-    {
-        using var store = new RunStateStore();
-        using var localeChanges = new Subject<Locale>();
-        var scenes = new RecordingSceneFlow();
-        var flow = CreateFlow(store, scenes, randomRootSeed: 303u);
-        flow.CreateNewRun(heroTemplateId: 1001);
-        var view = new RecordingRunEntryView();
-        using var presenter = new RunEntryPresenter(
-            view,
-            store,
-            flow,
-            CreateTables,
-            Localize,
-            localeChanges);
-
-        presenter.Initialize();
-        view.Emit(new RunEntryAction(RunEntryActionKind.EnterBattle));
-
-        Assert.That(store.Current.NodeStatus, Is.EqualTo(RunNodeStatus.InBattle));
-        Assert.That(store.Current.ActiveBattle.HeroTemplateId, Is.EqualTo(1001));
-        Assert.That(view.LastModel.BattleNodeInteractable, Is.False);
-        Assert.That(scenes.LoadedAddresses, Is.EqualTo(new[] { RunSceneAddresses.Battle }));
-    }
-
-    /// <summary>失败页重开只委托 RunFlow，恢复 snapshot 并以不同 seed 进入全新 BattleScene。</summary>
-    [Test]
-    public async System.Threading.Tasks.Task Failure_RestartBattle_RestoresSnapshotAndUsesNewSeed()
-    {
-        using var store = new RunStateStore();
-        using var localeChanges = new Subject<Locale>();
-        var scenes = new RecordingSceneFlow();
-        var flow = CreateFlow(store, scenes, randomRootSeed: 404u);
-        flow.CreateNewRun(heroTemplateId: 1002);
-        RunBattleInput failedInput = await flow.EnterBattleNodeAsync();
-        RunBattleId battleId = flow.BindBattleAttempt(flow.CreateBattleSetupOptions());
-        await flow.HandleBattleResultAsync(
-            battleId,
-            CreateBattleResult(BattleResultKind.Defeat, heroTemplateId: 1002, health: 0, maxHealth: 90));
-        scenes.LoadedAddresses.Clear();
-        var view = new RecordingRunEntryView();
-        using var presenter = new RunEntryPresenter(
-            view,
-            store,
-            flow,
-            CreateTables,
-            Localize,
-            localeChanges);
-
-        presenter.Initialize();
-        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Failure));
-
-        view.Emit(new RunEntryAction(RunEntryActionKind.RestartBattle));
-
-        Assert.That(store.Current.NodeStatus, Is.EqualTo(RunNodeStatus.InBattle));
-        Assert.That(store.Current.ActiveBattle.InitialHealth, Is.EqualTo(90));
-        Assert.That(store.Current.ActiveBattle.RandomSeed, Is.Not.EqualTo(failedInput.RandomSeed));
-        Assert.That(scenes.LoadedAddresses, Is.EqualTo(new[] { RunSceneAddresses.Battle }));
-    }
-
-    /// <summary>完成节点永远不可再次进入；语言变化仅重新投影当前 Run，不产生第二份业务状态。</summary>
-    [Test]
-    public async System.Threading.Tasks.Task CompletedMap_LocaleChanged_ReprojectsWithoutReopeningNode()
-    {
-        using var store = new RunStateStore();
-        using var localeChanges = new Subject<Locale>();
-        var scenes = new RecordingSceneFlow();
-        var flow = CreateFlow(store, scenes, randomRootSeed: 505u);
-        flow.CreateNewRun(heroTemplateId: 1001);
-        await flow.EnterBattleNodeAsync();
-        RunBattleId battleId = flow.BindBattleAttempt(flow.CreateBattleSetupOptions());
-        await flow.HandleBattleResultAsync(
-            battleId,
-            CreateBattleResult(BattleResultKind.Victory, heroTemplateId: 1001, health: 31, maxHealth: 80));
-        scenes.LoadedAddresses.Clear();
-        var view = new RecordingRunEntryView();
-        int localizationVersion = 0;
-        string VersionedLocalize(string key, IReadOnlyDictionary<string, object> arguments)
-        {
-            // 以版本前缀模拟语言切换后的重新投影。
-            return $"v{localizationVersion}:{Localize(key, arguments)}";
-        }
-
-        using var presenter = new RunEntryPresenter(
-            view,
-            store,
-            flow,
-            CreateTables,
-            VersionedLocalize,
-            localeChanges);
-        presenter.Initialize();
-        RunState completed = store.Current;
-        int initialRenderCount = view.RenderCount;
-        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Map));
-        Assert.That(view.LastModel.BattleNodeCompleted, Is.True);
-        Assert.That(view.LastModel.BattleNodeInteractable, Is.False);
-        Assert.That(
-            view.LastModel.GetText(RunEntryTextSlot.Cleared),
-            Is.EqualTo("v0:节点已清除、后续内容未接入"));
-
-        view.Emit(new RunEntryAction(RunEntryActionKind.EnterBattle));
-        localizationVersion = 1;
-        localeChanges.OnNext(null);
-
-        Assert.That(store.Current, Is.SameAs(completed));
-        Assert.That(scenes.LoadedAddresses, Is.Empty);
-        Assert.That(view.RenderCount, Is.EqualTo(initialRenderCount + 1));
-        Assert.That(view.LastModel.GetText(RunEntryTextSlot.MapTitle), Does.StartWith("v1:"));
-    }
-
-    /// <summary>场景释放 Presenter 后，旧 View、RunState 与语言事件都不得再触发渲染。</summary>
-    [Test]
-    public void Dispose_UnsubscribesViewStateAndLocaleCallbacks()
-    {
-        using var store = new RunStateStore();
-        using var localeChanges = new Subject<Locale>();
-        var view = new RecordingRunEntryView();
-        var flow = CreateFlow(store, new RecordingSceneFlow(), randomRootSeed: 606u);
-        var presenter = new RunEntryPresenter(
-            view,
-            store,
-            flow,
-            CreateTables,
-            Localize,
-            localeChanges);
-        presenter.Initialize();
-        int renderedBeforeDispose = view.RenderCount;
-
-        presenter.Dispose();
-        view.Emit(new RunEntryAction(RunEntryActionKind.StartGame));
-        store.CreateNewRun(new RunCreationOptions(
-            new RunId(Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")),
-            heroTemplateId: 1001,
-            initialHealth: 80,
-            maxHealth: 80,
-            deckTemplateId: 1001,
-            encounterTemplateId: 5001,
-            randomRootSeed: 606u));
-        localeChanges.OnNext(null);
-
-        Assert.That(view.RenderCount, Is.EqualTo(renderedBeforeDispose));
-    }
-
-    /// <summary>创建带确定 Run 身份、配置与随机输入的测试编排。</summary>
+    /// <summary>创建带确定 Run 身份、配置、地图 seed 与可替换存档 port 的测试编排。</summary>
     private static RunFlowService CreateFlow(
         RunStateStore store,
         RecordingSceneFlow scenes,
@@ -483,7 +545,7 @@ public sealed class RunEntryPresenterTests
             saveStore ?? new InMemoryRunSaveStore());
     }
 
-    /// <summary>创建两名候选 Hero、两副起始牌组与唯一遭遇的最小 Luban 表。</summary>
+    /// <summary>创建两名候选 Hero、两副起始牌组与 G3 profile 遭遇的最小 Luban 表。</summary>
     private static Tables CreateTables()
     {
         var data = new Dictionary<string, JArray>
@@ -493,15 +555,19 @@ public sealed class RunEntryPresenterTests
                 "{\"id\":1002,\"name_i18n_key\":\"battle.hero.machine_gunner.name\",\"view_prefab_key\":\"pfb_char_player\",\"max_health\":90,\"base_strength\":2,\"initial_deck_id\":1002,\"initial_energy\":4,\"max_energy\":4,\"energy_gain_per_round\":4,\"initial_ammo\":3,\"max_ammo\":6,\"ammo_gain_per_round\":1,\"runtime_profile\":1}]"),
             ["battle_tbdeck"] = JArray.Parse(
                 "[{\"id\":1001,\"card_template_ids\":[3002]},{\"id\":1002,\"card_template_ids\":[3003]}]"),
+            ["battle_tbenemy"] = JArray.Parse(
+                "[{\"id\":2001,\"name_i18n_key\":\"battle.enemy.test_slime.name\",\"max_health\":20,\"base_strength\":0,\"view_prefab_key\":\"pfb_char_enemy\",\"behavior_group_id\":6001}," +
+                "{\"id\":2101,\"name_i18n_key\":\"battle.enemy.test_sentry.name\",\"max_health\":30,\"base_strength\":0,\"view_prefab_key\":\"pfb_char_enemy\",\"behavior_group_id\":6101}]"),
             ["battle_tbencounter"] = JArray.Parse(
-                "[{\"id\":5001,\"enemy_template_ids\":[2001]}]"),
+                "[{\"id\":5001,\"enemy_template_ids\":[2001]}," +
+                "{\"id\":5002,\"enemy_template_ids\":[2101]}]"),
         };
 
         return new Tables(tableName =>
             data.TryGetValue(tableName, out JArray rows) ? rows : new JArray());
     }
 
-    /// <summary>以稳定键映射模拟当前语言，并保留 Smart 参数用于生命文本断言。</summary>
+    /// <summary>以稳定键映射模拟当前语言，并保留生命与缺失配置参数。</summary>
     private static string Localize(
         string key,
         IReadOnlyDictionary<string, object> arguments)
@@ -512,10 +578,12 @@ public sealed class RunEntryPresenterTests
                 return "Warrior";
             case "battle.hero.machine_gunner.name":
                 return "Machine Gunner";
+            case "battle.enemy.test_slime.name":
+                return "Test Slime";
+            case "battle.enemy.test_sentry.name":
+                return "Test Sentry";
             case "run.entry.map.health":
                 return $"HP {arguments["current"]}/{arguments["max"]}";
-            case "run.entry.map.cleared":
-                return "节点已清除、后续内容未接入";
             case "run.entry.save.issue.missing_configuration":
                 return $"Missing {arguments["kind"]} {arguments["id"]}";
             default:
@@ -523,23 +591,76 @@ public sealed class RunEntryPresenterTests
         }
     }
 
-    /// <summary>创建一份可恢复的稳定 S0 文档，允许单独替换引用 ID 制造失配。</summary>
-    private static RunSaveDocument CreateSaveDocument(
-        int heroTemplateId = 1001,
-        int deckTemplateId = 1001,
-        int encounterTemplateId = 5001)
+    /// <summary>由真实生成器和初始路径创建一份可继续的 schema v2 文档。</summary>
+    private static RunSaveDocument CreateMapReadyDocument()
     {
-        return new RunSaveDocument(
-            RunSaveDocument.CurrentSchemaVersion,
-            "13572468-2468-1357-2468-135724681357",
-            heroTemplateId,
-            currentHealth: 46,
+        using var store = new RunStateStore();
+        return RunSaveDocumentMapper.Create(CreateDirectRun(store, randomRootSeed: 919191u));
+    }
+
+    /// <summary>由真实生成器、已承诺 Combat 与 Defeat 创建冷启动终局文档。</summary>
+    private static RunSaveDocument CreateTerminalDocument()
+    {
+        using var store = new RunStateStore();
+        RunState state = CreateDirectRun(store, randomRootSeed: 828282u);
+        MapNodeId combatNodeId = MapReachability.GetSelectableNodeIds(
+                state.MapDefinition,
+                state.CurrentNodeId,
+                MapTraversalMode.Ordinary)
+            .First();
+        store.CommitNode(combatNodeId);
+        RunBattleInput input = store.BeginCommittedBattle();
+        RunState terminal = store.RecordDefeat(
+            input.BattleId,
+            state.HeroTemplateId,
+            settledHealth: 0,
+            state.MaxHealth);
+        return RunSaveDocumentMapper.Create(terminal);
+    }
+
+    /// <summary>绕过场景编排，仅以当前 G3 profile 创建合法初始 Run 事实供文档测试使用。</summary>
+    private static RunState CreateDirectRun(RunStateStore store, uint randomRootSeed)
+    {
+        MapDefinition map = ActMapGenerator.Generate(
+            TinySpireActMapProfiles.Current,
+            RunRandomDomains.DeriveMapSeed(randomRootSeed));
+        return store.CreateNewRun(new RunCreationOptions(
+            new RunId(Guid.Parse("13572468-2468-1357-2468-135724681357")),
+            heroTemplateId: 1001,
+            initialHealth: 80,
             maxHealth: 80,
-            deckTemplateId,
-            encounterTemplateId,
-            randomRootSeed: 919191u,
-            RunSaveNodeStatus.Available,
-            battleAttemptSequence: 0);
+            deckTemplateId: 1001,
+            randomRootSeed,
+            map));
+    }
+
+    /// <summary>从完整地图投影中读取第一个指定状态与种类的节点身份。</summary>
+    private static MapNodeId GetFirstProjectedNodeId(
+        RunEntryViewModel model,
+        RunMapNodePresentationState state,
+        MapNodeKind kind)
+    {
+        RunMapNodeViewModel node = model.Map.Nodes.First(value =>
+            value.State == state && value.Kind == kind);
+        return new MapNodeId(node.NodeId);
+    }
+
+    /// <summary>消费当前唯一 Battle attempt，并发布指定胜负与结算生命。</summary>
+    private static async Task CompleteActiveBattleAsync(
+        RunFlowService flow,
+        RunStateStore store,
+        BattleResultKind kind,
+        int settledHealth)
+    {
+        RunBattleInput input = store.Current.ActiveBattle;
+        RunBattleId battleId = flow.BindBattleAttempt(flow.CreateBattleSetupOptions());
+        await flow.HandleBattleResultAsync(
+            battleId,
+            CreateBattleResult(
+                kind,
+                input.HeroTemplateId,
+                settledHealth,
+                input.MaxHealth));
     }
 
     /// <summary>冻结一个单玩家稳定 BattleResult，模拟队列完成表现后的唯一发布。</summary>
@@ -563,26 +684,22 @@ public sealed class RunEntryPresenterTests
             });
     }
 
-    /// <summary>记录 View 唯一动作流和最后一次不可变投影。</summary>
+    /// <summary>记录 View 唯一动作流与最后一次不可变投影。</summary>
     private sealed class RecordingRunEntryView : IRunEntryView
     {
         /// <summary>Presenter 订阅的唯一入口动作事件。</summary>
         public event Action<RunEntryAction> ActionRequested;
 
-        /// <summary>最后一次收到的不可变页面投影。</summary>
+        /// <summary>最后一次收到的完整页面投影。</summary>
         public RunEntryViewModel LastModel { get; private set; }
-
-        /// <summary>累计渲染次数，用于验证语言变化只重投影。</summary>
-        public int RenderCount { get; private set; }
 
         /// <summary>保存 Presenter 提交的完整投影。</summary>
         public void Render(RunEntryViewModel model)
         {
             LastModel = model;
-            RenderCount++;
         }
 
-        /// <summary>模拟单个 UI 控件发出业务意图，不直接写 Run。</summary>
+        /// <summary>模拟 UI 控件发布命令，不直接写 Run。</summary>
         public void Emit(RunEntryAction action)
         {
             ActionRequested?.Invoke(action);
@@ -595,7 +712,7 @@ public sealed class RunEntryPresenterTests
         /// <summary>按调用顺序保存目标场景地址。</summary>
         public List<string> LoadedAddresses { get; } = new List<string>();
 
-        /// <summary>记录场景目标并同步完成测试期请求。</summary>
+        /// <summary>记录目标并同步完成测试期请求。</summary>
         public UniTask LoadSceneWithLoadingAsync(string targetSceneAddress)
         {
             LoadedAddresses.Add(targetSceneAddress);
@@ -603,12 +720,12 @@ public sealed class RunEntryPresenterTests
         }
     }
 
-    /// <summary>为测试返回一次确定的 Run 身份与根随机输入。</summary>
+    /// <summary>每次返回同一确定 Run 身份与根随机输入。</summary>
     private sealed class FixedRunEntropySource : IRunEntropySource
     {
         private readonly RunEntropy _entropy;
 
-        /// <summary>保存应返回的确定输入。</summary>
+        /// <summary>冻结测试应返回的确定输入。</summary>
         public FixedRunEntropySource(RunEntropy entropy)
         {
             _entropy = entropy;
@@ -621,62 +738,25 @@ public sealed class RunEntryPresenterTests
         }
     }
 
-    /// <summary>记录 entropy 请求次数，证明存档重试不会偷偷创建第二个 Run。</summary>
-    private sealed class CountingRunEntropySource : IRunEntropySource
-    {
-        private readonly RunEntropy _entropy;
-
-        /// <summary>累计业务请求随机根输入的次数。</summary>
-        public int NextCount { get; private set; }
-
-        /// <summary>保存每次应返回的同一确定输入。</summary>
-        public CountingRunEntropySource(RunEntropy entropy)
-        {
-            _entropy = entropy;
-        }
-
-        /// <summary>记录请求并返回确定输入。</summary>
-        public RunEntropy Next()
-        {
-            NextCount++;
-            return _entropy;
-        }
-    }
-
-    /// <summary>以脚本化 load/commit/delete 结果验证 Presenter 的系统边界行为。</summary>
+    /// <summary>以脚本化提交结果保存最近成功文档，供失败与删除边界测试。</summary>
     private sealed class ScriptedRunSaveStore : IRunSaveStore
     {
         private readonly Queue<RunSaveCommitResult> _commitResults =
             new Queue<RunSaveCommitResult>();
         private RunSaveDocument _document;
-        private RunSaveLoadResult _forcedLoadResult;
 
-        /// <summary>累计 commit 调用次数。</summary>
-        public int CommitCount { get; private set; }
-
-        /// <summary>累计玩家确认后的 delete 调用次数。</summary>
+        /// <summary>累计玩家确认后的删除次数。</summary>
         public int DeleteCount { get; private set; }
-
-        /// <summary>记录每次提交的文档引用，供重试身份断言。</summary>
-        public List<RunSaveDocument> CommittedDocuments { get; } =
-            new List<RunSaveDocument>();
 
         /// <summary>创建空单槽。</summary>
         public ScriptedRunSaveStore()
         {
         }
 
-        /// <summary>创建含一份最近成功检查点的单槽。</summary>
+        /// <summary>创建含最近成功检查点的单槽。</summary>
         public ScriptedRunSaveStore(RunSaveDocument document)
         {
             _document = document ?? throw new ArgumentNullException(nameof(document));
-        }
-
-        /// <summary>创建每次 load 都先返回指定故障的单槽。</summary>
-        public ScriptedRunSaveStore(RunSaveLoadResult forcedLoadResult)
-        {
-            _forcedLoadResult = forcedLoadResult
-                ?? throw new ArgumentNullException(nameof(forcedLoadResult));
         }
 
         /// <summary>安排下一次 commit 的确定结果。</summary>
@@ -685,22 +765,17 @@ public sealed class RunEntryPresenterTests
             _commitResults.Enqueue(result ?? throw new ArgumentNullException(nameof(result)));
         }
 
-        /// <summary>返回脚本化故障、当前成功检查点或空槽。</summary>
+        /// <summary>返回当前最近成功检查点或空槽。</summary>
         public RunSaveLoadResult Load()
         {
-            if (_forcedLoadResult != null)
-                return _forcedLoadResult;
-
             return _document == null
                 ? RunSaveLoadResult.NotFound()
                 : RunSaveLoadResult.Succeeded(_document);
         }
 
-        /// <summary>按队列返回提交结果，并只在成功时替换最近检查点。</summary>
+        /// <summary>按队列返回结果，并只在成功时替换最近检查点。</summary>
         public RunSaveCommitResult Commit(RunSaveDocument document)
         {
-            CommitCount++;
-            CommittedDocuments.Add(document);
             RunSaveCommitResult result = _commitResults.Count > 0
                 ? _commitResults.Dequeue()
                 : RunSaveCommitResult.Succeeded();
@@ -709,12 +784,11 @@ public sealed class RunEntryPresenterTests
             return result;
         }
 
-        /// <summary>模拟玩家确认后的幂等删除，并清除故障发现结果。</summary>
+        /// <summary>模拟玩家确认后的幂等删除。</summary>
         public RunSaveDeleteResult Delete()
         {
             DeleteCount++;
             _document = null;
-            _forcedLoadResult = null;
             return RunSaveDeleteResult.Succeeded();
         }
     }

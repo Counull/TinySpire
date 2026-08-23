@@ -34,9 +34,8 @@ public sealed class AtomicJsonRunSaveStoreTests
         var store = new AtomicJsonRunSaveStore(_testDirectory);
         RunSaveDocument document = CreateDocument(
             "11111111-aaaa-bbbb-cccc-222222222222",
-            RunSaveNodeStatus.Available,
-            currentHealth: 73,
-            battleAttemptSequence: 0);
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 73);
 
         RunSaveCommitResult commit = store.Commit(document);
         RunSaveLoadResult load = store.Load();
@@ -58,14 +57,12 @@ public sealed class AtomicJsonRunSaveStoreTests
         var store = new AtomicJsonRunSaveStore(_testDirectory);
         RunSaveDocument initial = CreateDocument(
             "10101010-aaaa-bbbb-cccc-202020202020",
-            RunSaveNodeStatus.Available,
-            currentHealth: 80,
-            battleAttemptSequence: 0);
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 80);
         RunSaveDocument completed = CreateDocument(
             "10101010-aaaa-bbbb-cccc-202020202020",
-            RunSaveNodeStatus.Completed,
-            currentHealth: 23,
-            battleAttemptSequence: 1);
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 23);
 
         Assert.That(store.Commit(initial).Status, Is.EqualTo(RunSaveCommitStatus.Success));
 
@@ -74,9 +71,8 @@ public sealed class AtomicJsonRunSaveStoreTests
 
         Assert.That(replacement.Status, Is.EqualTo(RunSaveCommitStatus.Success));
         Assert.That(load.Status, Is.EqualTo(RunSaveLoadStatus.Success));
-        Assert.That(load.Document.NodeStatus, Is.EqualTo(RunSaveNodeStatus.Completed));
+        Assert.That(load.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.MapReady));
         Assert.That(load.Document.CurrentHealth, Is.EqualTo(23));
-        Assert.That(load.Document.BattleAttemptSequence, Is.EqualTo(1));
         Assert.That(File.Exists(GetTemporaryPath()), Is.False);
     }
 
@@ -89,9 +85,8 @@ public sealed class AtomicJsonRunSaveStoreTests
             new MoveFailingFileSystem());
         RunSaveDocument document = CreateDocument(
             "30303030-aaaa-bbbb-cccc-404040404040",
-            RunSaveNodeStatus.Available,
-            currentHealth: 80,
-            battleAttemptSequence: 0);
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 80);
 
         RunSaveCommitResult commit = store.Commit(document);
 
@@ -111,9 +106,8 @@ public sealed class AtomicJsonRunSaveStoreTests
         Assert.That(
             initialStore.Commit(CreateDocument(
                 "50505050-aaaa-bbbb-cccc-606060606060",
-                RunSaveNodeStatus.Available,
-                currentHealth: 80,
-                battleAttemptSequence: 0)).Status,
+                RunSaveProgressPhase.MapReady,
+                currentHealth: 80)).Status,
             Is.EqualTo(RunSaveCommitStatus.Success));
         var failingStore = new AtomicJsonRunSaveStore(
             _testDirectory,
@@ -133,9 +127,8 @@ public sealed class AtomicJsonRunSaveStoreTests
         var initialStore = new AtomicJsonRunSaveStore(_testDirectory);
         RunSaveDocument oldDocument = CreateDocument(
             "33333333-aaaa-bbbb-cccc-444444444444",
-            RunSaveNodeStatus.Available,
-            currentHealth: 80,
-            battleAttemptSequence: 0);
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 80);
         Assert.That(
             initialStore.Commit(oldDocument).Status,
             Is.EqualTo(RunSaveCommitStatus.Success));
@@ -146,9 +139,8 @@ public sealed class AtomicJsonRunSaveStoreTests
             new ReplaceFailingFileSystem());
         RunSaveDocument newDocument = CreateDocument(
             "55555555-aaaa-bbbb-cccc-666666666666",
-            RunSaveNodeStatus.Completed,
-            currentHealth: 29,
-            battleAttemptSequence: 1);
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 29);
 
         RunSaveCommitResult commit = failingStore.Commit(newDocument);
         byte[] currentBytes = File.ReadAllBytes(livePath);
@@ -161,6 +153,185 @@ public sealed class AtomicJsonRunSaveStoreTests
         Assert.That(load.HasPendingTemporaryFile, Is.True);
     }
 
+    /// <summary>终局替换失败后冷启动必须恢复已校验临时终局，不能回退到旧可继续档。</summary>
+    [Test]
+    public void Commit_TerminalReplacementFails_ColdLoadReturnsTerminalTemporary()
+    {
+        var initialStore = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument oldDocument = CreateDocument(
+            "12121212-aaaa-bbbb-cccc-343434343434",
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 46);
+        Assert.That(
+            initialStore.Commit(oldDocument).Status,
+            Is.EqualTo(RunSaveCommitStatus.Success));
+        byte[] oldLiveBytes = File.ReadAllBytes(GetLivePath());
+        var failingStore = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new ReplaceFailingFileSystem());
+        RunSaveDocument terminalDocument = CreateDocument(
+            oldDocument.RunId,
+            RunSaveProgressPhase.Terminal,
+            currentHealth: 0);
+
+        RunSaveCommitResult commit = failingStore.Commit(terminalDocument);
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
+        Assert.That(File.ReadAllBytes(GetLivePath()), Is.EqualTo(oldLiveBytes));
+        Assert.That(File.Exists(GetTerminalIntentPath()), Is.True);
+        File.Delete(GetTemporaryPath());
+        RunSaveLoadResult coldLoad = new AtomicJsonRunSaveStore(_testDirectory).Load();
+        Assert.That(coldLoad.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(coldLoad.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.Terminal));
+        Assert.That(coldLoad.Document.TerminalReason, Is.EqualTo(RunSaveTerminalReason.Defeat));
+        Assert.That(coldLoad.Document.CurrentHealth, Is.Zero);
+        Assert.That(coldLoad.HasPendingTemporaryFile, Is.True);
+    }
+
+    /// <summary>终局意图必须先耐久写入并严格回读；意图损坏时不能开始通用临时档或覆盖旧正式档。</summary>
+    [Test]
+    public void Commit_TerminalIntentWriteIsCorrupt_StopsBeforeTemporaryAndLivePublication()
+    {
+        var initialStore = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument liveDocument = CreateDocument(
+            "13131313-aaaa-bbbb-cccc-353535353535",
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 42);
+        Assert.That(initialStore.Commit(liveDocument).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        byte[] liveBytes = File.ReadAllBytes(GetLivePath());
+        var corruptingStore = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new CorruptingTerminalIntentWriteFileSystem(GetTerminalIntentPath()));
+        RunSaveDocument terminalDocument = CreateDocument(
+            liveDocument.RunId,
+            RunSaveProgressPhase.Terminal,
+            currentHealth: 0);
+
+        RunSaveCommitResult commit = corruptingStore.Commit(terminalDocument);
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.InvalidDocument));
+        Assert.That(File.ReadAllBytes(GetLivePath()), Is.EqualTo(liveBytes));
+        Assert.That(File.Exists(GetTemporaryPath()), Is.False);
+        Assert.That(File.ReadAllText(GetTerminalIntentPath()), Is.EqualTo("{"));
+    }
+
+    /// <summary>同一终局提交重试必须复用既有有效意图，不能用第二次写入风险覆盖可冷恢复的证据。</summary>
+    [Test]
+    public void Commit_TerminalRetryWithValidatedIntent_ReusesIntentBeforeAnotherReplaceFailure()
+    {
+        var initialStore = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument oldLive = CreateDocument(
+            "17171717-aaaa-bbbb-cccc-393939393939",
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 26);
+        Assert.That(initialStore.Commit(oldLive).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument terminalDocument = CreateDocument(
+            oldLive.RunId,
+            RunSaveProgressPhase.Terminal,
+            currentHealth: 0);
+        var firstAttempt = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new ReplaceFailingFileSystem());
+        Assert.That(
+            firstAttempt.Commit(terminalDocument).Status,
+            Is.EqualTo(RunSaveCommitStatus.IoFailure));
+        byte[] durableIntentBytes = File.ReadAllBytes(GetTerminalIntentPath());
+        var retry = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new CorruptingIntentAndReplaceFailingFileSystem(GetTerminalIntentPath()));
+
+        RunSaveCommitResult retryCommit = retry.Commit(terminalDocument);
+        RunSaveLoadResult coldLoad = new AtomicJsonRunSaveStore(_testDirectory).Load();
+
+        Assert.That(retryCommit.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
+        Assert.That(File.ReadAllBytes(GetTerminalIntentPath()), Is.EqualTo(durableIntentBytes));
+        Assert.That(coldLoad.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(coldLoad.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.Terminal));
+        Assert.That(coldLoad.Document.TerminalReason, Is.EqualTo(RunSaveTerminalReason.Defeat));
+    }
+
+    /// <summary>存在有效终局意图时必须恢复失败页事实，即使磁盘上仍是旧的可继续正式档。</summary>
+    [Test]
+    public void Load_ValidTerminalIntentWithOldLive_ReturnsTerminal()
+    {
+        var store = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument oldLive = CreateDocument(
+            "14141414-aaaa-bbbb-cccc-363636363636",
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 55);
+        Assert.That(store.Commit(oldLive).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument terminalDocument = CreateDocument(
+            oldLive.RunId,
+            RunSaveProgressPhase.Terminal,
+            currentHealth: 0);
+        File.WriteAllText(
+            GetTerminalIntentPath(),
+            RunSaveDocumentCodec.Serialize(terminalDocument));
+
+        RunSaveLoadResult load = store.Load();
+
+        Assert.That(load.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(load.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.Terminal));
+        Assert.That(load.Document.TerminalReason, Is.EqualTo(RunSaveTerminalReason.Defeat));
+        Assert.That(load.Document.CurrentHealth, Is.Zero);
+        Assert.That(load.HasPendingTemporaryFile, Is.True);
+    }
+
+    /// <summary>损坏的终局意图不能回退读取旧可继续正式档，必须 fail-closed 为中断提交。</summary>
+    [Test]
+    public void Load_CorruptTerminalIntentWithValidOldLive_ReturnsInterruptedCommit()
+    {
+        var store = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument oldLive = CreateDocument(
+            "15151515-aaaa-bbbb-cccc-373737373737",
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 64);
+        Assert.That(store.Commit(oldLive).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        File.WriteAllText(GetTerminalIntentPath(), "{");
+
+        RunSaveLoadResult load = store.Load();
+
+        Assert.That(load.Status, Is.EqualTo(RunSaveLoadStatus.InterruptedCommit));
+        Assert.That(load.Document, Is.Null);
+        Assert.That(load.HasStoredData, Is.True);
+        Assert.That(load.HasPendingTemporaryFile, Is.True);
+        Assert.That(load.Detail, Does.Contain("terminal intent"));
+        Assert.That(File.Exists(GetLivePath()), Is.True);
+    }
+
+    /// <summary>删除正式档失败时不得先清终局意图或临时档，冷启动仍必须恢复终局而非旧 Continue。</summary>
+    [Test]
+    public void Delete_LiveDeleteFails_PreservesTerminalArtifactsAndColdLoadReturnsTerminal()
+    {
+        var store = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument oldLive = CreateDocument(
+            "16161616-aaaa-bbbb-cccc-383838383838",
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 31);
+        Assert.That(store.Commit(oldLive).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument terminalDocument = CreateDocument(
+            oldLive.RunId,
+            RunSaveProgressPhase.Terminal,
+            currentHealth: 0);
+        string terminalJson = RunSaveDocumentCodec.Serialize(terminalDocument);
+        File.WriteAllText(GetTerminalIntentPath(), terminalJson);
+        File.WriteAllText(GetTemporaryPath(), terminalJson);
+        var failingStore = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new LiveDeleteFailingFileSystem(GetLivePath()));
+
+        RunSaveDeleteResult delete = failingStore.Delete();
+        RunSaveLoadResult coldLoad = new AtomicJsonRunSaveStore(_testDirectory).Load();
+
+        Assert.That(delete.Status, Is.EqualTo(RunSaveDeleteStatus.IoFailure));
+        Assert.That(File.Exists(GetLivePath()), Is.True);
+        Assert.That(File.Exists(GetTerminalIntentPath()), Is.True);
+        Assert.That(File.Exists(GetTemporaryPath()), Is.True);
+        Assert.That(coldLoad.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(coldLoad.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.Terminal));
+        Assert.That(coldLoad.Document.TerminalReason, Is.EqualTo(RunSaveTerminalReason.Defeat));
+    }
+
     /// <summary>临时文件若在写入边界损坏，提交必须重读识别并在替换前拒绝它。</summary>
     [Test]
     public void Commit_TemporaryJsonIsInvalid_ValidatesBeforeReplacingLiveFile()
@@ -168,9 +339,8 @@ public sealed class AtomicJsonRunSaveStoreTests
         var initialStore = new AtomicJsonRunSaveStore(_testDirectory);
         RunSaveDocument oldDocument = CreateDocument(
             "77777777-aaaa-bbbb-cccc-888888888888",
-            RunSaveNodeStatus.Available,
-            currentHealth: 61,
-            battleAttemptSequence: 0);
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 61);
         Assert.That(
             initialStore.Commit(oldDocument).Status,
             Is.EqualTo(RunSaveCommitStatus.Success));
@@ -181,9 +351,8 @@ public sealed class AtomicJsonRunSaveStoreTests
             new CorruptingTemporaryWriteFileSystem());
         RunSaveDocument newDocument = CreateDocument(
             "99999999-aaaa-bbbb-cccc-aaaaaaaaaaaa",
-            RunSaveNodeStatus.Completed,
-            currentHealth: 11,
-            battleAttemptSequence: 1);
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 11);
 
         RunSaveCommitResult commit = corruptingStore.Commit(newDocument);
 
@@ -258,9 +427,8 @@ public sealed class AtomicJsonRunSaveStoreTests
         string temporaryPath = GetTemporaryPath();
         string json = RunSaveDocumentCodec.Serialize(CreateDocument(
             "bbbbbbbb-aaaa-bbbb-cccc-cccccccccccc",
-            RunSaveNodeStatus.Available,
-            currentHealth: 80,
-            battleAttemptSequence: 0));
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 80));
         File.WriteAllText(temporaryPath, json);
         var store = new AtomicJsonRunSaveStore(_testDirectory);
 
@@ -275,6 +443,53 @@ public sealed class AtomicJsonRunSaveStoreTests
         Assert.That(File.ReadAllText(temporaryPath), Is.EqualTo(json));
     }
 
+    /// <summary>只有完整终局临时档时也必须恢复失败页所需事实，同时保留临时物供后续确认删除。</summary>
+    [Test]
+    public void Load_ValidatedTerminalTemporaryOnly_ReturnsTerminalWithoutMutation()
+    {
+        RunSaveDocument terminalDocument = CreateDocument(
+            "cdcdcdcd-aaaa-bbbb-cccc-efefefefefef",
+            RunSaveProgressPhase.Terminal,
+            currentHealth: 0);
+        string terminalJson = RunSaveDocumentCodec.Serialize(terminalDocument);
+        File.WriteAllText(GetTemporaryPath(), terminalJson);
+        var store = new AtomicJsonRunSaveStore(_testDirectory);
+
+        RunSaveLoadResult load = store.Load();
+
+        Assert.That(load.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(load.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.Terminal));
+        Assert.That(load.Document.TerminalReason, Is.EqualTo(RunSaveTerminalReason.Defeat));
+        Assert.That(load.HasPendingTemporaryFile, Is.True);
+        Assert.That(File.Exists(GetLivePath()), Is.False);
+        Assert.That(File.ReadAllText(GetTemporaryPath()), Is.EqualTo(terminalJson));
+    }
+
+    /// <summary>损坏临时物不能遮蔽或改写有效正式档，正式稳定态仍可读取并携带诊断标记。</summary>
+    [Test]
+    public void Load_CorruptTemporaryWithValidLive_ReturnsUnchangedLiveDocument()
+    {
+        var store = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument liveDocument = CreateDocument(
+            "abababab-aaaa-bbbb-cccc-cdcdcdcdcdcd",
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 37);
+        Assert.That(store.Commit(liveDocument).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        byte[] liveBytes = File.ReadAllBytes(GetLivePath());
+        File.WriteAllText(GetTemporaryPath(), "{");
+
+        RunSaveLoadResult load = store.Load();
+
+        Assert.That(load.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(load.Document.RunId, Is.EqualTo(liveDocument.RunId));
+        Assert.That(load.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.MapReady));
+        Assert.That(load.Document.CurrentHealth, Is.EqualTo(37));
+        Assert.That(load.HasPendingTemporaryFile, Is.True);
+        Assert.That(load.Detail, Does.Contain("temporary"));
+        Assert.That(File.ReadAllBytes(GetLivePath()), Is.EqualTo(liveBytes));
+        Assert.That(File.ReadAllText(GetTemporaryPath()), Is.EqualTo("{"));
+    }
+
     /// <summary>返回 Adapter 契约冻结的版本化正式文件路径。</summary>
     private string GetLivePath()
     {
@@ -287,13 +502,19 @@ public sealed class AtomicJsonRunSaveStoreTests
         return Path.Combine(_testDirectory, AtomicJsonRunSaveStore.TemporaryFileName);
     }
 
+    /// <summary>返回与正式文件同目录的终局意图日志路径。</summary>
+    private string GetTerminalIntentPath()
+    {
+        return Path.Combine(_testDirectory, AtomicJsonRunSaveStore.TerminalIntentFileName);
+    }
+
     /// <summary>建立字段稳定且互不共享的测试存档文档。</summary>
     private static RunSaveDocument CreateDocument(
         string runId,
-        RunSaveNodeStatus nodeStatus,
-        int currentHealth,
-        int battleAttemptSequence)
+        RunSaveProgressPhase progressPhase,
+        int currentHealth)
     {
+        bool isTerminal = progressPhase == RunSaveProgressPhase.Terminal;
         return new RunSaveDocument(
             RunSaveDocument.CurrentSchemaVersion,
             runId,
@@ -301,10 +522,15 @@ public sealed class AtomicJsonRunSaveStoreTests
             currentHealth,
             maxHealth: 80,
             deckTemplateId: 1001,
-            encounterTemplateId: 5001,
             randomRootSeed: 123456789u,
-            nodeStatus,
-            battleAttemptSequence);
+            mapProfileId: "tinyspire.act1.g3.v1",
+            mapGeneratorVersion: 1,
+            mapSeed: 987654321u,
+            mapFingerprint: new string('a', 64),
+            pathNodeIds: new[] { "start" },
+            progressPhase,
+            committedNodeId: isTerminal ? "layer-1-slot-0" : null,
+            terminalReason: isTerminal ? RunSaveTerminalReason.Defeat : (RunSaveTerminalReason?)null);
     }
 
     private class TestRunSaveFileSystem : IRunSaveFileSystem
@@ -385,6 +611,78 @@ public sealed class AtomicJsonRunSaveStoreTests
         public override void WriteAllTextDurably(string path, string contents)
         {
             File.WriteAllText(path, "{");
+        }
+    }
+
+    private sealed class CorruptingTerminalIntentWriteFileSystem : TestRunSaveFileSystem
+    {
+        private readonly string _terminalIntentPath;
+
+        /// <summary>建立只损坏终局意图写入、不影响后续通用临时档的故障 fake。</summary>
+        public CorruptingTerminalIntentWriteFileSystem(string terminalIntentPath)
+        {
+            _terminalIntentPath = terminalIntentPath;
+        }
+
+        /// <summary>在终局意图边界写入坏 JSON，其他路径仍按正常文本写入。</summary>
+        public override void WriteAllTextDurably(string path, string contents)
+        {
+            if (path == _terminalIntentPath)
+            {
+                File.WriteAllText(path, "{");
+                return;
+            }
+
+            base.WriteAllTextDurably(path, contents);
+        }
+    }
+
+    private sealed class CorruptingIntentAndReplaceFailingFileSystem : TestRunSaveFileSystem
+    {
+        private readonly string _terminalIntentPath;
+
+        /// <summary>建立会损坏重复意图写入并再次拒绝正式替换的组合故障 fake。</summary>
+        public CorruptingIntentAndReplaceFailingFileSystem(string terminalIntentPath)
+        {
+            _terminalIntentPath = terminalIntentPath;
+        }
+
+        /// <summary>若生产错误地重写既有意图则立刻损坏它；其他写入保持正常。</summary>
+        public override void WriteAllTextDurably(string path, string contents)
+        {
+            if (path == _terminalIntentPath)
+            {
+                File.WriteAllText(path, "{");
+                return;
+            }
+
+            base.WriteAllTextDurably(path, contents);
+        }
+
+        /// <summary>再次拒绝正式替换，使冷启动只能依赖第一次留下的有效终局意图。</summary>
+        public override void ReplaceFile(string sourcePath, string destinationPath)
+        {
+            throw new IOException("Injected retry replace failure.");
+        }
+    }
+
+    private sealed class LiveDeleteFailingFileSystem : TestRunSaveFileSystem
+    {
+        private readonly string _livePath;
+
+        /// <summary>建立只拒绝正式档删除、允许观察错误顺序的故障 fake。</summary>
+        public LiveDeleteFailingFileSystem(string livePath)
+        {
+            _livePath = livePath;
+        }
+
+        /// <summary>正式档删除稳定失败；若生产代码错误地先删其他文件则测试会留下证据。</summary>
+        public override void DeleteFile(string path)
+        {
+            if (path == _livePath)
+                throw new IOException("Injected live delete failure.");
+
+            base.DeleteFile(path);
         }
     }
 

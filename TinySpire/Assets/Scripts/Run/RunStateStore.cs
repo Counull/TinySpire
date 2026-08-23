@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using R3;
+using TinySpire.Run.Map;
 
 namespace TinySpire.Run
 {
@@ -52,9 +55,9 @@ namespace TinySpire.Run
             if (state == null)
                 return;
             if (state.ActiveBattle != null ||
-                state.BattleSnapshot != null ||
-                (state.NodeStatus != RunNodeStatus.Available &&
-                 state.NodeStatus != RunNodeStatus.Completed))
+                (state.ProgressPhase != RunProgressPhase.MapReady &&
+                 state.ProgressPhase != RunProgressPhase.BossGateReached &&
+                 state.ProgressPhase != RunProgressPhase.Terminal))
             {
                 throw new InvalidOperationException(
                     "Only a map-stable Run can be cleared outside battle.");
@@ -63,32 +66,82 @@ namespace TinySpire.Run
             _state.Value = null;
         }
 
-        /// <summary>从唯一可进入节点冻结恢复快照，并签发新的单场战斗输入。</summary>
-        public RunBattleInput BeginBattle()
+        /// <summary>按普通可达性提交下一节点；Combat 进入承诺态，Boss 只抵达稳定门。</summary>
+        public RunState CommitNode(MapNodeId nodeId)
         {
             RunState state = RequireCurrent();
-            if (state.NodeStatus != RunNodeStatus.Available ||
+            if (state.ProgressPhase != RunProgressPhase.MapReady ||
                 state.ActiveBattle != null ||
-                state.BattleSnapshot != null)
+                state.CommittedNodeId != null)
             {
-                throw new InvalidOperationException("The run battle node is not available.");
+                throw new InvalidOperationException("The Run is not ready to select a map node.");
+            }
+
+            IReadOnlyList<MapNodeId> selectableNodeIds = MapReachability.GetSelectableNodeIds(
+                state.MapDefinition,
+                state.CurrentNodeId,
+                MapTraversalMode.Ordinary);
+            if (!selectableNodeIds.Contains(nodeId))
+                throw new InvalidOperationException("The requested map node is not ordinarily selectable.");
+
+            MapNode node = state.MapDefinition.GetNode(nodeId);
+            switch (node.Kind)
+            {
+                case MapNodeKind.Combat:
+                    Publish(new RunState(
+                        state,
+                        state.CurrentHealth,
+                        state.PathNodeIds,
+                        RunProgressPhase.EncounterCommitted,
+                        node.Id,
+                        state.BattleAttemptSequence,
+                        activeBattle: null,
+                        terminalReason: null));
+                    return Current;
+                case MapNodeKind.Boss:
+                    var reachedPath = state.PathNodeIds.Concat(new[] { node.Id }).ToArray();
+                    Publish(new RunState(
+                        state,
+                        state.CurrentHealth,
+                        reachedPath,
+                        RunProgressPhase.BossGateReached,
+                        committedNodeId: null,
+                        battleAttemptSequence: state.BattleAttemptSequence,
+                        activeBattle: null,
+                        terminalReason: null));
+                    return Current;
+                default:
+                    throw new InvalidOperationException("Start cannot be selected as a destination.");
+            }
+        }
+
+        /// <summary>为已承诺的 Combat 节点签发唯一 attempt 与冻结 Encounter 输入。</summary>
+        public RunBattleInput BeginCommittedBattle()
+        {
+            RunState state = RequireCurrent();
+            if (state.ProgressPhase != RunProgressPhase.EncounterCommitted ||
+                state.CommittedNodeId == null ||
+                state.ActiveBattle != null)
+            {
+                throw new InvalidOperationException("The Run does not have a committed Combat node.");
             }
 
             int attemptSequence = checked(state.BattleAttemptSequence + 1);
-            var snapshot = new RunBattleSnapshot(state);
             uint battleSeed = DeriveBattleSeed(state.RandomRootSeed, attemptSequence);
             var input = new RunBattleInput(state, attemptSequence, battleSeed);
             Publish(new RunState(
                 state,
                 state.CurrentHealth,
-                RunNodeStatus.InBattle,
+                state.PathNodeIds,
+                RunProgressPhase.InBattle,
+                state.CommittedNodeId,
                 attemptSequence,
                 input,
-                snapshot));
+                terminalReason: null));
             return input;
         }
 
-        /// <summary>仅为当前本战尝试原子写回胜利生命，并完成唯一节点。</summary>
+        /// <summary>仅为当前节点 attempt 原子写回胜利生命，并把承诺节点追加为已完成路径。</summary>
         public RunState ApplyVictory(
             RunBattleId battleId,
             int heroTemplateId,
@@ -100,17 +153,23 @@ namespace TinySpire.Run
             if (settledHealth <= 0)
                 throw new ArgumentOutOfRangeException(nameof(settledHealth));
 
+            MapNodeId completedNodeId = state.CommittedNodeId.Value;
+            MapNodeId[] completedPath = state.PathNodeIds
+                .Concat(new[] { completedNodeId })
+                .ToArray();
             Publish(new RunState(
                 state,
                 settledHealth,
-                RunNodeStatus.Completed,
-                state.BattleAttemptSequence,
+                completedPath,
+                RunProgressPhase.MapReady,
+                committedNodeId: null,
+                battleAttemptSequence: state.BattleAttemptSequence,
                 activeBattle: null,
-                battleSnapshot: null));
+                terminalReason: null));
             return Current;
         }
 
-        /// <summary>记录当前本战失败，但拒绝把失败战斗的临时生命写入 Run。</summary>
+        /// <summary>记录当前普通战斗失败并原子进入不可继续的 Terminal(Defeat)。</summary>
         public RunState RecordDefeat(
             RunBattleId battleId,
             int heroTemplateId,
@@ -119,38 +178,19 @@ namespace TinySpire.Run
         {
             RunState state = RequireActiveBattle(battleId);
             ValidateResultPlayer(state, heroTemplateId, settledHealth, maxHealth);
-            int restoredHealth = state.BattleSnapshot.CurrentHealth;
+            if (settledHealth != 0)
+                throw new InvalidOperationException("A defeat result must settle the Run hero at zero health.");
+
             Publish(new RunState(
-                state,
-                restoredHealth,
-                RunNodeStatus.Failed,
-                state.BattleAttemptSequence,
+                previous: state,
+                currentHealth: 0,
+                pathNodeIds: state.PathNodeIds,
+                progressPhase: RunProgressPhase.Terminal,
+                committedNodeId: state.CommittedNodeId,
+                battleAttemptSequence: state.BattleAttemptSequence,
                 activeBattle: null,
-                battleSnapshot: state.BattleSnapshot));
+                terminalReason: RunTerminalReason.Defeat));
             return Current;
-        }
-
-        /// <summary>从失败页恢复进战前 snapshot，并以新的 attempt 签发重开输入。</summary>
-        public RunBattleInput RestartBattle()
-        {
-            RunState failed = RequireCurrent();
-            if (failed.NodeStatus != RunNodeStatus.Failed ||
-                failed.ActiveBattle != null ||
-                failed.BattleSnapshot == null)
-            {
-                throw new InvalidOperationException("The run does not have a failed battle to restart.");
-            }
-
-            RunBattleSnapshot snapshot = failed.BattleSnapshot;
-            ValidateSnapshotMatchesRun(failed, snapshot);
-            Publish(new RunState(
-                failed,
-                snapshot.CurrentHealth,
-                RunNodeStatus.Available,
-                failed.BattleAttemptSequence,
-                activeBattle: null,
-                battleSnapshot: null));
-            return BeginBattle();
         }
 
         /// <summary>释放 Run 事实的只读视图与唯一可写属性。</summary>
@@ -176,9 +216,9 @@ namespace TinySpire.Run
         private RunState RequireActiveBattle(RunBattleId battleId)
         {
             RunState state = RequireCurrent();
-            if (state.NodeStatus != RunNodeStatus.InBattle ||
+            if (state.ProgressPhase != RunProgressPhase.InBattle ||
                 state.ActiveBattle == null ||
-                state.BattleSnapshot == null ||
+                state.CommittedNodeId == null ||
                 state.ActiveBattle.BattleId != battleId)
             {
                 throw new InvalidOperationException("The battle result does not match the active run battle.");
@@ -200,20 +240,6 @@ namespace TinySpire.Run
                 throw new InvalidOperationException("The battle result max health does not match the run hero.");
             if (health < 0 || health > maxHealth)
                 throw new ArgumentOutOfRangeException(nameof(health));
-        }
-
-        /// <summary>确认恢复 snapshot 与当前 Run 的不可变身份和模板事实一致。</summary>
-        private static void ValidateSnapshotMatchesRun(RunState state, RunBattleSnapshot snapshot)
-        {
-            if (snapshot.RunId != state.RunId ||
-                snapshot.HeroTemplateId != state.HeroTemplateId ||
-                snapshot.MaxHealth != state.MaxHealth ||
-                snapshot.DeckTemplateId != state.DeckTemplateId ||
-                snapshot.EncounterTemplateId != state.EncounterTemplateId ||
-                snapshot.NodeStatus != RunNodeStatus.Available)
-            {
-                throw new InvalidOperationException("The battle snapshot does not belong to the current run.");
-            }
         }
 
         /// <summary>以互素步进从 Run 根种子派生正整数空间内不重复的本战种子。</summary>

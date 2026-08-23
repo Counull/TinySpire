@@ -2694,11 +2694,11 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 6047014798913547
-    m_Localized: Temporary Map
+    m_Localized: Act Map
     m_Metadata:
       m_Items: []
   - m_Id: 6047014798913548
-    m_Localized: First Battle
+    m_Localized: Encounter
     m_Metadata:
       m_Items: []
   - m_Id: 6047014798913549

@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Security;
 using System.Text;
 using TinySpire.Run;
@@ -106,10 +107,12 @@ namespace TinySpire.Infrastructure.Persistence
     {
         internal const string LiveFileName = "run-save.json";
         internal const string TemporaryFileName = "run-save.json.tmp";
+        internal const string TerminalIntentFileName = "run-save.terminal-intent.json";
 
         private readonly string _directoryPath;
         private readonly string _saveFilePath;
         private readonly string _temporaryFilePath;
+        private readonly string _terminalIntentFilePath;
         private readonly IRunSaveFileSystem _fileSystem;
 
         /// <summary>在指定目录建立真实文件系统单槽 Adapter。</summary>
@@ -129,22 +132,64 @@ namespace TinySpire.Infrastructure.Persistence
             _directoryPath = Path.GetFullPath(directoryPath);
             _saveFilePath = Path.Combine(_directoryPath, LiveFileName);
             _temporaryFilePath = Path.Combine(_directoryPath, TemporaryFileName);
+            _terminalIntentFilePath = Path.Combine(_directoryPath, TerminalIntentFileName);
             _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
         }
 
-        /// <summary>读取最近成功的正式档；临时物与坏档只作为显式诊断，不自动修复或删除。</summary>
+        /// <summary>读取最近安全的稳定事实；终局意图优先且损坏时 fail-closed，旧版终局临时档继续兼容。</summary>
         public RunSaveLoadResult Load()
         {
             bool hasTemporaryFile = false;
+            bool hasTerminalIntent = false;
             try
             {
+                hasTerminalIntent = _fileSystem.FileExists(_terminalIntentFilePath);
                 hasTemporaryFile = _fileSystem.FileExists(_temporaryFilePath);
+                if (hasTerminalIntent)
+                {
+                    if (TryReadTerminalCheckpoint(
+                            _terminalIntentFilePath,
+                            "terminal intent",
+                            out RunSaveDocument intentDocument,
+                            out string intentDetail))
+                    {
+                        return RunSaveLoadResult.Succeeded(
+                            intentDocument,
+                            hasPendingTemporaryFile: true,
+                            "Recovered a validated Terminal(Defeat) checkpoint from the terminal intent journal.");
+                    }
+
+                    return RunSaveLoadResult.Failed(
+                        RunSaveLoadStatus.InterruptedCommit,
+                        intentDetail.Length > 0
+                            ? intentDetail
+                            : "The terminal intent journal could not be validated.",
+                        hasStoredData: true,
+                        hasPendingTemporaryFile: true);
+                }
+
+                string temporaryDetail = string.Empty;
+                if (hasTemporaryFile &&
+                    TryReadTerminalCheckpoint(
+                        _temporaryFilePath,
+                        "pending temporary Run save",
+                        out RunSaveDocument terminalDocument,
+                        out temporaryDetail))
+                {
+                    return RunSaveLoadResult.Succeeded(
+                        terminalDocument,
+                        hasPendingTemporaryFile: true,
+                        "Recovered a validated Terminal(Defeat) checkpoint from an interrupted commit.");
+                }
+
                 if (!_fileSystem.FileExists(_saveFilePath))
                 {
                     return hasTemporaryFile
                         ? RunSaveLoadResult.Failed(
                             RunSaveLoadStatus.InterruptedCommit,
-                            "A temporary Run save exists without a successful checkpoint.",
+                            temporaryDetail.Length > 0
+                                ? temporaryDetail
+                                : "A temporary Run save exists without a successful checkpoint.",
                             hasStoredData: true,
                             hasPendingTemporaryFile: true)
                         : RunSaveLoadResult.NotFound();
@@ -158,7 +203,9 @@ namespace TinySpire.Infrastructure.Persistence
                         read.Document,
                         hasTemporaryFile,
                         hasTemporaryFile
-                            ? "A failed or interrupted newer commit remains for diagnosis."
+                            ? temporaryDetail.Length > 0
+                                ? temporaryDetail
+                                : "A failed or interrupted newer commit remains for diagnosis."
                             : string.Empty);
                 }
 
@@ -174,7 +221,7 @@ namespace TinySpire.Infrastructure.Persistence
                     RunSaveLoadStatus.InvalidJson,
                     exception.Message,
                     hasStoredData: true,
-                    hasPendingTemporaryFile: hasTemporaryFile);
+                    hasPendingTemporaryFile: hasTemporaryFile || hasTerminalIntent);
             }
             catch (Exception exception) when (IsStorageException(exception))
             {
@@ -182,11 +229,49 @@ namespace TinySpire.Infrastructure.Persistence
                     RunSaveLoadStatus.IoFailure,
                     exception.Message,
                     hasStoredData: true,
-                    hasPendingTemporaryFile: hasTemporaryFile);
+                    hasPendingTemporaryFile: hasTemporaryFile || hasTerminalIntent);
             }
         }
 
-        /// <summary>完整写入并回读校验临时档，之后只用同卷 move 或原子 replace 发布正式档。</summary>
+        /// <summary>只把完整可解析的 Terminal(Defeat) 文档作为更安全事实返回，并为拒绝原因保留诊断。</summary>
+        private bool TryReadTerminalCheckpoint(
+            string path,
+            string artifactName,
+            out RunSaveDocument terminalDocument,
+            out string detail)
+        {
+            terminalDocument = null;
+            detail = string.Empty;
+            try
+            {
+                RunSaveDocumentReadResult read = RunSaveDocumentCodec.Read(
+                    _fileSystem.ReadAllText(path));
+                if (read.Status == RunSaveDocumentReadStatus.Success &&
+                    read.Document.ProgressPhase == RunSaveProgressPhase.Terminal &&
+                    read.Document.TerminalReason == RunSaveTerminalReason.Defeat)
+                {
+                    terminalDocument = read.Document;
+                    return true;
+                }
+
+                detail = read.Status == RunSaveDocumentReadStatus.Success
+                    ? $"The {artifactName} is not a Terminal(Defeat) document."
+                    : $"The {artifactName} is unusable: {read.Detail}";
+                return false;
+            }
+            catch (DecoderFallbackException exception)
+            {
+                detail = $"The {artifactName} is not valid UTF-8: {exception.Message}";
+                return false;
+            }
+            catch (Exception exception) when (IsStorageException(exception))
+            {
+                detail = $"The {artifactName} could not be read: {exception.Message}";
+                return false;
+            }
+        }
+
+        /// <summary>终局先耐久冻结意图，再完整校验通用临时档并用同卷 move 或原子 replace 发布正式档。</summary>
         public RunSaveCommitResult Commit(RunSaveDocument document)
         {
             if (document == null)
@@ -211,6 +296,47 @@ namespace TinySpire.Infrastructure.Persistence
             try
             {
                 _fileSystem.CreateDirectory(_directoryPath);
+                if (document.ProgressPhase == RunSaveProgressPhase.Terminal)
+                {
+                    bool requiresIntentWrite = true;
+                    if (_fileSystem.FileExists(_terminalIntentFilePath))
+                    {
+                        RunSaveDocumentReadResult existingIntentRead = RunSaveDocumentCodec.Read(
+                            _fileSystem.ReadAllText(_terminalIntentFilePath));
+                        if (existingIntentRead.Status == RunSaveDocumentReadStatus.Success &&
+                            existingIntentRead.Document.ProgressPhase == RunSaveProgressPhase.Terminal &&
+                            existingIntentRead.Document.TerminalReason == RunSaveTerminalReason.Defeat)
+                        {
+                            if (!DocumentsEqual(document, existingIntentRead.Document))
+                            {
+                                return RunSaveCommitResult.Failed(
+                                    RunSaveCommitStatus.InvalidDocument,
+                                    "A different validated terminal intent already owns this save slot.");
+                            }
+
+                            requiresIntentWrite = false;
+                        }
+                    }
+
+                    if (requiresIntentWrite)
+                    {
+                        _fileSystem.WriteAllTextDurably(_terminalIntentFilePath, serialized);
+                        RunSaveDocumentReadResult intentRead = RunSaveDocumentCodec.Read(
+                            _fileSystem.ReadAllText(_terminalIntentFilePath));
+                        if (intentRead.Status != RunSaveDocumentReadStatus.Success ||
+                            intentRead.Document.ProgressPhase != RunSaveProgressPhase.Terminal ||
+                            intentRead.Document.TerminalReason != RunSaveTerminalReason.Defeat ||
+                            !DocumentsEqual(document, intentRead.Document))
+                        {
+                            return RunSaveCommitResult.Failed(
+                                RunSaveCommitStatus.InvalidDocument,
+                                intentRead.Detail.Length > 0
+                                    ? intentRead.Detail
+                                    : "The terminal intent journal did not match the requested checkpoint.");
+                        }
+                    }
+                }
+
                 _fileSystem.WriteAllTextDurably(_temporaryFilePath, serialized);
 
                 RunSaveDocumentReadResult temporaryRead = RunSaveDocumentCodec.Read(
@@ -246,15 +372,17 @@ namespace TinySpire.Infrastructure.Persistence
             }
         }
 
-        /// <summary>仅由已确认的调用方幂等删除诊断临时物与正式单槽。</summary>
+        /// <summary>先删正式档；只有正式档已消失后才清终局意图与临时物，避免删除失败后复活 Continue。</summary>
         public RunSaveDeleteResult Delete()
         {
             try
             {
-                if (_fileSystem.FileExists(_temporaryFilePath))
-                    _fileSystem.DeleteFile(_temporaryFilePath);
                 if (_fileSystem.FileExists(_saveFilePath))
                     _fileSystem.DeleteFile(_saveFilePath);
+                if (_fileSystem.FileExists(_terminalIntentFilePath))
+                    _fileSystem.DeleteFile(_terminalIntentFilePath);
+                if (_fileSystem.FileExists(_temporaryFilePath))
+                    _fileSystem.DeleteFile(_temporaryFilePath);
                 return RunSaveDeleteResult.Succeeded();
             }
             catch (Exception exception) when (IsStorageException(exception))
@@ -290,10 +418,15 @@ namespace TinySpire.Infrastructure.Persistence
                    left.CurrentHealth == right.CurrentHealth &&
                    left.MaxHealth == right.MaxHealth &&
                    left.DeckTemplateId == right.DeckTemplateId &&
-                   left.EncounterTemplateId == right.EncounterTemplateId &&
                    left.RandomRootSeed == right.RandomRootSeed &&
-                   left.NodeStatus == right.NodeStatus &&
-                   left.BattleAttemptSequence == right.BattleAttemptSequence;
+                   left.MapProfileId == right.MapProfileId &&
+                   left.MapGeneratorVersion == right.MapGeneratorVersion &&
+                   left.MapSeed == right.MapSeed &&
+                   left.MapFingerprint == right.MapFingerprint &&
+                   left.PathNodeIds.SequenceEqual(right.PathNodeIds) &&
+                   left.ProgressPhase == right.ProgressPhase &&
+                   left.CommittedNodeId == right.CommittedNodeId &&
+                   left.TerminalReason == right.TerminalReason;
         }
 
         /// <summary>只把可预期的本地存储异常转换为 typed failure，编程错误继续 fail-fast。</summary>

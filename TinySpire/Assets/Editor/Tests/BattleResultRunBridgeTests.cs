@@ -5,6 +5,7 @@ using NUnit.Framework;
 using R3;
 using TinySpire.Battle;
 using TinySpire.Run;
+using TinySpire.Run.Map;
 using VContainer;
 
 public sealed class BattleResultRunBridgeTests
@@ -25,12 +26,12 @@ public sealed class BattleResultRunBridgeTests
         using var bridge = new BattleResultRunBridge(resultView, setup, resolver);
 
         bridge.Initialize();
-        Assert.That(store.Current.NodeStatus, Is.EqualTo(RunNodeStatus.InBattle));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.InBattle));
 
         results.Value = CreateBattleResult(BattleResultKind.Victory, health: 31);
         results.Value = CreateBattleResult(BattleResultKind.Victory, health: 22);
 
-        Assert.That(store.Current.NodeStatus, Is.EqualTo(RunNodeStatus.Completed));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
         Assert.That(store.Current.CurrentHealth, Is.EqualTo(31));
         Assert.That(scenes.LoadedAddresses, Is.EqualTo(new[] { RunSceneAddresses.RunEntry }));
     }
@@ -50,7 +51,7 @@ public sealed class BattleResultRunBridgeTests
         bridge.Dispose();
         results.Value = CreateBattleResult(BattleResultKind.Defeat, health: 0);
 
-        Assert.That(store.Current.NodeStatus, Is.EqualTo(RunNodeStatus.InBattle));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.InBattle));
         Assert.That(store.Current.ActiveBattle, Is.SameAs(activeInput));
         Assert.That(scenes.LoadedAddresses, Is.Empty);
     }
@@ -98,19 +99,25 @@ public sealed class BattleResultRunBridgeTests
         Assert.That(scenes.LoadedAddresses, Is.Empty);
     }
 
-    /// <summary>建立已冻结 snapshot 与 active attempt 的最小 RunStateStore。</summary>
+    /// <summary>建立已提交地图节点与 active attempt 的最小 RunStateStore。</summary>
     private static RunStateStore CreateActiveRun(out RunBattleInput input)
     {
         var store = new RunStateStore();
-        store.CreateNewRun(new RunCreationOptions(
+        MapDefinition map = ActMapGenerator.Generate(TinySpireActMapProfiles.Current, 13579u);
+        RunState created = store.CreateNewRun(new RunCreationOptions(
             new RunId(Guid.Parse("aaaa1111-bbbb-2222-cccc-3333dddd4444")),
             heroTemplateId: 1001,
             initialHealth: 80,
             maxHealth: 80,
             deckTemplateId: 1001,
-            encounterTemplateId: 5001,
-            randomRootSeed: 13579u));
-        input = store.BeginBattle();
+            randomRootSeed: 13579u,
+            map: map));
+        MapNodeId selectedNodeId = MapReachability.GetSelectableNodeIds(
+            map,
+            created.CurrentNodeId,
+            MapTraversalMode.Ordinary)[0];
+        store.CommitNode(selectedNodeId);
+        input = store.BeginCommittedBattle();
         return store;
     }
 

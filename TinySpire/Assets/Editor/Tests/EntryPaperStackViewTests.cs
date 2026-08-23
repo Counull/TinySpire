@@ -221,8 +221,7 @@ public sealed class EntryPaperStackViewTests
             texts,
             selectedHeroTemplateId: null,
             confirmEnabled: false,
-            battleNodeInteractable: false,
-            battleNodeCompleted: false,
+            map: null,
             continueEnabled: false);
     }
 

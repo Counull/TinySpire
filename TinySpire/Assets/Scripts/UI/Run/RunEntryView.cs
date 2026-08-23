@@ -9,7 +9,7 @@ using UnityEngine.UI;
 
 namespace TinySpire.UI.Run
 {
-    /// <summary>以可替换几何控件渲染 G1-A 全部入口页面，不持有任何 Run 业务事实。</summary>
+    /// <summary>以可替换几何控件渲染入口与 G3 明牌地图，不持有任何 Run 业务事实。</summary>
     [DisallowMultipleComponent]
     public sealed class RunEntryView : MonoBehaviour, IRunEntryView
     {
@@ -24,7 +24,7 @@ namespace TinySpire.UI.Run
         };
 
         internal const string RequiredEntryGlyphs =
-            "开始游戏继续设置图鉴统计返回取消开发中布局占位选择角色确认并未来队伍槽临时地图首战节点已清除后续内容未接入生命战斗失败重开本关战士机枪兵放弃当前存档前会删除不可用有效无法版本未知迁移检测写入读取引用配置缺失保存重试退出不回退上一份成功检查点若尚无将恢复永久撤销？。“”，；";
+            "开始游戏继续设置图鉴统计返回取消开发中布局占位选择角色确认并未来队伍槽地图节点遭遇已清除后续内容未接入生命战斗失败离开战士机枪兵放弃当前存档前会删除不可用有效无法版本未知迁移检测写入读取引用配置缺失保存重试退出不回退上一份成功检查点若尚无将恢复永久撤销？。“”，；";
 
         private static readonly Color32 BackgroundColor = new Color32(18, 24, 36, 255);
         private static readonly Color32 SurfaceColor = new Color32(28, 38, 55, 248);
@@ -33,6 +33,14 @@ namespace TinySpire.UI.Run
         private static readonly Color32 DisabledButtonColor = new Color32(55, 61, 72, 255);
         private static readonly Color32 PrimaryTextColor = new Color32(235, 242, 250, 255);
         private static readonly Color32 SecondaryTextColor = new Color32(166, 181, 202, 255);
+        private static readonly Color32 MapSelectableColor = new Color32(204, 146, 62, 255);
+        private static readonly Color32 MapCurrentColor = new Color32(61, 126, 178, 255);
+        private static readonly Color32 MapCompletedColor = new Color32(62, 126, 115, 255);
+        private static readonly Color32 MapBossColor = new Color32(154, 72, 86, 255);
+        private static readonly Color32 MapRouteColor = new Color32(77, 177, 207, 255);
+        private static readonly Color32 MapEdgeColor = new Color32(91, 105, 125, 210);
+        private static readonly Color32 MapCompletedEdgeColor = new Color32(75, 145, 205, 255);
+        private static readonly Color32 MapDimmedColor = new Color32(39, 45, 56, 120);
 
         [Header("Run Entry Visuals")]
         [SerializeField]
@@ -46,6 +54,16 @@ namespace TinySpire.UI.Run
         private readonly Dictionary<string, Button> _buttons =
             new Dictionary<string, Button>(StringComparer.Ordinal);
         private readonly List<Button> _boundButtons = new List<Button>();
+        private readonly Dictionary<string, Button> _mapNodeButtons =
+            new Dictionary<string, Button>(StringComparer.Ordinal);
+        private readonly Dictionary<string, TMP_Text> _mapNodeLabels =
+            new Dictionary<string, TMP_Text>(StringComparer.Ordinal);
+        private readonly Dictionary<string, TMP_Text> _mapNodeIdentityIds =
+            new Dictionary<string, TMP_Text>(StringComparer.Ordinal);
+        private readonly Dictionary<string, IReadOnlyList<Image>> _mapNodeAnchorImages =
+            new Dictionary<string, IReadOnlyList<Image>>(StringComparer.Ordinal);
+        private readonly Dictionary<string, Image> _mapEdgeImages =
+            new Dictionary<string, Image>(StringComparer.Ordinal);
 
         private TMP_FontAsset _fontAsset;
         private bool _ownsFontAsset;
@@ -87,12 +105,14 @@ namespace TinySpire.UI.Run
 
         private TMP_Text _mapTitle;
         private TMP_Text _mapHealth;
-        private TMP_Text _battleNodeText;
-        private Button _battleNodeButton;
+        private RectTransform _mapGraphHost;
+        private RectTransform _mapGraphRoot;
+        private RunMapViewModel _renderedMap;
+        private string _renderedMapFingerprint;
 
         private TMP_Text _failureTitle;
         private TMP_Text _failureHealth;
-        private TMP_Text _restartBattleText;
+        private TMP_Text _leaveTerminalRunText;
 
         private TMP_Text _confirmationTitle;
         private TMP_Text _confirmationMessage;
@@ -103,6 +123,7 @@ namespace TinySpire.UI.Run
         private TMP_Text _saveFailureHealth;
         private TMP_Text _retrySaveText;
         private TMP_Text _saveFailureExitText;
+        private Button _saveFailureExitButton;
 
         private TMP_Text _rollbackTitle;
         private TMP_Text _rollbackMessage;
@@ -188,18 +209,14 @@ namespace TinySpire.UI.Run
 
             _mapTitle.text = model.GetText(RunEntryTextSlot.MapTitle);
             _mapHealth.text = model.GetText(RunEntryTextSlot.Health);
-            _battleNodeText.text = model.GetText(
-                model.BattleNodeCompleted
-                    ? RunEntryTextSlot.Cleared
-                    : RunEntryTextSlot.BattleNode);
-            _battleNodeButton.interactable = model.BattleNodeInteractable;
-            SetButtonColor(
-                _battleNodeButton,
-                model.BattleNodeCompleted ? DisabledButtonColor : ButtonColor);
+            RenderMap(model.Map);
 
             _failureTitle.text = model.GetText(RunEntryTextSlot.FailureTitle);
-            _failureHealth.text = model.GetText(RunEntryTextSlot.Health);
-            _restartBattleText.text = model.GetText(RunEntryTextSlot.RestartBattle);
+            string failureIssue = model.GetText(RunEntryTextSlot.SaveIssue);
+            _failureHealth.text = failureIssue.Length == 0
+                ? model.GetText(RunEntryTextSlot.Health)
+                : $"{model.GetText(RunEntryTextSlot.Health)}\n{failureIssue}";
+            _leaveTerminalRunText.text = model.GetText(RunEntryTextSlot.LeaveRun);
 
             _confirmationTitle.text = model.GetText(RunEntryTextSlot.ConfirmationTitle);
             _confirmationMessage.text = model.GetText(RunEntryTextSlot.ConfirmationMessage);
@@ -210,6 +227,8 @@ namespace TinySpire.UI.Run
             _saveFailureHealth.text = model.GetText(RunEntryTextSlot.Health);
             _retrySaveText.text = model.GetText(RunEntryTextSlot.RetrySave);
             _saveFailureExitText.text = model.GetText(RunEntryTextSlot.Exit);
+            _saveFailureExitButton.interactable = model.CanRollbackFailedSave;
+            _saveFailureExitButton.gameObject.SetActive(model.CanRollbackFailedSave);
 
             _rollbackTitle.text = model.GetText(RunEntryTextSlot.RollbackTitle);
             _rollbackMessage.text = model.GetText(RunEntryTextSlot.RollbackMessage);
@@ -603,31 +622,431 @@ namespace TinySpire.UI.Run
             }
         }
 
-        /// <summary>建立只含当前生命与唯一可点击战斗节点的临时地图。</summary>
+        /// <summary>建立地图标题、生命和供整张冻结 DAG 使用的绘制区域。</summary>
         private void BuildMapPage(RectTransform parent)
         {
             RectTransform page = CreatePage(RunEntryPage.Map, parent);
             _mapTitle = CreateText("MapTitle", page, 42f, FontStyles.Bold, PrimaryTextColor, 260f, 700f, 64f);
             _mapHealth = CreateText("MapHealth", page, 26f, FontStyles.Normal, SecondaryTextColor, 180f, 500f, 50f);
-            (_battleNodeButton, _battleNodeText) = CreateButton(
-                "BattleNodeButton",
+            _mapGraphHost = CreateContainer(
+                "MapGraphHost",
                 page,
-                new RunEntryAction(RunEntryActionKind.EnterBattle),
-                5f,
-                width: 320f,
-                height: 130f);
+                stretch: false,
+                size: new Vector2(820f, 480f));
+            SetCenteredRect(_mapGraphHost, new Vector2(0f, -75f), new Vector2(820f, 480f));
         }
 
-        /// <summary>建立失败说明、恢复生命投影与唯一重开本关动作。</summary>
+        /// <summary>按地图指纹复用拓扑几何，并在每次投影时刷新节点/边的功能状态。</summary>
+        private void RenderMap(RunMapViewModel model)
+        {
+            _renderedMap = model;
+            if (model == null)
+                return;
+
+            if (_mapGraphRoot == null ||
+                !string.Equals(_renderedMapFingerprint, model.Fingerprint, StringComparison.Ordinal))
+            {
+                BuildMapGraph(model);
+            }
+
+            foreach (RunMapNodeViewModel node in model.Nodes)
+            {
+                if (!_mapNodeButtons.TryGetValue(node.NodeId, out Button button) ||
+                    !_mapNodeLabels.TryGetValue(node.NodeId, out TMP_Text label) ||
+                    !_mapNodeIdentityIds.TryGetValue(node.NodeId, out TMP_Text identityId) ||
+                    !_mapNodeAnchorImages.ContainsKey(node.NodeId))
+                {
+                    throw new InvalidOperationException($"Map node view '{node.NodeId}' is missing.");
+                }
+
+                label.text = node.DisplayName;
+                identityId.text = node.ContentId > 0
+                    ? $"#{node.ContentId}"
+                    : node.NodeId;
+                button.interactable = node.State == RunMapNodePresentationState.Selectable;
+            }
+
+            RestoreMapVisuals();
+        }
+
+        /// <summary>由 Layer/Slot 建立一次冻结 DAG 的全部边和节点，重建时先停用旧根。</summary>
+        private void BuildMapGraph(RunMapViewModel model)
+        {
+            ClearMapGraph();
+            _renderedMapFingerprint = model.Fingerprint;
+            _mapGraphRoot = CreateContainer("FrozenActMap", _mapGraphHost, stretch: true);
+
+            int maxLayer = model.Nodes.Count == 0
+                ? 0
+                : model.Nodes.Max(node => node.Layer);
+            var positions = new Dictionary<string, Vector2>(StringComparer.Ordinal);
+            foreach (IGrouping<int, RunMapNodeViewModel> layer in model.Nodes.GroupBy(node => node.Layer))
+            {
+                RunMapNodeViewModel[] layerNodes = layer.OrderBy(node => node.Slot).ToArray();
+                int maxSlot = layerNodes.Length == 0 ? 0 : layerNodes.Max(node => node.Slot);
+                foreach (RunMapNodeViewModel node in layerNodes)
+                {
+                    float x = maxSlot == 0
+                        ? 0f
+                        : Mathf.Lerp(-315f, 315f, node.Slot / (float)maxSlot);
+                    float y = maxLayer == 0
+                        ? 0f
+                        : Mathf.Lerp(-185f, 185f, node.Layer / (float)maxLayer);
+                    positions.Add(node.NodeId, new Vector2(x, y));
+                }
+            }
+
+            foreach (RunMapEdgeViewModel edge in model.Edges)
+            {
+                if (!positions.TryGetValue(edge.FromNodeId, out Vector2 from) ||
+                    !positions.TryGetValue(edge.ToNodeId, out Vector2 to))
+                {
+                    throw new InvalidOperationException($"Map edge '{edge.Key}' references a missing view node.");
+                }
+
+                CreateMapEdge(edge, from, to);
+            }
+
+            foreach (RunMapNodeViewModel node in model.Nodes)
+                CreateMapNode(node, positions[node.NodeId]);
+        }
+
+        /// <summary>建立一条位于节点之后的纯表现连线。</summary>
+        private void CreateMapEdge(RunMapEdgeViewModel edge, Vector2 from, Vector2 to)
+        {
+            Vector2 delta = to - from;
+            RectTransform rect = CreatePanel(
+                $"MapEdge_{edge.FromNodeId}_{edge.ToNodeId}",
+                _mapGraphRoot,
+                MapEdgeColor,
+                (from + to) * 0.5f,
+                new Vector2(delta.magnitude, 6f),
+                stretch: false);
+            rect.localRotation = Quaternion.Euler(
+                0f,
+                0f,
+                Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg);
+            _mapEdgeImages.Add(edge.Key, rect.GetComponent<Image>());
+        }
+
+        /// <summary>建立一个按 NodeId 提交命令、仅由投影控制可交互性的地图节点。</summary>
+        private void CreateMapNode(RunMapNodeViewModel node, Vector2 position)
+        {
+            string objectName = GetMapNodeObjectName(node.NodeId);
+            float width = node.Kind == TinySpire.Run.Map.MapNodeKind.Boss ? 196f : 176f;
+            float height = node.Kind == TinySpire.Run.Map.MapNodeKind.Boss ? 98f : 88f;
+            (Button button, TMP_Text label) = CreateButton(
+                objectName,
+                _mapGraphRoot,
+                new RunEntryAction(
+                    RunEntryActionKind.EnterMapNode,
+                    mapNodeId: new TinySpire.Run.Map.MapNodeId(node.NodeId)),
+                position.y,
+                width,
+                height,
+                x: position.x);
+            SetCenteredRect(
+                (RectTransform)label.transform,
+                new Vector2(20f, 12f),
+                new Vector2(width - 68f, 42f));
+            label.fontSize = node.Kind == TinySpire.Run.Map.MapNodeKind.Boss ? 18f : 20f;
+            label.textWrappingMode = TextWrappingModes.Normal;
+
+            TMP_Text identityId = CreateText(
+                $"MapNode_{node.NodeId}_IdentityId",
+                (RectTransform)button.transform,
+                14f,
+                FontStyles.Normal,
+                SecondaryTextColor,
+                -22f,
+                width - 68f,
+                20f);
+            SetCenteredRect(
+                (RectTransform)identityId.transform,
+                new Vector2(20f, -23f),
+                new Vector2(width - 68f, 20f));
+            IReadOnlyList<Image> anchorImages = CreateMapVisualAnchor(
+                node,
+                (RectTransform)button.transform,
+                width);
+
+            _mapNodeButtons.Add(node.NodeId, button);
+            _mapNodeLabels.Add(node.NodeId, label);
+            _mapNodeIdentityIds.Add(node.NodeId, identityId);
+            _mapNodeAnchorImages.Add(node.NodeId, anchorImages);
+
+            var trigger = button.gameObject.AddComponent<EventTrigger>();
+            trigger.triggers = new List<EventTrigger.Entry>();
+            var enter = new EventTrigger.Entry { eventID = EventTriggerType.PointerEnter };
+            enter.callback.AddListener(_ => ApplyMapHover(node.NodeId));
+            trigger.triggers.Add(enter);
+            var exit = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
+            exit.callback.AddListener(_ => RestoreMapVisuals());
+            trigger.triggers.Add(exit);
+        }
+
+        /// <summary>按 ViewModel 指定种类建立轻量程序化徽记，不读取或猜测业务内容 ID。</summary>
+        private static IReadOnlyList<Image> CreateMapVisualAnchor(
+            RunMapNodeViewModel node,
+            RectTransform parent,
+            float buttonWidth)
+        {
+            RectTransform anchorRoot = CreateContainer(
+                $"MapNode_{node.NodeId}_Anchor_{node.VisualAnchorKind}",
+                parent,
+                stretch: false,
+                size: new Vector2(40f, 40f));
+            SetCenteredRect(
+                anchorRoot,
+                new Vector2((-buttonWidth * 0.5f) + 25f, 0f),
+                new Vector2(40f, 40f));
+
+            Color color = ResolveMapVisualAnchorColor(node.VisualAnchorKind);
+            var images = new List<Image>();
+            switch (node.VisualAnchorKind)
+            {
+                case RunMapVisualAnchorKind.StartFlag:
+                    AddMapAnchorShape(images, anchorRoot, "FlagPole", new Vector2(-7f, -1f), new Vector2(4f, 30f), 0f, color);
+                    AddMapAnchorShape(images, anchorRoot, "FlagPennant", new Vector2(3f, 8f), new Vector2(18f, 11f), -12f, color);
+                    break;
+                case RunMapVisualAnchorKind.EncounterSlimeSilhouette:
+                    AddMapAnchorShape(images, anchorRoot, "SlimeBody", new Vector2(0f, -5f), new Vector2(30f, 18f), 0f, color);
+                    AddMapAnchorShape(images, anchorRoot, "SlimeCrest", new Vector2(0f, 5f), new Vector2(18f, 18f), 45f, color);
+                    break;
+                case RunMapVisualAnchorKind.EncounterSentrySilhouette:
+                    AddMapAnchorShape(images, anchorRoot, "SentryBody", new Vector2(0f, -5f), new Vector2(23f, 21f), 0f, color);
+                    AddMapAnchorShape(images, anchorRoot, "SentryHead", new Vector2(0f, 8f), new Vector2(16f, 10f), 0f, color);
+                    AddMapAnchorShape(images, anchorRoot, "SentryAntenna", new Vector2(0f, 16f), new Vector2(3f, 10f), 0f, color);
+                    break;
+                case RunMapVisualAnchorKind.BossAlphaCrown:
+                    AddMapAnchorShape(images, anchorRoot, "CrownBase", new Vector2(0f, -10f), new Vector2(30f, 6f), 0f, color);
+                    AddMapAnchorShape(images, anchorRoot, "CrownLeft", new Vector2(-10f, 1f), new Vector2(7f, 21f), -18f, color);
+                    AddMapAnchorShape(images, anchorRoot, "CrownCenter", new Vector2(0f, 3f), new Vector2(7f, 25f), 0f, color);
+                    AddMapAnchorShape(images, anchorRoot, "CrownRight", new Vector2(10f, 1f), new Vector2(7f, 21f), 18f, color);
+                    break;
+                case RunMapVisualAnchorKind.BossBetaHorns:
+                    AddMapAnchorShape(images, anchorRoot, "HornCore", new Vector2(0f, -2f), new Vector2(14f, 14f), 45f, color);
+                    AddMapAnchorShape(images, anchorRoot, "HornLeft", new Vector2(-11f, 6f), new Vector2(6f, 24f), -35f, color);
+                    AddMapAnchorShape(images, anchorRoot, "HornRight", new Vector2(11f, 6f), new Vector2(6f, 24f), 35f, color);
+                    break;
+                case RunMapVisualAnchorKind.BossGammaEye:
+                    AddMapAnchorShape(images, anchorRoot, "EyeUpper", new Vector2(0f, 6f), new Vector2(29f, 5f), -12f, color);
+                    AddMapAnchorShape(images, anchorRoot, "EyeLower", new Vector2(0f, -6f), new Vector2(29f, 5f), 12f, color);
+                    AddMapAnchorShape(images, anchorRoot, "EyePupil", Vector2.zero, new Vector2(6f, 18f), 0f, color);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(node.VisualAnchorKind));
+            }
+
+            return images.AsReadOnly();
+        }
+
+        /// <summary>向程序化徽记加入一个不参与射线检测的矩形轮廓片段。</summary>
+        private static void AddMapAnchorShape(
+            ICollection<Image> images,
+            RectTransform parent,
+            string shapeName,
+            Vector2 position,
+            Vector2 size,
+            float rotationDegrees,
+            Color color)
+        {
+            RectTransform shape = CreatePanel(
+                shapeName,
+                parent,
+                color,
+                position,
+                size,
+                stretch: false);
+            shape.localRotation = Quaternion.Euler(0f, 0f, rotationDegrees);
+            Image image = shape.GetComponent<Image>();
+            image.raycastTarget = false;
+            images.Add(image);
+        }
+
+        /// <summary>为每类开局明牌身份提供稳定基础色，轮廓仍是主要区分信息。</summary>
+        private static Color ResolveMapVisualAnchorColor(RunMapVisualAnchorKind kind)
+        {
+            switch (kind)
+            {
+                case RunMapVisualAnchorKind.StartFlag:
+                    return new Color32(133, 202, 229, 255);
+                case RunMapVisualAnchorKind.EncounterSlimeSilhouette:
+                    return new Color32(244, 195, 105, 255);
+                case RunMapVisualAnchorKind.EncounterSentrySilhouette:
+                    return new Color32(135, 193, 224, 255);
+                case RunMapVisualAnchorKind.BossAlphaCrown:
+                    return new Color32(243, 115, 128, 255);
+                case RunMapVisualAnchorKind.BossBetaHorns:
+                    return new Color32(185, 135, 230, 255);
+                case RunMapVisualAnchorKind.BossGammaEye:
+                    return new Color32(105, 220, 203, 255);
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(kind));
+            }
+        }
+
+        /// <summary>悬停当前可选节点时高亮完整后半程，并弱化会被放弃的路线与 Boss。</summary>
+        private void ApplyMapHover(string candidateNodeId)
+        {
+            RunMapNodeViewModel candidate = _renderedMap?.Nodes.FirstOrDefault(node =>
+                string.Equals(node.NodeId, candidateNodeId, StringComparison.Ordinal));
+            if (candidate == null || candidate.State != RunMapNodePresentationState.Selectable)
+                return;
+
+            var routeNodeIds = new HashSet<string>(
+                candidate.DownstreamNodeIds,
+                StringComparer.Ordinal);
+            var routeEdgeKeys = new HashSet<string>(
+                candidate.DownstreamEdgeKeys,
+                StringComparer.Ordinal);
+            foreach (RunMapNodeViewModel node in _renderedMap.Nodes)
+            {
+                bool completedPrefix = node.State == RunMapNodePresentationState.Completed ||
+                                       node.State == RunMapNodePresentationState.Current;
+                Color color = routeNodeIds.Contains(node.NodeId)
+                    ? MapRouteColor
+                    : completedPrefix
+                        ? ResolveMapNodeColor(node)
+                        : MapDimmedColor;
+                SetButtonColor(_mapNodeButtons[node.NodeId], color);
+                bool emphasized = routeNodeIds.Contains(node.NodeId) || completedPrefix;
+                Color textColor = emphasized
+                    ? PrimaryTextColor
+                    : new Color32(115, 124, 139, 150);
+                _mapNodeLabels[node.NodeId].color = textColor;
+                _mapNodeIdentityIds[node.NodeId].color = textColor;
+                SetMapAnchorColor(
+                    node.NodeId,
+                    emphasized
+                        ? ResolveMapVisualAnchorColor(node.VisualAnchorKind)
+                        : new Color32(115, 124, 139, 120));
+            }
+
+            foreach (RunMapEdgeViewModel edge in _renderedMap.Edges)
+            {
+                _mapEdgeImages[edge.Key].color = routeEdgeKeys.Contains(edge.Key)
+                    ? MapRouteColor
+                    : edge.IsCompletedPath
+                        ? MapCompletedEdgeColor
+                        : MapDimmedColor;
+            }
+        }
+
+        /// <summary>移除悬停派生表现，恢复当前不可变投影的基础颜色。</summary>
+        private void RestoreMapVisuals()
+        {
+            if (_renderedMap == null)
+                return;
+
+            foreach (RunMapNodeViewModel node in _renderedMap.Nodes)
+            {
+                if (!_mapNodeButtons.TryGetValue(node.NodeId, out Button button) ||
+                    !_mapNodeLabels.TryGetValue(node.NodeId, out TMP_Text label) ||
+                    !_mapNodeIdentityIds.TryGetValue(node.NodeId, out TMP_Text identityId))
+                {
+                    continue;
+                }
+
+                SetButtonColor(button, ResolveMapNodeColor(node));
+                Color textColor = node.State == RunMapNodePresentationState.Locked
+                    ? SecondaryTextColor
+                    : PrimaryTextColor;
+                label.color = textColor;
+                identityId.color = textColor;
+                SetMapAnchorColor(
+                    node.NodeId,
+                    ResolveMapVisualAnchorColor(node.VisualAnchorKind));
+            }
+
+            foreach (RunMapEdgeViewModel edge in _renderedMap.Edges)
+            {
+                if (_mapEdgeImages.TryGetValue(edge.Key, out Image image))
+                {
+                    image.color = edge.IsCompletedPath
+                        ? MapCompletedEdgeColor
+                        : MapEdgeColor;
+                }
+            }
+        }
+
+        /// <summary>按节点种类与进度状态选择基础色；Boss 身份在锁定时仍保持可辨认。</summary>
+        private static Color ResolveMapNodeColor(RunMapNodeViewModel node)
+        {
+            switch (node.State)
+            {
+                case RunMapNodePresentationState.Selectable:
+                    return node.Kind == TinySpire.Run.Map.MapNodeKind.Boss
+                        ? MapBossColor
+                        : MapSelectableColor;
+                case RunMapNodePresentationState.Current:
+                    return MapCurrentColor;
+                case RunMapNodePresentationState.Completed:
+                    return MapCompletedColor;
+                case RunMapNodePresentationState.BossGateReached:
+                    return MapBossColor;
+                case RunMapNodePresentationState.Locked:
+                    return node.Kind == TinySpire.Run.Map.MapNodeKind.Boss
+                        ? new Color32(91, 52, 62, 220)
+                        : DisabledButtonColor;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(node.State));
+            }
+        }
+
+        /// <summary>为一个节点的全部程序化轮廓片段同步设置表现色。</summary>
+        private void SetMapAnchorColor(string nodeId, Color color)
+        {
+            if (!_mapNodeAnchorImages.TryGetValue(nodeId, out IReadOnlyList<Image> images))
+                return;
+
+            foreach (Image image in images)
+            {
+                if (image != null)
+                    image.color = color;
+            }
+        }
+
+        /// <summary>清理旧地图几何与测试按钮索引，不影响其他入口页面。</summary>
+        private void ClearMapGraph()
+        {
+            foreach (KeyValuePair<string, Button> entry in _mapNodeButtons)
+            {
+                _buttons.Remove(GetMapNodeObjectName(entry.Key));
+                _boundButtons.Remove(entry.Value);
+                if (entry.Value != null)
+                    entry.Value.onClick.RemoveAllListeners();
+            }
+            _mapNodeButtons.Clear();
+            _mapNodeLabels.Clear();
+            _mapNodeIdentityIds.Clear();
+            _mapNodeAnchorImages.Clear();
+            _mapEdgeImages.Clear();
+
+            if (_mapGraphRoot == null)
+                return;
+
+            _mapGraphRoot.gameObject.SetActive(false);
+            DestroyOwnedObject(_mapGraphRoot.gameObject);
+            _mapGraphRoot = null;
+        }
+
+        /// <summary>把稳定 NodeId 转为可由 EditMode 测试读取的稳定按钮对象名。</summary>
+        private static string GetMapNodeObjectName(string nodeId)
+        {
+            return $"MapNode_{nodeId}_Button";
+        }
+
+        /// <summary>建立失败说明、零生命投影与确认离开终局的唯一动作。</summary>
         private void BuildFailurePage(RectTransform parent)
         {
             RectTransform page = CreatePage(RunEntryPage.Failure, parent);
             _failureTitle = CreateText("FailureTitle", page, 46f, FontStyles.Bold, PrimaryTextColor, 185f, 700f, 70f);
-            _failureHealth = CreateText("FailureHealth", page, 26f, FontStyles.Normal, SecondaryTextColor, 95f, 500f, 50f);
-            _restartBattleText = CreateButton(
-                "RestartBattleButton",
+            _failureHealth = CreateText("FailureHealth", page, 26f, FontStyles.Normal, SecondaryTextColor, 95f, 700f, 100f);
+            _leaveTerminalRunText = CreateButton(
+                "LeaveTerminalRunButton",
                 page,
-                new RunEntryAction(RunEntryActionKind.RestartBattle),
+                new RunEntryAction(RunEntryActionKind.LeaveTerminalRun),
                 -35f).label;
         }
 
@@ -693,12 +1112,12 @@ namespace TinySpire.UI.Run
                 page,
                 new RunEntryAction(RunEntryActionKind.RetrySave),
                 -35f).label;
-            _saveFailureExitText = CreateButton(
+            (_saveFailureExitButton, _saveFailureExitText) = CreateButton(
                 "SaveFailureExitButton",
                 page,
                 new RunEntryAction(RunEntryActionKind.RequestExitAfterSaveFailure),
                 -130f,
-                width: 300f).label;
+                width: 300f);
         }
 
         /// <summary>建立退出未保存 Run 前的回退检查点警告确认页。</summary>

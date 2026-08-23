@@ -51,7 +51,7 @@ namespace TinySpire.Run
         }
     }
 
-    /// <summary>所有旧 schema 进入当前 v1 文档前必须经过的唯一迁移入口。</summary>
+    /// <summary>所有旧 schema 进入当前 v2 文档前必须经过的唯一迁移入口。</summary>
     public static class RunSaveDocumentMigrator
     {
         /// <summary>读取明确版本并只迁移可证明无歧义的文档。</summary>
@@ -212,16 +212,29 @@ namespace TinySpire.Run
                     migration.Detail);
             }
 
-            JToken nodeStatusToken = migration.CurrentDocument["nodeStatus"];
-            string nodeStatus = nodeStatusToken?.Type == JTokenType.String
-                ? nodeStatusToken.Value<string>()
+            JToken progressPhaseToken = migration.CurrentDocument["progressPhase"];
+            string progressPhase = progressPhaseToken?.Type == JTokenType.String
+                ? progressPhaseToken.Value<string>()
                 : null;
-            if (nodeStatus != nameof(RunSaveNodeStatus.Available) &&
-                nodeStatus != nameof(RunSaveNodeStatus.Completed))
+            if (progressPhase != nameof(RunSaveProgressPhase.MapReady) &&
+                progressPhase != nameof(RunSaveProgressPhase.BossGateReached) &&
+                progressPhase != nameof(RunSaveProgressPhase.Terminal))
             {
                 return RunSaveDocumentReadResult.Failed(
                     RunSaveDocumentReadStatus.InvalidDocument,
-                    "Run save nodeStatus must be an exact supported string value.");
+                    "Run save progressPhase must be an exact supported string value.");
+            }
+
+            JToken terminalReasonToken = migration.CurrentDocument["terminalReason"];
+            bool terminalReasonIsValid = progressPhase == nameof(RunSaveProgressPhase.Terminal)
+                ? terminalReasonToken?.Type == JTokenType.String &&
+                  terminalReasonToken.Value<string>() == nameof(RunSaveTerminalReason.Defeat)
+                : terminalReasonToken?.Type == JTokenType.Null;
+            if (!terminalReasonIsValid)
+            {
+                return RunSaveDocumentReadResult.Failed(
+                    RunSaveDocumentReadStatus.InvalidDocument,
+                    "Run save terminalReason does not match progressPhase.");
             }
 
             try

@@ -2,11 +2,12 @@
 title: 06_testing · 测试记录
 page_type: testing
 lifecycle: active
-updated: 2026-08-17
+updated: 2026-08-24
 ---
 
 ## 最新记录
 
+- [2026-08-24 G3 确定性尖塔式 Act 地图](2026-08-24-g3-deterministic-act-map.md) — verified；最终完整 EditMode 993/993，Sync/Local Addressables 成功；Packed Play 实走两个普通节点胜利到 BossGate 并进程级冷启动恢复，以及失败终局冷启动与确认删除，产品 Console Error=0
 - [2026-08-17 BattleCommandQueue 提交接口深化](2026-08-17-battle-command-submission-interface-deepening.md) — Queue 内部签发 handle、公开原始命令 lifecycle，生产 Hand/HUD/driver 删除 coordinator 协议；M8B 11/11、相关 116/116、完整 EditMode 953/953 与编译 0 error 通过
 - [2026-08-17 RunEntryScene 主入口视觉切片](2026-08-17-run-entry-visual-slice.md) — V06 边界、共享纸纹、三纸 raycast、一次性 DOTween、场景/importer 合约 22/22；Local Addressables、同 bundle BuildLayout、Packed Play 16:9 截图与 Settings 往返通过
 - [2026-08-16 G2-A Run Persistence 与继续游戏](2026-08-16-g2a-run-persistence.md) — versioned Save Document、原子单槽、S0/S1、Continue/确认删除、commit 重试与回退已完成；Luban/Local Addressables、唯一 Editor 主链与完整 EditMode 947/947 通过

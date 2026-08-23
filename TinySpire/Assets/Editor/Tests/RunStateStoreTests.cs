@@ -1,23 +1,20 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using NUnit.Framework;
 using R3;
 using TinySpire.Run;
+using TinySpire.Run.Map;
 
 public sealed class RunStateStoreTests
 {
-    /// <summary>创建新 Run 时冻结唯一身份、单英雄基础事实与唯一可进入节点。</summary>
+    /// <summary>创建新 Run 时冻结唯一身份、角色事实与完整地图，并停在 Start。</summary>
     [Test]
-    public void CreateNewRun_FreezesIdentityHeroAndSingleAvailableNode()
+    public void CreateNewRun_FreezesIdentityHeroAndWholeActMap()
     {
-        var options = new RunCreationOptions(
-            new RunId(Guid.Parse("11111111-2222-3333-4444-555555555555")),
-            heroTemplateId: 1001,
-            initialHealth: 80,
-            maxHealth: 80,
-            deckTemplateId: 1001,
-            encounterTemplateId: 5001,
-            randomRootSeed: 123456u);
+        RunCreationOptions options = CreateOptions(
+            "11111111-2222-3333-4444-555555555555",
+            mapSeed: 123456u);
 
         using var store = new RunStateStore();
         RunState state = store.CreateNewRun(options);
@@ -27,12 +24,13 @@ public sealed class RunStateStoreTests
         Assert.That(state.CurrentHealth, Is.EqualTo(80));
         Assert.That(state.MaxHealth, Is.EqualTo(80));
         Assert.That(state.DeckTemplateId, Is.EqualTo(1001));
-        Assert.That(state.EncounterTemplateId, Is.EqualTo(5001));
         Assert.That(state.RandomRootSeed, Is.EqualTo(123456u));
-        Assert.That(state.NodeStatus, Is.EqualTo(RunNodeStatus.Available));
+        Assert.That(state.MapDefinition, Is.SameAs(options.Map));
+        Assert.That(state.CurrentNodeId, Is.EqualTo(MapNodeId.FromPosition(0, 0)));
+        Assert.That(state.PathNodeIds, Is.EqualTo(new[] { MapNodeId.FromPosition(0, 0) }));
+        Assert.That(state.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
         Assert.That(state.BattleAttemptSequence, Is.Zero);
         Assert.That(state.ActiveBattle, Is.Null);
-        Assert.That(state.BattleSnapshot, Is.Null);
         Assert.That(store.Current, Is.SameAs(state));
     }
 
@@ -40,7 +38,7 @@ public sealed class RunStateStoreTests
     [Test]
     public void RunCreationOptions_WithDefaultRunId_IsRejected()
     {
-        using var store = new RunStateStore();
+        MapDefinition map = CreateMap(mapSeed: 7u);
 
         Assert.Throws<ArgumentException>(() => new RunCreationOptions(
             default,
@@ -48,63 +46,54 @@ public sealed class RunStateStoreTests
             initialHealth: 80,
             maxHealth: 80,
             deckTemplateId: 1001,
-            encounterTemplateId: 5001,
-            randomRootSeed: 123456u));
-        Assert.That(store.Current, Is.Null);
+            randomRootSeed: 123456u,
+            map: map));
     }
 
-    /// <summary>进入唯一节点时冻结进战前事实，并签发本次战斗唯一输入。</summary>
+    /// <summary>提交普通直接出边后才签发绑定 NodeId 与冻结 EncounterId 的本战输入。</summary>
     [Test]
-    public void BeginBattle_FreezesPreBattleSnapshotAndPublishesActiveInput()
+    public void CommitThenBeginBattle_FreezesSelectedNodeAndEncounterInput()
     {
-        var options = new RunCreationOptions(
-            new RunId(Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")),
+        using var store = new RunStateStore();
+        RunState created = store.CreateNewRun(CreateOptions(
+            "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            mapSeed: 91u,
             heroTemplateId: 1002,
             initialHealth: 57,
             maxHealth: 70,
-            deckTemplateId: 1002,
-            encounterTemplateId: 5001,
-            randomRootSeed: 987654321u);
-        using var store = new RunStateStore();
-        RunState beforeBattle = store.CreateNewRun(options);
+            deckTemplateId: 1002));
+        MapNodeId selectedNodeId = GetFirstSelectable(created);
 
-        RunBattleInput input = store.BeginBattle();
+        RunState committed = store.CommitNode(selectedNodeId);
+        RunBattleInput input = store.BeginCommittedBattle();
         RunState inBattle = store.Current;
 
-        Assert.That(inBattle, Is.Not.SameAs(beforeBattle));
-        Assert.That(inBattle.NodeStatus, Is.EqualTo(RunNodeStatus.InBattle));
+        Assert.That(committed.ProgressPhase, Is.EqualTo(RunProgressPhase.EncounterCommitted));
+        Assert.That(committed.CommittedNodeId, Is.EqualTo(selectedNodeId));
+        Assert.That(inBattle.ProgressPhase, Is.EqualTo(RunProgressPhase.InBattle));
         Assert.That(inBattle.BattleAttemptSequence, Is.EqualTo(1));
         Assert.That(inBattle.ActiveBattle, Is.SameAs(input));
-        Assert.That(input.BattleId.RunId, Is.EqualTo(options.RunId));
+        Assert.That(input.BattleId.RunId, Is.EqualTo(created.RunId));
+        Assert.That(input.BattleId.NodeId, Is.EqualTo(selectedNodeId));
         Assert.That(input.BattleId.AttemptSequence, Is.EqualTo(1));
-        Assert.That(input.HeroTemplateId, Is.EqualTo(1002));
+        Assert.That(input.EncounterTemplateId, Is.EqualTo(
+            created.MapDefinition.GetNode(selectedNodeId).ContentId));
         Assert.That(input.InitialHealth, Is.EqualTo(57));
-        Assert.That(input.MaxHealth, Is.EqualTo(70));
-        Assert.That(input.DeckTemplateId, Is.EqualTo(1002));
-        Assert.That(input.EncounterTemplateId, Is.EqualTo(5001));
         Assert.That(input.RandomSeed, Is.Not.Zero);
-        Assert.That(inBattle.BattleSnapshot, Is.Not.Null);
-        Assert.That(inBattle.BattleSnapshot.RunId, Is.EqualTo(options.RunId));
-        Assert.That(inBattle.BattleSnapshot.CurrentHealth, Is.EqualTo(57));
-        Assert.That(inBattle.BattleSnapshot.DeckTemplateId, Is.EqualTo(1002));
-        Assert.That(inBattle.BattleSnapshot.NodeStatus, Is.EqualTo(RunNodeStatus.Available));
+        Assert.That(inBattle.PathNodeIds, Is.EqualTo(created.PathNodeIds));
     }
 
-    /// <summary>当前本战胜利时原子写回结算生命、完成节点并清除战斗暂存事实。</summary>
+    /// <summary>当前本战胜利时原子写回生命、追加完成路径并回到地图。</summary>
     [Test]
-    public void ApplyVictory_WritesSettledHealthCompletesNodeAndClearsBattleFacts()
+    public void ApplyVictory_AppendsCompletedNodeAndReturnsToMap()
     {
-        var options = new RunCreationOptions(
-            new RunId(Guid.Parse("10000000-2000-3000-4000-500000000000")),
-            heroTemplateId: 1001,
-            initialHealth: 80,
-            maxHealth: 80,
-            deckTemplateId: 1001,
-            encounterTemplateId: 5001,
-            randomRootSeed: 31337u);
         using var store = new RunStateStore();
-        store.CreateNewRun(options);
-        RunBattleInput input = store.BeginBattle();
+        RunState created = store.CreateNewRun(CreateOptions(
+            "10000000-2000-3000-4000-500000000000",
+            mapSeed: 31337u));
+        MapNodeId selectedNodeId = GetFirstSelectable(created);
+        store.CommitNode(selectedNodeId);
+        RunBattleInput input = store.BeginCommittedBattle();
 
         RunState completed = store.ApplyVictory(
             input.BattleId,
@@ -113,132 +102,108 @@ public sealed class RunStateStoreTests
             maxHealth: 80);
 
         Assert.That(completed.CurrentHealth, Is.EqualTo(34));
-        Assert.That(completed.NodeStatus, Is.EqualTo(RunNodeStatus.Completed));
-        Assert.That(completed.BattleAttemptSequence, Is.EqualTo(1));
+        Assert.That(completed.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(completed.CurrentNodeId, Is.EqualTo(selectedNodeId));
+        Assert.That(completed.PathNodeIds.Last(), Is.EqualTo(selectedNodeId));
+        Assert.That(completed.CommittedNodeId, Is.Null);
         Assert.That(completed.ActiveBattle, Is.Null);
-        Assert.That(completed.BattleSnapshot, Is.Null);
-        Assert.That(store.Current, Is.SameAs(completed));
     }
 
-    /// <summary>失败不污染进战前事实，重开恢复 snapshot 并签发不同本战 seed。</summary>
+    /// <summary>普通战斗失败立即进入零生命终局，不完成失败节点且任何继续迁移都被拒绝。</summary>
     [Test]
-    public void RestartAfterDefeat_RestoresSnapshotAndUsesNewBattleSeed()
+    public void RecordDefeat_EntersTerminalWithoutCompletingOrRetryingNode()
     {
-        var options = new RunCreationOptions(
-            new RunId(Guid.Parse("abcdefab-cdef-abcd-efab-cdefabcdefab")),
-            heroTemplateId: 1002,
-            initialHealth: 41,
-            maxHealth: 70,
-            deckTemplateId: 1002,
-            encounterTemplateId: 5001,
-            randomRootSeed: 424242u);
         using var store = new RunStateStore();
-        store.CreateNewRun(options);
-        RunBattleInput failedAttempt = store.BeginBattle();
+        RunState created = store.CreateNewRun(CreateOptions(
+            "abcdefab-cdef-abcd-efab-cdefabcdefab",
+            mapSeed: 424242u));
+        MapNodeId failedNodeId = GetFirstSelectable(created);
+        store.CommitNode(failedNodeId);
+        RunBattleInput failedAttempt = store.BeginCommittedBattle();
 
-        RunState failed = store.RecordDefeat(
+        RunState terminal = store.RecordDefeat(
             failedAttempt.BattleId,
-            heroTemplateId: 1002,
+            heroTemplateId: 1001,
             settledHealth: 0,
-            maxHealth: 70);
+            maxHealth: 80);
 
-        Assert.That(failed.NodeStatus, Is.EqualTo(RunNodeStatus.Failed));
-        Assert.That(failed.CurrentHealth, Is.EqualTo(41));
-        Assert.That(failed.ActiveBattle, Is.Null);
-        Assert.That(failed.BattleSnapshot, Is.Not.Null);
-        Assert.That(failed.BattleSnapshot.CurrentHealth, Is.EqualTo(41));
-
-        RunBattleInput retry = store.RestartBattle();
-
-        Assert.That(retry.BattleId.AttemptSequence, Is.EqualTo(2));
-        Assert.That(retry.InitialHealth, Is.EqualTo(41));
-        Assert.That(retry.DeckTemplateId, Is.EqualTo(1002));
-        Assert.That(retry.RandomSeed, Is.Not.EqualTo(failedAttempt.RandomSeed));
-        Assert.That(store.Current.NodeStatus, Is.EqualTo(RunNodeStatus.InBattle));
-        Assert.That(store.Current.BattleAttemptSequence, Is.EqualTo(2));
-        Assert.That(store.Current.BattleSnapshot.CurrentHealth, Is.EqualTo(41));
+        Assert.That(terminal.ProgressPhase, Is.EqualTo(RunProgressPhase.Terminal));
+        Assert.That(terminal.TerminalReason, Is.EqualTo(RunTerminalReason.Defeat));
+        Assert.That(terminal.CurrentHealth, Is.Zero);
+        Assert.That(terminal.PathNodeIds, Is.EqualTo(created.PathNodeIds));
+        Assert.That(terminal.CommittedNodeId, Is.EqualTo(failedNodeId));
+        Assert.That(terminal.ActiveBattle, Is.Null);
+        Assert.Throws<InvalidOperationException>(() => store.CommitNode(failedNodeId));
+        Assert.Throws<InvalidOperationException>(() => store.BeginCommittedBattle());
     }
 
     /// <summary>本战 seed 派生在完整正整数 attempt 空间内不得复现旧压缩算法的碰撞。</summary>
     [Test]
     public void BattleSeedDerivation_PreviouslyCollidingAttempts_AreDifferent()
     {
-        uint first = RunStateStore.DeriveBattleSeed(
-            randomRootSeed: 123456789u,
-            attemptSequence: 50549);
-        uint second = RunStateStore.DeriveBattleSeed(
-            randomRootSeed: 123456789u,
-            attemptSequence: 63342);
+        uint first = RunStateStore.DeriveBattleSeed(123456789u, 50549);
+        uint second = RunStateStore.DeriveBattleSeed(123456789u, 63342);
 
         Assert.That(first, Is.InRange(1u, (uint)int.MaxValue));
         Assert.That(second, Is.InRange(1u, (uint)int.MaxValue));
         Assert.That(second, Is.Not.EqualTo(first));
     }
 
-    /// <summary>Store 以只读事实流依次发布创建与入战后的完整不可变状态。</summary>
+    /// <summary>Store 以只读事实流依次发布创建、承诺与入战的完整不可变状态。</summary>
     [Test]
     public void StateStream_PublishesEachImmutableRunState()
     {
         var observed = new List<RunState>();
         using var store = new RunStateStore();
         using IDisposable subscription = store.State.Subscribe(observed.Add);
-        var options = new RunCreationOptions(
-            new RunId(Guid.Parse("12345678-90ab-cdef-1234-567890abcdef")),
-            heroTemplateId: 1001,
-            initialHealth: 30,
-            maxHealth: 30,
-            deckTemplateId: 1001,
-            encounterTemplateId: 5001,
-            randomRootSeed: 77u);
+        RunState created = store.CreateNewRun(CreateOptions(
+            "12345678-90ab-cdef-1234-567890abcdef",
+            mapSeed: 77u));
+        store.CommitNode(GetFirstSelectable(created));
+        store.BeginCommittedBattle();
 
-        RunState created = store.CreateNewRun(options);
-        store.BeginBattle();
-
-        Assert.That(observed.Count, Is.EqualTo(3));
+        Assert.That(observed.Count, Is.EqualTo(4));
         Assert.That(observed[0], Is.Null);
         Assert.That(observed[1], Is.SameAs(created));
-        Assert.That(observed[2], Is.SameAs(store.Current));
-        Assert.That(observed[2].NodeStatus, Is.EqualTo(RunNodeStatus.InBattle));
+        Assert.That(observed[2].ProgressPhase, Is.EqualTo(RunProgressPhase.EncounterCommitted));
+        Assert.That(observed[3].ProgressPhase, Is.EqualTo(RunProgressPhase.InBattle));
     }
 
-    /// <summary>非法或过期迁移均被拒绝，且不会替换最后一份有效 Run 事实。</summary>
-    [Test]
-    public void IllegalAndStaleTransitions_AreRejectedWithoutMutatingState()
+    /// <summary>建立带确定性 G3 地图的有效 Run 创建输入。</summary>
+    private static RunCreationOptions CreateOptions(
+        string runId,
+        uint mapSeed,
+        int heroTemplateId = 1001,
+        int initialHealth = 80,
+        int maxHealth = 80,
+        int deckTemplateId = 1001)
     {
-        using var store = new RunStateStore();
-        Assert.Throws<InvalidOperationException>(() => store.BeginBattle());
-        var options = new RunCreationOptions(
-            new RunId(Guid.Parse("fedcba98-7654-3210-fedc-ba9876543210")),
-            heroTemplateId: 1001,
-            initialHealth: 80,
-            maxHealth: 80,
-            deckTemplateId: 1001,
-            encounterTemplateId: 5001,
-            randomRootSeed: 999u);
-        store.CreateNewRun(options);
-        RunBattleInput firstAttempt = store.BeginBattle();
-        RunState firstInBattle = store.Current;
+        return new RunCreationOptions(
+            new RunId(Guid.Parse(runId)),
+            heroTemplateId,
+            initialHealth,
+            maxHealth,
+            deckTemplateId,
+            randomRootSeed: mapSeed,
+            map: CreateMap(mapSeed));
+    }
 
-        Assert.Throws<InvalidOperationException>(() => store.BeginBattle());
-        Assert.Throws<InvalidOperationException>(() => store.ApplyVictory(
-            new RunBattleId(options.RunId, 2),
-            heroTemplateId: 1001,
-            settledHealth: 70,
-            maxHealth: 80));
-        Assert.That(store.Current, Is.SameAs(firstInBattle));
+    /// <summary>从当前固定 profile 生成一张通过生产 validator 的地图。</summary>
+    private static MapDefinition CreateMap(uint mapSeed)
+    {
+        MapDefinition map = ActMapGenerator.Generate(TinySpireActMapProfiles.Current, mapSeed);
+        Assert.That(
+            ActMapValidator.Validate(map, TinySpireActMapProfiles.Current).IsValid,
+            Is.True);
+        return map;
+    }
 
-        store.RecordDefeat(firstAttempt.BattleId, 1001, 0, 80);
-        Assert.Throws<InvalidOperationException>(() => store.RecordDefeat(
-            firstAttempt.BattleId,
-            heroTemplateId: 1001,
-            settledHealth: 0,
-            maxHealth: 80));
-        RunBattleInput retry = store.RestartBattle();
-        Assert.Throws<InvalidOperationException>(() => store.ApplyVictory(
-            firstAttempt.BattleId,
-            heroTemplateId: 1001,
-            settledHealth: 70,
-            maxHealth: 80));
-        Assert.That(store.Current.ActiveBattle, Is.SameAs(retry));
+    /// <summary>读取当前位置按普通规则可选的第一个节点。</summary>
+    private static MapNodeId GetFirstSelectable(RunState state)
+    {
+        return MapReachability.GetSelectableNodeIds(
+            state.MapDefinition,
+            state.CurrentNodeId,
+            MapTraversalMode.Ordinary)[0];
     }
 }

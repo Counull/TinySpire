@@ -1,7 +1,15 @@
 ---
 created: 2026-07-06
-updated: 2026-08-17
+updated: 2026-08-24
 ---
+
+## 2026-08-24 G3 确定性尖塔式 Act 地图（verified）
+
+- 已按 Hermes 决策 012～016 完成冻结 MapDefinition、固定 Profile 分层 DAG、纯可达性、明牌 Encounter/Boss、完整后半程 hover、BossGateReached 与失败 `Terminal(Defeat)`；Store 仍是唯一可变事实所有者，Flow 只编排，View 只投影/提交命令。
+- schema v2 只保存 seed、generator version、profile/config ID、fingerprint、path/phase 与终局必要事实；不保存整图、UI 或派生数据。旧 schema v1 无法无歧义迁移，明确 fail-fast；普通战斗失败不再恢复 snapshot 或提供同节点重试。
+- RED→GREEN 定向为 map+store 25/25、save 21/21、atomic 19/19、flow 22/22、presenter 15/15、Unity View 13/13；最终交互式完整 EditMode job `8e910a98b14f4fe4b4901ba78bf060dc` 为 **993/993 passed**、0 failed、0 skipped、44.1991795 秒。
+- `Sync and Build All` 与 Local Addressables 成功，12 个 bundle 均使用 `AssetBundleProvider`。Packed Play 实走多节点普通战斗胜利到 BossGate 并进程级冷启动恢复，以及失败终局、冷启动失败页和确认删除两条生产链；产品 Console Error=0。
+- 测试档已删除，用户原 schema v1 档按原 302 bytes 与 SHA-256 `419058435D82A48EA08DBF3121F6127417EAC700D302388BFFFA4586DFEE54B9` 恢复，Addressables Play Mode 已恢复 Fast Mode。G4+、真实 Boss、奖励和遗物实际效果未获授权。完整证据见 `plans/2026-08-24-g3-deterministic-act-map.md` 与 `06_testing/2026-08-24-g3-deterministic-act-map.md`。
 
 ## 当前 Run 路线状态（as of 2026-08-17 / `637f0ac` + RunEntry visual working tree）
 

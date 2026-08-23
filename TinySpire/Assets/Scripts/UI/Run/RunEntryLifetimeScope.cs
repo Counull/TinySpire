@@ -10,6 +10,8 @@ public class RunEntryLifetimeScope : LifetimeScope
     {
         builder.RegisterComponentInHierarchy<RunEntryView>()
             .As<IRunEntryView>();
+        builder.Register<RunMapIdentityCatalog>(Lifetime.Scoped)
+            .As<IRunMapIdentityCatalog>();
         builder.RegisterEntryPoint<RunEntryPresenter>()
             .AsSelf();
     }

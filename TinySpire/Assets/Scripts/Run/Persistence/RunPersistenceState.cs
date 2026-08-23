@@ -8,12 +8,14 @@ namespace TinySpire.Run
         Unchecked,
         NotFound,
         ContinueAvailable,
+        TerminalDefeat,
         InvalidJson,
         InvalidDocument,
         UnsupportedSchema,
         MissingHeroTemplate,
         MissingDeckTemplate,
         MissingEncounterTemplate,
+        MissingMapProfile,
         InterruptedCommit,
         IoFailure,
         DeleteFailed,
@@ -105,6 +107,21 @@ namespace TinySpire.Run
                 missingConfigurationId: null);
         }
 
+        /// <summary>建立已恢复 Terminal(Defeat) 且永久禁止 Continue 的单槽状态。</summary>
+        internal static RunPersistenceState TerminalDefeat(
+            bool hasPendingTemporaryFile,
+            string detail = "")
+        {
+            return new RunPersistenceState(
+                RunPersistenceStatus.TerminalDefeat,
+                canContinue: false,
+                hasStoredData: true,
+                hasPendingTemporaryFile,
+                detail,
+                missingConfigurationKind: null,
+                missingConfigurationId: null);
+        }
+
         /// <summary>建立禁止继续但必须保留原始槽位的读取故障状态。</summary>
         internal static RunPersistenceState Unavailable(
             RunPersistenceStatus status,
@@ -115,8 +132,9 @@ namespace TinySpire.Run
             int? missingConfigurationId = null)
         {
             if (status == RunPersistenceStatus.Unchecked ||
-                status == RunPersistenceStatus.NotFound ||
-                status == RunPersistenceStatus.ContinueAvailable ||
+                 status == RunPersistenceStatus.NotFound ||
+                 status == RunPersistenceStatus.ContinueAvailable ||
+                 status == RunPersistenceStatus.TerminalDefeat ||
                 status == RunPersistenceStatus.DeleteFailed ||
                 status == RunPersistenceStatus.CommitPending ||
                 status == RunPersistenceStatus.CommitFailed)

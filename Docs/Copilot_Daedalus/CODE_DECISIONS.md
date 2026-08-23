@@ -1,6 +1,6 @@
 ---
 created: 2026-07-06
-updated: 2026-08-17
+updated: 2026-08-24
 ---
 
 # Daedalus · 代码决策记录
@@ -1284,3 +1284,19 @@ Run 规划采用递归切片门禁：每个可执行切片先处于 `needs-grill
 **保留边界**：本决定只 supersede CD-043/045 中“生产调用者必须预注册 concrete coordinator”和“coordinator 是 View 的生命周期入口”两项接口口径。权威序号分配、唯一迭代 drain、callback 非重入、FIFO continuation、system token、普通失败空 settlement、表现屏障、completion 与 fault 诊断继续由既有 Queue/scheduling core 独占，语义和顺序不变。internal scheduling 合同测试继续直接覆盖预注册/拒绝/伪造 token；普通 Queue、UI 与业务测试只调用 `Submit`。没有新增 interface、模块、Scene/Prefab、配置表或包依赖，也没有修改 `BattleCardPlayEvaluation`。
 
 **影响与验收**：三个生产调用点和 13 个旧 `SubmitRegistered` 测试消费者已迁移；共享测试 coordinator registry/扩展已删除。新增 RED 首先证明 lifecycle 缺少原始 Command，随后旧 helper 的重复预注册暴露迁移遗漏；最终 M8B 11/11、相关聚合 116/116、完整 EditMode 953/953 均通过，Unity 编译 Console 0 error，`git diff --check` 通过。未运行 PlayMode、Player build、Addressables 或人工 BattleScene smoke；本次不含资产/配置变更。完整方案与证据见 `plans/2026-08-17-battle-command-submission-interface-deepening.md` 和 `06_testing/2026-08-17-battle-command-submission-interface-deepening.md`。
+
+## CD-116：G3 以冻结 MapDefinition、recipe-only 存档和 Terminal(Defeat) 贯通单 Act 地图
+
+**问题**：G3 需要把 G1 的单节点与失败 snapshot 脚手架替换为一张可规划、可保存、可复现的尖塔式 Act 地图，同时保留 CD-112/113 已验证的 Store / Flow / Scene Scope 与原子单槽边界。若 View 保存可选节点、节点自己把 `Outgoing` 当作唯一合法性、进入节点时才抽 Encounter/Boss，或 Save Document 直接序列化整图和派生集合，都会形成第二事实源并使读档结果依赖调用顺序；若继续沿用 `RunBattleSnapshot`，普通战斗失败又会违背 Hermes 决策 016 的终局规则。
+
+**地图与所有权选择**：创建 Run 时以固定 `ActMapProfile`、独立 map seed 和 generator version 一次生成整张分层 DAG，得到不可变 `MapDefinition`。稳定 `NodeId + Layer + Slot`、边、普通节点 `EncounterId`、本局 Boss 候选子集及每个终点 `BossId` 均属于该整图事实，开局冻结并可投影；构造边界防御性复制节点/边输入，规范化后的 profile/version/seed/nodes/edges 计算小写 SHA-256 `Fingerprint`。`RunStateStore` 是 Map/Run 可变事实的唯一写入所有者，只发布不可变 RunState，并拥有实际路径、当前/已提交节点、attempt、`MapReady / EncounterCommitted / InBattle / BossGateReached / Terminal` 等阶段；`RunFlowService` 只编排 Store、save port 和 SceneFlow，View 只投影与提交 `NodeId` 命令。
+
+**可达性与投影选择**：普通移动的选择集合由纯可达性 module 从 MapDefinition、当前进度和移动模式计算，当前普通模式等价于当前节点直接出边；同一 module 预留 WingBoots 模式，只允许紧邻下一层任意已生成节点。本轮不实现遗物库存、次数、消耗或 UI。完整后继节点/边和可达 Boss 也由 DAG 纯计算，供当前可选节点 hover 高亮完整后半程并弱化会放弃的路线；这些集合、锁定色、hover 与布局均不进入 Store 或存档。Validator 除可达性外，还类型化拒绝 profile/version 漂移、重复 ID/Layer-Slot/边、非稳定 NodeId、错误内容引用、缺失端点、非相邻边和 Boss 出边。投影侧以只读 identity catalog 把冻结内容 ID 映射为名称与程序化锚点：5001 显示 `SLIME PATROL`、首敌本地化名和 Slime silhouette；5002 `SENTRY LINE` 只作为身份判别测试数据；9001/9002/9003 分别为 `BOSS ALPHA/BETA/GAMMA`，使用 Crown/Horns/Eye 三种不同锚点。同一 Boss 的多个终点保持相同身份；名称与锚点不进入 MapDefinition 或存档。
+
+**recipe-only 存档选择**：当前写入 schema v2 在既有 Run/Hero/HP/Deck/random root 事实之外，地图与进度只保存 map seed、generator version、profile/config ID、Map fingerprint、实际 path、稳定 progress phase、可选 committed node 与 terminal reason；不保存 MapDefinition、节点/边副本、可选节点、可达 Boss、动画、hover、`BattleAttemptSequence` 或其他 UI/派生数据。恢复先按 profile/version/seed 重建整图，再运行 validator 并精确比较 fingerprint，之后才校验并恢复路径和阶段；profile、版本、配置引用、fingerprint 或 path 形状漂移均类型化失败。运行时下一 attempt 只由已完成 Combat path 与恢复 phase 推导，存档调用方不能注入第二份计数事实。旧 schema v1 没有 profile/version/map seed/fingerprint/path/Boss 身份，无法把历史单节点状态无歧义映射为本局冻结图，因此明确返回 UnsupportedSchema，不猜默认值、不补随机事实、不静默重掷。
+
+**Boss 门与失败终局选择**：普通战斗胜利只在当前 attempt 的稳定 `BattleResult` 到达后完成已提交 Combat 节点、追加实际路径并回到 `MapReady`；过期结果不能结算新节点。选择 Boss 终点只追加该路径并形成可保存的 `BossGateReached`，不进入 Battle、不发奖励、不产生 RunOutcome。普通战斗失败不完成所选节点，Store 立即形成类型化 `Terminal(Defeat)`；Flow 以同一终局 document 通过既有原子单槽提交，成功后只显示不可 Continue 的失败页。终局提交会先耐久写入并回读校验 `terminal-intent recovery artifact`，再发布通用临时档/正式档；重试相同文档复用既有恢复物，不同文档被拒绝，损坏或非终局恢复物 fail-closed，不能退回旧 live save 提供 Continue。确认离开按 live → intent → temp 顺序删除，若 live 删除失败则保留恢复物；提交失败保持终局内存态并只能重试同一 document，不能回退旧 checkpoint。冷启动直接恢复终局失败页，只有玩家确认离开后才删除终局档。
+
+**Supersede 与保留边界**：本决定只对 G3 Run-managed 流程 supersede CD-112 的 `RunBattleSnapshot / RestartBattle` 和 CD-113 的“当前写入 schema v1、Defeat 不写盘、失败页可同节点重开”口径；G1/G2 验收记录仍作为当时历史事实保留。CD-112 的 child-scope Result bridge、attempt 身份与唯一 Store/Flow 所有权，以及 CD-113 的 Bootstrap root、save port、同目录 temp、durable validation、Move/Replace 和失败不覆盖已提交事实继续有效。真实 Boss 战/Boss 阶段、奖励、Run 胜利、遗物实际效果、非战斗节点、多人/FishNet、云/多槽与战中存档均不在本决定内。
+
+**实施状态与验收门**：当前为 `verified`。静态编译证据为生产 **0 errors / 6 warnings**、Editor **0 errors / 12 warnings**；Mono 定向 runner 为 map+store 25/25、save 21/21、atomic 19/19、flow 22/22、presenter 15/15，Unity View 为 13/13。首次完整 Unity 暴露的 i18n workbook 四格漂移与测试构造参数问题均已修正；最终交互式完整 EditMode job `8e910a98b14f4fe4b4901ba78bf060dc` 为 **993/993 passed**、0 failed、0 skipped、44.1991795 秒。`Sync and Build All` 与 Local Addressables 成功；Packed Play 已实走普通战斗多节点胜利到 `BossGateReached` 并进程级冷启动恢复，以及失败原子终局、冷启动失败页和确认删除两条生产链，各产品检查点 Console Error=0。完整证据见 `06_testing/2026-08-24-g3-deterministic-act-map.md`，方案见 `plans/2026-08-24-g3-deterministic-act-map.md`。

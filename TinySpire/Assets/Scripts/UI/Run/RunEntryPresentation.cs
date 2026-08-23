@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using cfg;
 using Cysharp.Threading.Tasks;
 using R3;
 using TinySpire.Run;
+using TinySpire.Run.Map;
 using UnityEngine.Localization;
 using VContainer;
 using VContainer.Unity;
@@ -36,8 +38,8 @@ namespace TinySpire.UI.Run
         Back,
         SelectHero,
         ConfirmHero,
-        EnterBattle,
-        RestartBattle,
+        EnterMapNode,
+        LeaveTerminalRun,
         ContinueGame,
         ConfirmAbandon,
         RetrySave,
@@ -67,7 +69,7 @@ namespace TinySpire.UI.Run
         Cleared,
         Health,
         FailureTitle,
-        RestartBattle,
+        LeaveRun,
         ContinueGame,
         Cancel,
         ConfirmationTitle,
@@ -83,7 +85,7 @@ namespace TinySpire.UI.Run
         RollbackConfirm,
     }
 
-    /// <summary>View 发出的单个不可变入口动作；只有选择动作携带 Hero 模板标识。</summary>
+    /// <summary>View 发出的单个不可变入口动作；选择类动作只携带对应领域身份。</summary>
     public readonly struct RunEntryAction
     {
         /// <summary>动作类型。</summary>
@@ -92,8 +94,14 @@ namespace TinySpire.UI.Run
         /// <summary>选择动作携带的 Hero 模板标识，其余动作为空。</summary>
         public int? HeroTemplateId { get; }
 
+        /// <summary>地图节点动作携带的稳定节点身份，其余动作为空。</summary>
+        public MapNodeId? MapNodeId { get; }
+
         /// <summary>创建并验证一个入口 UI 意图。</summary>
-        public RunEntryAction(RunEntryActionKind kind, int? heroTemplateId = null)
+        public RunEntryAction(
+            RunEntryActionKind kind,
+            int? heroTemplateId = null,
+            MapNodeId? mapNodeId = null)
         {
             if (kind == RunEntryActionKind.SelectHero)
             {
@@ -107,8 +115,342 @@ namespace TinySpire.UI.Run
                     nameof(heroTemplateId));
             }
 
+
+            if (kind == RunEntryActionKind.EnterMapNode)
+            {
+                if (mapNodeId == null || string.IsNullOrEmpty(mapNodeId.Value.Value))
+                    throw new ArgumentException("EnterMapNode requires a stable node id.", nameof(mapNodeId));
+            }
+            else if (mapNodeId.HasValue)
+            {
+                throw new ArgumentException(
+                    "Only EnterMapNode actions may carry a map node id.",
+                    nameof(mapNodeId));
+            }
+
             Kind = kind;
             HeroTemplateId = heroTemplateId;
+            MapNodeId = mapNodeId;
+        }
+    }
+
+    /// <summary>地图节点在当前 Run 投影中的互斥功能状态。</summary>
+    public enum RunMapNodePresentationState
+    {
+        Locked,
+        Selectable,
+        Completed,
+        Current,
+        BossGateReached,
+    }
+
+    /// <summary>地图节点使用的轻量程序化视觉锚点；Boss 候选以不同轮廓保持开局可区分。</summary>
+    public enum RunMapVisualAnchorKind
+    {
+        StartFlag,
+        EncounterSlimeSilhouette,
+        EncounterSentrySilhouette,
+        BossAlphaCrown,
+        BossBetaHorns,
+        BossGammaEye,
+    }
+
+    /// <summary>由静态内容身份解析出的只读显示描述，不进入 MapDefinition 或 Run 存档。</summary>
+    public sealed class RunMapIdentityDescriptor
+    {
+        public string DisplayName { get; }
+        public RunMapVisualAnchorKind VisualAnchorKind { get; }
+
+        /// <summary>冻结玩家可见名称与程序化视觉锚点种类。</summary>
+        public RunMapIdentityDescriptor(
+            string displayName,
+            RunMapVisualAnchorKind visualAnchorKind)
+        {
+            if (string.IsNullOrWhiteSpace(displayName))
+                throw new ArgumentException("Map identity display name cannot be empty.", nameof(displayName));
+            if (!Enum.IsDefined(typeof(RunMapVisualAnchorKind), visualAnchorKind))
+                throw new ArgumentOutOfRangeException(nameof(visualAnchorKind));
+
+            DisplayName = displayName;
+            VisualAnchorKind = visualAnchorKind;
+        }
+    }
+
+    /// <summary>把冻结 EncounterId/BossId 解析为当前语言只读展示身份的单一 seam。</summary>
+    public interface IRunMapIdentityCatalog
+    {
+        /// <summary>读取指定节点内容身份的名称与视觉锚点，不写入任何 Run 事实。</summary>
+        RunMapIdentityDescriptor Resolve(MapNodeKind kind, int contentId);
+    }
+
+    /// <summary>从 Luban Encounter 首敌解析名称，并提供 G3 明确 Boss 测试身份的目录适配器。</summary>
+    public sealed class RunMapIdentityCatalog : IRunMapIdentityCatalog
+    {
+        private readonly Func<Tables> _tablesProvider;
+        private readonly Func<string, IReadOnlyDictionary<string, object>, string> _localize;
+
+        /// <summary>以生产配置与本地化服务创建只读地图身份目录。</summary>
+        [Inject]
+        public RunMapIdentityCatalog(
+            ConfigService configs,
+            LocalizationService localization)
+            : this(
+                CreateTablesProvider(configs),
+                CreateLocalizer(localization))
+        {
+        }
+
+        /// <summary>以可替换表与本地化 seam 创建可直接 EditMode 验证的身份目录。</summary>
+        internal RunMapIdentityCatalog(
+            Func<Tables> tablesProvider,
+            Func<string, IReadOnlyDictionary<string, object>, string> localize)
+        {
+            _tablesProvider = tablesProvider ?? throw new ArgumentNullException(nameof(tablesProvider));
+            _localize = localize ?? throw new ArgumentNullException(nameof(localize));
+        }
+
+        /// <summary>按节点种类解析开局明牌身份，并拒绝未定义的内容 ID。</summary>
+        public RunMapIdentityDescriptor Resolve(MapNodeKind kind, int contentId)
+        {
+            switch (kind)
+            {
+                case MapNodeKind.Start when contentId == 0:
+                    return new RunMapIdentityDescriptor(
+                        "START",
+                        RunMapVisualAnchorKind.StartFlag);
+                case MapNodeKind.Start:
+                    throw new InvalidOperationException("Start map identity must use content id 0.");
+                case MapNodeKind.Combat:
+                    return ResolveEncounter(contentId);
+                case MapNodeKind.Boss:
+                    return ResolveG3BossTestIdentity(contentId);
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(kind));
+            }
+        }
+
+        /// <summary>从 Encounter 的首个 TbEnemy 读取 NameI18nKey 并解析当前语言名称。</summary>
+        private RunMapIdentityDescriptor ResolveEncounter(int encounterId)
+        {
+            Tables tables = _tablesProvider()
+                ?? throw new InvalidOperationException(
+                    "ConfigService must be initialized before resolving map identities.");
+            cfg.battle.Encounter encounter = tables.TbEncounter.GetOrDefault(encounterId)
+                ?? throw new InvalidOperationException($"Encounter template {encounterId} does not exist.");
+            if (encounter.EnemyTemplateIds == null || encounter.EnemyTemplateIds.Length == 0)
+            {
+                throw new InvalidOperationException(
+                    $"Encounter template {encounterId} has no enemy identity to present.");
+            }
+
+            int enemyId = encounter.EnemyTemplateIds[0];
+            cfg.battle.Enemy enemy = tables.TbEnemy.GetOrDefault(enemyId)
+                ?? throw new InvalidOperationException($"Enemy template {enemyId} does not exist.");
+            if (string.IsNullOrWhiteSpace(enemy.NameI18nKey))
+                throw new InvalidOperationException($"Enemy template {enemyId} has no name localization key.");
+
+            string mainEnemyName = _localize(enemy.NameI18nKey, null);
+            if (string.IsNullOrWhiteSpace(mainEnemyName))
+            {
+                throw new InvalidOperationException(
+                    $"Enemy template {enemyId} resolved an empty display name.");
+            }
+
+            return ResolveG3EncounterTestIdentity(encounterId, enemyId, mainEnemyName);
+        }
+
+        /// <summary>解析当前 G3 profile 的 5001 与仅供目录判别测试的 5002，并把首敌身份绑定到稳定剪影。</summary>
+        private static RunMapIdentityDescriptor ResolveG3EncounterTestIdentity(
+            int encounterId,
+            int mainEnemyId,
+            string mainEnemyName)
+        {
+            switch (encounterId)
+            {
+                case 5001 when mainEnemyId == 2001:
+                    return new RunMapIdentityDescriptor(
+                        $"SLIME PATROL\n{mainEnemyName}",
+                        RunMapVisualAnchorKind.EncounterSlimeSilhouette);
+                case 5002 when mainEnemyId == 2101:
+                    return new RunMapIdentityDescriptor(
+                        $"SENTRY LINE\n{mainEnemyName}",
+                        RunMapVisualAnchorKind.EncounterSentrySilhouette);
+                default:
+                    throw new InvalidOperationException(
+                        $"G3 test Encounter identity {encounterId} with main enemy {mainEnemyId} is not defined.");
+            }
+        }
+
+        /// <summary>解析仅供 G3 地图闭环使用的三名测试 Boss 身份，不冒充真实 Boss 配置。</summary>
+        private static RunMapIdentityDescriptor ResolveG3BossTestIdentity(int bossId)
+        {
+            switch (bossId)
+            {
+                case 9001:
+                    return new RunMapIdentityDescriptor(
+                        "BOSS ALPHA",
+                        RunMapVisualAnchorKind.BossAlphaCrown);
+                case 9002:
+                    return new RunMapIdentityDescriptor(
+                        "BOSS BETA",
+                        RunMapVisualAnchorKind.BossBetaHorns);
+                case 9003:
+                    return new RunMapIdentityDescriptor(
+                        "BOSS GAMMA",
+                        RunMapVisualAnchorKind.BossGammaEye);
+                default:
+                    throw new InvalidOperationException(
+                        $"G3 test Boss identity {bossId} is not defined.");
+            }
+        }
+
+        /// <summary>从生产 ConfigService 延迟读取初始化完成后的 Luban 表。</summary>
+        private static Func<Tables> CreateTablesProvider(ConfigService configs)
+        {
+            if (configs == null)
+                throw new ArgumentNullException(nameof(configs));
+
+            return () => configs.Tables;
+        }
+
+        /// <summary>把生产 LocalizationService 适配为身份目录的只读文本函数。</summary>
+        private static Func<string, IReadOnlyDictionary<string, object>, string> CreateLocalizer(
+            LocalizationService localization)
+        {
+            if (localization == null)
+                throw new ArgumentNullException(nameof(localization));
+
+            return localization.GetString;
+        }
+    }
+
+    /// <summary>一个明牌地图节点及其悬停后半程的不可变 View 投影。</summary>
+    public sealed class RunMapNodeViewModel
+    {
+        private readonly ReadOnlyCollection<string> _downstreamNodeIds;
+        private readonly ReadOnlyCollection<string> _downstreamEdgeKeys;
+
+        public string NodeId { get; }
+        public int Layer { get; }
+        public int Slot { get; }
+        public MapNodeKind Kind { get; }
+        public int ContentId { get; }
+        public string DisplayName { get; }
+        public RunMapVisualAnchorKind VisualAnchorKind { get; }
+        public RunMapNodePresentationState State { get; }
+        public IReadOnlyList<string> DownstreamNodeIds => _downstreamNodeIds;
+        public IReadOnlyList<string> DownstreamEdgeKeys => _downstreamEdgeKeys;
+
+        /// <summary>冻结一个节点的布局、明牌身份、交互状态与纯派生后半程。</summary>
+        public RunMapNodeViewModel(
+            string nodeId,
+            int layer,
+            int slot,
+            MapNodeKind kind,
+            int contentId,
+            string displayName,
+            RunMapVisualAnchorKind visualAnchorKind,
+            RunMapNodePresentationState state,
+            IReadOnlyList<string> downstreamNodeIds,
+            IReadOnlyList<string> downstreamEdgeKeys)
+        {
+            if (string.IsNullOrWhiteSpace(nodeId))
+                throw new ArgumentException("Map node id cannot be empty.", nameof(nodeId));
+            if (layer < 0)
+                throw new ArgumentOutOfRangeException(nameof(layer));
+            if (slot < 0)
+                throw new ArgumentOutOfRangeException(nameof(slot));
+            if (string.IsNullOrWhiteSpace(displayName))
+                throw new ArgumentException("Map node display name cannot be empty.", nameof(displayName));
+            ValidateVisualAnchor(kind, visualAnchorKind);
+
+            NodeId = nodeId;
+            Layer = layer;
+            Slot = slot;
+            Kind = kind;
+            ContentId = contentId;
+            DisplayName = displayName;
+            VisualAnchorKind = visualAnchorKind;
+            State = state;
+            _downstreamNodeIds = Array.AsReadOnly(
+                (downstreamNodeIds ?? throw new ArgumentNullException(nameof(downstreamNodeIds))).ToArray());
+            _downstreamEdgeKeys = Array.AsReadOnly(
+                (downstreamEdgeKeys ?? throw new ArgumentNullException(nameof(downstreamEdgeKeys))).ToArray());
+        }
+
+        /// <summary>约束节点种类与视觉锚点种类一致，避免 View 猜测内容身份。</summary>
+        private static void ValidateVisualAnchor(
+            MapNodeKind nodeKind,
+            RunMapVisualAnchorKind visualAnchorKind)
+        {
+            bool isValid = nodeKind == MapNodeKind.Start
+                ? visualAnchorKind == RunMapVisualAnchorKind.StartFlag
+                : nodeKind == MapNodeKind.Combat
+                    ? visualAnchorKind == RunMapVisualAnchorKind.EncounterSlimeSilhouette ||
+                      visualAnchorKind == RunMapVisualAnchorKind.EncounterSentrySilhouette
+                    : nodeKind == MapNodeKind.Boss &&
+                      (visualAnchorKind == RunMapVisualAnchorKind.BossAlphaCrown ||
+                       visualAnchorKind == RunMapVisualAnchorKind.BossBetaHorns ||
+                       visualAnchorKind == RunMapVisualAnchorKind.BossGammaEye);
+            if (!isValid)
+            {
+                throw new ArgumentException(
+                    $"Visual anchor '{visualAnchorKind}' is invalid for map node kind '{nodeKind}'.",
+                    nameof(visualAnchorKind));
+            }
+        }
+    }
+
+    /// <summary>一条冻结地图边的稳定 View 投影。</summary>
+    public sealed class RunMapEdgeViewModel
+    {
+        public string Key { get; }
+        public string FromNodeId { get; }
+        public string ToNodeId { get; }
+        public bool IsCompletedPath { get; }
+
+        /// <summary>冻结一条边的端点与已走路径表现。</summary>
+        public RunMapEdgeViewModel(
+            string fromNodeId,
+            string toNodeId,
+            bool isCompletedPath)
+        {
+            if (string.IsNullOrWhiteSpace(fromNodeId))
+                throw new ArgumentException("From node id cannot be empty.", nameof(fromNodeId));
+            if (string.IsNullOrWhiteSpace(toNodeId))
+                throw new ArgumentException("To node id cannot be empty.", nameof(toNodeId));
+
+            FromNodeId = fromNodeId;
+            ToNodeId = toNodeId;
+            Key = $"{fromNodeId}>{toNodeId}";
+            IsCompletedPath = isCompletedPath;
+        }
+    }
+
+    /// <summary>整张冻结 Act 地图的功能性、无业务写入 View 投影。</summary>
+    public sealed class RunMapViewModel
+    {
+        private readonly ReadOnlyCollection<RunMapNodeViewModel> _nodes;
+        private readonly ReadOnlyCollection<RunMapEdgeViewModel> _edges;
+
+        public string Fingerprint { get; }
+        public IReadOnlyList<RunMapNodeViewModel> Nodes => _nodes;
+        public IReadOnlyList<RunMapEdgeViewModel> Edges => _edges;
+
+        /// <summary>冻结地图指纹、全部节点和全部边。</summary>
+        public RunMapViewModel(
+            string fingerprint,
+            IReadOnlyList<RunMapNodeViewModel> nodes,
+            IReadOnlyList<RunMapEdgeViewModel> edges)
+        {
+            if (string.IsNullOrWhiteSpace(fingerprint))
+                throw new ArgumentException("Map fingerprint cannot be empty.", nameof(fingerprint));
+
+            Fingerprint = fingerprint;
+            _nodes = Array.AsReadOnly(
+                (nodes ?? throw new ArgumentNullException(nameof(nodes))).ToArray());
+            _edges = Array.AsReadOnly(
+                (edges ?? throw new ArgumentNullException(nameof(edges))).ToArray());
         }
     }
 
@@ -126,14 +468,14 @@ namespace TinySpire.UI.Run
         /// <summary>角色确认按钮是否可用。</summary>
         public bool ConfirmEnabled { get; }
 
-        /// <summary>唯一战斗节点是否可点击。</summary>
-        public bool BattleNodeInteractable { get; }
-
-        /// <summary>唯一战斗节点是否已经完成。</summary>
-        public bool BattleNodeCompleted { get; }
+        /// <summary>当前 Run 的完整地图投影；尚未创建 Run 时为空。</summary>
+        public RunMapViewModel Map { get; }
 
         /// <summary>主菜单继续游戏按钮是否可用。</summary>
         public bool ContinueEnabled { get; }
+
+        /// <summary>普通检查点提交失败时是否允许显式回退；Terminal 永远不允许回退。</summary>
+        public bool CanRollbackFailedSave { get; }
 
         /// <summary>冻结当前页面、交互状态与全部本地化文本。</summary>
         public RunEntryViewModel(
@@ -141,9 +483,9 @@ namespace TinySpire.UI.Run
             IReadOnlyDictionary<RunEntryTextSlot, string> texts,
             int? selectedHeroTemplateId,
             bool confirmEnabled,
-            bool battleNodeInteractable,
-            bool battleNodeCompleted,
-            bool continueEnabled = false)
+            RunMapViewModel map,
+            bool continueEnabled = false,
+            bool canRollbackFailedSave = false)
         {
             if (texts == null)
                 throw new ArgumentNullException(nameof(texts));
@@ -151,9 +493,9 @@ namespace TinySpire.UI.Run
             Page = page;
             SelectedHeroTemplateId = selectedHeroTemplateId;
             ConfirmEnabled = confirmEnabled;
-            BattleNodeInteractable = battleNodeInteractable;
-            BattleNodeCompleted = battleNodeCompleted;
+            Map = map;
             ContinueEnabled = continueEnabled;
+            CanRollbackFailedSave = canRollbackFailedSave;
             _texts = new ReadOnlyDictionary<RunEntryTextSlot, string>(
                 new Dictionary<RunEntryTextSlot, string>(texts));
         }
@@ -202,7 +544,6 @@ namespace TinySpire.UI.Run
         private const string ClearedKey = "run.entry.map.cleared";
         private const string HealthKey = "run.entry.map.health";
         private const string FailureTitleKey = "run.entry.failure.title";
-        private const string RestartBattleKey = "run.entry.failure.restart";
         private const string CancelKey = "run.entry.common.cancel";
         private const string AbandonTitleKey = "run.entry.abandon.title";
         private const string AbandonMessageKey = "run.entry.abandon.message";
@@ -230,6 +571,7 @@ namespace TinySpire.UI.Run
         private readonly RunStateStore _store;
         private readonly RunFlowService _flow;
         private readonly Func<Tables> _tablesProvider;
+        private readonly IRunMapIdentityCatalog _mapIdentities;
         private readonly Func<string, IReadOnlyDictionary<string, object>, string> _localize;
         private readonly Observable<Locale> _localeChanges;
 
@@ -247,12 +589,14 @@ namespace TinySpire.UI.Run
             RunStateStore store,
             RunFlowService flow,
             ConfigService configs,
-            LocalizationService localization)
+            LocalizationService localization,
+            IRunMapIdentityCatalog mapIdentities)
             : this(
                 view,
                 store,
                 flow,
                 CreateTablesProvider(configs),
+                mapIdentities,
                 CreateLocalizer(localization),
                 RequireLocaleChanges(localization))
         {
@@ -266,11 +610,32 @@ namespace TinySpire.UI.Run
             Func<Tables> tablesProvider,
             Func<string, IReadOnlyDictionary<string, object>, string> localize,
             Observable<Locale> localeChanges)
+            : this(
+                view,
+                store,
+                flow,
+                tablesProvider,
+                new RunMapIdentityCatalog(tablesProvider, localize),
+                localize,
+                localeChanges)
+        {
+        }
+
+        /// <summary>以显式地图身份目录创建可直接验证身份投影的 Presenter。</summary>
+        internal RunEntryPresenter(
+            IRunEntryView view,
+            RunStateStore store,
+            RunFlowService flow,
+            Func<Tables> tablesProvider,
+            IRunMapIdentityCatalog mapIdentities,
+            Func<string, IReadOnlyDictionary<string, object>, string> localize,
+            Observable<Locale> localeChanges)
         {
             _view = view ?? throw new ArgumentNullException(nameof(view));
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _flow = flow ?? throw new ArgumentNullException(nameof(flow));
             _tablesProvider = tablesProvider ?? throw new ArgumentNullException(nameof(tablesProvider));
+            _mapIdentities = mapIdentities ?? throw new ArgumentNullException(nameof(mapIdentities));
             _localize = localize ?? throw new ArgumentNullException(nameof(localize));
             _localeChanges = localeChanges ?? throw new ArgumentNullException(nameof(localeChanges));
         }
@@ -375,19 +740,27 @@ namespace TinySpire.UI.Run
             }
         }
 
-        /// <summary>只响应由当前 Run 节点状态允许的入战或失败重开动作。</summary>
+        /// <summary>只响应由当前 Run 阶段允许的地图选择、终局离开或存档恢复动作。</summary>
         private void HandleRunAction(RunEntryAction action)
         {
             RunState state = _store.Current;
-            if (action.Kind == RunEntryActionKind.EnterBattle &&
-                state.NodeStatus == RunNodeStatus.Available)
+            if (action.Kind == RunEntryActionKind.EnterMapNode &&
+                action.MapNodeId.HasValue &&
+                state.ProgressPhase == RunProgressPhase.MapReady)
             {
-                _flow.EnterBattleNodeAsync().Forget();
+                _flow.EnterMapNodeAsync(action.MapNodeId.Value).Forget();
             }
-            else if (action.Kind == RunEntryActionKind.RestartBattle &&
-                     state.NodeStatus == RunNodeStatus.Failed)
+            else if (action.Kind == RunEntryActionKind.LeaveTerminalRun &&
+                     state.ProgressPhase == RunProgressPhase.Terminal)
             {
-                _flow.RestartFailedBattleAsync().Forget();
+                RunSaveDeleteResult delete = _flow.AbandonSavedRun();
+                if (delete.Status == RunSaveDeleteStatus.Success)
+                {
+                    _localPage = RunEntryPage.MainMenu;
+                    _selectedHeroTemplateId = null;
+                }
+
+                Render();
             }
             else if (action.Kind == RunEntryActionKind.RetrySave &&
                      _flow.Persistence.Status == RunPersistenceStatus.CommitFailed)
@@ -395,7 +768,8 @@ namespace TinySpire.UI.Run
                 _flow.RetryPendingCommit();
             }
             else if (action.Kind == RunEntryActionKind.RequestExitAfterSaveFailure &&
-                     _flow.Persistence.Status == RunPersistenceStatus.CommitFailed)
+                     _flow.Persistence.Status == RunPersistenceStatus.CommitFailed &&
+                     state.ProgressPhase != RunProgressPhase.Terminal)
             {
                 _localPage = RunEntryPage.RollbackConfirmation;
                 Render();
@@ -407,7 +781,8 @@ namespace TinySpire.UI.Run
                 Render();
             }
             else if (action.Kind == RunEntryActionKind.ConfirmRollback &&
-                     _flow.Persistence.Status == RunPersistenceStatus.CommitFailed)
+                     _flow.Persistence.Status == RunPersistenceStatus.CommitFailed &&
+                     state.ProgressPhase != RunProgressPhase.Terminal)
             {
                 _localPage = RunEntryPage.MainMenu;
                 _selectedHeroTemplateId = null;
@@ -434,12 +809,9 @@ namespace TinySpire.UI.Run
         {
             RunState state = _store.Current;
             RunEntryPage page = ResolvePage(state);
-            bool nodeCompleted = state?.NodeStatus == RunNodeStatus.Completed;
-            bool nodeInteractable = state?.NodeStatus == RunNodeStatus.Available &&
-                                    _flow.Persistence.Status != RunPersistenceStatus.CommitPending &&
-                                    _flow.Persistence.Status != RunPersistenceStatus.CommitFailed;
             int? selectedHero = state == null ? _selectedHeroTemplateId : state.HeroTemplateId;
             var texts = BuildTexts(state);
+            RunMapViewModel map = state == null ? null : BuildMapViewModel(state);
 
             _view.Render(new RunEntryViewModel(
                 page,
@@ -448,11 +820,13 @@ namespace TinySpire.UI.Run
                 confirmEnabled: state == null &&
                                 page == RunEntryPage.HeroSelection &&
                                 _selectedHeroTemplateId.HasValue,
-                battleNodeInteractable: nodeInteractable,
-                battleNodeCompleted: nodeCompleted,
+                map,
                 continueEnabled: state == null &&
                                  page == RunEntryPage.MainMenu &&
-                                 _flow.Persistence.CanContinue));
+                                 _flow.Persistence.CanContinue,
+                canRollbackFailedSave: state != null &&
+                                       state.ProgressPhase != RunProgressPhase.Terminal &&
+                                       _flow.Persistence.Status == RunPersistenceStatus.CommitFailed));
         }
 
         /// <summary>让 RunState 决定地图或失败页；尚未创建 Run 时才使用场景内导航。</summary>
@@ -468,9 +842,117 @@ namespace TinySpire.UI.Run
                     : RunEntryPage.SaveFailure;
             }
 
-            return state.NodeStatus == RunNodeStatus.Failed
+            return state.ProgressPhase == RunProgressPhase.Terminal
                 ? RunEntryPage.Failure
                 : RunEntryPage.Map;
+        }
+
+        /// <summary>把冻结地图和当前唯一进度投影为 View 可直接绘制的完整明牌图。</summary>
+        private RunMapViewModel BuildMapViewModel(RunState state)
+        {
+            if (state == null)
+                throw new ArgumentNullException(nameof(state));
+
+            MapDefinition map = state.MapDefinition;
+            bool selectionEnabled = state.ProgressPhase == RunProgressPhase.MapReady &&
+                                    _flow.Persistence.Status != RunPersistenceStatus.CommitPending &&
+                                    _flow.Persistence.Status != RunPersistenceStatus.CommitFailed;
+            var selectable = selectionEnabled
+                ? new HashSet<MapNodeId>(MapReachability.GetSelectableNodeIds(
+                    map,
+                    state.CurrentNodeId,
+                    MapTraversalMode.Ordinary))
+                : new HashSet<MapNodeId>();
+            var completed = new HashSet<MapNodeId>(state.PathNodeIds);
+            var completedEdgeKeys = new HashSet<string>(StringComparer.Ordinal);
+            for (int index = 1; index < state.PathNodeIds.Count; index++)
+            {
+                completedEdgeKeys.Add(BuildEdgeKey(
+                    state.PathNodeIds[index - 1],
+                    state.PathNodeIds[index]));
+            }
+
+            RunMapNodeViewModel[] nodes = map.Nodes
+                .OrderBy(node => node.Layer)
+                .ThenBy(node => node.Slot)
+                .Select(node => BuildMapNodeViewModel(
+                    map,
+                    node,
+                    state,
+                    selectable.Contains(node.Id),
+                    completed.Contains(node.Id)))
+                .ToArray();
+            RunMapEdgeViewModel[] edges = map.Edges
+                .Select(edge => new RunMapEdgeViewModel(
+                    edge.FromNodeId.Value,
+                    edge.ToNodeId.Value,
+                    completedEdgeKeys.Contains(BuildEdgeKey(edge.FromNodeId, edge.ToNodeId))))
+                .ToArray();
+
+            return new RunMapViewModel(map.Fingerprint, nodes, edges);
+        }
+
+        /// <summary>投影一个节点的功能状态，并只为当前可选节点计算完整后半程。</summary>
+        private RunMapNodeViewModel BuildMapNodeViewModel(
+            MapDefinition map,
+            MapNode node,
+            RunState state,
+            bool isSelectable,
+            bool isCompleted)
+        {
+            MapDownstreamRoute route = isSelectable
+                ? MapReachability.GetDownstreamRoute(map, node.Id)
+                : null;
+            string[] downstreamNodeIds = route == null
+                ? Array.Empty<string>()
+                : route.NodeIds.Select(nodeId => nodeId.Value).ToArray();
+            string[] downstreamEdgeKeys = route == null
+                ? Array.Empty<string>()
+                : route.Edges.Select(edge => BuildEdgeKey(
+                    edge.FromNodeId,
+                    edge.ToNodeId)).ToArray();
+            RunMapIdentityDescriptor identity = _mapIdentities.Resolve(
+                node.Kind,
+                node.ContentId);
+
+            return new RunMapNodeViewModel(
+                node.Id.Value,
+                node.Layer,
+                node.Slot,
+                node.Kind,
+                node.ContentId,
+                identity.DisplayName,
+                identity.VisualAnchorKind,
+                ResolveMapNodePresentationState(node, state, isSelectable, isCompleted),
+                downstreamNodeIds,
+                downstreamEdgeKeys);
+        }
+
+        /// <summary>把节点当前事实归一化为互斥的 View 表现状态。</summary>
+        private static RunMapNodePresentationState ResolveMapNodePresentationState(
+            MapNode node,
+            RunState state,
+            bool isSelectable,
+            bool isCompleted)
+        {
+            if (state.ProgressPhase == RunProgressPhase.BossGateReached &&
+                node.Id == state.CurrentNodeId)
+            {
+                return RunMapNodePresentationState.BossGateReached;
+            }
+            if (node.Id == state.CurrentNodeId)
+                return RunMapNodePresentationState.Current;
+            if (isCompleted)
+                return RunMapNodePresentationState.Completed;
+            if (isSelectable)
+                return RunMapNodePresentationState.Selectable;
+            return RunMapNodePresentationState.Locked;
+        }
+
+        /// <summary>为地图边生成与 View 一致的稳定无歧义键。</summary>
+        private static string BuildEdgeKey(MapNodeId fromNodeId, MapNodeId toNodeId)
+        {
+            return $"{fromNodeId.Value}>{toNodeId.Value}";
         }
 
         /// <summary>从 Luban Hero 键、当前语言与当前 Run 事实构建全部 TMP 文本。</summary>
@@ -513,7 +995,7 @@ namespace TinySpire.UI.Run
                 [RunEntryTextSlot.Cleared] = Localize(ClearedKey),
                 [RunEntryTextSlot.Health] = _localize(HealthKey, healthArguments),
                 [RunEntryTextSlot.FailureTitle] = Localize(FailureTitleKey),
-                [RunEntryTextSlot.RestartBattle] = Localize(RestartBattleKey),
+                [RunEntryTextSlot.LeaveRun] = Localize(ExitKey),
                 [RunEntryTextSlot.Cancel] = Localize(CancelKey),
                 [RunEntryTextSlot.ConfirmationTitle] = Localize(
                     deletingUnusableSave ? DeleteTitleKey : AbandonTitleKey),
@@ -561,6 +1043,8 @@ namespace TinySpire.UI.Run
                             ["kind"] = _flow.Persistence.MissingConfigurationKind,
                             ["id"] = _flow.Persistence.MissingConfigurationId ?? 0,
                         });
+                case RunPersistenceStatus.MissingMapProfile:
+                    return Localize(InvalidDocumentKey);
                 default:
                     return string.Empty;
             }

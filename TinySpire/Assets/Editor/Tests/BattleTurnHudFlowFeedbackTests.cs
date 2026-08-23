@@ -5,6 +5,7 @@ using DG.Tweening;
 using NUnit.Framework;
 using TinySpire.Battle;
 using TinySpire.Run;
+using TinySpire.Run.Map;
 using TinySpire.UI.Battle;
 using UnityEngine;
 using UnityEngine.UI;
@@ -505,15 +506,21 @@ public sealed class BattleTurnHudFlowFeedbackTests
             BattleCommandPresentationAdapter.IsRunManaged(resolver),
             Is.False);
 
-        store.CreateNewRun(new RunCreationOptions(
+        MapDefinition map = ActMapGenerator.Generate(TinySpireActMapProfiles.Current, 2468u);
+        RunState created = store.CreateNewRun(new RunCreationOptions(
             new RunId(Guid.Parse("11111111-2222-3333-4444-555555555555")),
             heroTemplateId: 1001,
             initialHealth: 80,
             maxHealth: 80,
             deckTemplateId: 1001,
-            encounterTemplateId: 5001,
-            randomRootSeed: 2468u));
-        store.BeginBattle();
+            randomRootSeed: 2468u,
+            map: map));
+        MapNodeId selectedNodeId = MapReachability.GetSelectableNodeIds(
+            map,
+            created.CurrentNodeId,
+            MapTraversalMode.Ordinary)[0];
+        store.CommitNode(selectedNodeId);
+        store.BeginCommittedBattle();
 
         Assert.That(
             BattleCommandPresentationAdapter.IsRunManaged(resolver),
