@@ -1176,6 +1176,7 @@ public sealed class BattleCommandQueueM8DTests
                 ["battle_tbencounter"] = new JArray(),
                 ["battle_tbenemybehaviorgroup"] = groups,
                 ["battle_tbenemybehavior"] = behaviors,
+                ["battle_tbcardupgradelevel"] = new JArray(),
             };
             return new Tables(tableName => data[tableName]);
         }
@@ -1246,6 +1247,9 @@ public sealed class BattleCommandQueueM8DTests
                 ["implementation_status"] = (int)cfg.battle.CardImplementationStatus.Implemented,
                 ["program_id"] = (int)cfg.battle.MachineGunnerProgramId.None,
                 ["is_innate"] = isInnate,
+                ["upgrade_track_kind"] = (int)cfg.battle.CardUpgradeTrackKind.None,
+                ["infinite_upgrade_rule_kind"] = (int)cfg.battle.CardUpgradeRuleKind.None,
+                ["infinite_upgrade_value_per_level"] = 0,
                 ["effect_bindings"] = new JArray(new JObject
                 {
                     ["argument_key"] = string.Empty,

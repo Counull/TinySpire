@@ -935,7 +935,10 @@ public sealed class HandCardContainer : MonoBehaviour
         HandCardVisual visual,
         CardInstanceData cardState)
     {
-        cfg.battle.Card cardTemplate = _configs.Tables.TbCard.Get(cardState.TemplateId);
+        BattleCardLevelProjection projection = BattleCardLevelProjection.Create(
+            _configs.Tables,
+            cardState.TemplateId,
+            cardState.UpgradeLevel);
         if (!_illustrationHandles.TryGetValue(cardState.TemplateId, out AsyncOperationHandle<Sprite> handle)
             || !handle.IsValid()
             || handle.Status != AsyncOperationStatus.Succeeded
@@ -946,7 +949,7 @@ public sealed class HandCardContainer : MonoBehaviour
         }
 
         CardPresentationText text = _cardTextFormatter.Format(cardState, _player);
-        visual.Bind(text, cardTemplate.Cost, handle.Result);
+        visual.Bind(text, projection.Cost, handle.Result);
     }
 
     /// <summary>按本局初始牌组及职业程序可能创建的唯一模板预加载牌面 Sprite，并持有其 Addressables 句柄。</summary>

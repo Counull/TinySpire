@@ -17,6 +17,21 @@ namespace TinySpire.Battle
             if (effect == null)
                 throw new ArgumentNullException(nameof(effect));
 
+            return Calculate(effect, effect.Value, source);
+        }
+
+        /// <summary>
+        /// 以实例等级投影后的配置值计算展示数值，同时沿用效果类型对应的既有公式。
+        /// 此重载只替换可配置基值，不修改静态效果配置。
+        /// </summary>
+        internal static int Calculate(
+            cfg.battle.CardEffect effect,
+            int configuredValue,
+            CombatantData source)
+        {
+            if (effect == null)
+                throw new ArgumentNullException(nameof(effect));
+
             int sourceStrength = source?.Strength.CurrentValue ?? 0;
             int sourceBlock = source?.Block.CurrentValue ?? 0;
             BattleEffectMagnitudeSource magnitudeSource =
@@ -25,7 +40,7 @@ namespace TinySpire.Battle
                     : BattleEffectMagnitudeSource.ConfiguredValue;
             int resolvedValue = BattleEffectMagnitudeResolver.Resolve(
                 magnitudeSource,
-                effect.Value,
+                configuredValue,
                 sourceBlock);
             var context = new BattleEffectFormulaContext(
                 ToOperationType(effect.EffectType),

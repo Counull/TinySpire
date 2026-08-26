@@ -261,9 +261,16 @@ namespace TinySpire.Battle
                     }
                 }
 
+                int configuredEffectValue = effect.Value;
+                if (operationType == BattleEffectOperationType.DealDamage &&
+                    magnitudeSource == BattleEffectMagnitudeSource.ConfiguredValue &&
+                    request.CardLevelProjection?.EffectDamageValue is int projectedDamageValue)
+                {
+                    configuredEffectValue = projectedDamageValue;
+                }
                 int resolvedEffectValue = BattleEffectMagnitudeResolver.Resolve(
                     magnitudeSource,
-                    effect.Value,
+                    configuredEffectValue,
                     sourceFacts.Block);
                 bool shouldSkipTargetNotAlive = simulatedTargetHealth <= 0;
                 BattleDamageFormulaOutcome? preparedDamageOutcome = null;
@@ -954,6 +961,7 @@ namespace TinySpire.Battle
                 request);
         }
 
+        /// <summary>提交前确认触发出牌计划仍属于当前执行器且冻结卡区事实未漂移。</summary>
         internal void ValidatePrepared(BattlePreparedTriggeredCardPlay plan)
         {
             if (plan == null)
@@ -1143,7 +1151,8 @@ namespace TinySpire.Battle
             BattleCardZone playedCardDestination,
             IReadOnlyList<CardInstanceId> selectedCardIds,
             int startingOrder,
-            int triggeredPlayDepth = 0)
+            int triggeredPlayDepth = 0,
+            BattleCardLevelProjection cardLevelProjection = null)
         {
             if (bindings == null)
                 throw new ArgumentNullException(nameof(bindings));
@@ -1294,7 +1303,11 @@ namespace TinySpire.Battle
             if (beforeDrawEffectIds.Count > 0)
             {
                 BattleEffectPreparationResult preparation = _effectExecutor.Prepare(
-                    new BattleEffectExecutionRequest(sourceId, targetId, beforeDrawEffectIds));
+                    new BattleEffectExecutionRequest(
+                        sourceId,
+                        targetId,
+                        beforeDrawEffectIds,
+                        cardLevelProjection));
                 if (!preparation.Succeeded)
                     return Failed(preparation.FailureReason);
                 beforeDrawPlan = preparation.Plan;
@@ -1303,7 +1316,11 @@ namespace TinySpire.Battle
             BattlePreparedEffectPlan afterDrawPlan = null;
             if (afterDrawEffectIds.Count > 0)
             {
-                var request = new BattleEffectExecutionRequest(sourceId, targetId, afterDrawEffectIds);
+                var request = new BattleEffectExecutionRequest(
+                    sourceId,
+                    targetId,
+                    afterDrawEffectIds,
+                    cardLevelProjection);
                 BattleEffectPreparationResult preparation = beforeDrawPlan == null
                     ? _effectExecutor.Prepare(request)
                     : _effectExecutor.PrepareProjected(

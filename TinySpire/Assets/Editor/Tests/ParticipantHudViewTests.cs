@@ -524,7 +524,8 @@ public sealed class ParticipantHudViewTests
             ["battle_tbenemybehavior"] = JArray.Parse(
                 "[{\"id\":7001,\"intent_type\":0,\"target_rule\":1," +
                 "\"effect_id\":4002,\"weight\":1,\"cooldown_selections\":0," +
-                "\"max_consecutive\":0}]")
+                "\"max_consecutive\":0}]"),
+            ["battle_tbcardupgradelevel"] = new JArray(),
         };
         return new cfg.Tables(tableName => data[tableName]);
     }

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Cysharp.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using R3;
 using TinySpire.Battle;
@@ -16,7 +18,8 @@ public sealed class BattleResultRunBridgeTests
     {
         using var store = CreateActiveRun(out _);
         var scenes = new RecordingSceneFlow();
-        var flow = CreateFlow(store, scenes);
+        var saves = new RecordingRunSaveStore();
+        var flow = CreateFlow(store, scenes, saves);
         BattleSetupOptions setup = flow.CreateBattleSetupOptions();
         var builder = new ContainerBuilder();
         builder.RegisterInstance(flow).AsSelf();
@@ -29,10 +32,33 @@ public sealed class BattleResultRunBridgeTests
         Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.InBattle));
 
         results.Value = CreateBattleResult(BattleResultKind.Victory, health: 31);
+        PendingCardReward frozenReward = store.Current.PendingCardReward;
+        int[] frozenCandidates = frozenReward.CandidateTemplateIds.ToArray();
         results.Value = CreateBattleResult(BattleResultKind.Victory, health: 22);
 
-        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.RewardPending));
         Assert.That(store.Current.CurrentHealth, Is.EqualTo(31));
+        Assert.That(store.Current.PendingCardReward, Is.SameAs(frozenReward));
+        Assert.That(store.Current.PendingCardReward.CandidateTemplateIds,
+            Is.EqualTo(frozenCandidates));
+        Assert.That(frozenCandidates, Is.EquivalentTo(new[] { 3105, 3123, 3157 }));
+        Assert.That(store.Current.RunDeck.Cards, Has.Count.EqualTo(3));
+        Assert.That(store.Current.RunDeck.Cards[0].InstanceId, Is.EqualTo(new RunCardInstanceId(51)));
+        Assert.That(store.Current.RunDeck.Cards[0].TemplateId, Is.EqualTo(3002));
+        Assert.That(store.Current.RunDeck.Cards[0].UpgradeLevel, Is.EqualTo(1));
+        Assert.That(store.Current.RunDeck.Cards[1].InstanceId, Is.EqualTo(new RunCardInstanceId(77)));
+        Assert.That(store.Current.RunDeck.Cards[1].TemplateId, Is.EqualTo(3002));
+        Assert.That(store.Current.RunDeck.Cards[1].UpgradeLevel, Is.Zero);
+        Assert.That(store.Current.RunDeck.Cards[2].InstanceId, Is.EqualTo(new RunCardInstanceId(81)));
+        Assert.That(store.Current.RunDeck.Cards[2].TemplateId, Is.EqualTo(3123));
+        Assert.That(store.Current.RunDeck.Cards[2].UpgradeLevel, Is.EqualTo(2));
+        Assert.That(saves.Documents, Has.Count.EqualTo(1));
+        Assert.That(saves.Documents[0].ProgressPhase,
+            Is.EqualTo(RunSaveProgressPhase.RewardPending));
+        Assert.That(saves.Documents[0].PendingCardReward.RewardId,
+            Is.EqualTo(frozenReward.Id.ToString()));
+        Assert.That(saves.Documents[0].PendingCardReward.CandidateTemplateIds,
+            Is.EqualTo(frozenCandidates));
         Assert.That(scenes.LoadedAddresses, Is.EqualTo(new[] { RunSceneAddresses.RunEntry }));
     }
 
@@ -109,7 +135,12 @@ public sealed class BattleResultRunBridgeTests
             heroTemplateId: 1001,
             initialHealth: 80,
             maxHealth: 80,
-            deckTemplateId: 1001,
+            runDeck: new RunDeck(new[]
+            {
+                new RunCard(new RunCardInstanceId(51), templateId: 3002, upgradeLevel: 1),
+                new RunCard(new RunCardInstanceId(77), templateId: 3002, upgradeLevel: 0),
+                new RunCard(new RunCardInstanceId(81), templateId: 3123, upgradeLevel: 2),
+            }),
             randomRootSeed: 13579u,
             map: map));
         MapNodeId selectedNodeId = MapReachability.GetSelectableNodeIds(
@@ -121,15 +152,65 @@ public sealed class BattleResultRunBridgeTests
         return store;
     }
 
-    /// <summary>以不会读取配置或随机源的依赖建立结果编排 Flow。</summary>
-    private static RunFlowService CreateFlow(RunStateStore store, RecordingSceneFlow scenes)
+    /// <summary>以最小奖励配置和不会取用的新 Run 随机源建立结果编排 Flow。</summary>
+    private static RunFlowService CreateFlow(
+        RunStateStore store,
+        RecordingSceneFlow scenes,
+        RecordingRunSaveStore saves = null)
     {
         return new RunFlowService(
             store,
-            () => null,
+            CreateTables,
             scenes,
             new UnusedRunEntropySource(),
-            new InMemoryRunSaveStore());
+            saves ?? new RecordingRunSaveStore());
+    }
+
+    /// <summary>创建 bridge 胜利结算所需的一名 Hero 与三个合法奖励模板。</summary>
+    private static cfg.Tables CreateTables()
+    {
+        var data = new Dictionary<string, JArray>
+        {
+            ["battle_tbhero"] = JArray.Parse(
+                "[{\"id\":1001,\"name_i18n_key\":\"battle.hero.test.name\",\"view_prefab_key\":\"pfb_char_player\",\"max_health\":80,\"base_strength\":1,\"initial_deck_id\":1001,\"initial_energy\":3,\"max_energy\":3,\"energy_gain_per_round\":3,\"initial_ammo\":0,\"max_ammo\":0,\"ammo_gain_per_round\":0,\"runtime_profile\":0,\"reward_card_template_ids\":[3105,3123,3157],\"reward_common_weight\":60,\"reward_uncommon_weight\":37,\"reward_rare_weight\":3}]"),
+            ["battle_tbcard"] = new JArray(
+                CreateCardRow(3105, rarity: 1),
+                CreateCardRow(3123, rarity: 2),
+                CreateCardRow(3157, rarity: 3)),
+        };
+        return new cfg.Tables(tableName =>
+            data.TryGetValue(tableName, out JArray rows) ? rows : new JArray());
+    }
+
+    /// <summary>建立 bridge 奖励池使用的最小 Implemented 卡牌行。</summary>
+    private static JObject CreateCardRow(int templateId, int rarity)
+    {
+        return new JObject
+        {
+            ["id"] = templateId,
+            ["external_key"] = $"TEST_BRIDGE_{templateId}",
+            ["catalog_snapshot_key"] = "test-fixture",
+            ["name_i18n_key"] = $"battle.card.{templateId}.name",
+            ["description_i18n_key"] = $"battle.card.{templateId}.description",
+            ["upgraded_description_i18n_key"] = $"battle.card.{templateId}.description",
+            ["card_type"] = 0,
+            ["rarity"] = rarity,
+            ["cost"] = 1,
+            ["cost_kind"] = 0,
+            ["upgraded_cost"] = 1,
+            ["target_rule"] = 1,
+            ["play_destination"] = 0,
+            ["upgraded_play_destination"] = 0,
+            ["has_upgrade"] = false,
+            ["implementation_status"] = 0,
+            ["effect_bindings"] = new JArray(),
+            ["illustration_key"] = string.Empty,
+            ["program_id"] = 0,
+            ["is_innate"] = false,
+            ["upgrade_track_kind"] = 0,
+            ["infinite_upgrade_rule_kind"] = 0,
+            ["infinite_upgrade_value_per_level"] = 0,
+        };
     }
 
     /// <summary>创建与测试 Run Hero 对应的单玩家稳定战斗结果。</summary>
@@ -170,6 +251,32 @@ public sealed class BattleResultRunBridgeTests
         public RunEntropy Next()
         {
             throw new InvalidOperationException("Bridge result handling must not create a new run.");
+        }
+    }
+
+    /// <summary>记录 bridge 触发的稳定检查点，证明重复结果不会再次写入。</summary>
+    private sealed class RecordingRunSaveStore : IRunSaveStore
+    {
+        /// <summary>按提交顺序保留全部文档引用。</summary>
+        public List<RunSaveDocument> Documents { get; } = new List<RunSaveDocument>();
+
+        /// <summary>bridge 测试没有预存档。</summary>
+        public RunSaveLoadResult Load()
+        {
+            return RunSaveLoadResult.NotFound();
+        }
+
+        /// <summary>记录一次成功提交。</summary>
+        public RunSaveCommitResult Commit(RunSaveDocument document)
+        {
+            Documents.Add(document ?? throw new ArgumentNullException(nameof(document)));
+            return RunSaveCommitResult.Succeeded();
+        }
+
+        /// <summary>bridge 测试不会请求删除，保持幂等成功。</summary>
+        public RunSaveDeleteResult Delete()
+        {
+            return RunSaveDeleteResult.Succeeded();
         }
     }
 }

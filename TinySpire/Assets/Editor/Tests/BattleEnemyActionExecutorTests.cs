@@ -787,6 +787,7 @@ public sealed class BattleEnemyActionExecutorTests
                 ["behavior_ids"] = behaviorIds,
             }),
             ["battle_tbenemybehavior"] = behaviors,
+            ["battle_tbcardupgradelevel"] = new JArray(),
         };
         return new Tables(tableName => data[tableName]);
     }

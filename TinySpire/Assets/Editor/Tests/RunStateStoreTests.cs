@@ -23,7 +23,7 @@ public sealed class RunStateStoreTests
         Assert.That(state.HeroTemplateId, Is.EqualTo(1001));
         Assert.That(state.CurrentHealth, Is.EqualTo(80));
         Assert.That(state.MaxHealth, Is.EqualTo(80));
-        Assert.That(state.DeckTemplateId, Is.EqualTo(1001));
+        Assert.That(state.RunDeck.Cards.Select(card => card.TemplateId), Is.EqualTo(new[] { 3002 }));
         Assert.That(state.RandomRootSeed, Is.EqualTo(123456u));
         Assert.That(state.MapDefinition, Is.SameAs(options.Map));
         Assert.That(state.CurrentNodeId, Is.EqualTo(MapNodeId.FromPosition(0, 0)));
@@ -32,6 +32,42 @@ public sealed class RunStateStoreTests
         Assert.That(state.BattleAttemptSequence, Is.Zero);
         Assert.That(state.ActiveBattle, Is.Null);
         Assert.That(store.Current, Is.SameAs(state));
+    }
+
+    /// <summary>创建 Run 时由 Store 冻结显式 RunDeck，并把同一不可变实例投影签发给 Battle。</summary>
+    [Test]
+    public void CreateThenBeginBattle_PreservesExplicitRunDeckProjection()
+    {
+        var deck = new RunDeck(new[]
+        {
+            new RunCard(new RunCardInstanceId(1), templateId: 3002, upgradeLevel: 0),
+            new RunCard(new RunCardInstanceId(2), templateId: 3002, upgradeLevel: 1),
+            new RunCard(new RunCardInstanceId(3), templateId: 3003, upgradeLevel: 0),
+        });
+        var options = new RunCreationOptions(
+            new RunId(Guid.Parse("10101010-2020-3030-4040-505050505050")),
+            heroTemplateId: 1001,
+            initialHealth: 80,
+            maxHealth: 80,
+            runDeck: deck,
+            randomRootSeed: 2468u,
+            map: CreateMap(2468u));
+        using var store = new RunStateStore();
+
+        RunState created = store.CreateNewRun(options);
+        store.CommitNode(GetFirstSelectable(created));
+        RunBattleInput battleInput = store.BeginCommittedBattle();
+
+        Assert.That(created.RunDeck, Is.SameAs(deck));
+        Assert.That(battleInput.RunCards.Select(card => card.InstanceId), Is.EqualTo(
+            new[]
+            {
+                new RunCardInstanceId(1),
+                new RunCardInstanceId(2),
+                new RunCardInstanceId(3),
+            }));
+        Assert.That(battleInput.RunCards.Select(card => card.UpgradeLevel), Is.EqualTo(
+            new[] { 0, 1, 0 }));
     }
 
     /// <summary>创建 Run 时拒绝由值类型默认值绕过构造器产生的空身份。</summary>
@@ -45,7 +81,7 @@ public sealed class RunStateStoreTests
             heroTemplateId: 1001,
             initialHealth: 80,
             maxHealth: 80,
-            deckTemplateId: 1001,
+            runDeck: RunDeck.CreateInitial(new[] { 3002 }),
             randomRootSeed: 123456u,
             map: map));
     }
@@ -83,9 +119,9 @@ public sealed class RunStateStoreTests
         Assert.That(inBattle.PathNodeIds, Is.EqualTo(created.PathNodeIds));
     }
 
-    /// <summary>当前本战胜利时原子写回生命、追加完成路径并回到地图。</summary>
+    /// <summary>当前本战胜利时只冻结奖励与生命，不得提前完成节点或重复生成。</summary>
     [Test]
-    public void ApplyVictory_AppendsCompletedNodeAndReturnsToMap()
+    public void RecordVictory_FreezesRewardWithoutCompletingNode_ExactlyOnce()
     {
         using var store = new RunStateStore();
         RunState created = store.CreateNewRun(CreateOptions(
@@ -94,19 +130,215 @@ public sealed class RunStateStoreTests
         MapNodeId selectedNodeId = GetFirstSelectable(created);
         store.CommitNode(selectedNodeId);
         RunBattleInput input = store.BeginCommittedBattle();
+        int generationCount = 0;
 
-        RunState completed = store.ApplyVictory(
+        RunState pending = store.RecordVictoryAndFreezeReward(
             input.BattleId,
             heroTemplateId: 1001,
             settledHealth: 34,
-            maxHealth: 80);
+            maxHealth: 80,
+            battleInput =>
+            {
+                generationCount++;
+                return new PendingCardReward(
+                    new RunCardRewardId(battleInput.BattleId),
+                    new[] { 3105, 3123, 3157 });
+            });
 
-        Assert.That(completed.CurrentHealth, Is.EqualTo(34));
-        Assert.That(completed.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
-        Assert.That(completed.CurrentNodeId, Is.EqualTo(selectedNodeId));
-        Assert.That(completed.PathNodeIds.Last(), Is.EqualTo(selectedNodeId));
-        Assert.That(completed.CommittedNodeId, Is.Null);
-        Assert.That(completed.ActiveBattle, Is.Null);
+        Assert.That(pending.CurrentHealth, Is.EqualTo(34));
+        Assert.That(pending.ProgressPhase, Is.EqualTo(RunProgressPhase.RewardPending));
+        Assert.That(pending.CurrentNodeId, Is.EqualTo(created.CurrentNodeId));
+        Assert.That(pending.PathNodeIds, Is.EqualTo(created.PathNodeIds));
+        Assert.That(pending.CommittedNodeId, Is.EqualTo(selectedNodeId));
+        Assert.That(pending.ActiveBattle, Is.Null);
+        Assert.That(pending.PendingCardReward.Id.BattleId, Is.EqualTo(input.BattleId));
+        Assert.That(pending.PendingCardReward.CandidateTemplateIds,
+            Is.EqualTo(new[] { 3105, 3123, 3157 }));
+        Assert.That(generationCount, Is.EqualTo(1));
+
+        Assert.Throws<InvalidOperationException>(() => store.RecordVictoryAndFreezeReward(
+            input.BattleId,
+            heroTemplateId: 1001,
+            settledHealth: 34,
+            maxHealth: 80,
+            battleInput =>
+            {
+                generationCount++;
+                return pending.PendingCardReward;
+            }));
+        Assert.That(generationCount, Is.EqualTo(1));
+        Assert.That(store.Current, Is.SameAs(pending));
+    }
+
+    /// <summary>选择冻结候选时预览不得发布；正式结算只追加一个全新实例并完成原节点。</summary>
+    [Test]
+    public void CardRewardSelection_PreviewsThenCommitsOneNewIndependentInstance()
+    {
+        var deck = new RunDeck(new[]
+        {
+            new RunCard(new RunCardInstanceId(2), templateId: 3002, upgradeLevel: 0),
+            new RunCard(new RunCardInstanceId(7), templateId: 3002, upgradeLevel: 1),
+        });
+        using var store = new RunStateStore();
+        RunState created = store.CreateNewRun(new RunCreationOptions(
+            new RunId(Guid.Parse("20000000-3000-4000-5000-600000000000")),
+            heroTemplateId: 1001,
+            initialHealth: 80,
+            maxHealth: 80,
+            runDeck: deck,
+            randomRootSeed: 421337u,
+            map: CreateMap(421337u)));
+        MapNodeId selectedNodeId = GetFirstSelectable(created);
+        store.CommitNode(selectedNodeId);
+        RunBattleInput input = store.BeginCommittedBattle();
+        RunState pending = store.RecordVictoryAndFreezeReward(
+            input.BattleId,
+            heroTemplateId: 1001,
+            settledHealth: 47,
+            maxHealth: 80,
+            battleInput => new PendingCardReward(
+                new RunCardRewardId(battleInput.BattleId),
+                new[] { 3105, 3123, 3157 }));
+
+        RunState preview = store.PreviewCardRewardSettlement(
+            pending.PendingCardReward.Id,
+            selectedCardTemplateId: 3123);
+
+        Assert.That(store.Current, Is.SameAs(pending));
+        Assert.That(preview.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(preview.PathNodeIds, Is.EqualTo(
+            pending.PathNodeIds.Concat(new[] { selectedNodeId })));
+        Assert.That(preview.CommittedNodeId, Is.Null);
+        Assert.That(preview.PendingCardReward, Is.Null);
+        Assert.That(preview.CurrentHealth, Is.EqualTo(47));
+        Assert.That(preview.RunDeck.Cards.Select(card => card.InstanceId.Sequence),
+            Is.EqualTo(new[] { 2, 7, 8 }));
+        Assert.That(preview.RunDeck.Cards.Select(card => card.TemplateId),
+            Is.EqualTo(new[] { 3002, 3002, 3123 }));
+        Assert.That(preview.RunDeck.Cards.Select(card => card.UpgradeLevel),
+            Is.EqualTo(new[] { 0, 1, 0 }));
+
+        RunState settled = store.CommitCardRewardSettlement(
+            pending.PendingCardReward.Id,
+            selectedCardTemplateId: 3123);
+
+        Assert.That(store.Current, Is.SameAs(settled));
+        Assert.That(settled.RunDeck.Cards.Last().InstanceId.Sequence, Is.EqualTo(8));
+        Assert.That(settled.RunDeck.Cards.Last(), Is.Not.SameAs(deck.Cards[0]));
+    }
+
+    /// <summary>跨两场战斗可重复选择同模板，但每次都必须追加不同的稳定实例身份。</summary>
+    [Test]
+    public void CardRewardSelection_AcrossBattlesSameTemplateCreatesIndependentInstances()
+    {
+        using var store = new RunStateStore();
+        RunState state = store.CreateNewRun(CreateOptions(
+            "21000000-3000-4000-5000-610000000000",
+            mapSeed: 531337u));
+        var acquiredIds = new List<RunCardInstanceId>();
+
+        for (int battleIndex = 0; battleIndex < 2; battleIndex++)
+        {
+            MapNodeId selectedNodeId = GetFirstSelectable(state);
+            store.CommitNode(selectedNodeId);
+            RunBattleInput input = store.BeginCommittedBattle();
+            RunState pending = store.RecordVictoryAndFreezeReward(
+                input.BattleId,
+                heroTemplateId: 1001,
+                settledHealth: 70 - battleIndex,
+                maxHealth: 80,
+                battleInput => new PendingCardReward(
+                    new RunCardRewardId(battleInput.BattleId),
+                    new[] { 3105, 3123, 3157 }));
+            state = store.CommitCardRewardSettlement(
+                pending.PendingCardReward.Id,
+                selectedCardTemplateId: 3123);
+            acquiredIds.Add(state.RunDeck.Cards.Last().InstanceId);
+        }
+
+        Assert.That(acquiredIds, Has.Count.EqualTo(2));
+        Assert.That(acquiredIds[0], Is.Not.EqualTo(acquiredIds[1]));
+        Assert.That(
+            state.RunDeck.Cards.Where(card => card.TemplateId == 3123)
+                .Select(card => card.InstanceId),
+            Is.EqualTo(acquiredIds));
+        Assert.That(
+            state.RunDeck.Cards.Where(card => card.TemplateId == 3123)
+                .Select(card => card.UpgradeLevel),
+            Is.EqualTo(new[] { 0, 0 }));
+    }
+
+    /// <summary>跳过奖励只完成原节点，保持原有 RunDeck 对象与全部实例事实不变。</summary>
+    [Test]
+    public void CardRewardSkip_CompletesNodeWithoutChangingRunDeck()
+    {
+        using var store = new RunStateStore();
+        RunState created = store.CreateNewRun(CreateOptions(
+            "30000000-4000-5000-6000-700000000000",
+            mapSeed: 741852u));
+        MapNodeId selectedNodeId = GetFirstSelectable(created);
+        store.CommitNode(selectedNodeId);
+        RunBattleInput input = store.BeginCommittedBattle();
+        RunState pending = store.RecordVictoryAndFreezeReward(
+            input.BattleId,
+            heroTemplateId: 1001,
+            settledHealth: 56,
+            maxHealth: 80,
+            battleInput => new PendingCardReward(
+                new RunCardRewardId(battleInput.BattleId),
+                new[] { 3105, 3123, 3157 }));
+
+        RunState settled = store.CommitCardRewardSettlement(
+            pending.PendingCardReward.Id,
+            selectedCardTemplateId: null);
+
+        Assert.That(settled.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(settled.CurrentNodeId, Is.EqualTo(selectedNodeId));
+        Assert.That(settled.RunDeck, Is.SameAs(pending.RunDeck));
+        Assert.That(settled.PendingCardReward, Is.Null);
+    }
+
+    /// <summary>伪造模板、过期身份与重复提交都必须在发布前拒绝并保持同一快照。</summary>
+    [Test]
+    public void CardRewardSettlement_ForgedStaleAndDuplicateCommandsAreZeroWrite()
+    {
+        using var store = new RunStateStore();
+        RunState created = store.CreateNewRun(CreateOptions(
+            "40000000-5000-6000-7000-800000000000",
+            mapSeed: 963258u));
+        store.CommitNode(GetFirstSelectable(created));
+        RunBattleInput input = store.BeginCommittedBattle();
+        RunState pending = store.RecordVictoryAndFreezeReward(
+            input.BattleId,
+            heroTemplateId: 1001,
+            settledHealth: 62,
+            maxHealth: 80,
+            battleInput => new PendingCardReward(
+                new RunCardRewardId(battleInput.BattleId),
+                new[] { 3105, 3123, 3157 }));
+        var staleId = new RunCardRewardId(new RunBattleId(
+            pending.RunId,
+            pending.BattleAttemptSequence + 1,
+            pending.CommittedNodeId.Value));
+
+        Assert.Throws<InvalidOperationException>(() =>
+            store.PreviewCardRewardSettlement(staleId, selectedCardTemplateId: 3105));
+        Assert.Throws<InvalidOperationException>(() =>
+            store.PreviewCardRewardSettlement(
+                pending.PendingCardReward.Id,
+                selectedCardTemplateId: 3999));
+        Assert.That(store.Current, Is.SameAs(pending));
+
+        RunState settled = store.CommitCardRewardSettlement(
+            pending.PendingCardReward.Id,
+            selectedCardTemplateId: 3105);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            store.CommitCardRewardSettlement(
+                pending.PendingCardReward.Id,
+                selectedCardTemplateId: 3105));
+        Assert.That(store.Current, Is.SameAs(settled));
+        Assert.That(settled.RunDeck.Cards.Count(card => card.TemplateId == 3105), Is.EqualTo(1));
     }
 
     /// <summary>普通战斗失败立即进入零生命终局，不完成失败节点且任何继续迁移都被拒绝。</summary>
@@ -183,7 +415,10 @@ public sealed class RunStateStoreTests
             heroTemplateId,
             initialHealth,
             maxHealth,
-            deckTemplateId,
+            RunDeck.CreateInitial(new[]
+            {
+                deckTemplateId == 1002 ? 3201 : 3002,
+            }),
             randomRootSeed: mapSeed,
             map: CreateMap(mapSeed));
     }

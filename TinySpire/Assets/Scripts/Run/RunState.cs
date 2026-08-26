@@ -64,6 +64,7 @@ namespace TinySpire.Run
         MapReady,
         EncounterCommitted,
         InBattle,
+        RewardPending,
         BossGateReached,
         Terminal,
     }
@@ -89,8 +90,8 @@ namespace TinySpire.Run
         /// <summary>本 Run 角色生命上限。</summary>
         public int MaxHealth { get; }
 
-        /// <summary>本 Run 起始牌组模板标识。</summary>
-        public int DeckTemplateId { get; }
+        /// <summary>创建时已从初始牌组模板一次展开的有序 RunDeck。</summary>
+        public RunDeck RunDeck { get; }
 
         /// <summary>后续本战随机输入的非零根种子。</summary>
         public uint RandomRootSeed { get; }
@@ -104,7 +105,7 @@ namespace TinySpire.Run
             int heroTemplateId,
             int initialHealth,
             int maxHealth,
-            int deckTemplateId,
+            RunDeck runDeck,
             uint randomRootSeed,
             MapDefinition map)
         {
@@ -116,8 +117,8 @@ namespace TinySpire.Run
                 throw new ArgumentOutOfRangeException(nameof(maxHealth));
             if (initialHealth <= 0 || initialHealth > maxHealth)
                 throw new ArgumentOutOfRangeException(nameof(initialHealth));
-            if (deckTemplateId <= 0)
-                throw new ArgumentOutOfRangeException(nameof(deckTemplateId));
+            if (runDeck == null)
+                throw new ArgumentNullException(nameof(runDeck));
             if (randomRootSeed == 0)
                 throw new ArgumentOutOfRangeException(nameof(randomRootSeed));
             if (map == null)
@@ -127,7 +128,7 @@ namespace TinySpire.Run
             HeroTemplateId = heroTemplateId;
             InitialHealth = initialHealth;
             MaxHealth = maxHealth;
-            DeckTemplateId = deckTemplateId;
+            RunDeck = runDeck;
             RandomRootSeed = randomRootSeed;
             Map = map;
         }
@@ -140,7 +141,7 @@ namespace TinySpire.Run
         public int HeroTemplateId { get; }
         public int CurrentHealth { get; }
         public int MaxHealth { get; }
-        public int DeckTemplateId { get; }
+        public RunDeck RunDeck { get; }
         public uint RandomRootSeed { get; }
         public MapDefinition Map { get; }
         public IReadOnlyList<MapNodeId> PathNodeIds { get; }
@@ -148,6 +149,7 @@ namespace TinySpire.Run
         public MapNodeId? CommittedNodeId { get; }
         public RunTerminalReason? TerminalReason { get; }
         public int BattleAttemptSequence { get; }
+        public PendingCardReward PendingCardReward { get; }
 
         /// <summary>冻结并验证一份不含 Battle transient 的稳定恢复输入。</summary>
         public RunRestoreOptions(
@@ -155,13 +157,14 @@ namespace TinySpire.Run
             int heroTemplateId,
             int currentHealth,
             int maxHealth,
-            int deckTemplateId,
+            RunDeck runDeck,
             uint randomRootSeed,
             MapDefinition map,
             IReadOnlyList<MapNodeId> pathNodeIds,
             RunProgressPhase progressPhase,
             MapNodeId? committedNodeId,
-            RunTerminalReason? terminalReason)
+            RunTerminalReason? terminalReason,
+            PendingCardReward pendingCardReward = null)
         {
             if (runId.Value == Guid.Empty)
                 throw new ArgumentException("Run id cannot be empty.", nameof(runId));
@@ -171,8 +174,8 @@ namespace TinySpire.Run
                 throw new ArgumentOutOfRangeException(nameof(maxHealth));
             if (currentHealth < 0 || currentHealth > maxHealth)
                 throw new ArgumentOutOfRangeException(nameof(currentHealth));
-            if (deckTemplateId <= 0)
-                throw new ArgumentOutOfRangeException(nameof(deckTemplateId));
+            if (runDeck == null)
+                throw new ArgumentNullException(nameof(runDeck));
             if (randomRootSeed == 0)
                 throw new ArgumentOutOfRangeException(nameof(randomRootSeed));
             if (map == null)
@@ -180,6 +183,7 @@ namespace TinySpire.Run
             if (pathNodeIds == null || pathNodeIds.Count == 0)
                 throw new ArgumentException("A restored Run path must contain Start.", nameof(pathNodeIds));
             if (progressPhase != RunProgressPhase.MapReady &&
+                progressPhase != RunProgressPhase.RewardPending &&
                 progressPhase != RunProgressPhase.BossGateReached &&
                 progressPhase != RunProgressPhase.Terminal)
             {
@@ -191,11 +195,17 @@ namespace TinySpire.Run
                 throw new ArgumentException("Only a terminal Run can carry a reason.", nameof(terminalReason));
             if (currentHealth == 0 && progressPhase != RunProgressPhase.Terminal)
                 throw new ArgumentException("Only a terminal Run can have zero health.", nameof(currentHealth));
+            if ((progressPhase == RunProgressPhase.RewardPending) != (pendingCardReward != null))
+            {
+                throw new ArgumentException(
+                    "Only RewardPending restore facts may carry a pending card reward.",
+                    nameof(pendingCardReward));
+            }
             RunId = runId;
             HeroTemplateId = heroTemplateId;
             CurrentHealth = currentHealth;
             MaxHealth = maxHealth;
-            DeckTemplateId = deckTemplateId;
+            RunDeck = runDeck;
             RandomRootSeed = randomRootSeed;
             Map = map;
             PathNodeIds = Array.AsReadOnly(pathNodeIds.ToArray());
@@ -206,10 +216,11 @@ namespace TinySpire.Run
                 map,
                 pathNodeIds,
                 progressPhase);
+            PendingCardReward = pendingCardReward;
         }
 
         /// <summary>无重试语义下，从完成 Combat 路径与失败中的当前 Combat 唯一推导 attempt 序号。</summary>
-        private static int DeriveBattleAttemptSequence(
+        internal static int DeriveBattleAttemptSequence(
             MapDefinition map,
             IReadOnlyList<MapNodeId> pathNodeIds,
             RunProgressPhase progressPhase)
@@ -221,7 +232,8 @@ namespace TinySpire.Run
                     completedCombatCount = checked(completedCombatCount + 1);
             }
 
-            return progressPhase == RunProgressPhase.Terminal
+            return progressPhase == RunProgressPhase.Terminal ||
+                   progressPhase == RunProgressPhase.RewardPending
                 ? checked(completedCombatCount + 1)
                 : completedCombatCount;
         }
@@ -304,8 +316,8 @@ namespace TinySpire.Run
         /// <summary>本战玩家生命上限。</summary>
         public int MaxHealth { get; }
 
-        /// <summary>本战起始牌组模板标识。</summary>
-        public int DeckTemplateId { get; }
+        /// <summary>按 RunDeck 顺序复制的不可变实例投影。</summary>
+        public IReadOnlyList<RunCard> RunCards { get; }
 
         /// <summary>本战遭遇模板标识。</summary>
         public int EncounterTemplateId { get; }
@@ -334,7 +346,7 @@ namespace TinySpire.Run
             HeroTemplateId = state.HeroTemplateId;
             InitialHealth = state.CurrentHealth;
             MaxHealth = state.MaxHealth;
-            DeckTemplateId = state.DeckTemplateId;
+            RunCards = Array.AsReadOnly(state.RunDeck.Cards.ToArray());
             EncounterTemplateId = committedNode.ContentId;
             RandomSeed = randomSeed;
         }
@@ -357,8 +369,8 @@ namespace TinySpire.Run
         /// <summary>本 Run 生命上限。</summary>
         public int MaxHealth { get; }
 
-        /// <summary>本 Run 起始牌组模板标识。</summary>
-        public int DeckTemplateId { get; }
+        /// <summary>跨战斗保持顺序、实例身份与升级事实的不可变牌组。</summary>
+        public RunDeck RunDeck { get; }
 
         /// <summary>派生本战随机输入的根种子。</summary>
         public uint RandomRootSeed { get; }
@@ -387,6 +399,9 @@ namespace TinySpire.Run
         /// <summary>当前有效的本战输入；尚未入战时为空。</summary>
         public RunBattleInput ActiveBattle { get; }
 
+        /// <summary>胜利后已冻结且尚未选择或跳过的普通战斗卡牌奖励。</summary>
+        public PendingCardReward PendingCardReward { get; }
+
         /// <summary>从已验证创建参数建立初始 Run 事实。</summary>
         internal RunState(RunCreationOptions options)
         {
@@ -397,7 +412,7 @@ namespace TinySpire.Run
             HeroTemplateId = options.HeroTemplateId;
             CurrentHealth = options.InitialHealth;
             MaxHealth = options.MaxHealth;
-            DeckTemplateId = options.DeckTemplateId;
+            RunDeck = options.RunDeck;
             RandomRootSeed = options.RandomRootSeed;
             MapDefinition = options.Map;
             _pathNodeIds = Array.AsReadOnly(new[]
@@ -409,6 +424,7 @@ namespace TinySpire.Run
             TerminalReason = null;
             BattleAttemptSequence = 0;
             ActiveBattle = null;
+            PendingCardReward = null;
             ValidateShape();
         }
 
@@ -422,7 +438,7 @@ namespace TinySpire.Run
             HeroTemplateId = options.HeroTemplateId;
             CurrentHealth = options.CurrentHealth;
             MaxHealth = options.MaxHealth;
-            DeckTemplateId = options.DeckTemplateId;
+            RunDeck = options.RunDeck;
             RandomRootSeed = options.RandomRootSeed;
             MapDefinition = options.Map;
             _pathNodeIds = Array.AsReadOnly(options.PathNodeIds.ToArray());
@@ -431,6 +447,7 @@ namespace TinySpire.Run
             TerminalReason = options.TerminalReason;
             BattleAttemptSequence = options.BattleAttemptSequence;
             ActiveBattle = null;
+            PendingCardReward = options.PendingCardReward;
             ValidateShape();
         }
 
@@ -443,7 +460,9 @@ namespace TinySpire.Run
             MapNodeId? committedNodeId,
             int battleAttemptSequence,
             RunBattleInput activeBattle,
-            RunTerminalReason? terminalReason)
+            RunTerminalReason? terminalReason,
+            PendingCardReward pendingCardReward = null,
+            RunDeck runDeck = null)
         {
             if (previous == null)
                 throw new ArgumentNullException(nameof(previous));
@@ -458,7 +477,7 @@ namespace TinySpire.Run
             HeroTemplateId = previous.HeroTemplateId;
             CurrentHealth = currentHealth;
             MaxHealth = previous.MaxHealth;
-            DeckTemplateId = previous.DeckTemplateId;
+            RunDeck = runDeck ?? previous.RunDeck;
             RandomRootSeed = previous.RandomRootSeed;
             MapDefinition = previous.MapDefinition;
             _pathNodeIds = Array.AsReadOnly(pathNodeIds.ToArray());
@@ -467,6 +486,7 @@ namespace TinySpire.Run
             TerminalReason = terminalReason;
             BattleAttemptSequence = battleAttemptSequence;
             ActiveBattle = activeBattle;
+            PendingCardReward = pendingCardReward;
             ValidateShape();
         }
 
@@ -482,6 +502,19 @@ namespace TinySpire.Run
                 : ActiveBattle == null;
             if (!activeBattleMatches)
                 throw new InvalidOperationException("Run battle transient does not match its progress phase.");
+
+            bool pendingRewardMatches = ProgressPhase == RunProgressPhase.RewardPending
+                ? PendingCardReward != null &&
+                  CommittedNodeId != null &&
+                  PendingCardReward.Id.BattleId.RunId == RunId &&
+                  PendingCardReward.Id.BattleId.AttemptSequence == BattleAttemptSequence &&
+                  PendingCardReward.Id.BattleId.NodeId == CommittedNodeId.Value
+                : PendingCardReward == null;
+            if (!pendingRewardMatches)
+            {
+                throw new InvalidOperationException(
+                    "Run pending card reward does not match its progress phase.");
+            }
 
             switch (ProgressPhase)
             {
@@ -503,6 +536,11 @@ namespace TinySpire.Run
                     {
                         throw new InvalidOperationException("Boss gate Run facts are inconsistent.");
                     }
+                    break;
+                case RunProgressPhase.RewardPending:
+                    ValidateCommittedCombat();
+                    if (TerminalReason != null || CurrentHealth <= 0)
+                        throw new InvalidOperationException("RewardPending Run facts are inconsistent.");
                     break;
                 case RunProgressPhase.Terminal:
                     if (TerminalReason != RunTerminalReason.Defeat ||

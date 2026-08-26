@@ -55,21 +55,27 @@ namespace TinySpire.Battle
             if (_configs.Tables == null)
                 throw new InvalidOperationException("ConfigService must be initialized before formatting card text.");
 
-            cfg.battle.Card template = _configs.Tables.TbCard.GetOrDefault(card.TemplateId)
-                ?? throw new InvalidOperationException($"Card template {card.TemplateId} does not exist.");
+            BattleCardLevelProjection projection = BattleCardLevelProjection.Create(
+                _configs.Tables,
+                card.TemplateId,
+                card.UpgradeLevel);
+            cfg.battle.Card template = projection.Template;
 
-            Dictionary<string, object> arguments = BuildArguments(template, source);
+            Dictionary<string, object> arguments = BuildArguments(projection, source);
             arguments.Add("keywordStrength", _localization.GetString(StrengthKeywordKey));
             arguments.Add("keywordVulnerable", _localization.GetString(VulnerableKeywordKey));
 
             return new CardPresentationText(
                 _localization.GetString(template.NameI18nKey),
-                _localization.GetString(template.DescriptionI18nKey, arguments));
+                _localization.GetString(projection.DescriptionI18nKey, arguments));
         }
 
-        /// <summary>从静态效果绑定和当前来源事实派生本地化模板参数。</summary>
-        private Dictionary<string, object> BuildArguments(cfg.battle.Card card, CombatantData source)
+        /// <summary>从实例等级投影、静态效果绑定和当前来源事实派生本地化模板参数。</summary>
+        private Dictionary<string, object> BuildArguments(
+            BattleCardLevelProjection projection,
+            CombatantData source)
         {
+            cfg.battle.Card card = projection.Template;
             var arguments = new Dictionary<string, object>(StringComparer.Ordinal);
             foreach (cfg.battle.CardEffectBinding binding in card.EffectBindings)
             {
@@ -82,11 +88,27 @@ namespace TinySpire.Battle
                 cfg.battle.CardEffect effect = _configs.Tables.TbCardEffect.GetOrDefault(binding.EffectId)
                     ?? throw new InvalidOperationException(
                         $"Card {card.Id} references missing effect {binding.EffectId}.");
+                int configuredValue = effect.EffectType == cfg.battle.EffectType.DealDamage &&
+                    projection.EffectDamageValue.HasValue
+                        ? projection.EffectDamageValue.Value
+                        : effect.Value;
                 int displayValue = BattleCardEffectTypeMapping.UsesLiteralDisplayValue(
                     effect.EffectType)
-                    ? effect.Value
-                    : BattleEffectValueCalculator.Calculate(effect, source);
+                    ? configuredValue
+                    : BattleEffectValueCalculator.Calculate(effect, configuredValue, source);
                 arguments.Add(binding.ArgumentKey, displayValue);
+            }
+
+            if (projection.ProgramDamageValue.HasValue)
+            {
+                const string damageArgumentKey = "damage";
+                if (arguments.ContainsKey(damageArgumentKey))
+                {
+                    throw new InvalidOperationException(
+                        $"Card {card.Id} contains duplicate program argument '{damageArgumentKey}'.");
+                }
+
+                arguments.Add(damageArgumentKey, projection.ProgramDamageValue.Value);
             }
 
             return arguments;

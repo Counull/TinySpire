@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using TMPro;
+using TinySpire.Run;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
@@ -9,7 +10,7 @@ using UnityEngine.UI;
 
 namespace TinySpire.UI.Run
 {
-    /// <summary>以可替换几何控件渲染入口与 G3 明牌地图，不持有任何 Run 业务事实。</summary>
+    /// <summary>以可替换几何控件渲染入口、明牌地图与冻结奖励，不持有任何 Run 业务事实。</summary>
     [DisallowMultipleComponent]
     public sealed class RunEntryView : MonoBehaviour, IRunEntryView
     {
@@ -24,7 +25,7 @@ namespace TinySpire.UI.Run
         };
 
         internal const string RequiredEntryGlyphs =
-            "开始游戏继续设置图鉴统计返回取消开发中布局占位选择角色确认并未来队伍槽地图节点遭遇已清除后续内容未接入生命战斗失败离开战士机枪兵放弃当前存档前会删除不可用有效无法版本未知迁移检测写入读取引用配置缺失保存重试退出不回退上一份成功检查点若尚无将恢复永久撤销？。“”，；";
+            "开始游戏继续设置图鉴统计返回取消开发中布局占位选择角色确认并未来队伍槽地图节点遭遇已清除后续内容未接入生命战斗奖励一张牌跳过费用失败离开战士机枪兵放弃当前存档前会删除不可用有效无法版本未知迁移检测写入读取引用配置缺失保存重试退出不回退上一份成功检查点若尚无将恢复永久撤销？。“”，；";
 
         private static readonly Color32 BackgroundColor = new Color32(18, 24, 36, 255);
         private static readonly Color32 SurfaceColor = new Color32(28, 38, 55, 248);
@@ -109,6 +110,14 @@ namespace TinySpire.UI.Run
         private RectTransform _mapGraphRoot;
         private RunMapViewModel _renderedMap;
         private string _renderedMapFingerprint;
+
+        private TMP_Text _cardRewardTitle;
+        private readonly Button[] _cardRewardCandidateButtons = new Button[3];
+        private readonly TMP_Text[] _cardRewardCandidateTexts = new TMP_Text[3];
+        private readonly RunEntryAction?[] _cardRewardCandidateActions = new RunEntryAction?[3];
+        private TMP_Text _skipCardRewardText;
+        private Button _skipCardRewardButton;
+        private RunEntryAction? _skipCardRewardAction;
 
         private TMP_Text _failureTitle;
         private TMP_Text _failureHealth;
@@ -211,6 +220,10 @@ namespace TinySpire.UI.Run
             _mapHealth.text = model.GetText(RunEntryTextSlot.Health);
             RenderMap(model.Map);
 
+            _cardRewardTitle.text = model.GetText(RunEntryTextSlot.CardRewardTitle);
+            _skipCardRewardText.text = model.GetText(RunEntryTextSlot.SkipCardReward);
+            RenderCardReward(model.CardReward);
+
             _failureTitle.text = model.GetText(RunEntryTextSlot.FailureTitle);
             string failureIssue = model.GetText(RunEntryTextSlot.SaveIssue);
             _failureHealth.text = failureIssue.Length == 0
@@ -282,7 +295,7 @@ namespace TinySpire.UI.Run
                 : throw new InvalidOperationException($"Run entry button '{objectName}' does not exist.");
         }
 
-        /// <summary>建立 Canvas、事件系统及十个互斥页面；重复调用不再绑定监听。</summary>
+        /// <summary>建立 Canvas、事件系统及全部互斥页面；重复调用不再绑定监听。</summary>
         private void EnsureBuilt()
         {
             if (_built)
@@ -320,6 +333,7 @@ namespace TinySpire.UI.Run
             BuildComingSoonPage(surface, RunEntryPage.Compendium);
             BuildComingSoonPage(surface, RunEntryPage.Statistics);
             BuildMapPage(surface);
+            BuildCardRewardPage(surface);
             BuildFailurePage(surface);
             BuildAbandonConfirmationPage(surface);
             BuildSaveFailurePage(surface);
@@ -634,6 +648,72 @@ namespace TinySpire.UI.Run
                 stretch: false,
                 size: new Vector2(820f, 480f));
             SetCenteredRect(_mapGraphHost, new Vector2(0f, -75f), new Vector2(820f, 480f));
+        }
+
+        /// <summary>建立固定三候选与单一跳过按钮的普通战斗奖励页。</summary>
+        private void BuildCardRewardPage(RectTransform parent)
+        {
+            RectTransform page = CreatePage(RunEntryPage.CardReward, parent);
+            _cardRewardTitle = CreateText(
+                "CardRewardTitle",
+                page,
+                42f,
+                FontStyles.Bold,
+                PrimaryTextColor,
+                300f,
+                700f,
+                64f);
+            for (int index = 0; index < RunCardRewardGenerator.CandidateCount; index++)
+            {
+                int candidateIndex = index;
+                float x = (index - 1) * 280f;
+                (_cardRewardCandidateButtons[index], _cardRewardCandidateTexts[index]) = CreateButton(
+                    $"CardRewardCandidate{index}Button",
+                    page,
+                    () => _cardRewardCandidateActions[candidateIndex],
+                    20f,
+                    width: 250f,
+                    height: 360f,
+                    x: x);
+            }
+
+            (_skipCardRewardButton, _skipCardRewardText) = CreateButton(
+                "SkipCardRewardButton",
+                page,
+                () => _skipCardRewardAction,
+                -260f,
+                width: 260f);
+        }
+
+        /// <summary>以最新投影替换三个动态动作与文本，不在重复 Render 时新增监听。</summary>
+        private void RenderCardReward(RunCardRewardViewModel model)
+        {
+            for (int index = 0; index < RunCardRewardGenerator.CandidateCount; index++)
+            {
+                if (model == null)
+                {
+                    _cardRewardCandidateActions[index] = null;
+                    _cardRewardCandidateTexts[index].text = string.Empty;
+                    _cardRewardCandidateButtons[index].interactable = false;
+                    continue;
+                }
+
+                RunCardRewardCandidateViewModel candidate = model.Candidates[index];
+                _cardRewardCandidateActions[index] = new RunEntryAction(
+                    RunEntryActionKind.SelectCardReward,
+                    cardRewardId: model.RewardId,
+                    cardTemplateId: candidate.TemplateId);
+                _cardRewardCandidateTexts[index].text =
+                    $"{candidate.Name}\n{candidate.Description}\n{candidate.CostText}";
+                _cardRewardCandidateButtons[index].interactable = model.ActionsEnabled;
+            }
+
+            _skipCardRewardAction = model == null
+                ? default
+                : new RunEntryAction(
+                    RunEntryActionKind.SkipCardReward,
+                    cardRewardId: model.RewardId);
+            _skipCardRewardButton.interactable = model != null && model.ActionsEnabled;
         }
 
         /// <summary>按地图指纹复用拓扑几何，并在每次投影时刷新节点/边的功能状态。</summary>
@@ -1245,6 +1325,29 @@ namespace TinySpire.UI.Run
             float height = 66f,
             float x = 0f)
         {
+            return CreateButton(
+                objectName,
+                parent,
+                () => action,
+                y,
+                width,
+                height,
+                x);
+        }
+
+        /// <summary>创建从最新投影延迟读取动作的按钮，供跨 Render 身份变化的页面复用。</summary>
+        private (Button button, TMP_Text label) CreateButton(
+            string objectName,
+            RectTransform parent,
+            Func<RunEntryAction?> actionProvider,
+            float y,
+            float width = 420f,
+            float height = 66f,
+            float x = 0f)
+        {
+            if (actionProvider == null)
+                throw new ArgumentNullException(nameof(actionProvider));
+
             var buttonObject = new GameObject(
                 objectName,
                 typeof(RectTransform),
@@ -1274,7 +1377,7 @@ namespace TinySpire.UI.Run
                 0f,
                 width - 30f,
                 height - 12f);
-            BindButton(button, action);
+            BindButton(button, actionProvider);
             _buttons.Add(objectName, button);
             return (button, label);
         }
@@ -1361,10 +1464,20 @@ namespace TinySpire.UI.Run
         /// <summary>只在按钮实际可交互且可见时发布对应入口动作。</summary>
         private void BindButton(Button button, RunEntryAction action)
         {
+            BindButton(button, () => action);
+        }
+
+        /// <summary>只绑定一次动态动作读取器，使重复投影不会叠加旧奖励监听。</summary>
+        private void BindButton(Button button, Func<RunEntryAction?> actionProvider)
+        {
             button.onClick.AddListener(() =>
             {
-                if (button != null && button.IsActive() && button.IsInteractable())
-                    ActionRequested?.Invoke(action);
+                if (button == null || !button.IsActive() || !button.IsInteractable())
+                    return;
+
+                RunEntryAction? action = actionProvider();
+                if (action.HasValue)
+                    ActionRequested?.Invoke(action.Value);
             });
             _boundButtons.Add(button);
         }

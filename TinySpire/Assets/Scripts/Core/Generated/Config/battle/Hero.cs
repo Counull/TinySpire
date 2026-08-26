@@ -33,6 +33,10 @@ public sealed partial class Hero : Luban.BeanBase
         MaxAmmo = (int)_obj.GetValue("max_ammo");
         AmmoGainPerRound = (int)_obj.GetValue("ammo_gain_per_round");
         RuntimeProfile = (battle.HeroRuntimeProfile)(int)_obj.GetValue("runtime_profile");
+        { var __json0 = _obj.GetValue("reward_card_template_ids"); int _n0 = (__json0 as JArray).Count; RewardCardTemplateIds = new int[_n0]; int __index0=0; foreach(JToken __e0 in __json0) { int __v0;  __v0 = (int)__e0;  RewardCardTemplateIds[__index0++] = __v0; }   }
+        RewardCommonWeight = (int)_obj.GetValue("reward_common_weight");
+        RewardUncommonWeight = (int)_obj.GetValue("reward_uncommon_weight");
+        RewardRareWeight = (int)_obj.GetValue("reward_rare_weight");
     }
 
     public static Hero DeserializeHero(JToken _buf)
@@ -92,6 +96,22 @@ public sealed partial class Hero : Luban.BeanBase
     /// Battle runtime profile
     /// </summary>
     public readonly battle.HeroRuntimeProfile RuntimeProfile;
+    /// <summary>
+    /// Reward card template IDs
+    /// </summary>
+    public readonly int[] RewardCardTemplateIds;
+    /// <summary>
+    /// Common reward weight
+    /// </summary>
+    public readonly int RewardCommonWeight;
+    /// <summary>
+    /// Uncommon reward weight
+    /// </summary>
+    public readonly int RewardUncommonWeight;
+    /// <summary>
+    /// Rare reward weight
+    /// </summary>
+    public readonly int RewardRareWeight;
 
 
     public const int __ID__ = -795877488;
@@ -117,6 +137,10 @@ public sealed partial class Hero : Luban.BeanBase
         + "maxAmmo:" + MaxAmmo + ","
         + "ammoGainPerRound:" + AmmoGainPerRound + ","
         + "runtimeProfile:" + RuntimeProfile + ","
+        + "rewardCardTemplateIds:" + Luban.StringUtil.CollectionToString(RewardCardTemplateIds) + ","
+        + "rewardCommonWeight:" + RewardCommonWeight + ","
+        + "rewardUncommonWeight:" + RewardUncommonWeight + ","
+        + "rewardRareWeight:" + RewardRareWeight + ","
         + "}";
     }
 }

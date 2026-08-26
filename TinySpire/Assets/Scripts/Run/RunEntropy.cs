@@ -54,6 +54,29 @@ namespace TinySpire.Run
 
             return mixed == 0 ? 1u : mixed;
         }
+
+        /// <summary>以固定 Reward domain salt 与 attempt 派生非零 seed，不推进 Map/Battle 随机序列。</summary>
+        public static uint DeriveRewardSeed(uint randomRootSeed, int attemptSequence)
+        {
+            if (randomRootSeed == 0)
+                throw new ArgumentOutOfRangeException(nameof(randomRootSeed));
+            if (attemptSequence <= 0)
+                throw new ArgumentOutOfRangeException(nameof(attemptSequence));
+
+            uint mixed = randomRootSeed;
+            unchecked
+            {
+                mixed ^= 0x52574400u;
+                mixed += (uint)attemptSequence * 0x9E3779B9u;
+                mixed ^= mixed >> 16;
+                mixed *= 0x7FEB352Du;
+                mixed ^= mixed >> 15;
+                mixed *= 0x846CA68Bu;
+                mixed ^= mixed >> 16;
+            }
+
+            return mixed == 0 ? 1u : mixed;
+        }
     }
 
     /// <summary>使用系统 Guid 与密码学随机源签发生产 Run 输入。</summary>

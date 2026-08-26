@@ -1761,6 +1761,7 @@ public sealed class BattleParticipantFeedbackRoutingTests
                 "[{\"id\":7001,\"intent_type\":0,\"target_rule\":1," +
                 "\"effect_id\":4002,\"weight\":1,\"cooldown_selections\":0," +
                 "\"max_consecutive\":0}]"),
+            ["battle_tbcardupgradelevel"] = new JArray(),
         };
         return new cfg.Tables(tableName => data[tableName]);
     }
@@ -1773,7 +1774,7 @@ public sealed class BattleParticipantFeedbackRoutingTests
             ["battle_tbhero"] = JArray.Parse(
                 "[{\"id\":1001,\"name_i18n_key\":\"battle.hero.test_warrior.name\"," +
                 "\"view_prefab_key\":\"pfb_char_player\",\"max_health\":30," +
-                "\"base_strength\":0,\"initial_deck_id\":1001,\"initial_energy\":3,\"max_energy\":3,\"energy_gain_per_round\":3,\"initial_ammo\":0,\"max_ammo\":0,\"ammo_gain_per_round\":0,\"runtime_profile\":0}]"),
+                "\"base_strength\":0,\"initial_deck_id\":1001,\"initial_energy\":3,\"max_energy\":3,\"energy_gain_per_round\":3,\"initial_ammo\":0,\"max_ammo\":0,\"ammo_gain_per_round\":0,\"runtime_profile\":0,\"reward_card_template_ids\":[],\"reward_common_weight\":0,\"reward_uncommon_weight\":0,\"reward_rare_weight\":0}]"),
             ["battle_tbenemy"] = JArray.Parse(
                 "[{\"id\":2001,\"name_i18n_key\":\"battle.enemy.test_slime.name\"," +
                 "\"view_prefab_key\":\"pfb_char_enemy\",\"max_health\":20," +
@@ -1789,6 +1790,8 @@ public sealed class BattleParticipantFeedbackRoutingTests
                 "\"card_type\":1,\"rarity\":0,\"cost\":0,\"cost_kind\":0," +
                 "\"upgraded_cost\":0,\"target_rule\":0,\"play_destination\":0," +
                 "\"upgraded_play_destination\":0,\"has_upgrade\":false," +
+                "\"upgrade_track_kind\":0,\"infinite_upgrade_rule_kind\":0," +
+                "\"infinite_upgrade_value_per_level\":0," +
                 "\"implementation_status\":0,\"program_id\":0,\"is_innate\":false," +
                 "\"effect_bindings\":[{\"argument_key\":\"block\"," +
                 "\"effect_id\":4001}]}]"),
@@ -1802,6 +1805,7 @@ public sealed class BattleParticipantFeedbackRoutingTests
                 "[{\"id\":7001,\"intent_type\":1,\"target_rule\":0," +
                 "\"effect_id\":4001,\"weight\":1,\"cooldown_selections\":0," +
                 "\"max_consecutive\":0}]"),
+            ["battle_tbcardupgradelevel"] = new JArray(),
         };
         return new cfg.Tables(tableName => data[tableName]);
     }

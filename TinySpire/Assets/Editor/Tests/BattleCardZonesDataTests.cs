@@ -4,9 +4,35 @@ using NUnit.Framework;
 using R3;
 using TinySpire.Battle;
 using TinySpire.Core;
+using TinySpire.Run;
 
 public sealed class BattleCardZonesDataTests
 {
+    /// <summary>RunCard 投影进入战斗后保留稳定来源、模板、等级与输入顺序，同时分配独立战内身份。</summary>
+    [Test]
+    public void CreatingFromRunCards_PreservesOriginOrderTemplateAndOpaqueUpgradeFacts()
+    {
+        var runCards = new[]
+        {
+            new RunCard(new RunCardInstanceId(41), templateId: 3002, upgradeLevel: 0),
+            new RunCard(new RunCardInstanceId(42), templateId: 3002, upgradeLevel: 2),
+            new RunCard(new RunCardInstanceId(99), templateId: 3003, upgradeLevel: 1),
+        };
+
+        using var zones = new BattleCardZonesData(runCards, shuffleSeed: 1234);
+        CardInstanceData[] projected = zones.Cards
+            .OrderBy(pair => pair.Key.Value)
+            .Select(pair => pair.Value)
+            .ToArray();
+
+        Assert.That(projected.Select(card => card.Id.Value), Is.EqualTo(new[] { 1, 2, 3 }));
+        Assert.That(
+            projected.Select(card => card.OriginRunCardInstanceId?.Sequence),
+            Is.EqualTo(new int?[] { 41, 42, 99 }));
+        Assert.That(projected.Select(card => card.TemplateId), Is.EqualTo(new[] { 3002, 3002, 3003 }));
+        Assert.That(projected.Select(card => card.UpgradeLevel), Is.EqualTo(new[] { 0, 2, 1 }));
+    }
+
     [Test]
     public void CreatingDeck_CreatesDistinctInstancesInTheShuffledDrawPile()
     {
@@ -431,6 +457,8 @@ public sealed class BattleCardZonesDataTests
         {
             Assert.That(zones.TryGetCard(cardId, out CardInstanceData card), Is.True);
             Assert.That(card.TemplateId, Is.EqualTo(3201));
+            Assert.That(card.OriginRunCardInstanceId, Is.Null);
+            Assert.That(card.UpgradeLevel, Is.Zero);
         }
 
         AssertEveryCardHasExactlyOneZone(zones);

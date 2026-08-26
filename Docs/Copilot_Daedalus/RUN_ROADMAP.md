@@ -4,7 +4,7 @@ owner: Daedalus
 page_type: roadmap
 lifecycle: active
 created: 2026-08-14
-updated: 2026-08-24
+updated: 2026-08-26
 status_source: STATUS.md
 predecessor: ROADMAP.md
 note: 本文件承担 BattleScene 之后的 Run 阶段结果、候选切片、依赖与门禁；任何阶段或切片都不因出现在本文而获得实施授权。
@@ -58,7 +58,7 @@ Run MVP 的终点不是“把所有 STS 内容做完”，而是至少用一个�
 | G1 | `completed` | G1-A `verified` | 从主菜单创建 Run、选择 Hero、进入首战并经稳定结果回到 Run 入口 | G1-A 的完整测试、构建与手测证据通过 | BattleScene MVP checkpoint |
 | G2 | `completed` | G2-A `verified` | 关闭并重启游戏后，可从最近稳定地图检查点继续同一个 Run | 单槽存档可原子写入、坏档安全失败、恢复事实与后续随机一致 | G1 的 Run 生命周期与 setup/result seam |
 | G3 | `completed` | G3 `verified` | 生成并游玩一张可保存、可复现、开局明牌的确定性 Act 地图，胜利推进至 Boss 门，普通战斗失败立即终结 Run | 合法路线可完整推进至 `BossGateReached`；recipe 重建、失败终局冷启动与完整 Unity 验收均通过 | G2 的持久化 Run facts 与随机边界；决策 012～016 |
-| G4 | `not-started` | G4-A `candidate` | 胜利后选择/跳过冻结奖励，Run 牌组变化真实进入下一战 | 奖励不重随机、不重复领取，逐卡实例与升级事实可保存 | G1 结果 bridge、G2 schema；节点绑定时依赖 G3 |
+| G4 | `completed` | G4-A～D `verified` | 胜利后选择/跳过冻结奖励，Run 牌组变化真实进入下一战 | 奖励不重随机、不重复领取，逐卡实例与升级事实可保存 | G1 结果 bridge、G2 schema；节点绑定时依赖 G3 |
 | G5 | `not-started` | G5-A `candidate` | 获得并跨战使用至少一个遗物和一个药水 | 触发顺序稳定、消费 exactly-once、保存/重开语义明确 | G2 持久化、G4 奖励/实例 seam |
 | G6 | `not-started` | G6-A `candidate` | 商店、事件、休息点、宝箱各有一个可完成样本 | 候选冻结、结算原子、重进/读档不可重复获利 | G2 经济事实、G3 节点契约、所需 G4/G5 seam |
 | G7 | `not-started` | G7-A `candidate` | 从新 Run 贯通一个 Act、一个精英和一个 Boss，再进入 Run 终局 | 单 Act 全链可达且内容门禁拒绝坏引用，终局只结算一次 | G3 地图/Act 结构与 G4～G6 内容流程 |
@@ -74,7 +74,7 @@ Run MVP 的终点不是“把所有 STS 内容做完”，而是至少用一个�
 | G2 | 原子单槽、稳定检查点、显式 Continue、坏档与提交失败保护 | [G2-A](06_testing/2026-08-16-g2a-run-persistence.md) · 947/947 | schema v1、Defeat 不写盘仅为当时事实 |
 | G3 | 冻结确定性 Act 图、recipe-only schema v2、BossGate、`Terminal(Defeat)` | [G3](06_testing/2026-08-24-g3-deterministic-act-map.md) · 993/993 | CD-116 已显式 supersede 上述 G1/G2 失败与存档口径 |
 
-G1～G3 的完整计划、RED→GREEN、BuildLayout 与 Packed Play 细节保留在对应计划、验收和 `SESSION_LOG.md`，不再复制到活跃 Roadmap。当前没有 active slice；G4-A 仍只是未授权 candidate。
+G1～G3 的完整计划、RED→GREEN、BuildLayout 与 Packed Play 细节保留在对应计划、验收和 `SESSION_LOG.md`，不再复制到活跃 Roadmap。G4-A～D 已全部完成并 `verified`，最终证据见 [G4 验收记录](06_testing/2026-08-25-g4-run-deck-rewards-upgrades.md)。动态状态仍以 [STATUS.md](STATUS.md) 为准。
 
 ## 5. G4 · 战斗奖励、Run 牌组与卡牌实例
 
@@ -89,7 +89,7 @@ G1～G3 的完整计划、RED→GREEN、BuildLayout 与 Packed Play 细节保留
 
 **G4 完成门槛：** `胜利 → 冻结奖励 → 选择/跳过 → 回图 → 下一战` 全链成立，重进/读档不会刷新或重复领取；RunDeck 和升级事实跨战、跨进程一致。
 
-**明确不做：** 遗物、药水、大型奖励池、奖励动画、删牌/转化、通用任意卡升级。玩家主动升级的首个入口属于 G6 休息点；G4 只先交付实例与规则能力。
+**明确不做：** 遗物、药水、额外新卡或扩写新卡内容、奖励动画、删牌/转化、通用任意卡升级。G4 只把既有 Implemented 内容配置成两名 Hero 的独立生产奖励池；玩家主动升级的首个入口属于 G6 休息点，G4 只交付实例与规则能力。
 
 ## 6. G5 · 遗物、药水与跨战时机
 
@@ -169,6 +169,6 @@ G1～G3 的完整计划、RED→GREEN、BuildLayout 与 Packed Play 细节保留
 
 ## 11. 下一步
 
-G3「确定性尖塔式 Act 地图」已完成并 `verified`；最终完整 EditMode 993/993、`Sync and Build All`、Local Addressables、Packed Play 胜利到 BossGate 与失败终局两条生产链、进程级冷启动和 Console Error 0 均已取得本轮证据。下一候选是 G4-A，但仍为 `candidate`，必须先完成独立局部 Grill、窄计划和明确实施授权。
+G3「确定性尖塔式 Act 地图」与 G4「战斗奖励、Run 牌组与卡牌实例」均已完成并 `verified`。G4-A～D 已取得 RED→GREEN、定向回归、`Sync and Build All`、完整 EditMode、Local Addressables/BuildLayout、Packed Play 双 Hero 选择/跳过与冷启动链以及 Console 0 的本轮证据；详细记录见 [G4 验收](06_testing/2026-08-25-g4-run-deck-rewards-upgrades.md)。
 
-G4+、Platform Save Spike、平台 SDK、云存档、多槽、真实 Boss 战、奖励和遗物实际效果均未获授权。任何后续切片仍须重新经过 Grill、窄计划、明确授权和独立验收，不能继承 G3 的权限。
+当前立即停在 G4，没有实施中的 Run 切片。G5 仍为 `not-started / candidate`；G5+、Platform Save Spike、平台 SDK、云存档、多槽、真实 Boss 战和遗物实际效果均未获授权，任何新范围仍须重新经过 Grill、窄计划、明确授权和独立验收。

@@ -233,14 +233,26 @@ namespace TinySpire.Battle
             {
                 return Failure(BattleCommandExecutionFailureReason.CardNotImplemented);
             }
+            if (cardTemplate.ProgramId == cfg.battle.MachineGunnerProgramId.None)
+            {
+                BattleCommandExecutionFailureReason effectReferenceFailure =
+                    ValidateEffectBindingReferences(cardTemplate);
+                if (effectReferenceFailure != BattleCommandExecutionFailureReason.None)
+                    return Failure(effectReferenceFailure);
+            }
+
+            BattleCardLevelProjection projection = BattleCardLevelProjection.Create(
+                _tables,
+                card.TemplateId,
+                card.UpgradeLevel);
             if (cardTemplate.ProgramId != cfg.battle.MachineGunnerProgramId.None)
             {
                 return EvaluateMachineGunnerCard(
                     command,
                     playerTurn,
-                    cardTemplate);
+                    projection);
             }
-            if (cardTemplate.CostKind == cfg.battle.CardCostKind.Fixed && cardTemplate.Cost < 0)
+            if (cardTemplate.CostKind == cfg.battle.CardCostKind.Fixed && projection.Cost < 0)
                 return Failure(BattleCommandExecutionFailureReason.CardTemplateNotFound);
 
             bool canPayCost;
@@ -249,7 +261,7 @@ namespace TinySpire.Battle
                 case cfg.battle.CardCostKind.Fixed:
                     canPayCost = BattleCardCostResolver.TryResolveEnergy(
                         cardTemplate.CostKind,
-                        cardTemplate.Cost,
+                        projection.Cost,
                         playerTurn.Energy,
                         BattleCardPaymentMode.Normal,
                         out _,
@@ -388,6 +400,24 @@ namespace TinySpire.Battle
                 legalTargets);
         }
 
+        /// <summary>在升级投影前把普通卡的非法或缺表 Effect 引用映射为既有稳定失败。</summary>
+        private BattleCommandExecutionFailureReason ValidateEffectBindingReferences(
+            cfg.battle.Card cardTemplate)
+        {
+            if (cardTemplate.EffectBindings == null)
+                return BattleCommandExecutionFailureReason.InvalidEffectBinding;
+
+            foreach (cfg.battle.CardEffectBinding binding in cardTemplate.EffectBindings)
+            {
+                if (binding == null || binding.EffectId <= 0)
+                    return BattleCommandExecutionFailureReason.InvalidEffectBinding;
+                if (_tables.TbCardEffect.GetOrDefault(binding.EffectId) == null)
+                    return BattleCommandExecutionFailureReason.EffectTemplateNotFound;
+            }
+
+            return BattleCommandExecutionFailureReason.None;
+        }
+
         /// <summary>按 Effect 声明识别唯一选牌→抽牌序列，并在规则层统一冻结 Value、Attribute 与零候选语义。</summary>
         private BattleCommandExecutionFailureReason ValidateGenericHandCardSelection(
             PlayCardCommand command,
@@ -456,8 +486,9 @@ namespace TinySpire.Battle
         private BattleCardPlayEvaluation EvaluateMachineGunnerCard(
             PlayCardCommand command,
             PlayerTurnData playerTurn,
-            cfg.battle.Card cardTemplate)
+            BattleCardLevelProjection projection)
         {
+            cfg.battle.Card cardTemplate = projection.Template;
             if (_machineGunnerRuntime == null ||
                 !_machineGunnerRuntime.SupportsPlayer(command.ActorId))
             {
@@ -487,7 +518,7 @@ namespace TinySpire.Battle
                     NoTargets);
             }
             if (!_machineGunnerRuntime.TryPreviewCost(
-                    cardTemplate,
+                    projection,
                     playerTurn,
                     program,
                     out _,
@@ -568,7 +599,7 @@ namespace TinySpire.Battle
                         MachineGunnerProgramExecutionKind.
                             InitialThenRepeatByTargetStatusKinds &&
                     !_machineGunnerRuntime.TryPreviewCost(
-                        cardTemplate,
+                        projection,
                         playerTurn,
                         program,
                         command.TargetId.Value,

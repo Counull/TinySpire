@@ -6,6 +6,7 @@ using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using R3;
 using TinySpire.Battle;
+using TinySpire.Run;
 using TinySpire.UI.Battle;
 
 /// <summary>从 Hero 配置到唯一命令队列验证机枪兵初始五张卡的最小可玩运行时切片。</summary>
@@ -978,6 +979,71 @@ public sealed class MachineGunnerStarterRuntimeTests
         Assert.That(FindSettlement<BattleDamageAppliedSettlement>(elbow).TargetId, Is.EqualTo(scenario.FirstEnemy.Id));
         Assert.That(FindSettlement<BattleBlockGainedSettlement>(block).Amount, Is.EqualTo(5));
         Assert.That(FindSettlement<BattleAmmoRefilledSettlement>(reload).AmmoAfter, Is.EqualTo(5));
+    }
+
+    /// <summary>确认同模板 Shoot 的不同 Run 实例按各自无限升级等级执行伤害，且不会混淆来源身份。</summary>
+    [Test]
+    public void Shoot_InfiniteUpgrade_ExecutesPerRunInstanceLevel()
+    {
+        var levelZero = new RunCard(new RunCardInstanceId(11), 3201, upgradeLevel: 0);
+        var levelTwo = new RunCard(new RunCardInstanceId(12), 3201, upgradeLevel: 2);
+        using var scenario = new MachineGunnerStarterScenario(
+            new[] { 3201, 3201 },
+            initialHandCount: 2,
+            firstEnemyHealth: 30,
+            runCards: new[] { levelZero, levelTwo });
+        scenario.StartBattle();
+
+        BattleCommandExecutionResult baseShot = scenario.PlayRunCard(
+            levelZero.InstanceId,
+            scenario.FirstEnemy.Id);
+        BattleCommandExecutionResult upgradedShot = scenario.PlayRunCard(
+            levelTwo.InstanceId,
+            scenario.FirstEnemy.Id);
+
+        Assert.That(
+            FindSettlement<BattleDamageAppliedSettlement>(baseShot).AttackValue,
+            Is.EqualTo(6));
+        Assert.That(
+            FindSettlement<BattleDamageAppliedSettlement>(upgradedShot).AttackValue,
+            Is.EqualTo(12));
+        Assert.That(scenario.FirstEnemy.CurrentHealth, Is.EqualTo(12));
+        Assert.That(scenario.Zones.Cards.Values.Single(
+            card => card.OriginRunCardInstanceId == levelZero.InstanceId).UpgradeLevel,
+            Is.Zero);
+        Assert.That(scenario.Zones.Cards.Values.Single(
+            card => card.OriginRunCardInstanceId == levelTwo.InstanceId).UpgradeLevel,
+            Is.EqualTo(2));
+    }
+
+    /// <summary>确认 Output Adjust 的有限一级配置把费用降为零，并真实执行能力区与资源规则。</summary>
+    [Test]
+    public void OutputAdjust_FiniteUpgrade_ExecutesProjectedZeroCostAndPowerRule()
+    {
+        var upgraded = new RunCard(new RunCardInstanceId(21), 3207, upgradeLevel: 1);
+        using var scenario = new MachineGunnerStarterScenario(
+            new[] { 3207 },
+            initialHandCount: 1,
+            initialEnergy: 0,
+            runCards: new[] { upgraded });
+        scenario.StartBattle();
+
+        BattleCommandExecutionResult result = scenario.PlayRunCard(
+            upgraded.InstanceId,
+            targetId: null);
+
+        PlayerTurnData turn = scenario.Queue.Turn.CurrentValue.Players[scenario.Player.Id];
+        Assert.That(turn.Energy, Is.Zero);
+        Assert.That(turn.EnergyMaximum, Is.EqualTo(4));
+        Assert.That(turn.EnergyGainPerRound, Is.EqualTo(4));
+        BattleEnergySpentSettlement energy =
+            result.Settlements.OfType<BattleEnergySpentSettlement>().Single();
+        Assert.That(energy.Amount, Is.Zero);
+        Assert.That(energy.EnergyBefore, Is.Zero);
+        Assert.That(energy.EnergyAfter, Is.Zero);
+        Assert.That(FindSettlement<BattleCardMovedSettlement>(result).ToZone,
+            Is.EqualTo(BattleCardZone.PowerPile));
+        Assert.That(scenario.Zones.PowerPile, Has.Count.EqualTo(1));
     }
 
     /// <summary>确认兴奋剂抽两张、追加真实弹药和额外射击，并在下一玩家回合开始失效。</summary>
@@ -8965,7 +9031,8 @@ public sealed class MachineGunnerStarterRuntimeTests
             int ammoMaximum = 5,
             int? thirdEnemyHealth = null,
             int randomSeed = 1234,
-            bool isolateUnstoppableCandidate = false)
+            bool isolateUnstoppableCandidate = false,
+            IReadOnlyList<RunCard> runCards = null)
         {
             Tables = CreateTables(
                 deckCards,
@@ -8982,7 +9049,8 @@ public sealed class MachineGunnerStarterRuntimeTests
                 new BattleSetupOptions(
                     heroTemplateId: 1002,
                     encounterTemplateId: 5001,
-                    randomSeed: randomSeed));
+                    randomSeed: randomSeed,
+                    runCards: runCards));
             Player = FindCombatant<PlayerCombatantData>(Session.Combatants);
             FirstEnemy = (EnemyCombatantData)Session.Combatants.All[Session.EnemyCombatantIdsInEncounterOrder[0]];
             SecondEnemy = (EnemyCombatantData)Session.Combatants.All[Session.EnemyCombatantIdsInEncounterOrder[1]];
@@ -9026,6 +9094,22 @@ public sealed class MachineGunnerStarterRuntimeTests
         {
             int resultCountBefore = _presentation.Results.Count;
             BattleCommandSubmissionResult submission = Submit(templateId, targetId);
+            Assert.That(submission.Accepted, Is.True);
+            Assert.That(_presentation.Results.Count, Is.EqualTo(resultCountBefore + 1));
+            BattleCommandExecutionResult result = _presentation.Results[resultCountBefore];
+            Assert.That(result.Succeeded, Is.True);
+            return result;
+        }
+
+        /// <summary>按稳定 RunCard 来源身份提交当前手牌实例，并返回该次权威执行结果。</summary>
+        internal BattleCommandExecutionResult PlayRunCard(
+            RunCardInstanceId runCardInstanceId,
+            CombatantId? targetId)
+        {
+            int resultCountBefore = _presentation.Results.Count;
+            CardInstanceId cardId = FindRunCardInHand(runCardInstanceId);
+            BattleCommandSubmissionResult submission = Queue.Submit(
+                new PlayCardCommand(Player.Id, cardId, targetId));
             Assert.That(submission.Accepted, Is.True);
             Assert.That(_presentation.Results.Count, Is.EqualTo(resultCountBefore + 1));
             BattleCommandExecutionResult result = _presentation.Results[resultCountBefore];
@@ -9086,6 +9170,19 @@ public sealed class MachineGunnerStarterRuntimeTests
             return default;
         }
 
+        /// <summary>在权威手牌中按稳定 RunCard 来源身份定位唯一战内实例。</summary>
+        private CardInstanceId FindRunCardInHand(RunCardInstanceId runCardInstanceId)
+        {
+            foreach (CardInstanceId cardId in Zones.Hand)
+            {
+                if (Zones.Cards[cardId].OriginRunCardInstanceId == runCardInstanceId)
+                    return cardId;
+            }
+
+            Assert.Fail($"Run card instance {runCardInstanceId} was not found in hand.");
+            return default;
+        }
+
         /// <summary>创建只含机枪兵初始牌、两名敌人和固定敌方意图的最小 Luban 表集。</summary>
         private static Tables CreateTables(
             int[] deckCards,
@@ -9115,13 +9212,29 @@ public sealed class MachineGunnerStarterRuntimeTests
 
             var cards = new JArray
             {
-                CreateCard(3201, "TEST_MARINE_SHOOT", 0, cfg.battle.TargetRule.Enemy, cfg.battle.MachineGunnerProgramId.Shoot),
+                CreateCard(
+                    3201,
+                    "TEST_MARINE_SHOOT",
+                    0,
+                    cfg.battle.TargetRule.Enemy,
+                    cfg.battle.MachineGunnerProgramId.Shoot,
+                    upgradeTrackKind: cfg.battle.CardUpgradeTrackKind.Infinite,
+                    infiniteUpgradeRuleKind: cfg.battle.CardUpgradeRuleKind.DamageValue,
+                    infiniteUpgradeValuePerLevel: 3),
                 CreateCard(3202, "TEST_MARINE_ELBOW", 1, cfg.battle.TargetRule.Enemy, cfg.battle.MachineGunnerProgramId.Elbow),
                 CreateCard(3203, "TEST_MARINE_BLOCK", 1, cfg.battle.TargetRule.Self, cfg.battle.MachineGunnerProgramId.Block),
                 CreateCard(3204, "TEST_MARINE_RELOAD", 1, cfg.battle.TargetRule.Self, cfg.battle.MachineGunnerProgramId.Reload),
                 CreateCard(3205, "TEST_MARINE_STIM", 1, cfg.battle.TargetRule.Self, cfg.battle.MachineGunnerProgramId.Stim),
                 CreateCard(3206, "TEST_MARINE_CORE_EXPANSION", 1, cfg.battle.TargetRule.Self, cfg.battle.MachineGunnerProgramId.CoreExpansion, cfg.battle.CardType.Power, cfg.battle.CardPlayDestination.Power),
-                CreateCard(3207, "TEST_MARINE_OUTPUT_ADJUST", 1, cfg.battle.TargetRule.Self, cfg.battle.MachineGunnerProgramId.OutputAdjust, cfg.battle.CardType.Power, cfg.battle.CardPlayDestination.Power),
+                CreateCard(
+                    3207,
+                    "TEST_MARINE_OUTPUT_ADJUST",
+                    1,
+                    cfg.battle.TargetRule.Self,
+                    cfg.battle.MachineGunnerProgramId.OutputAdjust,
+                    cfg.battle.CardType.Power,
+                    cfg.battle.CardPlayDestination.Power,
+                    upgradeTrackKind: cfg.battle.CardUpgradeTrackKind.Finite),
                 CreateCard(3208, "TEST_MARINE_BLAST_SHIELD", 1, cfg.battle.TargetRule.Self, cfg.battle.MachineGunnerProgramId.BlastShield, cfg.battle.CardType.Power, cfg.battle.CardPlayDestination.Power),
                 CreateCard(3209, "TEST_MARINE_MAG_EXPANSION", 1, cfg.battle.TargetRule.Self, cfg.battle.MachineGunnerProgramId.MagExpansion, cfg.battle.CardType.Power, cfg.battle.CardPlayDestination.Power),
                 CreateCard(3210, "TEST_MARINE_INCENDIARY_AMMO", 1, cfg.battle.TargetRule.Self, cfg.battle.MachineGunnerProgramId.IncendiaryAmmo, cfg.battle.CardType.Power, cfg.battle.CardPlayDestination.Power),
@@ -9249,6 +9362,10 @@ public sealed class MachineGunnerStarterRuntimeTests
                         ["max_ammo"] = ammoMaximum,
                         ["ammo_gain_per_round"] = 1,
                         ["runtime_profile"] = (int)cfg.battle.HeroRuntimeProfile.MachineGunner,
+                        ["reward_card_template_ids"] = new JArray(),
+                        ["reward_common_weight"] = 0,
+                        ["reward_uncommon_weight"] = 0,
+                        ["reward_rare_weight"] = 0,
                     },
                 },
                 ["battle_tbenemy"] = enemies,
@@ -9300,6 +9417,17 @@ public sealed class MachineGunnerStarterRuntimeTests
                         ["max_consecutive"] = 0,
                     },
                 },
+                ["battle_tbcardupgradelevel"] = new JArray
+                {
+                    CreateUpgradeLevel(
+                        cardId: 3207,
+                        nextUpgradeLevel: 1,
+                        descriptionI18nKey: "battle.card.marine.output_adjust.upgrade_description",
+                        cost: 0,
+                        playDestination: cfg.battle.CardPlayDestination.Power,
+                        ruleKind: cfg.battle.CardUpgradeRuleKind.None,
+                        ruleValue: 0),
+                },
             };
             return new Tables(tableName => data[tableName]);
         }
@@ -9315,7 +9443,10 @@ public sealed class MachineGunnerStarterRuntimeTests
             cfg.battle.CardPlayDestination playDestination = cfg.battle.CardPlayDestination.DiscardPile,
             cfg.battle.CardCostKind costKind = cfg.battle.CardCostKind.Fixed,
             bool isInnate = false,
-            bool hasUpgrade = true)
+            bool hasUpgrade = true,
+            cfg.battle.CardUpgradeTrackKind upgradeTrackKind = cfg.battle.CardUpgradeTrackKind.None,
+            cfg.battle.CardUpgradeRuleKind infiniteUpgradeRuleKind = cfg.battle.CardUpgradeRuleKind.None,
+            int infiniteUpgradeValuePerLevel = 0)
         {
             return new JObject
             {
@@ -9339,6 +9470,31 @@ public sealed class MachineGunnerStarterRuntimeTests
                 ["illustration_key"] = "art_placeholder",
                 ["program_id"] = (int)programId,
                 ["is_innate"] = isInnate,
+                ["upgrade_track_kind"] = (int)upgradeTrackKind,
+                ["infinite_upgrade_rule_kind"] = (int)infiniteUpgradeRuleKind,
+                ["infinite_upgrade_value_per_level"] = infiniteUpgradeValuePerLevel,
+            };
+        }
+
+        /// <summary>创建一条供有限轨道投影消费的完整升级等级记录。</summary>
+        private static JObject CreateUpgradeLevel(
+            int cardId,
+            int nextUpgradeLevel,
+            string descriptionI18nKey,
+            int cost,
+            cfg.battle.CardPlayDestination playDestination,
+            cfg.battle.CardUpgradeRuleKind ruleKind,
+            int ruleValue)
+        {
+            return new JObject
+            {
+                ["card_id"] = cardId,
+                ["next_upgrade_level"] = nextUpgradeLevel,
+                ["description_i18n_key"] = descriptionI18nKey,
+                ["cost"] = cost,
+                ["play_destination"] = (int)playDestination,
+                ["rule_kind"] = (int)ruleKind,
+                ["rule_value"] = ruleValue,
             };
         }
 

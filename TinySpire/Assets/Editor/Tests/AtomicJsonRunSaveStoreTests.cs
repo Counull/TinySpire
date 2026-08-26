@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using TinySpire.Infrastructure.Persistence;
 using TinySpire.Run;
@@ -48,6 +51,252 @@ public sealed class AtomicJsonRunSaveStoreTests
         Assert.That(load.Document.CurrentHealth, Is.EqualTo(73));
         Assert.That(delete.Status, Is.EqualTo(RunSaveDeleteStatus.Success));
         Assert.That(afterDelete.Status, Is.EqualTo(RunSaveLoadStatus.NotFound));
+    }
+
+    /// <summary>冻结奖励检查点必须原样保存奖励身份与三个有序候选。</summary>
+    [Test]
+    public void CommitLoad_RewardPending_PreservesRewardIdentityAndCandidateOrder()
+    {
+        var store = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument document = CreateDocument(
+            "18181818-aaaa-bbbb-cccc-282828282828",
+            RunSaveProgressPhase.RewardPending,
+            currentHealth: 41);
+
+        RunSaveCommitResult commit = store.Commit(document);
+        RunSaveLoadResult load = store.Load();
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(load.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(load.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.RewardPending));
+        Assert.That(load.Document.PendingCardReward.RewardId,
+            Is.EqualTo(document.PendingCardReward.RewardId));
+        Assert.That(load.Document.PendingCardReward.CandidateTemplateIds,
+            Is.EqualTo(new[] { 3105, 3123, 3157 }));
+        Assert.That(File.Exists(GetRewardIntentPath()), Is.True);
+    }
+
+    /// <summary>冻结奖励在通用临时档写入前失败时，冷启动仍必须从 durable intent 恢复同一候选。</summary>
+    [Test]
+    public void Commit_RewardPendingTemporaryWriteFails_ColdLoadReturnsFrozenIntent()
+    {
+        var initialStore = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument oldLive = CreateDocument(
+            "19191919-aaaa-bbbb-cccc-292929292929",
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 80);
+        Assert.That(initialStore.Commit(oldLive).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument pending = CreateDocument(
+            oldLive.RunId,
+            RunSaveProgressPhase.RewardPending,
+            currentHealth: 43);
+        var failingStore = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new TemporaryWriteFailingFileSystem(GetTemporaryPath()));
+
+        RunSaveCommitResult commit = failingStore.Commit(pending);
+        RunSaveLoadResult coldLoad = new AtomicJsonRunSaveStore(_testDirectory).Load();
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
+        Assert.That(File.Exists(GetRewardIntentPath()), Is.True);
+        Assert.That(coldLoad.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(coldLoad.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.RewardPending));
+        Assert.That(coldLoad.Document.PendingCardReward.RewardId,
+            Is.EqualTo(pending.PendingCardReward.RewardId));
+        Assert.That(coldLoad.Document.PendingCardReward.CandidateTemplateIds,
+            Is.EqualTo(pending.PendingCardReward.CandidateTemplateIds));
+    }
+
+    /// <summary>战斗内回血后即使临时档写入失败，冷启动也必须以 durable intent 恢复同一奖励。</summary>
+    [Test]
+    public void Commit_HealedRewardPendingTemporaryWriteFails_ColdLoadReturnsFrozenIntent()
+    {
+        var initialStore = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument oldLive = CreateDocument(
+            "19191919-bbbb-cccc-dddd-292929292929",
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 20);
+        Assert.That(initialStore.Commit(oldLive).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument pending = CreateDocument(
+            oldLive.RunId,
+            RunSaveProgressPhase.RewardPending,
+            currentHealth: 30);
+        var failingStore = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new TemporaryWriteFailingFileSystem(GetTemporaryPath()));
+
+        RunSaveCommitResult commit = failingStore.Commit(pending);
+        RunSaveLoadResult coldLoad = new AtomicJsonRunSaveStore(_testDirectory).Load();
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
+        Assert.That(coldLoad.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(coldLoad.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.RewardPending));
+        Assert.That(coldLoad.Document.CurrentHealth, Is.EqualTo(30));
+        Assert.That(coldLoad.Document.PendingCardReward.RewardId,
+            Is.EqualTo(pending.PendingCardReward.RewardId));
+    }
+
+    /// <summary>战斗内回血后的首次 RewardPending 若正式替换失败，冷启动仍必须恢复源 Pending。</summary>
+    [Test]
+    public void Commit_HealedRewardPendingReplacementFails_ColdLoadReturnsFrozenIntent()
+    {
+        var initialStore = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument oldLive = CreateDocument(
+            "19191919-cccc-dddd-eeee-292929292929",
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 20);
+        Assert.That(initialStore.Commit(oldLive).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument pending = CreateDocument(
+            oldLive.RunId,
+            RunSaveProgressPhase.RewardPending,
+            currentHealth: 30);
+        var failingStore = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new ReplaceFailingFileSystem());
+
+        RunSaveCommitResult commit = failingStore.Commit(pending);
+        RunSaveLoadResult coldLoad = new AtomicJsonRunSaveStore(_testDirectory).Load();
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
+        Assert.That(coldLoad.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(coldLoad.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.RewardPending));
+        Assert.That(coldLoad.Document.CurrentHealth, Is.EqualTo(30));
+        Assert.That(File.Exists(GetRewardIntentPath()), Is.True);
+    }
+
+    /// <summary>奖励结算 Replace 失败时必须恢复源 Pending，不能发布未成功替换的选择结果。</summary>
+    [Test]
+    public void Commit_RewardSettlementReplacementFails_ColdLoadReturnsSourcePending()
+    {
+        var initialStore = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument pending = CreateDocument(
+            "1a1a1a1a-aaaa-bbbb-cccc-2a2a2a2a2a2a",
+            RunSaveProgressPhase.RewardPending,
+            currentHealth: 39);
+        Assert.That(initialStore.Commit(pending).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument settled = CreateSettledRewardDocument(pending, selectedTemplateId: 3123);
+        var failingStore = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new ReplaceFailingFileSystem());
+
+        RunSaveCommitResult commit = failingStore.Commit(settled);
+        RunSaveLoadResult coldLoad = new AtomicJsonRunSaveStore(_testDirectory).Load();
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
+        Assert.That(coldLoad.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(coldLoad.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.RewardPending));
+        Assert.That(coldLoad.Document.PendingCardReward.RewardId,
+            Is.EqualTo(pending.PendingCardReward.RewardId));
+        Assert.That(File.Exists(GetRewardIntentPath()), Is.True);
+    }
+
+    /// <summary>奖励结算正式发布成功后必须清除源 intent，并只保留选择后的 MapReady 正式档。</summary>
+    [Test]
+    public void Commit_RewardSettlementSucceeds_DeletesSourceIntentAndLoadsSettledLive()
+    {
+        var store = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument pending = CreateDocument(
+            "1d1d1d1d-aaaa-bbbb-cccc-2d2d2d2d2d2d",
+            RunSaveProgressPhase.RewardPending,
+            currentHealth: 58);
+        Assert.That(store.Commit(pending).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument settled = CreateSettledRewardDocument(pending, selectedTemplateId: null);
+
+        RunSaveCommitResult commit = store.Commit(settled);
+        RunSaveLoadResult load = store.Load();
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(File.Exists(GetRewardIntentPath()), Is.False);
+        Assert.That(File.Exists(GetTemporaryPath()), Is.False);
+        Assert.That(load.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(load.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.MapReady));
+        Assert.That(load.Document.PathNodeIds, Is.EqualTo(settled.PathNodeIds));
+        Assert.That(load.Document.RunCards.Select(card => card.InstanceId),
+            Is.EqualTo(pending.RunCards.Select(card => card.InstanceId)));
+    }
+
+    /// <summary>正式结算已替换但 intent 清理失败时，冷启动必须识别合法后继且不再次给奖励。</summary>
+    [Test]
+    public void Commit_RewardSettlementIntentDeleteFails_ColdLoadReturnsSettledLive()
+    {
+        var initialStore = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument pending = CreateDocument(
+            "1b1b1b1b-aaaa-bbbb-cccc-2b2b2b2b2b2b",
+            RunSaveProgressPhase.RewardPending,
+            currentHealth: 51);
+        Assert.That(initialStore.Commit(pending).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument settled = CreateSettledRewardDocument(pending, selectedTemplateId: 3105);
+        var failingStore = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new RewardIntentDeleteFailingFileSystem(GetRewardIntentPath()));
+
+        RunSaveCommitResult commit = failingStore.Commit(settled);
+        RunSaveLoadResult coldLoad = new AtomicJsonRunSaveStore(_testDirectory).Load();
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
+        Assert.That(coldLoad.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(coldLoad.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.MapReady));
+        Assert.That(coldLoad.Document.PathNodeIds,
+            Is.EqualTo(settled.PathNodeIds));
+        Assert.That(coldLoad.Document.RunCards.Select(card => card.InstanceId),
+            Is.EqualTo(settled.RunCards.Select(card => card.InstanceId)));
+        Assert.That(coldLoad.Document.PendingCardReward, Is.Null);
+    }
+
+    /// <summary>结算已发布但旧 intent 清理失败时，下一检查点须先安全收尾旧 intent，失败可重试且不能覆盖 live。</summary>
+    [Test]
+    public void Commit_ResidualSettledRewardIntent_BlocksThenAllowsNextRewardCheckpointRetry()
+    {
+        var initialStore = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument pending = CreateDocument(
+            "1b1b1b1b-bbbb-cccc-dddd-2b2b2b2b2b2b",
+            RunSaveProgressPhase.RewardPending,
+            currentHealth: 51);
+        Assert.That(initialStore.Commit(pending).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument settled = CreateSettledRewardDocument(pending, selectedTemplateId: 3105);
+        var cleanupFailingStore = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new RewardIntentDeleteFailingFileSystem(GetRewardIntentPath()));
+        Assert.That(
+            cleanupFailingStore.Commit(settled).Status,
+            Is.EqualTo(RunSaveCommitStatus.IoFailure));
+        byte[] settledLiveBytes = File.ReadAllBytes(GetLivePath());
+        RunSaveDocument nextPending = CreateNextPendingRewardDocument(settled);
+
+        RunSaveCommitResult blocked = cleanupFailingStore.Commit(nextPending);
+
+        Assert.That(blocked.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
+        Assert.That(File.ReadAllBytes(GetLivePath()), Is.EqualTo(settledLiveBytes));
+        Assert.That(File.Exists(GetRewardIntentPath()), Is.True);
+
+        RunSaveCommitResult retry = new AtomicJsonRunSaveStore(_testDirectory).Commit(nextPending);
+        RunSaveLoadResult load = new AtomicJsonRunSaveStore(_testDirectory).Load();
+
+        Assert.That(retry.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(load.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(load.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.RewardPending));
+        Assert.That(load.Document.PendingCardReward.RewardId,
+            Is.EqualTo(nextPending.PendingCardReward.RewardId));
+    }
+
+    /// <summary>损坏奖励 intent 且磁盘仅剩战前 MapReady 时无法唯一判定候选，必须 fail-closed。</summary>
+    [Test]
+    public void Load_CorruptRewardIntentWithOldMapReadyLive_ReturnsInterruptedCommit()
+    {
+        var store = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument oldLive = CreateDocument(
+            "1c1c1c1c-aaaa-bbbb-cccc-2c2c2c2c2c2c",
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 80);
+        Assert.That(store.Commit(oldLive).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        File.WriteAllText(GetRewardIntentPath(), "{");
+
+        RunSaveLoadResult load = store.Load();
+
+        Assert.That(load.Status, Is.EqualTo(RunSaveLoadStatus.InterruptedCommit));
+        Assert.That(load.Document, Is.Null);
+        Assert.That(load.HasPendingTemporaryFile, Is.True);
+        Assert.That(load.Detail, Does.Contain("reward intent"));
     }
 
     /// <summary>真实文件系统的第二次提交必须通过 replace 发布 S1，并移除提交临时文件。</summary>
@@ -348,7 +597,7 @@ public sealed class AtomicJsonRunSaveStoreTests
         byte[] oldBytes = File.ReadAllBytes(livePath);
         var corruptingStore = new AtomicJsonRunSaveStore(
             _testDirectory,
-            new CorruptingTemporaryWriteFileSystem());
+            new CorruptingTemporaryWriteFileSystem(GetTemporaryPath()));
         RunSaveDocument newDocument = CreateDocument(
             "99999999-aaaa-bbbb-cccc-aaaaaaaaaaaa",
             RunSaveProgressPhase.MapReady,
@@ -360,6 +609,72 @@ public sealed class AtomicJsonRunSaveStoreTests
         Assert.That(File.ReadAllBytes(livePath), Is.EqualTo(oldBytes));
         Assert.That(File.Exists(GetTemporaryPath()), Is.True);
         Assert.That(File.ReadAllText(GetTemporaryPath()), Is.EqualTo("{"));
+    }
+
+    /// <summary>临时档即使仍可解析，只要 RunCard 顺序、实例身份或等级漂移就必须拒绝发布。</summary>
+    [TestCase(RunCardDrift.Order)]
+    [TestCase(RunCardDrift.InstanceId)]
+    [TestCase(RunCardDrift.UpgradeLevel)]
+    public void Commit_ParseableRunCardDrift_RejectsBeforeLivePublication(RunCardDrift drift)
+    {
+        var store = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new DriftingRunCardTemporaryWriteFileSystem(drift));
+        RunSaveDocument document = CreateDocument(
+            "9a9a9a9a-aaaa-bbbb-cccc-abababababab",
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 67);
+
+        RunSaveCommitResult commit = store.Commit(document);
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.InvalidDocument));
+        Assert.That(File.Exists(GetLivePath()), Is.False);
+        Assert.That(File.Exists(GetTemporaryPath()), Is.True);
+        Assert.That(
+            RunSaveDocumentCodec.Read(File.ReadAllText(GetTemporaryPath())).Status,
+            Is.EqualTo(RunSaveDocumentReadStatus.Success));
+    }
+
+    /// <summary>临时档候选顺序即使仍合法可解析，只要偏离冻结奖励就必须拒绝发布。</summary>
+    [Test]
+    public void Commit_ParseablePendingRewardDrift_RejectsBeforeLivePublication()
+    {
+        var store = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new DriftingPendingRewardWriteFileSystem(GetTemporaryPath()));
+        RunSaveDocument document = CreateDocument(
+            "29292929-aaaa-bbbb-cccc-393939393939",
+            RunSaveProgressPhase.RewardPending,
+            currentHealth: 52);
+
+        RunSaveCommitResult commit = store.Commit(document);
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.InvalidDocument));
+        Assert.That(File.Exists(GetLivePath()), Is.False);
+        Assert.That(File.Exists(GetTemporaryPath()), Is.True);
+        Assert.That(
+            RunSaveDocumentCodec.Read(File.ReadAllText(GetTemporaryPath())).Status,
+            Is.EqualTo(RunSaveDocumentReadStatus.Success));
+    }
+
+    /// <summary>源 reward intent 的候选顺序若在 durable 写入边界漂移，必须在创建临时档前拒绝。</summary>
+    [Test]
+    public void Commit_ParseablePendingRewardIntentDrift_RejectsBeforeTemporaryWrite()
+    {
+        var store = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new DriftingPendingRewardWriteFileSystem(GetRewardIntentPath()));
+        RunSaveDocument document = CreateDocument(
+            "29292929-bbbb-cccc-dddd-393939393939",
+            RunSaveProgressPhase.RewardPending,
+            currentHealth: 52);
+
+        RunSaveCommitResult commit = store.Commit(document);
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.InvalidDocument));
+        Assert.That(File.Exists(GetLivePath()), Is.False);
+        Assert.That(File.Exists(GetTemporaryPath()), Is.False);
+        Assert.That(File.Exists(GetRewardIntentPath()), Is.True);
     }
 
     /// <summary>坏 JSON 与未知 schema 必须保持各自分类，且不得静默删除正式档。</summary>
@@ -508,6 +823,12 @@ public sealed class AtomicJsonRunSaveStoreTests
         return Path.Combine(_testDirectory, AtomicJsonRunSaveStore.TerminalIntentFileName);
     }
 
+    /// <summary>返回奖励事务源 Pending 的 durable intent 路径。</summary>
+    private string GetRewardIntentPath()
+    {
+        return Path.Combine(_testDirectory, AtomicJsonRunSaveStore.RewardIntentFileName);
+    }
+
     /// <summary>建立字段稳定且互不共享的测试存档文档。</summary>
     private static RunSaveDocument CreateDocument(
         string runId,
@@ -515,13 +836,26 @@ public sealed class AtomicJsonRunSaveStoreTests
         int currentHealth)
     {
         bool isTerminal = progressPhase == RunSaveProgressPhase.Terminal;
+        bool isRewardPending = progressPhase == RunSaveProgressPhase.RewardPending;
+        string committedNodeId = isTerminal || isRewardPending ? "layer-1-slot-0" : null;
+        RunSavePendingCardRewardDocument pendingCardReward = isRewardPending
+            ? new RunSavePendingCardRewardDocument(
+                $"{Guid.ParseExact(runId, "D"):N}:1:{committedNodeId}",
+                new[] { 3105, 3123, 3157 })
+            : null;
         return new RunSaveDocument(
             RunSaveDocument.CurrentSchemaVersion,
             runId,
             heroTemplateId: 1001,
             currentHealth,
             maxHealth: 80,
-            deckTemplateId: 1001,
+            runCards: new[]
+            {
+                new RunSaveCardDocument(instanceId: 1, templateId: 3002, upgradeLevel: 0),
+                new RunSaveCardDocument(instanceId: 2, templateId: 3002, upgradeLevel: 0),
+                new RunSaveCardDocument(instanceId: 3, templateId: 3003, upgradeLevel: 0),
+            },
+            legacyDeckTemplateId: null,
             randomRootSeed: 123456789u,
             mapProfileId: "tinyspire.act1.g3.v1",
             mapGeneratorVersion: 1,
@@ -529,8 +863,76 @@ public sealed class AtomicJsonRunSaveStoreTests
             mapFingerprint: new string('a', 64),
             pathNodeIds: new[] { "start" },
             progressPhase,
-            committedNodeId: isTerminal ? "layer-1-slot-0" : null,
-            terminalReason: isTerminal ? RunSaveTerminalReason.Defeat : (RunSaveTerminalReason?)null);
+            committedNodeId,
+            terminalReason: isTerminal ? RunSaveTerminalReason.Defeat : (RunSaveTerminalReason?)null,
+            pendingCardReward);
+    }
+
+    /// <summary>从源 Pending 构造选择或跳过后的唯一合法 MapReady 后继文档。</summary>
+    private static RunSaveDocument CreateSettledRewardDocument(
+        RunSaveDocument pending,
+        int? selectedTemplateId)
+    {
+        if (pending == null || pending.ProgressPhase != RunSaveProgressPhase.RewardPending)
+            throw new ArgumentException("A RewardPending source document is required.", nameof(pending));
+
+        var cards = new List<RunSaveCardDocument>(pending.RunCards);
+        if (selectedTemplateId.HasValue)
+        {
+            cards.Add(new RunSaveCardDocument(
+                pending.RunCards.Max(card => card.InstanceId) + 1,
+                selectedTemplateId.Value,
+                upgradeLevel: 0));
+        }
+
+        return new RunSaveDocument(
+            RunSaveDocument.CurrentSchemaVersion,
+            pending.RunId,
+            pending.HeroTemplateId,
+            pending.CurrentHealth,
+            pending.MaxHealth,
+            cards,
+            legacyDeckTemplateId: null,
+            pending.RandomRootSeed,
+            pending.MapProfileId,
+            pending.MapGeneratorVersion,
+            pending.MapSeed,
+            pending.MapFingerprint,
+            pending.PathNodeIds.Concat(new[] { pending.CommittedNodeId }).ToArray(),
+            RunSaveProgressPhase.MapReady,
+            committedNodeId: null,
+            terminalReason: null,
+            pendingCardReward: null);
+    }
+
+    /// <summary>从已结算 MapReady 构造下一场普通战斗的冻结奖励检查点。</summary>
+    private static RunSaveDocument CreateNextPendingRewardDocument(RunSaveDocument settled)
+    {
+        if (settled == null || settled.ProgressPhase != RunSaveProgressPhase.MapReady)
+            throw new ArgumentException("A settled MapReady document is required.", nameof(settled));
+
+        const string committedNodeId = "layer-2-slot-0";
+        var pendingReward = new RunSavePendingCardRewardDocument(
+            $"{Guid.ParseExact(settled.RunId, "D"):N}:2:{committedNodeId}",
+            new[] { 3105, 3123, 3157 });
+        return new RunSaveDocument(
+            RunSaveDocument.CurrentSchemaVersion,
+            settled.RunId,
+            settled.HeroTemplateId,
+            settled.CurrentHealth,
+            settled.MaxHealth,
+            settled.RunCards,
+            legacyDeckTemplateId: null,
+            settled.RandomRootSeed,
+            settled.MapProfileId,
+            settled.MapGeneratorVersion,
+            settled.MapSeed,
+            settled.MapFingerprint,
+            settled.PathNodeIds,
+            RunSaveProgressPhase.RewardPending,
+            committedNodeId,
+            terminalReason: null,
+            pendingReward);
     }
 
     private class TestRunSaveFileSystem : IRunSaveFileSystem
@@ -607,10 +1009,132 @@ public sealed class AtomicJsonRunSaveStoreTests
 
     private sealed class CorruptingTemporaryWriteFileSystem : TestRunSaveFileSystem
     {
+        private readonly string _temporaryPath;
+
+        /// <summary>建立只损坏通用临时档、不影响奖励 intent 的故障 fake。</summary>
+        public CorruptingTemporaryWriteFileSystem(string temporaryPath)
+        {
+            _temporaryPath = temporaryPath;
+        }
+
         /// <summary>忽略待写正文并落下坏 JSON，迫使 Adapter 重读临时文件。</summary>
         public override void WriteAllTextDurably(string path, string contents)
         {
-            File.WriteAllText(path, "{");
+            File.WriteAllText(path, path == _temporaryPath ? "{" : contents);
+        }
+    }
+
+    private sealed class TemporaryWriteFailingFileSystem : TestRunSaveFileSystem
+    {
+        private readonly string _temporaryPath;
+
+        /// <summary>建立只拒绝通用临时档写入、允许 durable reward intent 的故障 fake。</summary>
+        public TemporaryWriteFailingFileSystem(string temporaryPath)
+        {
+            _temporaryPath = temporaryPath;
+        }
+
+        /// <summary>指定临时档写入失败，其他 durable 写入保持正常。</summary>
+        public override void WriteAllTextDurably(string path, string contents)
+        {
+            if (path == _temporaryPath)
+                throw new IOException("Injected temporary write failure.");
+
+            base.WriteAllTextDurably(path, contents);
+        }
+    }
+
+    private sealed class RewardIntentDeleteFailingFileSystem : TestRunSaveFileSystem
+    {
+        private readonly string _rewardIntentPath;
+
+        /// <summary>建立只拒绝结算后 reward intent 清理的故障 fake。</summary>
+        public RewardIntentDeleteFailingFileSystem(string rewardIntentPath)
+        {
+            _rewardIntentPath = rewardIntentPath;
+        }
+
+        /// <summary>奖励 intent 删除稳定失败，正式档替换与其他文件操作保持正常。</summary>
+        public override void DeleteFile(string path)
+        {
+            if (path == _rewardIntentPath)
+                throw new IOException("Injected reward intent delete failure.");
+
+            base.DeleteFile(path);
+        }
+    }
+
+    public enum RunCardDrift
+    {
+        Order,
+        InstanceId,
+        UpgradeLevel,
+    }
+
+    private sealed class DriftingRunCardTemporaryWriteFileSystem : TestRunSaveFileSystem
+    {
+        private readonly RunCardDrift _drift;
+
+        /// <summary>建立只改写一种 RunCard durable equality 事实的可解析临时档 fake。</summary>
+        public DriftingRunCardTemporaryWriteFileSystem(RunCardDrift drift)
+        {
+            _drift = drift;
+        }
+
+        /// <summary>写入合法 JSON，但按测试要求漂移卡牌顺序、实例 ID 或升级等级。</summary>
+        public override void WriteAllTextDurably(string path, string contents)
+        {
+            JObject document = JObject.Parse(contents);
+            var runCards = (JArray)document["runCards"];
+            switch (_drift)
+            {
+                case RunCardDrift.Order:
+                    JToken first = runCards[0].DeepClone();
+                    JToken second = runCards[1].DeepClone();
+                    runCards[0] = second;
+                    runCards[1] = first;
+                    break;
+                case RunCardDrift.InstanceId:
+                    runCards[0]["instanceId"] = 71;
+                    break;
+                case RunCardDrift.UpgradeLevel:
+                    runCards[0]["upgradeLevel"] = 4;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(_drift));
+            }
+
+            File.WriteAllText(path, document.ToString());
+        }
+    }
+
+    private sealed class DriftingPendingRewardWriteFileSystem : TestRunSaveFileSystem
+    {
+        private readonly string _targetPath;
+
+        /// <summary>建立只在指定 durable 文件路径交换奖励候选的故障 fake。</summary>
+        public DriftingPendingRewardWriteFileSystem(string targetPath)
+        {
+            _targetPath = targetPath;
+        }
+
+        /// <summary>写入合法 JSON，但交换两个奖励候选以模拟静默顺序漂移。</summary>
+        public override void WriteAllTextDurably(string path, string contents)
+        {
+            if (path != _targetPath)
+            {
+                base.WriteAllTextDurably(path, contents);
+                return;
+            }
+
+            JObject document = JObject.Parse(contents);
+            var candidateTemplateIds =
+                (JArray)document["pendingCardReward"]?["candidateTemplateIds"];
+            JToken first = candidateTemplateIds[0].DeepClone();
+            JToken second = candidateTemplateIds[1].DeepClone();
+            candidateTemplateIds[0] = second;
+            candidateTemplateIds[1] = first;
+            File.WriteAllText(path, document.ToString());
         }
     }
 

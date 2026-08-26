@@ -308,21 +308,39 @@ internal static class M10BattleReplayHarness
         return new Tables(LoadGeneratedRows);
     }
 
-    /// <summary>把当前生成 JSON 的对象索引转换为 Luban Tables 构造器所需的行数组。</summary>
+    /// <summary>兼容生成表的对象索引根与有限升级表的数组根，并统一返回 Luban 行数组。</summary>
     private static JArray LoadGeneratedRows(string tableName)
     {
-        return new JArray(LoadGeneratedObject(tableName).Properties().Select(property => property.Value));
+        JToken table = LoadGeneratedToken(tableName);
+        if (table is JArray rows)
+            return rows;
+        if (table is JObject indexedRows)
+            return new JArray(indexedRows.Properties().Select(property => property.Value));
+
+        throw new InvalidOperationException(
+            $"Generated table {tableName} must use an object or array root.");
     }
 
     /// <summary>从项目内稳定 GameData 地址读取一个生成 JSON 对象，缺失时立刻暴露测试装配错误。</summary>
     private static JObject LoadGeneratedObject(string fileNameWithoutExtension)
+    {
+        JToken token = LoadGeneratedToken(fileNameWithoutExtension);
+        if (token is JObject generatedObject)
+            return generatedObject;
+
+        throw new InvalidOperationException(
+            $"Generated GameData {fileNameWithoutExtension} must use an object root.");
+    }
+
+    /// <summary>从项目内稳定 GameData 地址读取并解析一个生成 JSON 根节点。</summary>
+    private static JToken LoadGeneratedToken(string fileNameWithoutExtension)
     {
         TextAsset asset = AssetDatabase.LoadAssetAtPath<TextAsset>(
             $"Assets/GameData/{fileNameWithoutExtension}.json");
         if (asset == null)
             throw new InvalidOperationException($"Generated GameData is missing: {fileNameWithoutExtension}.");
 
-        return JObject.Parse(asset.text);
+        return JToken.Parse(asset.text);
     }
 
     /// <summary>把单一默认玩家映射到同一 BattleSession 卡区，不创建任何卡区镜像。</summary>

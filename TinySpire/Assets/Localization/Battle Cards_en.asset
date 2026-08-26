@@ -123,7 +123,7 @@ MonoBehaviour:
       m_Items:
       - rid: 3318493899348770842
   - m_Id: 2603194639872001
-    m_Localized: 'Upgrade metadata: damage parameter changes by +3.'
+    m_Localized: Deal {damage} damage.
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
@@ -455,7 +455,7 @@ MonoBehaviour:
       m_Items:
       - rid: 3318493899348770842
   - m_Id: 2603194644066312
-    m_Localized: Deal 42 damage.
+    m_Localized: Deal {damage} damage.
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
@@ -1367,12 +1367,12 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 2940359118843904
-    m_Localized: Spend 1 Ammo. Deal 6 damage to an enemy.
+    m_Localized: Spend 1 Ammo. Deal {damage} damage to an enemy.
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
   - m_Id: 2940359118843905
-    m_Localized: Spend 1 Ammo. Deal 9 damage to an enemy.
+    m_Localized: Spend 1 Ammo. Deal {damage} damage to an enemy.
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
@@ -2808,6 +2808,14 @@ MonoBehaviour:
       m_Items: []
   - m_Id: 6156690051985428
     m_Localized: Exit and Roll Back
+    m_Metadata:
+      m_Items: []
+  - m_Id: 9706613783556096
+    m_Localized: Card Reward
+    m_Metadata:
+      m_Items: []
+  - m_Id: 9706613871636480
+    m_Localized: Skip
     m_Metadata:
       m_Items: []
   references:

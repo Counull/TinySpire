@@ -80,6 +80,8 @@ public static class LocalizationBuildTools
         "run.entry.map.battle_node",
         "run.entry.map.cleared",
         "run.entry.map.health",
+        "run.entry.reward.title",
+        "run.entry.reward.skip",
         "run.entry.failure.title",
         "run.entry.failure.restart",
         "run.entry.menu.continue",
@@ -207,31 +209,10 @@ public static class LocalizationBuildTools
                         $"'{table.LocaleIdentifier.Code}' must be a Smart String.");
                 }
 
-                var bindingArguments = new HashSet<string>(StringComparer.Ordinal);
-                var expectedArguments = new HashSet<string>(StringComparer.Ordinal);
-                foreach (JObject binding in card.Value<JArray>("effect_bindings"))
-                {
-                    string argumentKey = binding.Value<string>("argument_key");
-                    if (!bindingArguments.Add(argumentKey))
-                        throw new InvalidOperationException(
-                            $"Card {cardProperty.Name} has duplicate effect argument '{argumentKey}'.");
-
-                    int effectId = binding.Value<int>("effect_id");
-                    JObject effect = effects[effectId.ToString()] as JObject;
-                    if (effect == null)
-                    {
-                        throw new InvalidOperationException(
-                            $"Card {cardProperty.Name} references missing effect {effectId}.");
-                    }
-
-                    // 非展示规则声明不应为了满足绑定校验而在正文显示无意义的“0”。
-                    int effectType = effect.Value<int>("effect_type");
-                    if (effectType != (int)cfg.battle.EffectType.RetainBlock &&
-                        effectType != (int)cfg.battle.EffectType.PlayTopDrawCardAndExhaust)
-                    {
-                        expectedArguments.Add(argumentKey);
-                    }
-                }
+                HashSet<string> expectedArguments = ResolveExpectedCardArguments(
+                    cardProperty.Name,
+                    card,
+                    effects);
 
                 var actualArguments = new HashSet<string>(StringComparer.Ordinal);
                 foreach (Match match in ArgumentPattern.Matches(description.LocalizedValue))
@@ -251,6 +232,71 @@ public static class LocalizationBuildTools
 
             ValidateImportedTableMatchesExcel(table, entries, localeCode);
         }
+    }
+
+    /// <summary>从效果绑定与既有类型化职业程序中推导一张卡牌正文必须拥有的参数集合。</summary>
+    internal static HashSet<string> ResolveExpectedCardArguments(
+        string cardId,
+        JObject card,
+        JObject effects)
+    {
+        if (string.IsNullOrWhiteSpace(cardId))
+            throw new ArgumentException("Card id must not be empty.", nameof(cardId));
+        if (card == null)
+            throw new ArgumentNullException(nameof(card));
+        if (effects == null)
+            throw new ArgumentNullException(nameof(effects));
+
+        var configuredArguments = new HashSet<string>(StringComparer.Ordinal);
+        var expectedArguments = new HashSet<string>(StringComparer.Ordinal);
+        foreach (JObject binding in card.Value<JArray>("effect_bindings"))
+        {
+            string argumentKey = binding.Value<string>("argument_key");
+            if (!configuredArguments.Add(argumentKey))
+            {
+                throw new InvalidOperationException(
+                    $"Card {cardId} has duplicate effect argument '{argumentKey}'.");
+            }
+
+            int effectId = binding.Value<int>("effect_id");
+            JObject effect = effects[effectId.ToString()] as JObject;
+            if (effect == null)
+            {
+                throw new InvalidOperationException(
+                    $"Card {cardId} references missing effect {effectId}.");
+            }
+
+            // 非展示规则声明不应为了满足绑定校验而在正文显示无意义的“0”。
+            int effectType = effect.Value<int>("effect_type");
+            if (effectType != (int)cfg.battle.EffectType.RetainBlock &&
+                effectType != (int)cfg.battle.EffectType.PlayTopDrawCardAndExhaust)
+            {
+                expectedArguments.Add(argumentKey);
+            }
+        }
+
+        AddProgramArguments(cardId, card, configuredArguments, expectedArguments);
+        return expectedArguments;
+    }
+
+    /// <summary>让 Shoot 复用生产 ProgramDamageValue 的 damage 参数，并拒绝与效果绑定重名。</summary>
+    private static void AddProgramArguments(
+        string cardId,
+        JObject card,
+        ISet<string> configuredArguments,
+        ISet<string> expectedArguments)
+    {
+        if (card.Value<int>("program_id") != (int)cfg.battle.MachineGunnerProgramId.Shoot)
+            return;
+
+        const string damageArgument = "damage";
+        if (!configuredArguments.Add(damageArgument))
+        {
+            throw new InvalidOperationException(
+                $"Card {cardId} contains duplicate program argument '{damageArgument}'.");
+        }
+
+        expectedArguments.Add(damageArgument);
     }
 
     /// <summary>读取项目内 i18n.xlsx 的全部翻译行。</summary>

@@ -343,7 +343,8 @@ public sealed class BattleEnemyActionJointSnapshotTests
                 ["id"] = 6001,
                 ["behavior_ids"] = behaviorIds
             }),
-            ["battle_tbenemybehavior"] = behaviors
+            ["battle_tbenemybehavior"] = behaviors,
+            ["battle_tbcardupgradelevel"] = new JArray(),
         };
         return new Tables(tableName => data[tableName]);
     }

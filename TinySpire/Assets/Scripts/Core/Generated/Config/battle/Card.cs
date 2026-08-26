@@ -40,6 +40,9 @@ public sealed partial class Card : Luban.BeanBase
         IllustrationKey = (string)_obj.GetValue("illustration_key");
         ProgramId = (battle.MachineGunnerProgramId)(int)_obj.GetValue("program_id");
         IsInnate = (bool)_obj.GetValue("is_innate");
+        UpgradeTrackKind = (battle.CardUpgradeTrackKind)(int)_obj.GetValue("upgrade_track_kind");
+        InfiniteUpgradeRuleKind = (battle.CardUpgradeRuleKind)(int)_obj.GetValue("infinite_upgrade_rule_kind");
+        InfiniteUpgradeValuePerLevel = (int)_obj.GetValue("infinite_upgrade_value_per_level");
     }
 
     public static Card DeserializeCard(JToken _buf)
@@ -127,6 +130,18 @@ public sealed partial class Card : Luban.BeanBase
     /// Whether the card is innate
     /// </summary>
     public readonly bool IsInnate;
+    /// <summary>
+    /// G4 upgrade track
+    /// </summary>
+    public readonly battle.CardUpgradeTrackKind UpgradeTrackKind;
+    /// <summary>
+    /// Typed infinite upgrade rule
+    /// </summary>
+    public readonly battle.CardUpgradeRuleKind InfiniteUpgradeRuleKind;
+    /// <summary>
+    /// Typed value added per upgrade level
+    /// </summary>
+    public readonly int InfiniteUpgradeValuePerLevel;
 
 
     public const int __ID__ = -796030298;
@@ -160,6 +175,9 @@ public sealed partial class Card : Luban.BeanBase
         + "illustrationKey:" + IllustrationKey + ","
         + "programId:" + ProgramId + ","
         + "isInnate:" + IsInnate + ","
+        + "upgradeTrackKind:" + UpgradeTrackKind + ","
+        + "infiniteUpgradeRuleKind:" + InfiniteUpgradeRuleKind + ","
+        + "infiniteUpgradeValuePerLevel:" + InfiniteUpgradeValuePerLevel + ","
         + "}";
     }
 }

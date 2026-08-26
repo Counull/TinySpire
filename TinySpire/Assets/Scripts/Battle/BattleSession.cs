@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using cfg;
+using TinySpire.Run;
 
 namespace TinySpire.Battle
 {
@@ -32,6 +34,9 @@ namespace TinySpire.Battle
         /// <summary>Run 显式提供的起始牌组模板；旧入口未提供时为空。</summary>
         public int? DeckTemplateId { get; }
 
+        /// <summary>Run 显式提供的有序实例投影；旧调试入口未提供时为空。</summary>
+        public IReadOnlyList<RunCard> RunCards { get; }
+
         /// <summary>
         /// 创建战斗装配参数，并验证所有模板标识和种子均有效。
         /// </summary>
@@ -40,7 +45,8 @@ namespace TinySpire.Battle
             int encounterTemplateId,
             int randomSeed = 1,
             int? playerInitialHealth = null,
-            int? deckTemplateId = null)
+            int? deckTemplateId = null,
+            IReadOnlyList<RunCard> runCards = null)
         {
             if (heroTemplateId <= 0)
                 throw new ArgumentOutOfRangeException(nameof(heroTemplateId));
@@ -52,12 +58,17 @@ namespace TinySpire.Battle
                 throw new ArgumentOutOfRangeException(nameof(playerInitialHealth));
             if (deckTemplateId.HasValue && deckTemplateId.Value <= 0)
                 throw new ArgumentOutOfRangeException(nameof(deckTemplateId));
+            if (deckTemplateId.HasValue && runCards != null)
+                throw new ArgumentException("Battle setup cannot contain two deck authorities.");
 
             HeroTemplateId = heroTemplateId;
             EncounterTemplateId = encounterTemplateId;
             RandomSeed = (uint)randomSeed;
             PlayerInitialHealth = playerInitialHealth;
             DeckTemplateId = deckTemplateId;
+            RunCards = runCards == null
+                ? null
+                : Array.AsReadOnly(runCards.ToArray());
         }
     }
 
@@ -146,9 +157,24 @@ namespace TinySpire.Battle
 
             cfg.battle.Hero hero = tables.TbHero.GetOrDefault(options.HeroTemplateId)
                 ?? throw new InvalidOperationException($"Hero template {options.HeroTemplateId} does not exist.");
-            int deckTemplateId = options.DeckTemplateId ?? hero.InitialDeckId;
-            cfg.battle.Deck deck = tables.TbDeck.GetOrDefault(deckTemplateId)
-                ?? throw new InvalidOperationException($"Deck template {deckTemplateId} does not exist.");
+            RunDeck runDeck = options.RunCards == null
+                ? null
+                : new RunDeck(options.RunCards);
+            IReadOnlyList<int> battleCardTemplateIds;
+            if (runDeck == null)
+            {
+                int deckTemplateId = options.DeckTemplateId ?? hero.InitialDeckId;
+                cfg.battle.Deck deck = tables.TbDeck.GetOrDefault(deckTemplateId)
+                    ?? throw new InvalidOperationException($"Deck template {deckTemplateId} does not exist.");
+                battleCardTemplateIds = deck.CardTemplateIds;
+            }
+            else
+            {
+                battleCardTemplateIds = runDeck.Cards
+                    .Select(card => card.TemplateId)
+                    .ToArray();
+            }
+            ValidateCardLevelsForBattle(tables, runDeck, battleCardTemplateIds);
             cfg.battle.Encounter encounter = tables.TbEncounter.GetOrDefault(options.EncounterTemplateId)
                 ?? throw new InvalidOperationException($"Encounter template {options.EncounterTemplateId} does not exist.");
             int playerInitialHealth = options.PlayerInitialHealth ?? hero.MaxHealth;
@@ -159,7 +185,7 @@ namespace TinySpire.Battle
             }
 
             IReadOnlyList<int> availableCardTemplateIds =
-                BuildAvailableCardTemplateIds(tables, deck, hero.RuntimeProfile);
+                BuildAvailableCardTemplateIds(tables, battleCardTemplateIds, hero.RuntimeProfile);
 
             BattlePlayerResourceProfile playerResourceProfile = new BattlePlayerResourceProfile(
                 hero.InitialEnergy,
@@ -192,9 +218,9 @@ namespace TinySpire.Battle
             MachineGunnerBattleRuntime machineGunnerRuntime = null;
             try
             {
-                cardZones = new BattleCardZonesData(
-                    deck.CardTemplateIds,
-                    options.RandomSeed);
+                cardZones = runDeck == null
+                    ? new BattleCardZonesData(battleCardTemplateIds, options.RandomSeed)
+                    : new BattleCardZonesData(runDeck.Cards, options.RandomSeed);
                 enemyIntents = new BattleEnemyIntentsData(
                     combatants,
                     enemyCombatantIdsInEncounterOrder,
@@ -255,12 +281,12 @@ namespace TinySpire.Battle
         /// <summary>冻结初始牌组与职业程序可能直接创建的模板，并在会话发布前拒绝缺失或不可运行的动态模板。</summary>
         private static IReadOnlyList<int> BuildAvailableCardTemplateIds(
             Tables tables,
-            cfg.battle.Deck deck,
+            IEnumerable<int> cardTemplateIds,
             cfg.battle.HeroRuntimeProfile runtimeProfile)
         {
             var templateIds = new List<int>();
             var seenTemplateIds = new HashSet<int>();
-            foreach (int cardTemplateId in deck.CardTemplateIds)
+            foreach (int cardTemplateId in cardTemplateIds)
             {
                 if (tables.TbCard.GetOrDefault(cardTemplateId) == null)
                     throw new InvalidOperationException($"Card template {cardTemplateId} does not exist.");
@@ -291,6 +317,29 @@ namespace TinySpire.Battle
             }
 
             return new ReadOnlyCollection<int>(templateIds);
+        }
+
+        /// <summary>在发布任何战斗事实前验证 Run 实例等级；旧模板牌组统一按零级投影。</summary>
+        private static void ValidateCardLevelsForBattle(
+            Tables tables,
+            RunDeck runDeck,
+            IEnumerable<int> legacyCardTemplateIds)
+        {
+            if (runDeck != null)
+            {
+                foreach (RunCard card in runDeck.Cards)
+                {
+                    BattleCardLevelProjection.Create(
+                        tables,
+                        card.TemplateId,
+                        card.UpgradeLevel);
+                }
+
+                return;
+            }
+
+            foreach (int cardTemplateId in legacyCardTemplateIds)
+                BattleCardLevelProjection.Create(tables, cardTemplateId, upgradeLevel: 0);
         }
     }
 }

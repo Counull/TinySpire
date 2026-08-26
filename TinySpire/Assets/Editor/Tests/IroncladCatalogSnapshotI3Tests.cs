@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Cysharp.Threading.Tasks;
@@ -650,6 +651,109 @@ public sealed class IroncladCatalogSnapshotI3Tests
             combatants.Dispose();
             localization.Dispose();
         }
+    }
+
+    /// <summary>确认四张 G4 生产卡按各自实例等级投影描述键与伤害参数，且同模板基础实例不被升级实例污染。</summary>
+    [UnityTest]
+    public IEnumerator GeneratedG4UpgradeCards_CardTextFormatterUsesInstanceLevelProjection()
+    {
+        var configs = new ConfigService();
+        var localization = new LocalizationService();
+        var combatants = new BattleCombatantsData();
+        Locale previousLocale = null;
+        bool localeCaptured = false;
+        try
+        {
+            yield return configs.InitializeAsync(new GeneratedGameDataTextLoader()).ToCoroutine();
+            yield return localization.InitializeAsync().ToCoroutine();
+            previousLocale = LocalizationSettings.SelectedLocale;
+            localeCaptured = true;
+            Assert.That(localization.SetLocale("en"), Is.True);
+
+            PlayerCombatantData source = combatants.AddPlayer(
+                templateId: 1001,
+                maxHealth: 80,
+                strength: 0);
+            var formatter = new CardTextFormatter(configs, localization);
+            var baseStrike = new CardInstanceData(
+                new CardInstanceId(1),
+                templateId: 3002,
+                originRunCardInstanceId: null,
+                upgradeLevel: 0);
+            var upgradedStrike = new CardInstanceData(
+                new CardInstanceId(2),
+                templateId: 3002,
+                originRunCardInstanceId: null,
+                upgradeLevel: 1);
+            var upgradedBludgeon = new CardInstanceData(
+                new CardInstanceId(3),
+                templateId: 3123,
+                originRunCardInstanceId: null,
+                upgradeLevel: 2);
+            var upgradedShoot = new CardInstanceData(
+                new CardInstanceId(4),
+                templateId: 3201,
+                originRunCardInstanceId: null,
+                upgradeLevel: 2);
+            var upgradedOutputAdjust = new CardInstanceData(
+                new CardInstanceId(5),
+                templateId: 3207,
+                originRunCardInstanceId: null,
+                upgradeLevel: 1);
+
+            CardPresentationText baseStrikeText = formatter.Format(baseStrike, source);
+            CardPresentationText upgradedStrikeText = formatter.Format(upgradedStrike, source);
+            CardPresentationText upgradedBludgeonText = formatter.Format(upgradedBludgeon, source);
+            CardPresentationText upgradedShootText = formatter.Format(upgradedShoot, source);
+            CardPresentationText upgradedOutputAdjustText = formatter.Format(
+                upgradedOutputAdjust,
+                source);
+
+            Assert.That(
+                baseStrikeText.Description,
+                Is.EqualTo(localization.GetString(
+                    "battle.card.strike.description",
+                    DamageArguments(6))));
+            Assert.That(
+                upgradedStrikeText.Description,
+                Is.EqualTo(localization.GetString(
+                    "battle.card.strike.upgrade_description",
+                    DamageArguments(9))));
+            Assert.That(
+                upgradedBludgeonText.Description,
+                Is.EqualTo(localization.GetString(
+                    "battle.card.sts2.bludgeon.upgrade_description",
+                    DamageArguments(52))));
+            Assert.That(
+                upgradedShootText.Description,
+                Is.EqualTo(localization.GetString(
+                    "battle.card.marine.shoot.upgrade_description",
+                    DamageArguments(12))));
+            Assert.That(
+                upgradedOutputAdjustText.Description,
+                Is.EqualTo(localization.GetString(
+                    "battle.card.marine.output_adjust.upgrade_description")));
+            StringAssert.Contains("6", baseStrikeText.Description);
+            StringAssert.Contains("9", upgradedStrikeText.Description);
+            StringAssert.Contains("52", upgradedBludgeonText.Description);
+            StringAssert.Contains("12", upgradedShootText.Description);
+        }
+        finally
+        {
+            if (localeCaptured)
+                LocalizationSettings.SelectedLocale = previousLocale;
+            combatants.Dispose();
+            localization.Dispose();
+        }
+    }
+
+    /// <summary>创建只含投影伤害参数的稳定本地化参数表。</summary>
+    private static IReadOnlyDictionary<string, object> DamageArguments(int damage)
+    {
+        return new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["damage"] = damage,
+        };
     }
 
     /// <summary>确认构建门禁会精确报告冻结快照缺失的外部身份。</summary>

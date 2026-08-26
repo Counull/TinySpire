@@ -372,7 +372,8 @@ public sealed class BattleEnemyIntentQueueTests
                     ? JArray.Parse(
                         "[{\"id\":7005,\"intent_type\":0,\"target_rule\":1,\"effect_id\":4999,\"weight\":1,\"cooldown_selections\":0,\"max_consecutive\":1}]")
                     : JArray.Parse(
-                        "[{\"id\":7001,\"intent_type\":0,\"target_rule\":1,\"effect_id\":4999,\"weight\":1,\"cooldown_selections\":0,\"max_consecutive\":1},{\"id\":7002,\"intent_type\":1,\"target_rule\":0,\"effect_id\":4998,\"weight\":1,\"cooldown_selections\":0,\"max_consecutive\":1},{\"id\":7003,\"intent_type\":0,\"target_rule\":1,\"effect_id\":4999,\"weight\":1,\"cooldown_selections\":0,\"max_consecutive\":1},{\"id\":7004,\"intent_type\":1,\"target_rule\":0,\"effect_id\":4998,\"weight\":1,\"cooldown_selections\":0,\"max_consecutive\":1}]")
+                        "[{\"id\":7001,\"intent_type\":0,\"target_rule\":1,\"effect_id\":4999,\"weight\":1,\"cooldown_selections\":0,\"max_consecutive\":1},{\"id\":7002,\"intent_type\":1,\"target_rule\":0,\"effect_id\":4998,\"weight\":1,\"cooldown_selections\":0,\"max_consecutive\":1},{\"id\":7003,\"intent_type\":0,\"target_rule\":1,\"effect_id\":4999,\"weight\":1,\"cooldown_selections\":0,\"max_consecutive\":1},{\"id\":7004,\"intent_type\":1,\"target_rule\":0,\"effect_id\":4998,\"weight\":1,\"cooldown_selections\":0,\"max_consecutive\":1}]"),
+                ["battle_tbcardupgradelevel"] = new JArray(),
             };
             return new Tables(tableName => data[tableName]);
         }

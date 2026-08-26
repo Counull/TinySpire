@@ -38,7 +38,7 @@ public sealed class RunEntryPresenterTests
         Assert.That(view.LastModel.Map, Is.Null);
     }
 
-    /// <summary>有效 schema v2 地图档只启用 Continue，玩家确认后才重建同一冻结地图。</summary>
+    /// <summary>有效当前 schema 地图档只启用 Continue，玩家确认后才重建同一冻结地图。</summary>
     [Test]
     public void ColdStartMapSave_EnablesContinueAndHydratesFrozenMapOnlyAfterAction()
     {
@@ -207,9 +207,9 @@ public sealed class RunEntryPresenterTests
         Assert.That(scenes.LoadedAddresses, Is.EqualTo(new[] { RunSceneAddresses.Battle }));
     }
 
-    /// <summary>战斗胜利后当前位置推进到已选节点，并只投影新当前位置的普通直接出边。</summary>
+    /// <summary>战斗胜利跳过冻结奖励后推进当前位置，并只投影新当前位置的普通直接出边。</summary>
     [Test]
-    public async Task Victory_ProjectsNewCurrentNodeAndNextSelectableLayer()
+    public async Task VictoryThenSkip_ProjectsNewCurrentNodeAndNextSelectableLayer()
     {
         using var store = new RunStateStore();
         using var localeChanges = new Subject<Locale>();
@@ -233,6 +233,7 @@ public sealed class RunEntryPresenterTests
             RunEntryActionKind.EnterMapNode,
             mapNodeId: selectedNodeId));
         await CompleteActiveBattleAsync(flow, store, BattleResultKind.Victory, settledHealth: 67);
+        SkipPendingReward(view, store);
 
         string[] expectedSelectable = MapReachability.GetSelectableNodeIds(
                 store.Current.MapDefinition,
@@ -254,6 +255,68 @@ public sealed class RunEntryPresenterTests
         Assert.That(actualSelectable, Is.EqualTo(expectedSelectable));
         Assert.That(actualSelectable.All(nodeId =>
             store.Current.MapDefinition.GetNode(new MapNodeId(nodeId)).Layer == current.Layer + 1), Is.True);
+    }
+
+    /// <summary>普通胜利投影同一冻结奖励；语言刷新不换候选，选择动作精确结算对应模板。</summary>
+    [Test]
+    public async Task RewardPending_ProjectsFrozenCandidatesAndRoutesExactSelection()
+    {
+        using var store = new RunStateStore();
+        using var localeChanges = new Subject<Locale>();
+        var localizer = new MutableCardLocalizer();
+        var flow = CreateFlow(store, new RecordingSceneFlow(), randomRootSeed: 313u);
+        flow.CreateNewRun(heroTemplateId: 1001);
+        int deckCountBeforeReward = store.Current.RunDeck.Cards.Count;
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            flow,
+            CreateTables,
+            localizer.Translate,
+            localeChanges);
+        presenter.Initialize();
+        MapNodeId combatNodeId = GetFirstProjectedNodeId(
+            view.LastModel,
+            RunMapNodePresentationState.Selectable,
+            MapNodeKind.Combat);
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.EnterMapNode,
+            mapNodeId: combatNodeId));
+
+        await CompleteActiveBattleAsync(flow, store, BattleResultKind.Victory, settledHealth: 67);
+
+        PendingCardReward pending = store.Current.PendingCardReward;
+        RunCardRewardViewModel firstProjection = view.LastModel.CardReward;
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.RewardPending));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.CardReward));
+        Assert.That(firstProjection.RewardId, Is.EqualTo(pending.Id));
+        Assert.That(
+            firstProjection.Candidates.Select(candidate => candidate.TemplateId),
+            Is.EqualTo(pending.CandidateTemplateIds));
+        Assert.That(firstProjection.Candidates.All(candidate => candidate.Name.StartsWith("EN:")), Is.True);
+
+        localizer.Language = "ZH";
+        localeChanges.OnNext(null);
+
+        Assert.That(view.LastModel.CardReward.RewardId, Is.EqualTo(pending.Id));
+        Assert.That(
+            view.LastModel.CardReward.Candidates.Select(candidate => candidate.TemplateId),
+            Is.EqualTo(pending.CandidateTemplateIds));
+        Assert.That(
+            view.LastModel.CardReward.Candidates.All(candidate => candidate.Name.StartsWith("ZH:")),
+            Is.True);
+
+        int selectedTemplateId = pending.CandidateTemplateIds[1];
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.SelectCardReward,
+            cardRewardId: pending.Id,
+            cardTemplateId: selectedTemplateId));
+
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(store.Current.RunDeck.Cards, Has.Count.EqualTo(deckCountBeforeReward + 1));
+        Assert.That(store.Current.RunDeck.Cards.Last().TemplateId, Is.EqualTo(selectedTemplateId));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Map));
     }
 
     /// <summary>走完普通层后抵达 Boss 终点只保存 BossGateReached，并继续停留地图页。</summary>
@@ -290,6 +353,7 @@ public sealed class RunEntryPresenterTests
                 store,
                 BattleResultKind.Victory,
                 settledHealth: 80 - layer);
+            SkipPendingReward(view, store);
         }
 
         MapNodeId bossNodeId = GetFirstProjectedNodeId(
@@ -431,9 +495,9 @@ public sealed class RunEntryPresenterTests
         }
     }
 
-    /// <summary>普通胜利检查点提交失败仍允许显式回退到上一成功档。</summary>
+    /// <summary>冻结奖励提交失败必须保留同一 Pending，只能重试且不能回退上一检查点。</summary>
     [Test]
-    public async Task OrdinaryCommitFailure_AllowsConfirmedRollbackToPreviousCheckpoint()
+    public async Task RewardPendingCommitFailure_DisablesRollbackAndPreservesFrozenReward()
     {
         using var store = new RunStateStore();
         using var localeChanges = new Subject<Locale>();
@@ -463,20 +527,28 @@ public sealed class RunEntryPresenterTests
             mapNodeId: combatNodeId));
 
         await CompleteActiveBattleAsync(flow, store, BattleResultKind.Victory, settledHealth: 61);
+        PendingCardReward pending = store.Current.PendingCardReward;
 
         Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.SaveFailure));
-        Assert.That(view.LastModel.CanRollbackFailedSave, Is.True);
-        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(view.LastModel.CanRollbackFailedSave, Is.False);
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.RewardPending));
         Assert.That(saves.Load().Document, Is.SameAs(previousCheckpoint));
 
         view.Emit(new RunEntryAction(RunEntryActionKind.RequestExitAfterSaveFailure));
-        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.RollbackConfirmation));
         view.Emit(new RunEntryAction(RunEntryActionKind.ConfirmRollback));
 
-        Assert.That(store.Current, Is.Null);
-        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.MainMenu));
-        Assert.That(view.LastModel.ContinueEnabled, Is.True);
-        Assert.That(saves.Load().Document, Is.SameAs(previousCheckpoint));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.RewardPending));
+        Assert.That(store.Current.PendingCardReward.Id, Is.EqualTo(pending.Id));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.SaveFailure));
+
+        view.Emit(new RunEntryAction(RunEntryActionKind.RetrySave));
+
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.CardReward));
+        Assert.That(view.LastModel.CardReward.RewardId, Is.EqualTo(pending.Id));
+        Assert.That(
+            view.LastModel.CardReward.Candidates.Select(candidate => candidate.TemplateId),
+            Is.EqualTo(pending.CandidateTemplateIds));
+        Assert.That(saves.Load().Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.RewardPending));
     }
 
     /// <summary>Terminal 提交失败只能重试保存，退出与确认回退动作都不得复活旧检查点。</summary>
@@ -551,10 +623,19 @@ public sealed class RunEntryPresenterTests
         var data = new Dictionary<string, JArray>
         {
             ["battle_tbhero"] = JArray.Parse(
-                "[{\"id\":1001,\"name_i18n_key\":\"battle.hero.test_warrior.name\",\"view_prefab_key\":\"pfb_char_player\",\"max_health\":80,\"base_strength\":1,\"initial_deck_id\":1001,\"initial_energy\":3,\"max_energy\":3,\"energy_gain_per_round\":3,\"initial_ammo\":0,\"max_ammo\":0,\"ammo_gain_per_round\":0,\"runtime_profile\":0}," +
-                "{\"id\":1002,\"name_i18n_key\":\"battle.hero.machine_gunner.name\",\"view_prefab_key\":\"pfb_char_player\",\"max_health\":90,\"base_strength\":2,\"initial_deck_id\":1002,\"initial_energy\":4,\"max_energy\":4,\"energy_gain_per_round\":4,\"initial_ammo\":3,\"max_ammo\":6,\"ammo_gain_per_round\":1,\"runtime_profile\":1}]"),
+                "[{\"id\":1001,\"name_i18n_key\":\"battle.hero.test_warrior.name\",\"view_prefab_key\":\"pfb_char_player\",\"max_health\":80,\"base_strength\":1,\"initial_deck_id\":1001,\"initial_energy\":3,\"max_energy\":3,\"energy_gain_per_round\":3,\"initial_ammo\":0,\"max_ammo\":0,\"ammo_gain_per_round\":0,\"runtime_profile\":0,\"reward_card_template_ids\":[3105,3123,3157],\"reward_common_weight\":60,\"reward_uncommon_weight\":37,\"reward_rare_weight\":3}," +
+                "{\"id\":1002,\"name_i18n_key\":\"battle.hero.machine_gunner.name\",\"view_prefab_key\":\"pfb_char_player\",\"max_health\":90,\"base_strength\":2,\"initial_deck_id\":1002,\"initial_energy\":4,\"max_energy\":4,\"energy_gain_per_round\":4,\"initial_ammo\":3,\"max_ammo\":6,\"ammo_gain_per_round\":1,\"runtime_profile\":1,\"reward_card_template_ids\":[3206,3227,3264],\"reward_common_weight\":60,\"reward_uncommon_weight\":37,\"reward_rare_weight\":3}]"),
             ["battle_tbdeck"] = JArray.Parse(
                 "[{\"id\":1001,\"card_template_ids\":[3002]},{\"id\":1002,\"card_template_ids\":[3003]}]"),
+            ["battle_tbcard"] = new JArray(
+                CreateTestCardRow(3002, rarity: 0),
+                CreateTestCardRow(3003, rarity: 0),
+                CreateTestCardRow(3105, rarity: 1),
+                CreateTestCardRow(3123, rarity: 2),
+                CreateTestCardRow(3157, rarity: 3),
+                CreateTestCardRow(3206, rarity: 1),
+                CreateTestCardRow(3227, rarity: 2),
+                CreateTestCardRow(3264, rarity: 3)),
             ["battle_tbenemy"] = JArray.Parse(
                 "[{\"id\":2001,\"name_i18n_key\":\"battle.enemy.test_slime.name\",\"max_health\":20,\"base_strength\":0,\"view_prefab_key\":\"pfb_char_enemy\",\"behavior_group_id\":6001}," +
                 "{\"id\":2101,\"name_i18n_key\":\"battle.enemy.test_sentry.name\",\"max_health\":30,\"base_strength\":0,\"view_prefab_key\":\"pfb_char_enemy\",\"behavior_group_id\":6101}]"),
@@ -565,6 +646,38 @@ public sealed class RunEntryPresenterTests
 
         return new Tables(tableName =>
             data.TryGetValue(tableName, out JArray rows) ? rows : new JArray());
+    }
+
+    /// <summary>创建 Presenter 奖励投影所需的最小 Implemented 卡牌配置行。</summary>
+    private static JObject CreateTestCardRow(int templateId, int rarity)
+    {
+        bool isXCost = templateId == 3157 || templateId == 3264;
+        return new JObject
+        {
+            ["id"] = templateId,
+            ["external_key"] = $"TEST_RUN_ENTRY_{templateId}",
+            ["catalog_snapshot_key"] = "test-fixture",
+            ["name_i18n_key"] = $"battle.card.{templateId}.name",
+            ["description_i18n_key"] = $"battle.card.{templateId}.description",
+            ["upgraded_description_i18n_key"] = $"battle.card.{templateId}.description",
+            ["card_type"] = 0,
+            ["rarity"] = rarity,
+            ["cost"] = isXCost ? 0 : 1,
+            ["cost_kind"] = isXCost ? 1 : 0,
+            ["upgraded_cost"] = 1,
+            ["target_rule"] = 1,
+            ["play_destination"] = 0,
+            ["upgraded_play_destination"] = 0,
+            ["has_upgrade"] = false,
+            ["implementation_status"] = 0,
+            ["effect_bindings"] = new JArray(),
+            ["illustration_key"] = string.Empty,
+            ["program_id"] = 0,
+            ["is_innate"] = false,
+            ["upgrade_track_kind"] = 0,
+            ["infinite_upgrade_rule_kind"] = 0,
+            ["infinite_upgrade_value_per_level"] = 0,
+        };
     }
 
     /// <summary>以稳定键映射模拟当前语言，并保留生命与缺失配置参数。</summary>
@@ -591,7 +704,7 @@ public sealed class RunEntryPresenterTests
         }
     }
 
-    /// <summary>由真实生成器和初始路径创建一份可继续的 schema v2 文档。</summary>
+    /// <summary>由真实生成器和初始路径创建一份可继续的当前 schema 文档。</summary>
     private static RunSaveDocument CreateMapReadyDocument()
     {
         using var store = new RunStateStore();
@@ -629,9 +742,9 @@ public sealed class RunEntryPresenterTests
             heroTemplateId: 1001,
             initialHealth: 80,
             maxHealth: 80,
-            deckTemplateId: 1001,
+            runDeck: RunDeck.CreateInitial(new[] { 3002, 3003 }),
             randomRootSeed,
-            map));
+            map: map));
     }
 
     /// <summary>从完整地图投影中读取第一个指定状态与种类的节点身份。</summary>
@@ -661,6 +774,18 @@ public sealed class RunEntryPresenterTests
                 input.HeroTemplateId,
                 settledHealth,
                 input.MaxHealth));
+    }
+
+    /// <summary>通过 Presenter 的严格奖励身份动作跳过当前唯一冻结奖励。</summary>
+    private static void SkipPendingReward(
+        RecordingRunEntryView view,
+        RunStateStore store)
+    {
+        PendingCardReward pending = store.Current.PendingCardReward
+            ?? throw new InvalidOperationException("The test Run does not have a pending reward.");
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.SkipCardReward,
+            cardRewardId: pending.Id));
     }
 
     /// <summary>冻结一个单玩家稳定 BattleResult，模拟队列完成表现后的唯一发布。</summary>
@@ -703,6 +828,23 @@ public sealed class RunEntryPresenterTests
         public void Emit(RunEntryAction action)
         {
             ActionRequested?.Invoke(action);
+        }
+    }
+
+    /// <summary>以可切换语言前缀证明刷新只重投影文本而不改变奖励身份。</summary>
+    private sealed class MutableCardLocalizer
+    {
+        /// <summary>当前测试语言前缀。</summary>
+        public string Language { get; set; } = "EN";
+
+        /// <summary>本地化卡牌名称与描述，其余入口键复用稳定测试映射。</summary>
+        public string Translate(
+            string key,
+            IReadOnlyDictionary<string, object> arguments)
+        {
+            return key.StartsWith("battle.card.", StringComparison.Ordinal)
+                ? $"{Language}:{key}"
+                : RunEntryPresenterTests.Localize(key, arguments);
         }
     }
 

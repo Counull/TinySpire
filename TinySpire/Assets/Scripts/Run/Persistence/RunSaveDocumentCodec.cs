@@ -51,7 +51,7 @@ namespace TinySpire.Run
         }
     }
 
-    /// <summary>所有旧 schema 进入当前 v2 文档前必须经过的唯一迁移入口。</summary>
+    /// <summary>所有旧 schema 进入当前 v4 文档前必须经过的唯一迁移入口。</summary>
     public static class RunSaveDocumentMigrator
     {
         /// <summary>读取明确版本并只迁移可证明无歧义的文档。</summary>
@@ -89,6 +89,10 @@ namespace TinySpire.Run
 
             switch (schemaVersion)
             {
+                case 2:
+                    return MigrateV2ToV4(source);
+                case 3:
+                    return MigrateV3ToV4(source);
                 case RunSaveDocument.CurrentSchemaVersion:
                     return RunSaveDocumentMigrationResult.Succeeded((JObject)source.DeepClone());
                 default:
@@ -97,6 +101,81 @@ namespace TinySpire.Run
                         $"Run save schemaVersion {schemaVersion} cannot be migrated to " +
                         $"{RunSaveDocument.CurrentSchemaVersion}.");
             }
+        }
+
+        /// <summary>按显式 v2→v3→v4 链迁移，不跨级猜测旧字段。</summary>
+        private static RunSaveDocumentMigrationResult MigrateV2ToV4(JObject source)
+        {
+            RunSaveDocumentMigrationResult v3 = MigrateV2ToV3(source);
+            return v3.Status == RunSaveDocumentMigrationStatus.Success
+                ? MigrateV3ToV4(v3.CurrentDocument)
+                : v3;
+        }
+
+        /// <summary>把 v2 的初始牌组模板转换为 v3 一次性 legacy fallback，不伪造实例事实。</summary>
+        private static RunSaveDocumentMigrationResult MigrateV2ToV3(JObject source)
+        {
+            JProperty newerDeckProperty = source.Property("runCards") ??
+                                           source.Property("legacyDeckTemplateId");
+            if (newerDeckProperty != null)
+            {
+                return RunSaveDocumentMigrationResult.Failed(
+                    RunSaveDocumentMigrationStatus.InvalidDocument,
+                    $"Schema v2 cannot contain {newerDeckProperty.Name}.");
+            }
+
+            JToken deckTemplateToken = source["deckTemplateId"];
+            if (deckTemplateToken == null || deckTemplateToken.Type != JTokenType.Integer)
+            {
+                return RunSaveDocumentMigrationResult.Failed(
+                    RunSaveDocumentMigrationStatus.InvalidDocument,
+                    "Schema v2 deckTemplateId is missing or is not an integer.");
+            }
+
+            int deckTemplateId;
+            try
+            {
+                deckTemplateId = deckTemplateToken.Value<int>();
+            }
+            catch (Exception exception) when (
+                exception is FormatException ||
+                exception is OverflowException ||
+                exception is InvalidCastException)
+            {
+                return RunSaveDocumentMigrationResult.Failed(
+                    RunSaveDocumentMigrationStatus.InvalidDocument,
+                    $"Schema v2 deckTemplateId is invalid: {exception.Message}");
+            }
+
+            if (deckTemplateId <= 0)
+            {
+                return RunSaveDocumentMigrationResult.Failed(
+                    RunSaveDocumentMigrationStatus.InvalidDocument,
+                    "Schema v2 deckTemplateId must be positive.");
+            }
+
+            var current = (JObject)source.DeepClone();
+            current["schemaVersion"] = 3;
+            current.Remove("deckTemplateId");
+            current["runCards"] = JValue.CreateNull();
+            current["legacyDeckTemplateId"] = deckTemplateId;
+            return RunSaveDocumentMigrationResult.Succeeded(current);
+        }
+
+        /// <summary>把 v3 稳定检查点扩为 v4，并显式声明当时不存在 Pending reward。</summary>
+        private static RunSaveDocumentMigrationResult MigrateV3ToV4(JObject source)
+        {
+            if (source.Property("pendingCardReward") != null)
+            {
+                return RunSaveDocumentMigrationResult.Failed(
+                    RunSaveDocumentMigrationStatus.InvalidDocument,
+                    "Schema v3 cannot contain pendingCardReward.");
+            }
+
+            var current = (JObject)source.DeepClone();
+            current["schemaVersion"] = RunSaveDocument.CurrentSchemaVersion;
+            current["pendingCardReward"] = JValue.CreateNull();
+            return RunSaveDocumentMigrationResult.Succeeded(current);
         }
     }
 
@@ -181,7 +260,12 @@ namespace TinySpire.Run
             JObject source;
             try
             {
-                source = JToken.Parse(json) as JObject;
+                source = JToken.Parse(
+                    json,
+                    new JsonLoadSettings
+                    {
+                        DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error,
+                    }) as JObject;
             }
             catch (JsonException exception)
             {
@@ -217,6 +301,7 @@ namespace TinySpire.Run
                 ? progressPhaseToken.Value<string>()
                 : null;
             if (progressPhase != nameof(RunSaveProgressPhase.MapReady) &&
+                progressPhase != nameof(RunSaveProgressPhase.RewardPending) &&
                 progressPhase != nameof(RunSaveProgressPhase.BossGateReached) &&
                 progressPhase != nameof(RunSaveProgressPhase.Terminal))
             {

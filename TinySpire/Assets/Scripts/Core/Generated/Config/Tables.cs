@@ -45,6 +45,10 @@ public partial class Tables
     /// Enemy behavior static template
     /// </summary>
     public battle.TbEnemyBehavior TbEnemyBehavior {get; }
+    /// <summary>
+    /// Explicit finite card upgrade levels; runtime keys card_id + next_upgrade_level
+    /// </summary>
+    public battle.TbCardUpgradeLevel TbCardUpgradeLevel {get; }
 
 
       public Tables(System.Func<string, JArray> loader)
@@ -57,6 +61,7 @@ public partial class Tables
         TbEncounter = new battle.TbEncounter(loader("battle_tbencounter"));
         TbEnemyBehaviorGroup = new battle.TbEnemyBehaviorGroup(loader("battle_tbenemybehaviorgroup"));
         TbEnemyBehavior = new battle.TbEnemyBehavior(loader("battle_tbenemybehavior"));
+        TbCardUpgradeLevel = new battle.TbCardUpgradeLevel(loader("battle_tbcardupgradelevel"));
         ResolveRef();
     }
     
@@ -70,6 +75,7 @@ public partial class Tables
         TbEncounter.ResolveRef(this);
         TbEnemyBehaviorGroup.ResolveRef(this);
         TbEnemyBehavior.ResolveRef(this);
+        TbCardUpgradeLevel.ResolveRef(this);
     }
 }
 

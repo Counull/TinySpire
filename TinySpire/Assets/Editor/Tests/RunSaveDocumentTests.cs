@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
@@ -7,6 +8,83 @@ using TinySpire.Run.Map;
 
 public sealed class RunSaveDocumentTests
 {
+    /// <summary>RewardPending 必须连同稳定身份、候选顺序、生命与未完成节点完成冷恢复。</summary>
+    [Test]
+    public void RewardPending_JsonRoundTrip_PreservesFrozenRewardAndAttempt()
+    {
+        using RunStateStore sourceStore = CreateStore(
+            "01010101-0202-0303-0404-050505050505",
+            mapSeed: 135791357u);
+        MapNodeId nodeId = FirstSelectableNodeId(sourceStore.Current);
+        sourceStore.CommitNode(nodeId);
+        RunBattleInput battle = sourceStore.BeginCommittedBattle();
+        RunState source = sourceStore.RecordVictoryAndFreezeReward(
+            battle.BattleId,
+            heroTemplateId: 1001,
+            settledHealth: 43,
+            maxHealth: 80,
+            battleInput => new PendingCardReward(
+                new RunCardRewardId(battleInput.BattleId),
+                new[] { 3105, 3123, 3157 }));
+
+        RunSaveDocument document = RunSaveDocumentMapper.Create(source);
+        string json = RunSaveDocumentCodec.Serialize(document);
+        RunSaveDocumentReadResult read = RunSaveDocumentCodec.Read(json);
+        RunSaveRestoreResult restore = RunSaveDocumentMapper.CreateRestore(
+            read.Document,
+            new ExistingConfigurationCatalog());
+        using var restoredStore = new RunStateStore();
+        RunState restored = restoredStore.RestoreRun(restore.Options);
+        JObject raw = JObject.Parse(json);
+
+        Assert.That(raw.Value<int>("schemaVersion"), Is.EqualTo(4));
+        Assert.That(raw.Value<string>("progressPhase"), Is.EqualTo("RewardPending"));
+        Assert.That(read.Status, Is.EqualTo(RunSaveDocumentReadStatus.Success));
+        Assert.That(restore.Status, Is.EqualTo(RunSaveRestoreStatus.Success));
+        Assert.That(restored.ProgressPhase, Is.EqualTo(RunProgressPhase.RewardPending));
+        Assert.That(restored.CurrentHealth, Is.EqualTo(43));
+        Assert.That(restored.PathNodeIds, Is.EqualTo(source.PathNodeIds));
+        Assert.That(restored.CommittedNodeId, Is.EqualTo(nodeId));
+        Assert.That(restored.BattleAttemptSequence, Is.EqualTo(1));
+        Assert.That(restored.PendingCardReward.Id, Is.EqualTo(source.PendingCardReward.Id));
+        Assert.That(restored.PendingCardReward.CandidateTemplateIds,
+            Is.EqualTo(new[] { 3105, 3123, 3157 }));
+    }
+
+    /// <summary>冷恢复必须拒绝不属于当前 Hero 明确奖励池的伪造候选，即使该 Card 模板存在。</summary>
+    [Test]
+    public void CreateRestore_RewardPendingWithForeignCandidate_ReturnsInvalidDocument()
+    {
+        using RunStateStore store = CreateStore(
+            "02020202-0303-0404-0505-060606060606",
+            mapSeed: 24682468u);
+        MapNodeId nodeId = FirstSelectableNodeId(store.Current);
+        store.CommitNode(nodeId);
+        RunBattleInput battle = store.BeginCommittedBattle();
+        RunState pending = store.RecordVictoryAndFreezeReward(
+            battle.BattleId,
+            heroTemplateId: 1001,
+            settledHealth: 55,
+            maxHealth: 80,
+            battleInput => new PendingCardReward(
+                new RunCardRewardId(battleInput.BattleId),
+                new[] { 3105, 3123, 3157 }));
+        RunSaveDocument source = RunSaveDocumentMapper.Create(pending);
+        RunSaveDocument tampered = CopyDocument(
+            source,
+            pendingCardReward: new RunSavePendingCardRewardDocument(
+                source.PendingCardReward.RewardId,
+                new[] { 3002, 3123, 3157 }));
+
+        RunSaveRestoreResult restore = RunSaveDocumentMapper.CreateRestore(
+            tampered,
+            new ExistingConfigurationCatalog());
+
+        Assert.That(restore.Status, Is.EqualTo(RunSaveRestoreStatus.InvalidDocument));
+        Assert.That(restore.Options, Is.Null);
+        Assert.That(restore.Detail, Does.Contain("reward pool").IgnoreCase);
+    }
+
     /// <summary>地图稳定态只保存重建配方与路径，并由配方恢复出相同指纹的完整冻结地图。</summary>
     [Test]
     public void MapReady_RecipeRoundTrip_RebuildsSameFingerprintAndPath()
@@ -42,9 +120,9 @@ public sealed class RunSaveDocumentTests
         Assert.That(restored.ActiveBattle, Is.Null);
     }
 
-    /// <summary>schema v2 JSON 严格限制为地图配方与稳定进度，不落整图、UI 或可达性派生结果。</summary>
+    /// <summary>当前 schema 只保存有序 RunCard 与稳定地图事实，不再把初始牌组模板作为牌组权威。</summary>
     [Test]
-    public void MapReady_JsonRoundTrip_ContainsOnlyRecipeAndStableProgressFacts()
+    public void MapReady_JsonRoundTrip_ContainsCanonicalRunDeckAndNoLegacyTemplate()
     {
         using RunStateStore store = CreateStore(
             "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
@@ -57,6 +135,7 @@ public sealed class RunSaveDocumentTests
         JObject raw = JObject.Parse(json);
 
         Assert.That(read.Status, Is.EqualTo(RunSaveDocumentReadStatus.Success));
+        Assert.That(raw.Value<int>("schemaVersion"), Is.EqualTo(RunSaveDocument.CurrentSchemaVersion));
         Assert.That(read.Document.MapFingerprint, Is.EqualTo(expected.MapFingerprint));
         Assert.That(read.Document.PathNodeIds, Is.EqualTo(expected.PathNodeIds));
         Assert.That(
@@ -68,7 +147,7 @@ public sealed class RunSaveDocumentTests
                 "heroTemplateId",
                 "currentHealth",
                 "maxHealth",
-                "deckTemplateId",
+                "runCards",
                 "randomRootSeed",
                 "mapProfileId",
                 "mapGeneratorVersion",
@@ -78,7 +157,19 @@ public sealed class RunSaveDocumentTests
                 "progressPhase",
                 "committedNodeId",
                 "terminalReason",
+                "pendingCardReward",
             }));
+        Assert.That(
+            raw["runCards"]?.Select(card => card.Value<int>("instanceId")),
+            Is.EqualTo(new[] { 1, 2, 3 }));
+        Assert.That(
+            raw["runCards"]?.Select(card => card.Value<int>("templateId")),
+            Is.EqualTo(new[] { 3002, 3002, 3003 }));
+        Assert.That(
+            raw["runCards"]?.Select(card => card.Value<int>("upgradeLevel")),
+            Is.EqualTo(new[] { 0, 0, 0 }));
+        Assert.That(raw["pendingCardReward"]?.Type, Is.EqualTo(JTokenType.Null));
+        Assert.That(raw["deckTemplateId"], Is.Null);
         Assert.That(json, Does.Not.Contain("\"nodes\"").IgnoreCase);
         Assert.That(json, Does.Not.Contain("\"edges\"").IgnoreCase);
         Assert.That(json, Does.Not.Contain("MapDefinition").IgnoreCase);
@@ -90,7 +181,158 @@ public sealed class RunSaveDocumentTests
         Assert.That(json, Does.Not.Contain("uiState").IgnoreCase);
     }
 
-    /// <summary>无重试后 attempt 是路径派生值，schema v2 必须拒绝外部夹带第二份事实。</summary>
+    /// <summary>实例级升级只改变指定副本，并在 JSON 冷恢复后保留身份、顺序与等级。</summary>
+    [Test]
+    public void MapReady_UpgradedSpecificInstanceRoundTrip_PreservesIdentityOrderAndLevel()
+    {
+        using RunStateStore sourceStore = CreateStore(
+            "abababab-cdcd-efef-0101-232323232323",
+            mapSeed: 975319753u);
+        var catalog = new ExistingConfigurationCatalog();
+
+        RunState upgraded = sourceStore.CommitCardUpgrade(
+            new RunCardInstanceId(2),
+            catalog);
+        RunSaveDocument document = RunSaveDocumentMapper.Create(upgraded);
+        RunSaveDocumentReadResult read = RunSaveDocumentCodec.Read(
+            RunSaveDocumentCodec.Serialize(document));
+        RunSaveRestoreResult restore = RunSaveDocumentMapper.CreateRestore(read.Document, catalog);
+        using var restoredStore = new RunStateStore();
+        RunState restored = restoredStore.RestoreRun(restore.Options);
+
+        Assert.That(restore.Status, Is.EqualTo(RunSaveRestoreStatus.Success));
+        Assert.That(
+            restored.RunDeck.Cards.Select(card => card.InstanceId.Sequence),
+            Is.EqualTo(new[] { 1, 2, 3 }));
+        Assert.That(
+            restored.RunDeck.Cards.Select(card => card.TemplateId),
+            Is.EqualTo(new[] { 3002, 3002, 3003 }));
+        Assert.That(
+            restored.RunDeck.Cards.Select(card => card.UpgradeLevel),
+            Is.EqualTo(new[] { 0, 1, 0 }));
+    }
+
+    /// <summary>有限轨道升满后的下一等级与伪造存档都被同一配置合法性拒绝。</summary>
+    [Test]
+    public void FiniteUpgradeBeyondConfiguredLevel_IsRejectedWithoutPublishingOrRestore()
+    {
+        using RunStateStore store = CreateStore(
+            "bcbcbcbc-dede-f0f0-1212-343434343434",
+            mapSeed: 864208642u);
+        var catalog = new ExistingConfigurationCatalog();
+        store.CommitCardUpgrade(new RunCardInstanceId(1), catalog);
+        RunState beforeRejectedCommand = store.Current;
+
+        Assert.Throws<InvalidOperationException>(() => store.CommitCardUpgrade(
+            new RunCardInstanceId(1),
+            catalog));
+        Assert.That(store.Current, Is.SameAs(beforeRejectedCommand));
+
+        RunSaveDocument source = RunSaveDocumentMapper.Create(store.Current);
+        RunSaveCardDocument[] forgedCards = source.RunCards
+            .Select(card => card.InstanceId == 1
+                ? new RunSaveCardDocument(card.InstanceId, card.TemplateId, upgradeLevel: 2)
+                : card)
+            .ToArray();
+        RunSaveDocument forged = CopyDocument(source, runCards: forgedCards);
+
+        RunSaveRestoreResult restore = RunSaveDocumentMapper.CreateRestore(forged, catalog);
+
+        Assert.That(restore.Status, Is.EqualTo(RunSaveRestoreStatus.InvalidDocument));
+        Assert.That(restore.Options, Is.Null);
+        Assert.That(restore.Detail, Does.Contain("upgrade level").IgnoreCase);
+    }
+
+    /// <summary>canonical 保存与恢复必须保留稳定实例身份、同模板副本顺序及合法有限/无限等级。</summary>
+    [Test]
+    public void CanonicalRunDeck_RoundTrip_PreservesInstanceOrderAndUpgradeFacts()
+    {
+        MapDefinition map = ActMapGenerator.Generate(TinySpireActMapProfiles.Current, 424242u);
+        var deck = new RunDeck(new[]
+        {
+            new RunCard(new RunCardInstanceId(17), templateId: 3002, upgradeLevel: 1),
+            new RunCard(new RunCardInstanceId(29), templateId: 3002, upgradeLevel: 0),
+            new RunCard(new RunCardInstanceId(61), templateId: 3123, upgradeLevel: 2),
+        });
+        using var sourceStore = new RunStateStore();
+        sourceStore.CreateNewRun(new RunCreationOptions(
+            new RunId(Guid.Parse("17171717-2929-6161-7171-292961617171")),
+            heroTemplateId: 1001,
+            initialHealth: 80,
+            maxHealth: 80,
+            runDeck: deck,
+            randomRootSeed: 424242u,
+            map));
+
+        string json = RunSaveDocumentCodec.Serialize(
+            RunSaveDocumentMapper.Create(sourceStore.Current));
+        RunSaveDocumentReadResult read = RunSaveDocumentCodec.Read(json);
+        RunSaveRestoreResult restore = RunSaveDocumentMapper.CreateRestore(
+            read.Document,
+            new ExistingConfigurationCatalog());
+
+        Assert.That(read.Status, Is.EqualTo(RunSaveDocumentReadStatus.Success));
+        Assert.That(restore.Status, Is.EqualTo(RunSaveRestoreStatus.Success));
+        Assert.That(
+            restore.Options.RunDeck.Cards.Select(card => card.InstanceId.Sequence),
+            Is.EqualTo(new[] { 17, 29, 61 }));
+        Assert.That(
+            restore.Options.RunDeck.Cards.Select(card => card.TemplateId),
+            Is.EqualTo(new[] { 3002, 3002, 3123 }));
+        Assert.That(
+            restore.Options.RunDeck.Cards.Select(card => card.UpgradeLevel),
+            Is.EqualTo(new[] { 1, 0, 2 }));
+    }
+
+    /// <summary>无限轨道必须经两次实例命令升至二级，只改目标副本并完整穿过保存恢复。</summary>
+    [Test]
+    public void InfiniteUpgrade_TwoCommandsOnlyChangeTargetAndRoundTrip()
+    {
+        MapDefinition map = ActMapGenerator.Generate(TinySpireActMapProfiles.Current, 434343u);
+        var deck = new RunDeck(new[]
+        {
+            new RunCard(new RunCardInstanceId(17), templateId: 3123, upgradeLevel: 0),
+            new RunCard(new RunCardInstanceId(29), templateId: 3123, upgradeLevel: 0),
+            new RunCard(new RunCardInstanceId(61), templateId: 3002, upgradeLevel: 0),
+        });
+        var catalog = new ExistingConfigurationCatalog();
+        using var sourceStore = new RunStateStore();
+        sourceStore.CreateNewRun(new RunCreationOptions(
+            new RunId(Guid.Parse("18181818-2929-6161-7171-292961617171")),
+            heroTemplateId: 1001,
+            initialHealth: 80,
+            maxHealth: 80,
+            runDeck: deck,
+            randomRootSeed: 434343u,
+            map));
+
+        RunState levelOne = sourceStore.CommitCardUpgrade(
+            new RunCardInstanceId(17),
+            catalog);
+        RunState levelTwo = sourceStore.CommitCardUpgrade(
+            new RunCardInstanceId(17),
+            catalog);
+        RunSaveDocumentReadResult read = RunSaveDocumentCodec.Read(
+            RunSaveDocumentCodec.Serialize(RunSaveDocumentMapper.Create(levelTwo)));
+        RunSaveRestoreResult restore = RunSaveDocumentMapper.CreateRestore(read.Document, catalog);
+        using var restoredStore = new RunStateStore();
+        RunState restored = restoredStore.RestoreRun(restore.Options);
+
+        Assert.That(levelOne.RunDeck.Cards.Select(card => card.UpgradeLevel),
+            Is.EqualTo(new[] { 1, 0, 0 }));
+        Assert.That(levelTwo.RunDeck.Cards.Select(card => card.UpgradeLevel),
+            Is.EqualTo(new[] { 2, 0, 0 }));
+        Assert.That(read.Status, Is.EqualTo(RunSaveDocumentReadStatus.Success));
+        Assert.That(restore.Status, Is.EqualTo(RunSaveRestoreStatus.Success));
+        Assert.That(restored.RunDeck.Cards.Select(card => card.InstanceId.Sequence),
+            Is.EqualTo(new[] { 17, 29, 61 }));
+        Assert.That(restored.RunDeck.Cards.Select(card => card.TemplateId),
+            Is.EqualTo(new[] { 3123, 3123, 3002 }));
+        Assert.That(restored.RunDeck.Cards.Select(card => card.UpgradeLevel),
+            Is.EqualTo(new[] { 2, 0, 0 }));
+    }
+
+    /// <summary>无重试后 attempt 是路径派生值，当前 schema 必须拒绝外部夹带第二份事实。</summary>
     [Test]
     public void Read_WhenDocumentContainsDerivedAttemptSequence_ReturnsInvalidDocument()
     {
@@ -296,6 +538,8 @@ public sealed class RunSaveDocumentTests
     {
         RunSaveDocument document = CreateInitialDocument(
             "88888888-9999-aaaa-bbbb-cccccccccccc");
+        if (missing == MissingConfiguration.Deck)
+            document = CopyAsLegacyFallback(document, deckTemplateId: 1001);
 
         RunSaveRestoreResult result = RunSaveDocumentMapper.CreateRestore(
             document,
@@ -304,6 +548,23 @@ public sealed class RunSaveDocumentTests
         Assert.That(result.Status, Is.EqualTo(expectedStatus));
         Assert.That(result.Options, Is.Null);
         Assert.That(result.Detail, Is.Not.Empty);
+    }
+
+    /// <summary>旧 Deck 仍引用已删除 Card 时必须在冷读档阶段拒绝，不能把坏实例投影延迟到 Battle。</summary>
+    [Test]
+    public void CreateRestore_LegacyDeckWithMissingCardTemplate_ReturnsInvalidDocument()
+    {
+        RunSaveDocument document = CopyAsLegacyFallback(
+            CreateInitialDocument("89898989-9a9a-abab-bcbc-cdcdcdcdcdcd"),
+            deckTemplateId: 1001);
+
+        RunSaveRestoreResult result = RunSaveDocumentMapper.CreateRestore(
+            document,
+            new ExistingConfigurationCatalog(missingCardTemplateId: 3003));
+
+        Assert.That(result.Status, Is.EqualTo(RunSaveRestoreStatus.InvalidDocument));
+        Assert.That(result.Options, Is.Null);
+        Assert.That(result.Detail, Does.Contain("3003"));
     }
 
     /// <summary>Hero 最大生命配置漂移时必须在冷读档阶段拒绝，不能延迟到 Battle。</summary>
@@ -346,7 +607,157 @@ public sealed class RunSaveDocumentTests
         Assert.That(result.Detail, Is.Not.Empty);
     }
 
-    /// <summary>progressPhase 必须使用可审阅的精确字符串，数字枚举不能绕过 schema v2。</summary>
+    /// <summary>schema v2 的初始牌组模板必须无歧义展开为当前有序实例牌组。</summary>
+    [Test]
+    public void Read_SchemaV2DeckTemplate_MigratesThroughLegacyFallbackAndRestoresOrderedInstances()
+    {
+        RunSaveDocument current = CreateInitialDocument(
+            "12345678-aaaa-bbbb-cccc-123456789abc");
+        JObject raw = JObject.Parse(RunSaveDocumentCodec.Serialize(current));
+        raw["schemaVersion"] = 2;
+        raw.Remove("runCards");
+        raw.Remove("pendingCardReward");
+        raw["deckTemplateId"] = 1001;
+
+        RunSaveDocumentReadResult read = RunSaveDocumentCodec.Read(raw.ToString());
+        RunSaveRestoreResult restore = read.Document == null
+            ? null
+            : RunSaveDocumentMapper.CreateRestore(
+                read.Document,
+                new ExistingConfigurationCatalog());
+
+        Assert.That(read.Status, Is.EqualTo(RunSaveDocumentReadStatus.Success));
+        Assert.That(read.Document.SchemaVersion, Is.EqualTo(RunSaveDocument.CurrentSchemaVersion));
+        Assert.That(read.Document.RunCards, Is.Null);
+        Assert.That(read.Document.LegacyDeckTemplateId, Is.EqualTo(1001));
+        Assert.That(read.Document.PendingCardReward, Is.Null);
+        Assert.That(restore.Status, Is.EqualTo(RunSaveRestoreStatus.Success));
+        Assert.That(
+            restore.Options.RunDeck.Cards.Select(card => card.InstanceId.Sequence),
+            Is.EqualTo(new[] { 1, 2, 3 }));
+        Assert.That(
+            restore.Options.RunDeck.Cards.Select(card => card.TemplateId),
+            Is.EqualTo(new[] { 3002, 3002, 3003 }));
+
+        using var store = new RunStateStore();
+        store.RestoreRun(restore.Options);
+        RunSaveDocument resaved = RunSaveDocumentMapper.Create(store.Current);
+        Assert.That(resaved.RunCards, Is.Not.Null);
+        Assert.That(resaved.RunCards.Select(card => card.InstanceId), Is.EqualTo(new[] { 1, 2, 3 }));
+        Assert.That(resaved.LegacyDeckTemplateId, Is.Null);
+    }
+
+    /// <summary>schema v2 不得夹带新 schema 的实例牌组或 legacy 字段并让迁移静默覆盖。</summary>
+    [TestCase("runCards")]
+    [TestCase("legacyDeckTemplateId")]
+    public void Read_SchemaV2WithNewerDeckField_ReturnsInvalidDocument(string newerField)
+    {
+        RunSaveDocument current = CreateInitialDocument(
+            "13131313-aaaa-bbbb-cccc-131313131313");
+        JObject raw = JObject.Parse(RunSaveDocumentCodec.Serialize(current));
+        raw["schemaVersion"] = 2;
+        raw.Remove("pendingCardReward");
+        raw["deckTemplateId"] = 1001;
+        if (newerField == "legacyDeckTemplateId")
+        {
+            raw.Remove("runCards");
+            raw["legacyDeckTemplateId"] = 1001;
+        }
+
+        RunSaveDocumentReadResult read = RunSaveDocumentCodec.Read(raw.ToString());
+
+        Assert.That(read.Status, Is.EqualTo(RunSaveDocumentReadStatus.InvalidDocument));
+        Assert.That(read.Document, Is.Null);
+        Assert.That(read.Detail, Does.Contain(newerField));
+    }
+
+    /// <summary>schema v3 的 canonical RunDeck 必须补入空奖励字段并无歧义迁移到 v4。</summary>
+    [Test]
+    public void Read_SchemaV3CanonicalDeck_MigratesWithNullPendingReward()
+    {
+        RunSaveDocument current = CreateInitialDocument(
+            "23232323-aaaa-bbbb-cccc-232323232323");
+        JObject raw = JObject.Parse(RunSaveDocumentCodec.Serialize(current));
+        raw["schemaVersion"] = 3;
+        raw.Remove("pendingCardReward");
+
+        RunSaveDocumentReadResult read = RunSaveDocumentCodec.Read(raw.ToString());
+
+        Assert.That(read.Status, Is.EqualTo(RunSaveDocumentReadStatus.Success));
+        Assert.That(read.Document.SchemaVersion, Is.EqualTo(RunSaveDocument.CurrentSchemaVersion));
+        Assert.That(read.Document.RunCards, Is.Not.Null);
+        Assert.That(read.Document.PendingCardReward, Is.Null);
+    }
+
+    /// <summary>schema v3 当时不存在奖励字段，夹带 v4 Pending 事实必须拒绝而非静默擦除。</summary>
+    [Test]
+    public void Read_SchemaV3WithPendingRewardField_ReturnsInvalidDocument()
+    {
+        RunSaveDocument current = CreateInitialDocument(
+            "24242424-aaaa-bbbb-cccc-242424242424");
+        JObject raw = JObject.Parse(RunSaveDocumentCodec.Serialize(current));
+        raw["schemaVersion"] = 3;
+
+        RunSaveDocumentReadResult read = RunSaveDocumentCodec.Read(raw.ToString());
+
+        Assert.That(read.Status, Is.EqualTo(RunSaveDocumentReadStatus.InvalidDocument));
+        Assert.That(read.Document, Is.Null);
+        Assert.That(read.Detail, Does.Contain("pendingCardReward"));
+    }
+
+    /// <summary>legacy deck fallback 只用于稳定旧档展开，不能与可结算 Pending 奖励组成死档。</summary>
+    [Test]
+    public void Read_RewardPendingWithLegacyDeckFallback_ReturnsInvalidDocument()
+    {
+        using RunStateStore store = CreateStore(
+            "25252525-aaaa-bbbb-cccc-252525252525",
+            mapSeed: 987612345u);
+        MapNodeId nodeId = FirstSelectableNodeId(store.Current);
+        store.CommitNode(nodeId);
+        RunBattleInput battle = store.BeginCommittedBattle();
+        RunState pending = store.RecordVictoryAndFreezeReward(
+            battle.BattleId,
+            heroTemplateId: 1001,
+            settledHealth: 61,
+            maxHealth: 80,
+            battleInput => new PendingCardReward(
+                new RunCardRewardId(battleInput.BattleId),
+                new[] { 3105, 3123, 3157 }));
+        JObject raw = JObject.Parse(RunSaveDocumentCodec.Serialize(
+            RunSaveDocumentMapper.Create(pending)));
+        raw["runCards"] = JValue.CreateNull();
+        raw["legacyDeckTemplateId"] = 1001;
+
+        RunSaveDocumentReadResult read = RunSaveDocumentCodec.Read(raw.ToString());
+
+        Assert.That(read.Status, Is.EqualTo(RunSaveDocumentReadStatus.InvalidDocument));
+        Assert.That(read.Document, Is.Null);
+        Assert.That(read.Detail, Does.Contain("legacy").IgnoreCase);
+    }
+
+    /// <summary>任一关键 JSON 属性重复时必须拒绝整份输入，不能采用 first/last-wins。</summary>
+    [TestCase("schemaVersion", "4")]
+    [TestCase("runCards", "[]")]
+    [TestCase("pendingCardReward", "null")]
+    public void Read_DuplicateCriticalProperty_ReturnsInvalidJson(
+        string propertyName,
+        string duplicateValue)
+    {
+        string json = RunSaveDocumentCodec.Serialize(CreateInitialDocument(
+            "26262626-aaaa-bbbb-cccc-262626262626"));
+        int objectStart = json.IndexOf('{');
+        string duplicated = json.Insert(
+            objectStart + 1,
+            $"\"{propertyName}\":{duplicateValue},");
+
+        RunSaveDocumentReadResult read = RunSaveDocumentCodec.Read(duplicated);
+
+        Assert.That(read.Status, Is.EqualTo(RunSaveDocumentReadStatus.InvalidJson));
+        Assert.That(read.Document, Is.Null);
+        Assert.That(read.Detail, Is.Not.Empty);
+    }
+
+    /// <summary>progressPhase 必须使用可审阅的精确字符串，数字枚举不能绕过当前 schema。</summary>
     [Test]
     public void Read_NumericProgressPhase_ReturnsInvalidDocument()
     {
@@ -432,9 +843,9 @@ public sealed class RunSaveDocumentTests
             heroTemplateId: 1001,
             initialHealth: 80,
             maxHealth: 80,
-            deckTemplateId: 1001,
+            runDeck: RunDeck.CreateInitial(new[] { 3002, 3002, 3003 }),
             randomRootSeed: 987654321u,
-            map));
+            map: map));
         return store;
     }
 
@@ -454,11 +865,17 @@ public sealed class RunSaveDocumentTests
         Assert.That(store.Current.MapDefinition.GetNode(nodeId).Kind, Is.EqualTo(MapNodeKind.Combat));
         store.CommitNode(nodeId);
         RunBattleInput battle = store.BeginCommittedBattle();
-        return store.ApplyVictory(
+        RunState pending = store.RecordVictoryAndFreezeReward(
             battle.BattleId,
             heroTemplateId: 1001,
             settledHealth,
-            maxHealth: 80);
+            maxHealth: 80,
+            battleInput => new PendingCardReward(
+                new RunCardRewardId(battleInput.BattleId),
+                new[] { 3105, 3123, 3157 }));
+        return store.CommitCardRewardSettlement(
+            pending.PendingCardReward.Id,
+            selectedCardTemplateId: null);
     }
 
     /// <summary>胜利穿过全部普通层后选择首个普通可达 Boss 门。</summary>
@@ -488,7 +905,9 @@ public sealed class RunSaveDocumentTests
         string mapProfileId = null,
         int? mapGeneratorVersion = null,
         string mapFingerprint = null,
-        string[] pathNodeIds = null)
+        string[] pathNodeIds = null,
+        RunSavePendingCardRewardDocument pendingCardReward = null,
+        IReadOnlyList<RunSaveCardDocument> runCards = null)
     {
         return new RunSaveDocument(
             source.SchemaVersion,
@@ -496,7 +915,8 @@ public sealed class RunSaveDocumentTests
             source.HeroTemplateId,
             source.CurrentHealth,
             source.MaxHealth,
-            source.DeckTemplateId,
+            runCards ?? source.RunCards,
+            source.LegacyDeckTemplateId,
             source.RandomRootSeed,
             mapProfileId ?? source.MapProfileId,
             mapGeneratorVersion ?? source.MapGeneratorVersion,
@@ -505,21 +925,52 @@ public sealed class RunSaveDocumentTests
             pathNodeIds ?? source.PathNodeIds,
             source.ProgressPhase,
             source.CommittedNodeId,
-            source.TerminalReason);
+            source.TerminalReason,
+            pendingCardReward ?? source.PendingCardReward);
     }
 
-    private sealed class ExistingConfigurationCatalog : IRunSaveConfigurationCatalog
+    /// <summary>把 canonical 测试文档改写为只携带旧 Deck 模板的一次性恢复输入。</summary>
+    private static RunSaveDocument CopyAsLegacyFallback(
+        RunSaveDocument source,
+        int deckTemplateId)
+    {
+        return new RunSaveDocument(
+            source.SchemaVersion,
+            source.RunId,
+            source.HeroTemplateId,
+            source.CurrentHealth,
+            source.MaxHealth,
+            runCards: null,
+            legacyDeckTemplateId: deckTemplateId,
+            source.RandomRootSeed,
+            source.MapProfileId,
+            source.MapGeneratorVersion,
+            source.MapSeed,
+            source.MapFingerprint,
+            source.PathNodeIds,
+            source.ProgressPhase,
+            source.CommittedNodeId,
+            source.TerminalReason,
+            source.PendingCardReward);
+    }
+
+    private sealed class ExistingConfigurationCatalog :
+        IRunSaveConfigurationCatalog,
+        IRunCardUpgradeConfigurationCatalog
     {
         private readonly int _heroMaxHealth;
         private readonly ActMapProfile _profile;
+        private readonly int? _missingCardTemplateId;
 
-        /// <summary>建立完整测试配置目录，并允许替换当前 Hero 上限或同 ID profile。</summary>
+        /// <summary>建立测试配置目录，并允许替换 Hero 上限、同 ID profile 或指定缺失 Card。</summary>
         public ExistingConfigurationCatalog(
             int heroMaxHealth = 80,
-            ActMapProfile profile = null)
+            ActMapProfile profile = null,
+            int? missingCardTemplateId = null)
         {
             _heroMaxHealth = heroMaxHealth;
             _profile = profile ?? TinySpireActMapProfiles.Current;
+            _missingCardTemplateId = missingCardTemplateId;
         }
 
         /// <summary>完整目录中的 Hero 均视为存在。</summary>
@@ -538,6 +989,39 @@ public sealed class RunSaveDocumentTests
         public bool DeckExists(int templateId)
         {
             return true;
+        }
+
+        /// <summary>按固定顺序返回含同模板副本的测试初始牌组。</summary>
+        public IReadOnlyList<int> GetDeckCardTemplateIds(int templateId)
+        {
+            return new[] { 3002, 3002, 3003 };
+        }
+
+        /// <summary>除测试指定缺失模板外，其余 Card 均视为存在。</summary>
+        public bool CardExists(int templateId)
+        {
+            return templateId != _missingCardTemplateId;
+        }
+
+        /// <summary>测试有限卡 3002 仅允许一级、无限卡 3123 允许任意可表达非负等级。</summary>
+        public bool IsCardUpgradeLevelValid(int templateId, int upgradeLevel)
+        {
+            if (upgradeLevel < 0)
+                return false;
+
+            if (templateId == 3002)
+                return upgradeLevel <= 1;
+            return templateId == 3123 || upgradeLevel == 0;
+        }
+
+        /// <summary>测试 Hero 1001 只接受本轮冻结的三个显式奖励候选。</summary>
+        public bool IsRewardCardForHero(int heroTemplateId, int cardTemplateId)
+        {
+            return heroTemplateId == 1001 &&
+                   cardTemplateId != _missingCardTemplateId &&
+                   (cardTemplateId == 3105 ||
+                    cardTemplateId == 3123 ||
+                    cardTemplateId == 3157);
         }
 
         /// <summary>完整目录中的 Encounter 均视为存在。</summary>
@@ -581,6 +1065,24 @@ public sealed class RunSaveDocumentTests
         public bool DeckExists(int templateId)
         {
             return _missing != MissingConfiguration.Deck;
+        }
+
+        /// <summary>为非缺失 Deck 的恢复分支提供稳定测试牌序。</summary>
+        public IReadOnlyList<int> GetDeckCardTemplateIds(int templateId)
+        {
+            return new[] { 3002, 3003 };
+        }
+
+        /// <summary>当前旧测试目录中的 Card 均视为存在。</summary>
+        public bool CardExists(int templateId)
+        {
+            return true;
+        }
+
+        /// <summary>选择性缺配置测试不包含 Pending reward，若被调用则保持 Card 可奖励。</summary>
+        public bool IsRewardCardForHero(int heroTemplateId, int cardTemplateId)
+        {
+            return true;
         }
 
         /// <summary>仅在测试指定 Encounter 缺失时返回 false。</summary>

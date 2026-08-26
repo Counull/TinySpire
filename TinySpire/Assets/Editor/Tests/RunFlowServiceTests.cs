@@ -59,11 +59,18 @@ public sealed class RunFlowServiceTests
     public async Task RefreshValidMapReadySave_DoesNotHydrateUntilContinueAndPreservesNextAttemptSeed()
     {
         using var store = new RunStateStore();
+        var expectedCards = new[]
+        {
+            new RunSaveCardDocument(instanceId: 17, templateId: 3002, upgradeLevel: 1),
+            new RunSaveCardDocument(instanceId: 29, templateId: 3002, upgradeLevel: 0),
+            new RunSaveCardDocument(instanceId: 61, templateId: 3123, upgradeLevel: 2),
+        };
         var saves = new RecordingRunSaveStore(CreateDocument(
             heroTemplateId: 1002,
             deckTemplateId: 1002,
             randomRootSeed: 246810u,
-            completedCombatCount: 1));
+            completedCombatCount: 1,
+            runCards: expectedCards));
         var entropy = new CountingRunEntropySource(new RunEntropy(
             new RunId(Guid.Parse("11111111-2222-3333-4444-555555555555")),
             randomRootSeed: 999u));
@@ -83,14 +90,149 @@ public sealed class RunFlowServiceTests
         MapNodeId nextNodeId = GetFirstSelectableNodeId(restored);
         await flow.EnterMapNodeAsync(nextNodeId);
         RunBattleInput nextAttempt = store.Current.ActiveBattle;
+        BattleSetupOptions setup = flow.CreateBattleSetupOptions();
+        RunBattleId boundBattleId = flow.BindBattleAttempt(setup);
 
         Assert.That(restored.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
         Assert.That(restored.BattleAttemptSequence, Is.EqualTo(1));
+        Assert.That(
+            restored.RunDeck.Cards.Select(card => card.InstanceId.Sequence),
+            Is.EqualTo(new[] { 17, 29, 61 }));
+        Assert.That(
+            restored.RunDeck.Cards.Select(card => card.TemplateId),
+            Is.EqualTo(new[] { 3002, 3002, 3123 }));
+        Assert.That(
+            restored.RunDeck.Cards.Select(card => card.UpgradeLevel),
+            Is.EqualTo(new[] { 1, 0, 2 }));
         Assert.That(nextAttempt.BattleId.AttemptSequence, Is.EqualTo(2));
         Assert.That(nextAttempt.BattleId.NodeId, Is.EqualTo(nextNodeId));
+        Assert.That(boundBattleId, Is.EqualTo(nextAttempt.BattleId));
+        Assert.That(
+            setup.RunCards.Select(card => card.InstanceId.Sequence),
+            Is.EqualTo(new[] { 17, 29, 61 }));
+        Assert.That(
+            setup.RunCards.Select(card => card.UpgradeLevel),
+            Is.EqualTo(new[] { 1, 0, 2 }));
         Assert.That(
             nextAttempt.RandomSeed,
             Is.EqualTo(RunStateStore.DeriveBattleSeed(246810u, attemptSequence: 2)));
+        Assert.That(entropy.NextCount, Is.Zero);
+        Assert.That(saves.CommitAttempts, Is.Empty);
+    }
+
+    /// <summary>Continue 必须先把 legacy deck fallback 原子改写为 canonical RunCards，再发布 active Run。</summary>
+    [Test]
+    public void ContinueLegacyDeckCheckpoint_CommitsCanonicalBeforePublishingRun()
+    {
+        using var store = new RunStateStore();
+        var saves = new RecordingRunSaveStore(CreateDocument(
+            heroTemplateId: 1001,
+            deckTemplateId: 1001,
+            randomRootSeed: 246812u));
+        var flow = CreateFlow(store, new RecordingSceneFlow(), saves, randomRootSeed: 97532u);
+        flow.RefreshSaveAvailability();
+
+        RunState restored = flow.ContinueSavedRun();
+
+        Assert.That(store.Current, Is.SameAs(restored));
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(1));
+        Assert.That(saves.CommitAttempts[0].LegacyDeckTemplateId, Is.Null);
+        Assert.That(saves.CommitAttempts[0].RunCards, Is.Not.Null.And.Not.Empty);
+        Assert.That(
+            saves.CommitAttempts[0].RunCards.Select(card => card.TemplateId),
+            Is.EqualTo(restored.RunDeck.Cards.Select(card => card.TemplateId)));
+        Assert.That(flow.Persistence.Status, Is.EqualTo(RunPersistenceStatus.ContinueAvailable));
+    }
+
+    /// <summary>legacy canonical 改写失败时不得发布 Run；重试同一文档成功后才允许再次 Continue。</summary>
+    [Test]
+    public void ContinueLegacyDeckCheckpoint_WhenCanonicalCommitFails_KeepsStoreEmptyAndRetriesExactDocument()
+    {
+        using var store = new RunStateStore();
+        var saves = new RecordingRunSaveStore(CreateDocument(
+            heroTemplateId: 1001,
+            deckTemplateId: 1001,
+            randomRootSeed: 246813u));
+        saves.EnqueueCommitResult(RunSaveCommitResult.Failed(
+            RunSaveCommitStatus.IoFailure,
+            "canonical migration failed"));
+        saves.EnqueueCommitResult(RunSaveCommitResult.Succeeded());
+        var flow = CreateFlow(store, new RecordingSceneFlow(), saves, randomRootSeed: 97533u);
+        flow.RefreshSaveAvailability();
+
+        Assert.That(() => flow.ContinueSavedRun(), Throws.TypeOf<InvalidOperationException>());
+        Assert.That(store.Current, Is.Null);
+        Assert.That(flow.Persistence.Status, Is.EqualTo(RunPersistenceStatus.CommitFailed));
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(1));
+        RunSaveDocument canonicalDocument = saves.CommitAttempts[0];
+        Assert.That(canonicalDocument.LegacyDeckTemplateId, Is.Null);
+        Assert.That(canonicalDocument.RunCards, Is.Not.Null.And.Not.Empty);
+
+        RunSaveCommitResult retry = flow.RetryPendingCommit();
+
+        Assert.That(retry.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(store.Current, Is.Null);
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(2));
+        Assert.That(saves.CommitAttempts[1], Is.SameAs(canonicalDocument));
+
+        RunState restored = flow.ContinueSavedRun();
+
+        Assert.That(store.Current, Is.SameAs(restored));
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(2));
+        Assert.That(
+            restored.RunDeck.Cards.Select(card => card.TemplateId),
+            Is.EqualTo(canonicalDocument.RunCards.Select(card => card.TemplateId)));
+    }
+
+    /// <summary>有效 RewardPending 文档只在 Continue 后恢复，且不重新生成奖励或漂移牌组实例。</summary>
+    [Test]
+    public void RefreshRewardPendingSave_DoesNotHydrateUntilContinueAndRestoresFrozenReward()
+    {
+        using var store = new RunStateStore();
+        var expectedCards = new[]
+        {
+            new RunSaveCardDocument(instanceId: 17, templateId: 3002, upgradeLevel: 1),
+            new RunSaveCardDocument(instanceId: 29, templateId: 3002, upgradeLevel: 0),
+        };
+        RunSaveDocument document = CreateDocument(
+            heroTemplateId: 1001,
+            deckTemplateId: 1001,
+            randomRootSeed: 246811u,
+            progressPhase: RunSaveProgressPhase.RewardPending,
+            completedCombatCount: 1,
+            runCards: expectedCards);
+        var saves = new RecordingRunSaveStore(document);
+        var entropy = new CountingRunEntropySource(new RunEntropy(
+            new RunId(Guid.Parse("11111111-2222-3333-4444-666666666666")),
+            randomRootSeed: 999u));
+        var flow = new RunFlowService(
+            store,
+            CreateTables,
+            new RecordingSceneFlow(),
+            entropy,
+            saves);
+
+        RunPersistenceState availability = flow.RefreshSaveAvailability();
+
+        Assert.That(availability.CanContinue, Is.True);
+        Assert.That(store.Current, Is.Null);
+
+        RunState restored = flow.ContinueSavedRun();
+
+        Assert.That(restored.ProgressPhase, Is.EqualTo(RunProgressPhase.RewardPending));
+        Assert.That(restored.CurrentHealth, Is.EqualTo(80));
+        Assert.That(restored.BattleAttemptSequence, Is.EqualTo(2));
+        Assert.That(restored.CommittedNodeId?.Value, Is.EqualTo(document.CommittedNodeId));
+        Assert.That(restored.PendingCardReward.Id.ToString(),
+            Is.EqualTo(document.PendingCardReward.RewardId));
+        Assert.That(restored.PendingCardReward.CandidateTemplateIds,
+            Is.EqualTo(new[] { 3105, 3123, 3157 }));
+        Assert.That(
+            restored.RunDeck.Cards.Select(card => card.InstanceId.Sequence),
+            Is.EqualTo(new[] { 17, 29 }));
+        Assert.That(
+            restored.RunDeck.Cards.Select(card => card.UpgradeLevel),
+            Is.EqualTo(new[] { 1, 0 }));
         Assert.That(entropy.NextCount, Is.Zero);
         Assert.That(saves.CommitAttempts, Is.Empty);
     }
@@ -124,15 +266,19 @@ public sealed class RunFlowServiceTests
         Assert.That(() => flow.CreateBattleSetupOptions(), Throws.TypeOf<InvalidOperationException>());
     }
 
-    /// <summary>普通战斗胜利先形成 MapReady，只有 RunEntry 加载完成后才提交同一稳定检查点。</summary>
-    [Test]
-    public async Task Victory_WaitsForRunEntryBeforeCommittingMapReadyCheckpoint()
+    /// <summary>两名 Hero 胜利后都先提交各自冻结奖励，再等待 RunEntry 场景加载完成。</summary>
+    [TestCase(1001, 80, 41)]
+    [TestCase(1002, 90, 51)]
+    public async Task Victory_CommitsHeroOwnedFrozenRewardBeforeLoadingRunEntry(
+        int heroTemplateId,
+        int maxHealth,
+        int settledHealth)
     {
         using var store = new RunStateStore();
         var scenes = new RecordingSceneFlow();
         var saves = new RecordingRunSaveStore();
         var flow = CreateFlow(store, scenes, saves, randomRootSeed: 34567u);
-        flow.CreateNewRun(heroTemplateId: 1002);
+        flow.CreateNewRun(heroTemplateId);
         MapNodeId selectedNodeId = GetFirstSelectableNodeId(store.Current);
         await flow.EnterMapNodeAsync(selectedNodeId);
         RunBattleId battleId = flow.BindBattleAttempt(flow.CreateBattleSetupOptions());
@@ -140,27 +286,50 @@ public sealed class RunFlowServiceTests
 
         Task handling = flow.HandleBattleResultAsync(
                 battleId,
-                CreateBattleResult(BattleResultKind.Victory, 1002, health: 41, maxHealth: 90))
+                CreateBattleResult(
+                    BattleResultKind.Victory,
+                    heroTemplateId,
+                    settledHealth,
+                    maxHealth))
             .AsTask();
 
         Assert.That(handling.IsCompleted, Is.False);
-        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
-        Assert.That(store.Current.CurrentNodeId, Is.EqualTo(selectedNodeId));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.RewardPending));
+        Assert.That(store.Current.CurrentNodeId, Is.EqualTo(MapNodeId.FromPosition(0, 0)));
+        Assert.That(store.Current.CurrentHealth, Is.EqualTo(settledHealth));
         Assert.That(store.Current.ActiveBattle, Is.Null);
-        Assert.That(store.Current.CommittedNodeId, Is.Null);
-        Assert.That(flow.Persistence.Status, Is.EqualTo(RunPersistenceStatus.CommitPending));
-        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(1), "RunEntry 未完成前只能存在开局检查点");
+        Assert.That(store.Current.CommittedNodeId, Is.EqualTo(selectedNodeId));
+        Assert.That(store.Current.PendingCardReward, Is.Not.Null);
+        Assert.That(store.Current.PendingCardReward.CandidateTemplateIds, Has.Count.EqualTo(3));
+        Assert.That(
+            store.Current.PendingCardReward.CandidateTemplateIds.Distinct().Count(),
+            Is.EqualTo(3));
+        int[] legalPool = heroTemplateId == 1001
+            ? new[] { 3105, 3123, 3157 }
+            : new[] { 3206, 3227, 3264 };
+        Assert.That(store.Current.PendingCardReward.CandidateTemplateIds,
+            Is.SubsetOf(legalPool));
+        Assert.That(flow.Persistence.Status, Is.EqualTo(RunPersistenceStatus.ContinueAvailable));
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(2));
+        Assert.That(saves.CommitAttempts[1].ProgressPhase,
+            Is.EqualTo(RunSaveProgressPhase.RewardPending));
+        Assert.That(saves.CommitAttempts[1].PendingCardReward.RewardId,
+            Is.EqualTo(store.Current.PendingCardReward.Id.ToString()));
+        Assert.That(saves.CommitAttempts[1].PendingCardReward.CandidateTemplateIds,
+            Is.EqualTo(store.Current.PendingCardReward.CandidateTemplateIds));
+        Assert.That(saves.CommitAttempts[1].PathNodeIds,
+            Is.EqualTo(new[] { MapNodeId.FromPosition(0, 0).Value }));
+        Assert.That(saves.CommitAttempts[1].CommittedNodeId, Is.EqualTo(selectedNodeId.Value));
+        Assert.That(scenes.LoadedAddresses, Is.EqualTo(new[]
+        {
+            RunSceneAddresses.Battle,
+            RunSceneAddresses.RunEntry,
+        }));
 
         scenes.ReleaseRunEntryLoad();
         await handling;
 
         Assert.That(saves.CommitAttempts, Has.Count.EqualTo(2));
-        Assert.That(saves.CommitAttempts[1].ProgressPhase, Is.EqualTo(RunSaveProgressPhase.MapReady));
-        Assert.That(saves.CommitAttempts[1].PathNodeIds, Is.EqualTo(new[]
-        {
-            MapNodeId.FromPosition(0, 0).Value,
-            selectedNodeId.Value,
-        }));
         Assert.That(saves.SuccessfulDocument, Is.SameAs(saves.CommitAttempts[1]));
     }
 
@@ -186,8 +355,10 @@ public sealed class RunFlowServiceTests
             CreateBattleResult(BattleResultKind.Victory, 1001, health: 29, maxHealth: 80));
 
         Assert.That(flow.Persistence.Status, Is.EqualTo(RunPersistenceStatus.CommitFailed));
-        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
-        Assert.That(store.Current.PathNodeIds, Has.Count.EqualTo(2));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.RewardPending));
+        Assert.That(store.Current.PathNodeIds, Has.Count.EqualTo(1));
+        Assert.That(store.Current.CommittedNodeId, Is.EqualTo(battleId.NodeId));
+        Assert.That(store.Current.PendingCardReward, Is.Not.Null);
         Assert.That(store.Current.ActiveBattle, Is.Null);
         Assert.That(saves.SuccessfulDocument, Is.SameAs(openingCheckpoint));
         Assert.That(openingCheckpoint.PathNodeIds, Has.Count.EqualTo(1));
@@ -198,7 +369,197 @@ public sealed class RunFlowServiceTests
         Assert.That(saves.CommitAttempts, Has.Count.EqualTo(3));
         Assert.That(saves.CommitAttempts[2], Is.SameAs(failedCheckpoint));
         Assert.That(saves.SuccessfulDocument, Is.SameAs(failedCheckpoint));
-        Assert.That(saves.SuccessfulDocument.PathNodeIds, Has.Count.EqualTo(2));
+        Assert.That(saves.SuccessfulDocument.ProgressPhase,
+            Is.EqualTo(RunSaveProgressPhase.RewardPending));
+        Assert.That(saves.SuccessfulDocument.PathNodeIds, Has.Count.EqualTo(1));
+        Assert.That(saves.SuccessfulDocument.PendingCardReward.RewardId,
+            Is.EqualTo(store.Current.PendingCardReward.Id.ToString()));
+    }
+
+    /// <summary>选择冻结候选必须先提交完整 MapReady 文档，再发布新实例并让下一战收到同一实例。</summary>
+    [TestCase(1001, 80, 37)]
+    [TestCase(1002, 90, 47)]
+    public async Task SelectCardReward_CommitsBeforePublishingAndNextBattleReceivesSelectedInstance(
+        int heroTemplateId,
+        int maxHealth,
+        int settledHealth)
+    {
+        using var store = new RunStateStore();
+        var scenes = new RecordingSceneFlow();
+        var saves = new RecordingRunSaveStore();
+        var flow = CreateFlow(store, scenes, saves, randomRootSeed: 56789u);
+        flow.CreateNewRun(heroTemplateId);
+        await flow.EnterMapNodeAsync(GetFirstSelectableNodeId(store.Current));
+        RunBattleId battleId = flow.BindBattleAttempt(flow.CreateBattleSetupOptions());
+        await flow.HandleBattleResultAsync(
+            battleId,
+            CreateBattleResult(
+                BattleResultKind.Victory,
+                heroTemplateId,
+                settledHealth,
+                maxHealth));
+        RunState pending = store.Current;
+        int selectedTemplateId = pending.PendingCardReward.CandidateTemplateIds[1];
+
+        RunSaveCommitResult settlement = flow.SettleCardReward(
+            pending.PendingCardReward.Id,
+            selectedTemplateId);
+
+        Assert.That(settlement.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(store.Current.CurrentNodeId, Is.EqualTo(battleId.NodeId));
+        Assert.That(store.Current.PathNodeIds, Has.Count.EqualTo(2));
+        Assert.That(store.Current.PendingCardReward, Is.Null);
+        Assert.That(store.Current.RunDeck.Cards, Has.Count.EqualTo(2));
+        RunCard rewardedCard = store.Current.RunDeck.Cards[1];
+        Assert.That(rewardedCard.InstanceId.Sequence, Is.EqualTo(2));
+        Assert.That(rewardedCard.TemplateId, Is.EqualTo(selectedTemplateId));
+        Assert.That(rewardedCard.UpgradeLevel, Is.Zero);
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(3));
+        Assert.That(saves.CommitAttempts[2].ProgressPhase,
+            Is.EqualTo(RunSaveProgressPhase.MapReady));
+        Assert.That(saves.CommitAttempts[2].PendingCardReward, Is.Null);
+        Assert.That(saves.CommitAttempts[2].RunCards.Last().InstanceId, Is.EqualTo(2));
+
+        await flow.EnterMapNodeAsync(GetFirstSelectableNodeId(store.Current));
+        BattleSetupOptions nextBattle = flow.CreateBattleSetupOptions();
+
+        Assert.That(nextBattle.RunCards.Select(card => card.InstanceId.Sequence),
+            Is.EqualTo(new[] { 1, 2 }));
+        Assert.That(nextBattle.RunCards.Last().TemplateId, Is.EqualTo(selectedTemplateId));
+
+        using BattleSession nextSession = BattleSession.FromConfig(CreateTables(), nextBattle);
+        nextSession.CardZones.Draw(nextSession.CardZones.Cards.Count);
+        CardInstanceData[] drawnRewardInstances = nextSession.CardZones.Hand
+            .Select(cardId =>
+            {
+                Assert.That(nextSession.CardZones.TryGetCard(cardId, out CardInstanceData card),
+                    Is.True);
+                return card;
+            })
+            .Where(card => card.OriginRunCardInstanceId == rewardedCard.InstanceId)
+            .ToArray();
+        Assert.That(drawnRewardInstances, Has.Length.EqualTo(1));
+        Assert.That(drawnRewardInstances[0].TemplateId, Is.EqualTo(selectedTemplateId));
+        Assert.That(drawnRewardInstances[0].UpgradeLevel, Is.Zero);
+    }
+
+    /// <summary>跳过冻结奖励必须原子完成节点，但不能新增、替换或重排任何 RunCard。</summary>
+    [Test]
+    public async Task SkipCardReward_CommitsCompletedPathWithoutChangingDeck()
+    {
+        using var store = new RunStateStore();
+        var saves = new RecordingRunSaveStore();
+        var flow = CreateFlow(
+            store,
+            new RecordingSceneFlow(),
+            saves,
+            randomRootSeed: 67890u);
+        flow.CreateNewRun(heroTemplateId: 1002);
+        RunCard[] openingCards = store.Current.RunDeck.Cards.ToArray();
+        await flow.EnterMapNodeAsync(GetFirstSelectableNodeId(store.Current));
+        RunBattleId battleId = flow.BindBattleAttempt(flow.CreateBattleSetupOptions());
+        await flow.HandleBattleResultAsync(
+            battleId,
+            CreateBattleResult(BattleResultKind.Victory, 1002, health: 48, maxHealth: 90));
+        RunCardRewardId rewardId = store.Current.PendingCardReward.Id;
+
+        RunSaveCommitResult settlement = flow.SettleCardReward(
+            rewardId,
+            selectedCardTemplateId: null);
+
+        Assert.That(settlement.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(store.Current.RunDeck.Cards, Is.EqualTo(openingCards));
+        Assert.That(saves.SuccessfulDocument.RunCards.Select(card => card.InstanceId),
+            Is.EqualTo(openingCards.Select(card => card.InstanceId.Sequence)));
+    }
+
+    /// <summary>结算落盘失败时 Store 必须保持 Pending，重试同一文档后才只发布一次所选实例。</summary>
+    [Test]
+    public async Task CardRewardCommitFailure_RetriesSameDocumentBeforePublishingExactlyOnce()
+    {
+        using var store = new RunStateStore();
+        var saves = new RecordingRunSaveStore();
+        saves.EnqueueCommitResult(RunSaveCommitResult.Succeeded());
+        saves.EnqueueCommitResult(RunSaveCommitResult.Succeeded());
+        saves.EnqueueCommitResult(RunSaveCommitResult.Failed(
+            RunSaveCommitStatus.IoFailure,
+            "settlement replace failed"));
+        saves.EnqueueCommitResult(RunSaveCommitResult.Succeeded());
+        var flow = CreateFlow(
+            store,
+            new RecordingSceneFlow(),
+            saves,
+            randomRootSeed: 78901u);
+        flow.CreateNewRun(heroTemplateId: 1001);
+        await flow.EnterMapNodeAsync(GetFirstSelectableNodeId(store.Current));
+        RunBattleId battleId = flow.BindBattleAttempt(flow.CreateBattleSetupOptions());
+        await flow.HandleBattleResultAsync(
+            battleId,
+            CreateBattleResult(BattleResultKind.Victory, 1001, health: 44, maxHealth: 80));
+        RunState pending = store.Current;
+        int selectedTemplateId = pending.PendingCardReward.CandidateTemplateIds[0];
+
+        RunSaveCommitResult failed = flow.SettleCardReward(
+            pending.PendingCardReward.Id,
+            selectedTemplateId);
+        RunSaveDocument failedDocument = saves.CommitAttempts[2];
+
+        Assert.That(failed.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
+        Assert.That(store.Current, Is.SameAs(pending));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.RewardPending));
+        Assert.That(store.Current.RunDeck.Cards, Has.Count.EqualTo(1));
+        Assert.That(failedDocument.RunCards.Last().InstanceId, Is.EqualTo(2));
+
+        RunSaveCommitResult retry = flow.RetryPendingCommit();
+
+        Assert.That(retry.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(saves.CommitAttempts[3], Is.SameAs(failedDocument));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(store.Current.RunDeck.Cards.Count(card =>
+            card.TemplateId == selectedTemplateId), Is.EqualTo(1));
+        Assert.That(store.Current.RunDeck.Cards.Last().InstanceId.Sequence, Is.EqualTo(2));
+    }
+
+    /// <summary>伪造、过期和重复奖励命令必须在 save port 之前拒绝，保持提交计数不变。</summary>
+    [Test]
+    public async Task CardRewardForgedStaleAndDuplicateInputs_AreRejectedBeforeSaveWrite()
+    {
+        using var store = new RunStateStore();
+        var saves = new RecordingRunSaveStore();
+        var flow = CreateFlow(
+            store,
+            new RecordingSceneFlow(),
+            saves,
+            randomRootSeed: 89013u);
+        flow.CreateNewRun(heroTemplateId: 1001);
+        await flow.EnterMapNodeAsync(GetFirstSelectableNodeId(store.Current));
+        RunBattleId battleId = flow.BindBattleAttempt(flow.CreateBattleSetupOptions());
+        await flow.HandleBattleResultAsync(
+            battleId,
+            CreateBattleResult(BattleResultKind.Victory, 1001, health: 52, maxHealth: 80));
+        RunState pending = store.Current;
+        int writesBeforeInvalidCommands = saves.CommitAttempts.Count;
+        var staleRewardId = new RunCardRewardId(new RunBattleId(
+            pending.RunId,
+            pending.BattleAttemptSequence + 1,
+            pending.CommittedNodeId.Value));
+
+        Assert.Throws<InvalidOperationException>(() =>
+            flow.SettleCardReward(staleRewardId, pending.PendingCardReward.CandidateTemplateIds[0]));
+        Assert.Throws<InvalidOperationException>(() =>
+            flow.SettleCardReward(pending.PendingCardReward.Id, selectedCardTemplateId: 3999));
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(writesBeforeInvalidCommands));
+
+        RunCardRewardId validRewardId = pending.PendingCardReward.Id;
+        int validTemplateId = pending.PendingCardReward.CandidateTemplateIds[0];
+        flow.SettleCardReward(validRewardId, validTemplateId);
+        int writesAfterSettlement = saves.CommitAttempts.Count;
+
+        Assert.Throws<InvalidOperationException>(() =>
+            flow.SettleCardReward(validRewardId, validTemplateId));
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(writesAfterSettlement));
     }
 
     /// <summary>坏 JSON、未知 schema、中断提交与加载 IO 都禁用 Continue、保留数据且不隐式删除。</summary>
@@ -314,9 +675,9 @@ public sealed class RunFlowServiceTests
         Assert.That(continued.RunId.ToString(), Is.EqualTo(saves.SuccessfulDocument.RunId));
     }
 
-    /// <summary>普通胜利存档失败可显式回退到上一成功路径，不把未保存节点伪装成已恢复。</summary>
+    /// <summary>冻结奖励存档失败不得回退战前档，必须保留同一 Pending 与 retry 文档。</summary>
     [Test]
-    public async Task ExitAfterFailedVictoryCheckpoint_RestoresPreviousSuccessfulPath()
+    public async Task ExitAfterFailedVictoryCheckpoint_IsRejectedAndPreservesRetryDocument()
     {
         using var store = new RunStateStore();
         var saves = new RecordingRunSaveStore();
@@ -326,23 +687,25 @@ public sealed class RunFlowServiceTests
             "checkpoint failed"));
         var flow = CreateFlow(store, new RecordingSceneFlow(), saves, randomRootSeed: 89012u);
         flow.CreateNewRun(heroTemplateId: 1002);
-        RunSaveDocument openingCheckpoint = saves.SuccessfulDocument;
         await flow.EnterMapNodeAsync(GetFirstSelectableNodeId(store.Current));
         RunBattleId battleId = flow.BindBattleAttempt(flow.CreateBattleSetupOptions());
         await flow.HandleBattleResultAsync(
             battleId,
             CreateBattleResult(BattleResultKind.Victory, 1002, health: 33, maxHealth: 90));
 
-        flow.ExitPendingRunToMenu();
+        RunState pending = store.Current;
+        RunSaveDocument failedCheckpoint = saves.CommitAttempts[1];
 
-        Assert.That(store.Current, Is.Null);
+        Assert.That(() => flow.ExitPendingRunToMenu(), Throws.TypeOf<InvalidOperationException>());
+        Assert.That(store.Current, Is.SameAs(pending));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.RewardPending));
+        Assert.That(flow.Persistence.Status, Is.EqualTo(RunPersistenceStatus.CommitFailed));
+
+        flow.RetryPendingCommit();
+
+        Assert.That(saves.CommitAttempts[2], Is.SameAs(failedCheckpoint));
+        Assert.That(store.Current, Is.SameAs(pending));
         Assert.That(flow.Persistence.Status, Is.EqualTo(RunPersistenceStatus.ContinueAvailable));
-        Assert.That(saves.SuccessfulDocument, Is.SameAs(openingCheckpoint));
-        RunState restored = flow.ContinueSavedRun();
-        Assert.That(restored.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
-        Assert.That(restored.PathNodeIds, Has.Count.EqualTo(1));
-        Assert.That(restored.CurrentHealth, Is.EqualTo(openingCheckpoint.CurrentHealth));
-        Assert.That(restored.BattleAttemptSequence, Is.Zero);
     }
 
     /// <summary>选择普通直接出边后，Battle setup 精确使用该冻结节点的 Encounter 与节点身份。</summary>
@@ -376,7 +739,8 @@ public sealed class RunFlowServiceTests
         Assert.That(setup.HeroTemplateId, Is.EqualTo(input.HeroTemplateId));
         Assert.That(setup.EncounterTemplateId, Is.EqualTo(input.EncounterTemplateId));
         Assert.That(setup.PlayerInitialHealth, Is.EqualTo(input.InitialHealth));
-        Assert.That(setup.DeckTemplateId, Is.EqualTo(input.DeckTemplateId));
+        Assert.That(setup.DeckTemplateId, Is.Null);
+        Assert.That(setup.RunCards, Is.EqualTo(input.RunCards));
         Assert.That(setup.RandomSeed, Is.EqualTo(input.RandomSeed));
         Assert.That(scenes.LoadedAddresses, Is.EqualTo(new[] { RunSceneAddresses.Battle }));
     }
@@ -398,7 +762,18 @@ public sealed class RunFlowServiceTests
         Assert.That(store.Current.PathNodeIds, Has.Count.EqualTo(4));
         Assert.That(store.Current.MapDefinition.GetNode(store.Current.CurrentNodeId).Kind, Is.EqualTo(MapNodeKind.Boss));
         Assert.That(store.Current.ActiveBattle, Is.Null);
-        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(4));
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(6));
+        Assert.That(
+            saves.CommitAttempts.Select(document => document.ProgressPhase),
+            Is.EqualTo(new[]
+            {
+                RunSaveProgressPhase.MapReady,
+                RunSaveProgressPhase.RewardPending,
+                RunSaveProgressPhase.MapReady,
+                RunSaveProgressPhase.RewardPending,
+                RunSaveProgressPhase.MapReady,
+                RunSaveProgressPhase.BossGateReached,
+            }));
         Assert.That(saves.SuccessfulDocument.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.BossGateReached));
         Assert.That(saves.SuccessfulDocument.PathNodeIds.Last(), Is.EqualTo(store.Current.CurrentNodeId.Value));
         Assert.That(saves.SuccessfulDocument.MapFingerprint, Is.EqualTo(created.MapDefinition.Fingerprint));
@@ -598,6 +973,9 @@ public sealed class RunFlowServiceTests
                     store.Current.HeroTemplateId,
                     settledHealth,
                     store.Current.MaxHealth));
+            flow.SettleCardReward(
+                store.Current.PendingCardReward.Id,
+                selectedCardTemplateId: null);
             victories++;
         }
 
@@ -625,14 +1003,15 @@ public sealed class RunFlowServiceTests
             });
     }
 
-    /// <summary>创建一份可覆盖配置引用与稳定地图阶段的 v2 recipe 文档。</summary>
+    /// <summary>创建一份可覆盖配置引用、RunCards、冻结奖励与稳定阶段的 schema v4 文档。</summary>
     private static RunSaveDocument CreateDocument(
         int heroTemplateId = 1001,
         int deckTemplateId = 1001,
         uint randomRootSeed = 112233u,
         RunSaveProgressPhase progressPhase = RunSaveProgressPhase.MapReady,
         int completedCombatCount = 0,
-        string mapProfileId = null)
+        string mapProfileId = null,
+        IReadOnlyList<RunSaveCardDocument> runCards = null)
     {
         ActMapProfile profile = TinySpireActMapProfiles.Current;
         uint mapSeed = RunRandomDomains.DeriveMapSeed(randomRootSeed);
@@ -643,8 +1022,9 @@ public sealed class RunFlowServiceTests
                 .Select(nodeId => nodeId.Value)
                 .ToArray();
         bool terminal = progressPhase == RunSaveProgressPhase.Terminal;
+        bool rewardPending = progressPhase == RunSaveProgressPhase.RewardPending;
         MapNodeId currentNodeId = new MapNodeId(pathNodeIds[pathNodeIds.Length - 1]);
-        string committedNodeId = terminal
+        string committedNodeId = terminal || rewardPending
             ? MapReachability.GetSelectableNodeIds(
                     map,
                     currentNodeId,
@@ -653,14 +1033,24 @@ public sealed class RunFlowServiceTests
                 .Value
             : null;
         int maxHealth = heroTemplateId == 1002 ? 90 : 80;
+        int[] rewardCandidates = heroTemplateId == 1002
+            ? new[] { 3206, 3227, 3264 }
+            : new[] { 3105, 3123, 3157 };
+        const string runId = "0f0e0d0c-0b0a-0908-0706-050403020100";
+        RunSavePendingCardRewardDocument pendingCardReward = rewardPending
+            ? new RunSavePendingCardRewardDocument(
+                $"{Guid.ParseExact(runId, "D"):N}:{completedCombatCount + 1}:{committedNodeId}",
+                rewardCandidates)
+            : null;
 
         return new RunSaveDocument(
             RunSaveDocument.CurrentSchemaVersion,
-            "0f0e0d0c-0b0a-0908-0706-050403020100",
+            runId,
             heroTemplateId,
             currentHealth: terminal ? 0 : maxHealth,
             maxHealth,
-            deckTemplateId,
+            runCards,
+            legacyDeckTemplateId: runCards == null ? deckTemplateId : (int?)null,
             randomRootSeed,
             mapProfileId ?? map.ProfileId,
             map.GeneratorVersion,
@@ -669,7 +1059,8 @@ public sealed class RunFlowServiceTests
             pathNodeIds,
             progressPhase,
             committedNodeId,
-            terminal ? RunSaveTerminalReason.Defeat : (RunSaveTerminalReason?)null);
+            terminal ? RunSaveTerminalReason.Defeat : (RunSaveTerminalReason?)null,
+            pendingCardReward);
     }
 
     /// <summary>沿普通直接边构造含指定数量已完成 Combat 的合法稳定路径。</summary>
@@ -725,17 +1116,79 @@ public sealed class RunFlowServiceTests
         var data = new Dictionary<string, JArray>
         {
             ["battle_tbhero"] = JArray.Parse(
-                "[{\"id\":1001,\"name_i18n_key\":\"battle.hero.test_warrior.name\",\"view_prefab_key\":\"pfb_char_player\",\"max_health\":80,\"base_strength\":1,\"initial_deck_id\":1001,\"initial_energy\":3,\"max_energy\":3,\"energy_gain_per_round\":3,\"initial_ammo\":0,\"max_ammo\":0,\"ammo_gain_per_round\":0,\"runtime_profile\":0}," +
-                "{\"id\":1002,\"name_i18n_key\":\"battle.hero.machine_gunner.name\",\"view_prefab_key\":\"pfb_char_player\",\"max_health\":90,\"base_strength\":2,\"initial_deck_id\":1002,\"initial_energy\":4,\"max_energy\":4,\"energy_gain_per_round\":4,\"initial_ammo\":3,\"max_ammo\":6,\"ammo_gain_per_round\":1,\"runtime_profile\":1}]"),
+                "[{\"id\":1001,\"name_i18n_key\":\"battle.hero.test_warrior.name\",\"view_prefab_key\":\"pfb_char_player\",\"max_health\":80,\"base_strength\":1,\"initial_deck_id\":1001,\"initial_energy\":3,\"max_energy\":3,\"energy_gain_per_round\":3,\"initial_ammo\":0,\"max_ammo\":0,\"ammo_gain_per_round\":0,\"runtime_profile\":0,\"reward_card_template_ids\":[3105,3123,3157],\"reward_common_weight\":60,\"reward_uncommon_weight\":37,\"reward_rare_weight\":3}," +
+                "{\"id\":1002,\"name_i18n_key\":\"battle.hero.machine_gunner.name\",\"view_prefab_key\":\"pfb_char_player\",\"max_health\":90,\"base_strength\":2,\"initial_deck_id\":1002,\"initial_energy\":4,\"max_energy\":4,\"energy_gain_per_round\":4,\"initial_ammo\":3,\"max_ammo\":6,\"ammo_gain_per_round\":1,\"runtime_profile\":1,\"reward_card_template_ids\":[3206,3227,3264],\"reward_common_weight\":60,\"reward_uncommon_weight\":37,\"reward_rare_weight\":3}]"),
             ["battle_tbdeck"] = JArray.Parse(
                 "[{\"id\":1001,\"card_template_ids\":[3002]},{\"id\":1002,\"card_template_ids\":[3003]}]"),
+            ["battle_tbcard"] = new JArray(
+                CreateTestCardRow(3002, rarity: 0),
+                CreateTestCardRow(3003, rarity: 0),
+                CreateTestCardRow(3105, rarity: 1),
+                CreateTestCardRow(3123, rarity: 2),
+                CreateTestCardRow(3157, rarity: 3),
+                CreateTestCardRow(3206, rarity: 1),
+                CreateTestCardRow(3227, rarity: 2),
+                CreateTestCardRow(3263, rarity: 1),
+                CreateTestCardRow(3264, rarity: 3)),
+            ["battle_tbcardeffect"] = JArray.Parse(
+                "[{\"id\":4002,\"effect_type\":1,\"attribute\":0,\"value\":6}]"),
+            ["battle_tbcardupgradelevel"] = JArray.Parse(
+                "[{\"card_id\":3002,\"next_upgrade_level\":1," +
+                "\"description_i18n_key\":\"battle.card.3002.upgrade_description\"," +
+                "\"cost\":1,\"play_destination\":0,\"rule_kind\":1,\"rule_value\":9}]"),
+            ["battle_tbenemy"] = JArray.Parse(
+                "[{\"id\":2001,\"name_i18n_key\":\"battle.enemy.test.name\",\"view_prefab_key\":\"pfb_char_enemy\",\"max_health\":20,\"base_strength\":0,\"behavior_group_id\":6001}]"),
             ["battle_tbencounter"] = includeEncounter
                 ? JArray.Parse("[{\"id\":5001,\"enemy_template_ids\":[2001]}]")
                 : new JArray(),
+            ["battle_tbenemybehaviorgroup"] = JArray.Parse(
+                "[{\"id\":6001,\"behavior_ids\":[7001]}]"),
+            ["battle_tbenemybehavior"] = JArray.Parse(
+                "[{\"id\":7001,\"intent_type\":0,\"target_rule\":1,\"effect_id\":4002,\"weight\":1,\"cooldown_selections\":0,\"max_consecutive\":0}]"),
         };
 
         return new Tables(tableName =>
             data.TryGetValue(tableName, out JArray rows) ? rows : new JArray());
+    }
+
+    /// <summary>创建 Flow 测试所需的最小 Implemented 卡牌配置行。</summary>
+    private static JObject CreateTestCardRow(int templateId, int rarity)
+    {
+        bool finiteDamage = templateId == 3002;
+        bool infiniteDamage = templateId == 3123;
+        bool machinegunBurst = templateId == 3263;
+        return new JObject
+        {
+            ["id"] = templateId,
+            ["external_key"] = $"TEST_RUN_FLOW_{templateId}",
+            ["catalog_snapshot_key"] = "test-fixture",
+            ["name_i18n_key"] = $"battle.card.{templateId}.name",
+            ["description_i18n_key"] = $"battle.card.{templateId}.description",
+            ["upgraded_description_i18n_key"] = $"battle.card.{templateId}.description",
+            ["card_type"] = 0,
+            ["rarity"] = rarity,
+            ["cost"] = 1,
+            ["cost_kind"] = 0,
+            ["upgraded_cost"] = 1,
+            ["target_rule"] = machinegunBurst ? 3 : 1,
+            ["play_destination"] = machinegunBurst ? 1 : 0,
+            ["upgraded_play_destination"] = machinegunBurst ? 1 : 0,
+            ["has_upgrade"] = false,
+            ["implementation_status"] = 0,
+            ["effect_bindings"] = finiteDamage || infiniteDamage
+                ? new JArray(new JObject
+                {
+                    ["argument_key"] = "damage",
+                    ["effect_id"] = 4002,
+                })
+                : new JArray(),
+            ["illustration_key"] = string.Empty,
+            ["program_id"] = machinegunBurst ? 63 : 0,
+            ["is_innate"] = false,
+            ["upgrade_track_kind"] = finiteDamage ? 1 : infiniteDamage ? 2 : 0,
+            ["infinite_upgrade_rule_kind"] = infiniteDamage ? 1 : 0,
+            ["infinite_upgrade_value_per_level"] = infiniteDamage ? 10 : 0,
+        };
     }
 
     /// <summary>记录 Run 编排请求的稳定场景地址，替代真实 Addressables 切换。</summary>

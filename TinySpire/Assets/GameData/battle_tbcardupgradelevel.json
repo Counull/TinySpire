@@ -1,0 +1,20 @@
+[
+  {
+    "card_id": 3002,
+    "next_upgrade_level": 1,
+    "description_i18n_key": "battle.card.strike.upgrade_description",
+    "cost": 1,
+    "play_destination": 0,
+    "rule_kind": 1,
+    "rule_value": 9
+  },
+  {
+    "card_id": 3207,
+    "next_upgrade_level": 1,
+    "description_i18n_key": "battle.card.marine.output_adjust.upgrade_description",
+    "cost": 0,
+    "play_destination": 2,
+    "rule_kind": 0,
+    "rule_value": 0
+  }
+]

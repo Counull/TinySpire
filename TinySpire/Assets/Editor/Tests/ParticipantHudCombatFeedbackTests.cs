@@ -808,7 +808,8 @@ public sealed class ParticipantHudCombatFeedbackTests
                 "\"max_consecutive\":0}," +
                 "{\"id\":7002,\"intent_type\":0,\"target_rule\":1," +
                 "\"effect_id\":4003,\"weight\":1,\"cooldown_selections\":0," +
-                "\"max_consecutive\":0}]")
+                "\"max_consecutive\":0}]"),
+            ["battle_tbcardupgradelevel"] = new JArray(),
         };
         return new cfg.Tables(tableName => data[tableName]);
     }

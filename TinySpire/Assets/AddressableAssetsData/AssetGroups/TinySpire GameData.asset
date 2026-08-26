@@ -39,6 +39,12 @@ MonoBehaviour:
     m_SerializedLabels:
     - GameData
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 96f9e0ad705ddca419bd25fb41b8b2ce
+    m_Address: Assets/GameData/battle_tbcardupgradelevel.json
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - GameData
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 9782e86f4f1fb8a40a1e1569a0bf1b0f
     m_Address: Assets/GameData/battle_tbhero.json
     m_ReadOnly: 0

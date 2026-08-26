@@ -566,7 +566,8 @@ public sealed class BattleEnemyIntentsDataTests
             ["battle_tbcardeffect"] = effects ?? CreateDefaultEffects(),
             ["battle_tbencounter"] = new JArray(),
             ["battle_tbenemybehaviorgroup"] = behaviorGroups,
-            ["battle_tbenemybehavior"] = behaviors
+            ["battle_tbenemybehavior"] = behaviors,
+            ["battle_tbcardupgradelevel"] = new JArray(),
         };
         return new Tables(tableName => data[tableName]);
     }

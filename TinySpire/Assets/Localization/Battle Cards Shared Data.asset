@@ -2251,6 +2251,14 @@ MonoBehaviour:
     m_Key: run.entry.save.rollback.confirm
     m_Metadata:
       m_Items: []
+  - m_Id: 9706613783556096
+    m_Key: run.entry.reward.title
+    m_Metadata:
+      m_Items: []
+  - m_Id: 9706613871636480
+    m_Key: run.entry.reward.skip
+    m_Metadata:
+      m_Items: []
   m_Metadata:
     m_Items: []
   m_KeyGenerator:

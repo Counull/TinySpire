@@ -512,7 +512,7 @@ public sealed class BattleTurnHudFlowFeedbackTests
             heroTemplateId: 1001,
             initialHealth: 80,
             maxHealth: 80,
-            deckTemplateId: 1001,
+            runDeck: RunDeck.CreateInitial(new[] { 3002, 3003 }),
             randomRootSeed: 2468u,
             map: map));
         MapNodeId selectedNodeId = MapReachability.GetSelectableNodeIds(

@@ -17,7 +17,7 @@ public sealed class RunMapStateStoreG3Tests
             heroTemplateId: 1001,
             initialHealth: 80,
             maxHealth: 80,
-            deckTemplateId: 1001,
+            runDeck: RunDeck.CreateInitial(new[] { 3002, 3003 }),
             randomRootSeed: 123456u,
             map: map));
         MapNodeId selectedNodeId = MapReachability.GetSelectableNodeIds(
@@ -27,11 +27,15 @@ public sealed class RunMapStateStoreG3Tests
 
         RunState committed = store.CommitNode(selectedNodeId);
         RunBattleInput input = store.BeginCommittedBattle();
-        RunState settled = store.ApplyVictory(
+        RunState pending = store.RecordVictoryAndFreezeReward(
             input.BattleId,
             heroTemplateId: 1001,
             settledHealth: 37,
-            maxHealth: 80);
+            maxHealth: 80,
+            battleInput => CreatePendingReward(battleInput));
+        RunState settled = store.CommitCardRewardSettlement(
+            pending.PendingCardReward.Id,
+            selectedCardTemplateId: null);
 
         Assert.That(created.MapDefinition, Is.SameAs(map));
         Assert.That(created.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
@@ -119,7 +123,7 @@ public sealed class RunMapStateStoreG3Tests
 
     /// <summary>旧 attempt 不能结算随后已承诺的新节点，拒绝时当前状态必须保持同一快照。</summary>
     [Test]
-    public void ApplyVictory_WithStaleBattleId_LeavesNewAttemptUntouched()
+    public void RecordVictory_WithStaleBattleId_LeavesNewAttemptUntouched()
     {
         MapDefinition map = CreateMap();
         using var store = CreateStore(map);
@@ -129,7 +133,15 @@ public sealed class RunMapStateStoreG3Tests
             MapTraversalMode.Ordinary)[0];
         store.CommitNode(firstNodeId);
         RunBattleInput oldInput = store.BeginCommittedBattle();
-        store.ApplyVictory(oldInput.BattleId, 1001, settledHealth: 70, maxHealth: 80);
+        RunState firstPending = store.RecordVictoryAndFreezeReward(
+            oldInput.BattleId,
+            heroTemplateId: 1001,
+            settledHealth: 70,
+            maxHealth: 80,
+            CreatePendingReward);
+        store.CommitCardRewardSettlement(
+            firstPending.PendingCardReward.Id,
+            selectedCardTemplateId: null);
         MapNodeId nextNodeId = MapReachability.GetSelectableNodeIds(
             map,
             store.Current.CurrentNodeId,
@@ -139,7 +151,12 @@ public sealed class RunMapStateStoreG3Tests
         RunState before = store.Current;
 
         Assert.Throws<InvalidOperationException>(() =>
-            store.ApplyVictory(oldInput.BattleId, 1001, settledHealth: 60, maxHealth: 80));
+            store.RecordVictoryAndFreezeReward(
+                oldInput.BattleId,
+                heroTemplateId: 1001,
+                settledHealth: 60,
+                maxHealth: 80,
+                CreatePendingReward));
 
         Assert.That(store.Current, Is.SameAs(before));
     }
@@ -153,7 +170,7 @@ public sealed class RunMapStateStoreG3Tests
             heroTemplateId: 1001,
             initialHealth: 80,
             maxHealth: 80,
-            deckTemplateId: 1001,
+            runDeck: RunDeck.CreateInitial(new[] { 3002, 3003 }),
             randomRootSeed: 123456u,
             map: map));
         return store;
@@ -168,11 +185,23 @@ public sealed class RunMapStateStoreG3Tests
             MapTraversalMode.Ordinary)[0];
         store.CommitNode(nodeId);
         RunBattleInput input = store.BeginCommittedBattle();
-        store.ApplyVictory(
+        RunState pending = store.RecordVictoryAndFreezeReward(
             input.BattleId,
             heroTemplateId: 1001,
             settledHealth: store.Current.CurrentHealth,
-            maxHealth: 80);
+            maxHealth: 80,
+            CreatePendingReward);
+        store.CommitCardRewardSettlement(
+            pending.PendingCardReward.Id,
+            selectedCardTemplateId: null);
+    }
+
+    /// <summary>为旧地图行为测试冻结一组固定不同模板的合法普通奖励。</summary>
+    private static PendingCardReward CreatePendingReward(RunBattleInput battleInput)
+    {
+        return new PendingCardReward(
+            new RunCardRewardId(battleInput.BattleId),
+            new[] { 3105, 3123, 3157 });
     }
 
     /// <summary>创建包含两个普通层与多个 Boss 候选的确定性测试地图。</summary>

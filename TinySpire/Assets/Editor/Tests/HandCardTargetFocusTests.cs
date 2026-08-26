@@ -851,7 +851,7 @@ public sealed class HandCardTargetFocusTests
             ["battle_tbhero"] = JArray.Parse(
                 "[{\"id\":1001,\"name_i18n_key\":\"battle.hero.test.name\"," +
                 "\"view_prefab_key\":\"\",\"max_health\":30," +
-                "\"base_strength\":0,\"initial_deck_id\":1001,\"initial_energy\":3,\"max_energy\":3,\"energy_gain_per_round\":3,\"initial_ammo\":0,\"max_ammo\":0,\"ammo_gain_per_round\":0,\"runtime_profile\":0}]"),
+                "\"base_strength\":0,\"initial_deck_id\":1001,\"initial_energy\":3,\"max_energy\":3,\"energy_gain_per_round\":3,\"initial_ammo\":0,\"max_ammo\":0,\"ammo_gain_per_round\":0,\"runtime_profile\":0,\"reward_card_template_ids\":[],\"reward_common_weight\":0,\"reward_uncommon_weight\":0,\"reward_rare_weight\":0}]"),
             ["battle_tbenemy"] = JArray.Parse(
                 "[{\"id\":2001,\"name_i18n_key\":\"battle.enemy.test.name\"," +
                 "\"max_health\":20,\"base_strength\":0,\"view_prefab_key\":\"\"," +
@@ -882,6 +882,9 @@ public sealed class HandCardTargetFocusTests
                     ["is_innate"] = false,
                     ["effect_bindings"] = new JArray(),
                     ["illustration_key"] = string.Empty,
+                    ["upgrade_track_kind"] = (int)cfg.battle.CardUpgradeTrackKind.None,
+                    ["infinite_upgrade_rule_kind"] = (int)cfg.battle.CardUpgradeRuleKind.None,
+                    ["infinite_upgrade_value_per_level"] = 0,
                 },
             },
             ["battle_tbcardeffect"] = JArray.Parse(
@@ -894,6 +897,7 @@ public sealed class HandCardTargetFocusTests
                 "[{\"id\":7001,\"intent_type\":0,\"target_rule\":1," +
                 "\"effect_id\":4999,\"weight\":1,\"cooldown_selections\":0," +
                 "\"max_consecutive\":0}]"),
+            ["battle_tbcardupgradelevel"] = new JArray(),
         };
         return new cfg.Tables(tableName => data[tableName]);
     }

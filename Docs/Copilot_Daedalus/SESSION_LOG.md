@@ -3,11 +3,38 @@ title: Daedalus · 会话变更日志
 page_type: changelog
 lifecycle: active
 created: 2026-07-06
-updated: 2026-08-24
+updated: 2026-08-26
 status_source: STATUS.md
 ---
 
 > 当前可变状态只查 [STATUS.md](STATUS.md)。本页保留按日期排列的审计与恢复线索；其中旧状态快照不构成当前事实。
+
+## 2026-08-26 G4 RunDeck、奖励闭环与多级升级（verified）
+
+- G4-A～D 已全部完成并关闭：ordered RunDeck 与稳定实例 ID、schema v4/legacy canonicalize、双 Hero 冻结奖励池、选择/跳过 exactly-once 事务，以及四张生产卡的有限/无限升级投影均落地；没有进入 G5。
+- 最终停止点为 120/120、30/30、35/35、258/258；生产 GameData 双 Hero 验收 job `614adafdcec0456088074214dbc85f98` 为 1/1；完整 Unity EditMode job `7cad4b02d38248f298227ea06804c949` 为 **1093/1093 passed、0 failed、0 skipped**；Rider build session `07b40384-6749-4cfa-ac8c-b5f8bd4f9cee` 成功且 errors-only 检查为 0。
+- `battle.hero.xlsx`、`battle.card.xlsx`、`battle.card_upgrade_level.xlsx`、`__tables__.xlsx`、`__enums__.xlsx` 与 `i18n.xlsx` 已通过 Spreadsheets 流程维护并回读；Luban 与 `TinySpire/Build/Sync and Build All` 成功。最新 BuildLayout 无 BuildError，G4 GameData 和 RunEntry/Battle/Loading 场景均由 `AssetBundleProvider` 打包。
+- Packed Play 使用真实 UGUI、SceneFlow、BattleCommandQueue、BattleSession、卡区与 Effect 链完成两名 Hero 的产品闭环：1001 选择 3116 后新增 origin 实例 11 并在下一战实际抽到；1002 冷启动后候选 3218/3213/3274 顺序不变，Skip 前后 RunDeck 完全相同，下一战投影一致。最终产品检查点 Console Error、InvalidKey 与配置失败均为 0。
+- Packed 验收后已恢复 Fast Mode，并把用户原 `run-save.json` 按 SHA-256 `419058435D82A48EA08DBF3121F6127417EAC700D302388BFFFA4586DFEE54B9` 精确恢复；临时副本已删除。用户原有 `TinySpire/ProjectSettings/ProjectSettings.asset` 与 `TinySpire/.codex/` WIP 均保留。
+- 本轮没有修改 Scene、Prefab、asmdef、ProjectSettings、HybridCLR 或 DI 架构，未实现任何 G5 内容，也未执行 `git add`、`commit`、`push`、`reset` 或 `clean`。完整原始证据见 `06_testing/2026-08-25-g4-run-deck-rewards-upgrades.md`。
+
+## 2026-08-26 G4-B～D 冻结奖励、选择/跳过与多级升级（implemented；final validation pending）
+
+- 用户授权 Agent 自行裁量阻塞后，普通奖励稀有度配表冻结为 Common/Uncommon/Rare `60/37/3`，明确只做无状态独立抽取、不继承旧草稿保底。Spreadsheets 插件直接维护生产 `battle.hero.xlsx`、`battle.card.xlsx`、新增升级表、表/枚举定义与 i18n；Luban 已成功生成 schema 与 GameData，最终仍必须由 `Sync and Build All` 重建 Local Addressables。
+- Hero 1001/1002 分别配置 12/76 张互不共享的 Implemented 非 Basic 奖励候选。独立 Reward seed、三张不同模板、schema v4 冻结 Pending、读档/冷启动不重抽、选择/跳过、save-before-publish、reward intent 恢复、失败 exact retry、伪造/过期/重复零写入与下一战 Run origin 实例链均已接入现有 Store/Flow/RunEntry seam。
+- 升级生产轨道锁定 3002 Strike 有限 L1 伤害 9、3123 Bludgeon 无限伤害 +10/level、3201 Shoot 无限程序伤害 +3/level、3207 OutputAdjust 有限 L1 费用 0。共享只读投影进入文本、费用、归宿、通用 Effect 与 MachineGunner program；G4 只提供实例级领域升级，不新增玩家按钮，首个主动入口仍留给 G6。
+- Rider 最近完整静态 build `29060419-60fa-4d8a-add3-2fca3431720b` 为 success、0 problems；两处正式 GameData 测试加载器已兼容对象索引根与升级表数组根，errors-only lint 为 0，临时 csproj Include 已字节级恢复。合同审查未发现 G5 越界、高影响文件写入或第二份 Run 状态。
+- 持久化终审发现旧 v2/v3 legacy fallback 若只在内存展开，首战 reward intent 崩溃窗口会让磁盘 legacy live 与 canonical intent 被误判冲突。已先补 Continue canonicalize-before-publish 与失败 exact retry 的预期 RED 用例；必须在 Unity Session 中取得真实 RED，再做最小修复与 GREEN，之后才能继续最终门。
+- 当前既有 Unity Editor 尚未连接 UnityMCP，因此没有把静态证据冒充 Unity 验收。待连接同一 Editor 后，只执行 G4-B～D 定向、`Sync and Build All`、完整 EditMode、Local Addressables/Packed 双 Hero 产品链及 Console 0；全部通过后立即停在 G4。用户原有 ProjectSettings 与 `.codex/` WIP 保留，未执行 add/commit/push/reset/clean。
+
+## 2026-08-26 G4-A RunDeck 实例、schema v3 与 Battle origin 投影（G4-A verified；G4 整体未完成）
+
+- 按已冻结 G4 窄计划完成首个串行停止点：新增稳定 `RunCardInstanceId`、不可变 `RunCard` 与 ordered `RunDeck`；新 Run 只从 Hero initial deck 展开一次，同模板副本保持独立身份，Store/Flow/View 不再以第二份模板列表拥有牌组事实。
+- 当前写入 schema 提升到 v3 并 canonical 保存 ordered RunCards。v2 仅经严格正整数 `deckTemplateId` 迁移到显式 legacy fallback，恢复时展开一次并在后续稳定提交改写 canonical；v1 继续 fail-fast。Atomic adapter 的 durable equality 已纳入实例 ID、模板、等级和顺序。
+- Battle setup 只读接收 RunCard 投影，局部 CardInstanceId 与跨战 Run origin 明确分离；`CardInstanceData` 保存 nullable origin 和 opaque UpgradeLevel，临时卡保持 null/0，抽弃牌堆、手牌和其他 Battle 状态不回写 RunDeck。
+- TDD 中保留了 schema 版本、v2 migration、Battle origin 与默认实例 ID 等真实 RED；终审又以 job `2b353e13f9224f10b76bd44db5b980f1` 证明 legacy Deck 缺失 Card 会错误恢复成功，最小修复后 job `2470f01dddc9430bb0a209deef2fd3f1` 1/1。补齐 canonical 冷启动→Battle setup 与 atomic 三类可解析漂移覆盖后，最终八类定向聚合 job `c210e4b045aa454780e22a38d02e9445` 为 **120/120 passed、0 failed、0 skipped，4.6678839s**。Rider 相关文件分析、Unity 刷新编译与清空测试工具日志后的 Console 均为 0 errors。
+- Spreadsheets 插件已用 `battle.hero.xlsx` 完成只读导入/渲染，并在一次性副本编辑、导出和回读；生产 workbook Git 状态与 SHA-256 均未变化。后续若 G4 表格修改获准，可使用该插件并继续遵守 Luban 与 Sync/Build 门。
+- G4-B 尚未开始。Common/Uncommon/Rare 精确权重没有权威值；非权威 inbox 的 `60/37/3` 不采纳。等待用户冻结权重前不创建奖励池、Reward RNG 或 Pending，也不越过 B 进入 C/D。完整滚动证据见 `06_testing/2026-08-25-g4-run-deck-rewards-upgrades.md`，决策见 CD-117。
 
 ## 2026-08-24 LLM workflow 第二轮文档维护（verified）
 

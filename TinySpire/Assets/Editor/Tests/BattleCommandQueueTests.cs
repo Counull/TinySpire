@@ -1312,6 +1312,9 @@ internal static class BattleCommandQueueTestFactory
                     ["illustration_key"] = string.Empty,
                     ["program_id"] = (int)cfg.battle.MachineGunnerProgramId.None,
                     ["is_innate"] = false,
+                    ["upgrade_track_kind"] = (int)cfg.battle.CardUpgradeTrackKind.None,
+                    ["infinite_upgrade_rule_kind"] = (int)cfg.battle.CardUpgradeRuleKind.None,
+                    ["infinite_upgrade_value_per_level"] = 0,
                 });
             }
         }
@@ -1350,7 +1353,8 @@ internal static class BattleCommandQueueTestFactory
             ["battle_tbenemybehaviorgroup"] = JArray.Parse(
                 "[{\"id\":6001,\"behavior_ids\":[7001]}]"),
             ["battle_tbenemybehavior"] = JArray.Parse(
-                "[{\"id\":7001,\"intent_type\":0,\"target_rule\":1,\"effect_id\":4999,\"weight\":1,\"cooldown_selections\":0,\"max_consecutive\":0}]")
+                "[{\"id\":7001,\"intent_type\":0,\"target_rule\":1,\"effect_id\":4999,\"weight\":1,\"cooldown_selections\":0,\"max_consecutive\":0}]"),
+            ["battle_tbcardupgradelevel"] = new JArray(),
         };
         return new Tables(tableName => data[tableName]);
     }

@@ -285,6 +285,11 @@ namespace TinySpire.Battle
             BattleCardZonesData cardZones = _playerCardZones[command.ActorId];
             CardInstanceData card = cardZones.Cards[command.CardId];
             cfg.battle.Card cardTemplate = _tables.TbCard.GetOrDefault(card.TemplateId);
+            BattleCardLevelProjection cardLevelProjection =
+                BattleCardLevelProjection.Create(
+                    _tables,
+                    card.TemplateId,
+                    card.UpgradeLevel);
             if (cardTemplate.ProgramId != cfg.battle.MachineGunnerProgramId.None)
             {
                 return TryPlayMachineGunnerCard(
@@ -292,11 +297,12 @@ namespace TinySpire.Battle
                     playerTurn,
                     cardZones,
                     card,
-                    cardTemplate);
+                    cardTemplate,
+                    cardLevelProjection);
             }
 
             BattleCardZone playedCardDestination;
-            switch (cardTemplate.PlayDestination)
+            switch (cardLevelProjection.PlayDestination)
             {
                 case cfg.battle.CardPlayDestination.DiscardPile:
                     playedCardDestination = BattleCardZone.DiscardPile;
@@ -309,15 +315,15 @@ namespace TinySpire.Battle
                     break;
                 default:
                     throw new InvalidOperationException(
-                        $"当前出牌归宿尚不支持：{cardTemplate.PlayDestination}。");
+                        $"当前出牌归宿尚不支持：{cardLevelProjection.PlayDestination}。");
             }
 
-            int energySpent = cardTemplate.Cost;
+            int energySpent = cardLevelProjection.Cost;
             if (cardTemplate.CostKind == cfg.battle.CardCostKind.Fixed)
             {
                 if (!BattleCardCostResolver.TryResolveEnergy(
                         cardTemplate.CostKind,
-                        cardTemplate.Cost,
+                        cardLevelProjection.Cost,
                         playerTurn.Energy,
                         BattleCardPaymentMode.Normal,
                         out BattleCardEnergyCostResolution energyCost,
@@ -361,7 +367,8 @@ namespace TinySpire.Battle
                     playedCardDestination,
                     command.SelectedCardIds,
                     startingOrder: 1,
-                    triggeredPlayDepth: 0);
+                    triggeredPlayDepth: 0,
+                    cardLevelProjection: cardLevelProjection);
                 if (!preparation.Succeeded)
                     return BattleTurnOperationResult.Failed(preparation.FailureReason);
 
@@ -490,6 +497,11 @@ namespace TinySpire.Battle
                 return BattleTurnOperationResult.Failed(BattleCommandExecutionFailureReason.CardTemplateNotFound);
             if (cardTemplate.ImplementationStatus != cfg.battle.CardImplementationStatus.Implemented)
                 return BattleTurnOperationResult.Failed(BattleCommandExecutionFailureReason.CardNotImplemented);
+            BattleCardLevelProjection cardLevelProjection =
+                BattleCardLevelProjection.Create(
+                    _tables,
+                    card.TemplateId,
+                    card.UpgradeLevel);
             if (cardTemplate.ProgramId != cfg.battle.MachineGunnerProgramId.None)
             {
                 if (request.SourceZone != BattleCardZone.Hand)
@@ -504,13 +516,14 @@ namespace TinySpire.Battle
                     cardZones,
                     card,
                     cardTemplate,
+                    cardLevelProjection,
                     request);
             }
             if (!ValidateTriggeredTarget(command, cardTemplate))
                 return BattleTurnOperationResult.Failed(BattleCommandExecutionFailureReason.TargetRuleMismatch);
             if (!BattleCardCostResolver.TryResolveEnergy(
                     cardTemplate.CostKind,
-                    cardTemplate.Cost,
+                    cardLevelProjection.Cost,
                     playerTurn.Energy,
                     request.PaymentMode,
                     out BattleCardEnergyCostResolution energyCost,
@@ -545,7 +558,8 @@ namespace TinySpire.Battle
                         request.Destination,
                         command.SelectedCardIds,
                         startingOrder: 1,
-                        triggeredPlayDepth: request.Depth);
+                        triggeredPlayDepth: request.Depth,
+                        cardLevelProjection: cardLevelProjection);
                 if (!preparation.Succeeded)
                     return BattleTurnOperationResult.Failed(preparation.FailureReason);
                 ordinaryEffectPlan = preparation.Plan;
@@ -663,6 +677,7 @@ namespace TinySpire.Battle
             BattleCardZonesData cardZones,
             CardInstanceData card,
             cfg.battle.Card cardTemplate,
+            BattleCardLevelProjection cardLevelProjection,
             BattleTriggeredCardPlayRequest triggeredPlayRequest = null)
         {
             if (_machineGunnerRuntime == null)
@@ -678,6 +693,7 @@ namespace TinySpire.Battle
                     cardZones,
                     card,
                     cardTemplate,
+                    cardLevelProjection,
                     _blockRetention,
                     _tables,
                     _triggeredCardPlayExecution,

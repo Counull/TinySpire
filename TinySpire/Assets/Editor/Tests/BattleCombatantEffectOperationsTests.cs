@@ -421,6 +421,7 @@ internal static class BattleEffectStateTestDriver
             ["battle_tbencounter"] = new JArray(),
             ["battle_tbenemybehaviorgroup"] = new JArray(),
             ["battle_tbenemybehavior"] = new JArray(),
+            ["battle_tbcardupgradelevel"] = new JArray(),
         };
         return new cfg.Tables(tableName => data[tableName]);
     }

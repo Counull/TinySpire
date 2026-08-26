@@ -21,14 +21,20 @@ public sealed class HandCardSelectionSessionTests
     [Test]
     public void BurningPact_RulesSelectionSessionAndQueue_UseGenericSelectedCardProtocol()
     {
-        /// <summary>从正式生成 JSON 读取 Luban 表行，避免测试夹具重写 3125 契约。</summary>
+        /// <summary>从正式生成 JSON 的对象或数组根读取 Luban 表行，避免测试夹具重写 3125 契约。</summary>
         JArray LoadRows(string tableName)
         {
             TextAsset asset = AssetDatabase.LoadAssetAtPath<TextAsset>(
                 $"Assets/GameData/{tableName}.json");
             Assert.That(asset, Is.Not.Null, $"Missing generated table {tableName}.");
-            JObject rows = JObject.Parse(asset.text);
-            return new JArray(rows.Properties().Select(property => property.Value));
+            JToken table = JToken.Parse(asset.text);
+            if (table is JArray rows)
+                return rows;
+            if (table is JObject indexedRows)
+                return new JArray(indexedRows.Properties().Select(property => property.Value));
+
+            throw new InvalidOperationException(
+                $"Generated table {tableName} must use an object or array root.");
         }
 
         cfg.Tables tables = new cfg.Tables(LoadRows);

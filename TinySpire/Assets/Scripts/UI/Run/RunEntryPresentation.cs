@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Linq;
 using cfg;
 using Cysharp.Threading.Tasks;
@@ -22,6 +23,7 @@ namespace TinySpire.UI.Run
         Compendium,
         Statistics,
         Map,
+        CardReward,
         Failure,
         AbandonConfirmation,
         SaveFailure,
@@ -45,6 +47,8 @@ namespace TinySpire.UI.Run
         RetrySave,
         RequestExitAfterSaveFailure,
         ConfirmRollback,
+        SelectCardReward,
+        SkipCardReward,
     }
 
     /// <summary>入口投影中每个 TMP 文本的稳定槽位。</summary>
@@ -68,6 +72,8 @@ namespace TinySpire.UI.Run
         BattleNode,
         Cleared,
         Health,
+        CardRewardTitle,
+        SkipCardReward,
         FailureTitle,
         LeaveRun,
         ContinueGame,
@@ -97,11 +103,19 @@ namespace TinySpire.UI.Run
         /// <summary>地图节点动作携带的稳定节点身份，其余动作为空。</summary>
         public MapNodeId? MapNodeId { get; }
 
+        /// <summary>奖励动作携带的稳定奖励身份，其余动作为空。</summary>
+        public RunCardRewardId? CardRewardId { get; }
+
+        /// <summary>选择奖励动作携带的卡牌模板标识，其余动作为空。</summary>
+        public int? CardTemplateId { get; }
+
         /// <summary>创建并验证一个入口 UI 意图。</summary>
         public RunEntryAction(
             RunEntryActionKind kind,
             int? heroTemplateId = null,
-            MapNodeId? mapNodeId = null)
+            MapNodeId? mapNodeId = null,
+            RunCardRewardId? cardRewardId = null,
+            int? cardTemplateId = null)
         {
             if (kind == RunEntryActionKind.SelectHero)
             {
@@ -128,9 +142,44 @@ namespace TinySpire.UI.Run
                     nameof(mapNodeId));
             }
 
+            if (kind == RunEntryActionKind.SelectCardReward)
+            {
+                if (!IsValidCardRewardId(cardRewardId) ||
+                    !cardTemplateId.HasValue ||
+                    cardTemplateId.Value <= 0)
+                {
+                    throw new ArgumentException(
+                        "SelectCardReward requires a stable reward id and a positive card template id.");
+                }
+            }
+            else if (kind == RunEntryActionKind.SkipCardReward)
+            {
+                if (!IsValidCardRewardId(cardRewardId) || cardTemplateId.HasValue)
+                {
+                    throw new ArgumentException(
+                        "SkipCardReward requires only a stable reward id.");
+                }
+            }
+            else if (cardRewardId.HasValue || cardTemplateId.HasValue)
+            {
+                throw new ArgumentException(
+                    "Only card reward actions may carry reward payload.");
+            }
+
             Kind = kind;
             HeroTemplateId = heroTemplateId;
             MapNodeId = mapNodeId;
+            CardRewardId = cardRewardId;
+            CardTemplateId = cardTemplateId;
+        }
+
+        /// <summary>检查可空奖励身份是否含完整 Run、attempt 与节点事实。</summary>
+        private static bool IsValidCardRewardId(RunCardRewardId? rewardId)
+        {
+            return rewardId.HasValue &&
+                   rewardId.Value.BattleId.RunId.Value != Guid.Empty &&
+                   rewardId.Value.BattleId.AttemptSequence > 0 &&
+                   !string.IsNullOrEmpty(rewardId.Value.BattleId.NodeId.Value);
         }
     }
 
@@ -454,6 +503,88 @@ namespace TinySpire.UI.Run
         }
     }
 
+    /// <summary>奖励页上一张卡牌的已本地化只读投影。</summary>
+    public sealed class RunCardRewardCandidateViewModel
+    {
+        /// <summary>结算命令所需的稳定卡牌模板标识。</summary>
+        public int TemplateId { get; }
+
+        /// <summary>当前语言下的卡牌名称。</summary>
+        public string Name { get; }
+
+        /// <summary>当前语言下的卡牌规则描述。</summary>
+        public string Description { get; }
+
+        /// <summary>当前等级的最终费用文本。</summary>
+        public string CostText { get; }
+
+        /// <summary>冻结单张候选的身份与当前语言文本。</summary>
+        public RunCardRewardCandidateViewModel(
+            int templateId,
+            string name,
+            string description,
+            string costText)
+        {
+            if (templateId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(templateId));
+            if (string.IsNullOrWhiteSpace(name))
+                throw new ArgumentException("Card reward name cannot be empty.", nameof(name));
+            if (description == null)
+                throw new ArgumentNullException(nameof(description));
+            if (string.IsNullOrWhiteSpace(costText))
+                throw new ArgumentException("Card reward cost text cannot be empty.", nameof(costText));
+
+            TemplateId = templateId;
+            Name = name;
+            Description = description;
+            CostText = costText;
+        }
+    }
+
+    /// <summary>奖励身份、固定三候选及当前交互门禁的完整页面投影。</summary>
+    public sealed class RunCardRewardViewModel
+    {
+        private readonly ReadOnlyCollection<RunCardRewardCandidateViewModel> _candidates;
+
+        /// <summary>选择或跳过必须回传的稳定奖励身份。</summary>
+        public RunCardRewardId RewardId { get; }
+
+        /// <summary>按冻结展示顺序排列的恰好三张候选。</summary>
+        public IReadOnlyList<RunCardRewardCandidateViewModel> Candidates => _candidates;
+
+        /// <summary>存档提交期间关闭选择与跳过，阻止重复命令。</summary>
+        public bool ActionsEnabled { get; }
+
+        /// <summary>验证并冻结奖励页所需的最小投影。</summary>
+        public RunCardRewardViewModel(
+            RunCardRewardId rewardId,
+            IReadOnlyList<RunCardRewardCandidateViewModel> candidates,
+            bool actionsEnabled)
+        {
+            if (rewardId.BattleId.RunId.Value == Guid.Empty ||
+                rewardId.BattleId.AttemptSequence <= 0 ||
+                string.IsNullOrEmpty(rewardId.BattleId.NodeId.Value))
+            {
+                throw new ArgumentException("Card reward id cannot be empty.", nameof(rewardId));
+            }
+            if (candidates == null)
+                throw new ArgumentNullException(nameof(candidates));
+            if (candidates.Count != RunCardRewardGenerator.CandidateCount ||
+                candidates.Any(candidate => candidate == null) ||
+                candidates.Select(candidate => candidate.TemplateId).Distinct().Count() !=
+                RunCardRewardGenerator.CandidateCount)
+            {
+                throw new ArgumentException(
+                    "Card reward projection must contain exactly three distinct candidates.",
+                    nameof(candidates));
+            }
+
+            RewardId = rewardId;
+            _candidates = Array.AsReadOnly(candidates.ToArray());
+            ActionsEnabled = actionsEnabled;
+        }
+    }
+
     /// <summary>由 Presenter 一次冻结、供 View 无业务判断渲染的完整页面投影。</summary>
     public sealed class RunEntryViewModel
     {
@@ -477,6 +608,9 @@ namespace TinySpire.UI.Run
         /// <summary>普通检查点提交失败时是否允许显式回退；Terminal 永远不允许回退。</summary>
         public bool CanRollbackFailedSave { get; }
 
+        /// <summary>当前普通战斗奖励投影；仅奖励页非空。</summary>
+        public RunCardRewardViewModel CardReward { get; }
+
         /// <summary>冻结当前页面、交互状态与全部本地化文本。</summary>
         public RunEntryViewModel(
             RunEntryPage page,
@@ -485,7 +619,8 @@ namespace TinySpire.UI.Run
             bool confirmEnabled,
             RunMapViewModel map,
             bool continueEnabled = false,
-            bool canRollbackFailedSave = false)
+            bool canRollbackFailedSave = false,
+            RunCardRewardViewModel cardReward = null)
         {
             if (texts == null)
                 throw new ArgumentNullException(nameof(texts));
@@ -496,6 +631,7 @@ namespace TinySpire.UI.Run
             Map = map;
             ContinueEnabled = continueEnabled;
             CanRollbackFailedSave = canRollbackFailedSave;
+            CardReward = cardReward;
             _texts = new ReadOnlyDictionary<RunEntryTextSlot, string>(
                 new Dictionary<RunEntryTextSlot, string>(texts));
         }
@@ -543,6 +679,10 @@ namespace TinySpire.UI.Run
         private const string BattleNodeKey = "run.entry.map.battle_node";
         private const string ClearedKey = "run.entry.map.cleared";
         private const string HealthKey = "run.entry.map.health";
+        private const string CardRewardTitleKey = "run.entry.reward.title";
+        private const string SkipCardRewardKey = "run.entry.reward.skip";
+        private const string StrengthKeywordKey = "battle.keyword.strength.name";
+        private const string VulnerableKeywordKey = "battle.keyword.vulnerable.name";
         private const string FailureTitleKey = "run.entry.failure.title";
         private const string CancelKey = "run.entry.common.cancel";
         private const string AbandonTitleKey = "run.entry.abandon.title";
@@ -767,9 +907,29 @@ namespace TinySpire.UI.Run
             {
                 _flow.RetryPendingCommit();
             }
+            else if (action.Kind == RunEntryActionKind.SelectCardReward &&
+                     action.CardRewardId.HasValue &&
+                     action.CardTemplateId.HasValue &&
+                     state.ProgressPhase == RunProgressPhase.RewardPending &&
+                     _flow.Persistence.Status != RunPersistenceStatus.CommitPending &&
+                     _flow.Persistence.Status != RunPersistenceStatus.CommitFailed)
+            {
+                _flow.SettleCardReward(
+                    action.CardRewardId.Value,
+                    action.CardTemplateId.Value);
+            }
+            else if (action.Kind == RunEntryActionKind.SkipCardReward &&
+                     action.CardRewardId.HasValue &&
+                     state.ProgressPhase == RunProgressPhase.RewardPending &&
+                     _flow.Persistence.Status != RunPersistenceStatus.CommitPending &&
+                     _flow.Persistence.Status != RunPersistenceStatus.CommitFailed)
+            {
+                _flow.SettleCardReward(action.CardRewardId.Value, selectedCardTemplateId: null);
+            }
             else if (action.Kind == RunEntryActionKind.RequestExitAfterSaveFailure &&
                      _flow.Persistence.Status == RunPersistenceStatus.CommitFailed &&
-                     state.ProgressPhase != RunProgressPhase.Terminal)
+                     state.ProgressPhase != RunProgressPhase.Terminal &&
+                     state.ProgressPhase != RunProgressPhase.RewardPending)
             {
                 _localPage = RunEntryPage.RollbackConfirmation;
                 Render();
@@ -782,7 +942,8 @@ namespace TinySpire.UI.Run
             }
             else if (action.Kind == RunEntryActionKind.ConfirmRollback &&
                      _flow.Persistence.Status == RunPersistenceStatus.CommitFailed &&
-                     state.ProgressPhase != RunProgressPhase.Terminal)
+                     state.ProgressPhase != RunProgressPhase.Terminal &&
+                     state.ProgressPhase != RunProgressPhase.RewardPending)
             {
                 _localPage = RunEntryPage.MainMenu;
                 _selectedHeroTemplateId = null;
@@ -812,6 +973,7 @@ namespace TinySpire.UI.Run
             int? selectedHero = state == null ? _selectedHeroTemplateId : state.HeroTemplateId;
             var texts = BuildTexts(state);
             RunMapViewModel map = state == null ? null : BuildMapViewModel(state);
+            RunCardRewardViewModel cardReward = BuildCardRewardViewModel(state);
 
             _view.Render(new RunEntryViewModel(
                 page,
@@ -825,8 +987,10 @@ namespace TinySpire.UI.Run
                                  page == RunEntryPage.MainMenu &&
                                  _flow.Persistence.CanContinue,
                 canRollbackFailedSave: state != null &&
-                                       state.ProgressPhase != RunProgressPhase.Terminal &&
-                                       _flow.Persistence.Status == RunPersistenceStatus.CommitFailed));
+                                        state.ProgressPhase != RunProgressPhase.Terminal &&
+                                        state.ProgressPhase != RunProgressPhase.RewardPending &&
+                                        _flow.Persistence.Status == RunPersistenceStatus.CommitFailed,
+                cardReward: cardReward));
         }
 
         /// <summary>让 RunState 决定地图或失败页；尚未创建 Run 时才使用场景内导航。</summary>
@@ -842,9 +1006,71 @@ namespace TinySpire.UI.Run
                     : RunEntryPage.SaveFailure;
             }
 
-            return state.ProgressPhase == RunProgressPhase.Terminal
-                ? RunEntryPage.Failure
-                : RunEntryPage.Map;
+            if (state.ProgressPhase == RunProgressPhase.Terminal)
+                return RunEntryPage.Failure;
+            if (state.ProgressPhase == RunProgressPhase.RewardPending)
+                return RunEntryPage.CardReward;
+            return RunEntryPage.Map;
+        }
+
+        /// <summary>从 Pending 身份与卡牌配置构建当前语言的固定三候选投影。</summary>
+        private RunCardRewardViewModel BuildCardRewardViewModel(RunState state)
+        {
+            if (state?.ProgressPhase != RunProgressPhase.RewardPending)
+                return null;
+            PendingCardReward pending = state.PendingCardReward
+                ?? throw new InvalidOperationException("RewardPending Run must contain its frozen reward.");
+            Tables tables = _tablesProvider()
+                ?? throw new InvalidOperationException("ConfigService must be initialized before rendering card rewards.");
+            RunCardRewardCandidateViewModel[] candidates = pending.CandidateTemplateIds
+                .Select(templateId => BuildCardRewardCandidate(tables, templateId))
+                .ToArray();
+            bool actionsEnabled = _flow.Persistence.Status != RunPersistenceStatus.CommitPending &&
+                                  _flow.Persistence.Status != RunPersistenceStatus.CommitFailed;
+            return new RunCardRewardViewModel(pending.Id, candidates, actionsEnabled);
+        }
+
+        /// <summary>把一个零升级奖励模板投影为名称、规则文本与费用文本。</summary>
+        private RunCardRewardCandidateViewModel BuildCardRewardCandidate(
+            Tables tables,
+            int templateId)
+        {
+            cfg.battle.Card card = tables.TbCard.GetOrDefault(templateId)
+                ?? throw new InvalidOperationException($"Card template {templateId} does not exist.");
+            string costText = card.CostKind == cfg.battle.CardCostKind.X
+                ? "X"
+                : card.Cost.ToString(CultureInfo.InvariantCulture);
+            return new RunCardRewardCandidateViewModel(
+                card.Id,
+                Localize(card.NameI18nKey),
+                _localize(card.DescriptionI18nKey, BuildCardRewardDescriptionArguments(tables, card)),
+                costText);
+        }
+
+        /// <summary>用静态效果基值填充奖励页规则参数，不读取或保存任何 Battle 临时事实。</summary>
+        private IReadOnlyDictionary<string, object> BuildCardRewardDescriptionArguments(
+            Tables tables,
+            cfg.battle.Card card)
+        {
+            var arguments = new Dictionary<string, object>(StringComparer.Ordinal);
+            foreach (cfg.battle.CardEffectBinding binding in card.EffectBindings)
+            {
+                if (string.IsNullOrWhiteSpace(binding.ArgumentKey) ||
+                    arguments.ContainsKey(binding.ArgumentKey))
+                {
+                    throw new InvalidOperationException(
+                        $"Card {card.Id} contains an invalid reward text argument key.");
+                }
+
+                cfg.battle.CardEffect effect = tables.TbCardEffect.GetOrDefault(binding.EffectId)
+                    ?? throw new InvalidOperationException(
+                        $"Card {card.Id} references missing effect {binding.EffectId}.");
+                arguments.Add(binding.ArgumentKey, effect.Value);
+            }
+
+            arguments["keywordStrength"] = Localize(StrengthKeywordKey);
+            arguments["keywordVulnerable"] = Localize(VulnerableKeywordKey);
+            return arguments;
         }
 
         /// <summary>把冻结地图和当前唯一进度投影为 View 可直接绘制的完整明牌图。</summary>
@@ -994,6 +1220,8 @@ namespace TinySpire.UI.Run
                 [RunEntryTextSlot.BattleNode] = Localize(BattleNodeKey),
                 [RunEntryTextSlot.Cleared] = Localize(ClearedKey),
                 [RunEntryTextSlot.Health] = _localize(HealthKey, healthArguments),
+                [RunEntryTextSlot.CardRewardTitle] = Localize(CardRewardTitleKey),
+                [RunEntryTextSlot.SkipCardReward] = Localize(SkipCardRewardKey),
                 [RunEntryTextSlot.FailureTitle] = Localize(FailureTitleKey),
                 [RunEntryTextSlot.LeaveRun] = Localize(ExitKey),
                 [RunEntryTextSlot.Cancel] = Localize(CancelKey),

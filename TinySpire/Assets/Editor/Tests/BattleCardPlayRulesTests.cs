@@ -4,6 +4,7 @@ using cfg;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using TinySpire.Battle;
+using TinySpire.Run;
 
 public sealed class BattleCardPlayRulesTests
 {
@@ -266,6 +267,62 @@ public sealed class BattleCardPlayRulesTests
         }
     }
 
+    /// <summary>验证 Output Adjust 的有限一级投影会把零费用同时交给规则预览，零能量仍可开始出牌。</summary>
+    [Test]
+    public void Evaluate_OutputAdjustLevelOneAtZeroEnergy_UsesProjectedZeroCost()
+    {
+        using var combatants = new BattleCombatantsData();
+        PlayerCombatantData player = combatants.AddPlayer(templateId: 101, maxHealth: 30, strength: 0);
+        EnemyCombatantData enemy = combatants.AddEnemy(templateId: 201, maxHealth: 20, strength: 0);
+        var enemyIds = new[] { enemy.Id };
+        using var zones = new BattleCardZonesData(
+            new[]
+            {
+                new RunCard(new RunCardInstanceId(17), templateId: 3207, upgradeLevel: 1),
+            },
+            shuffleSeed: 1234);
+        zones.Draw(count: 1);
+        Tables tables = CreateOutputAdjustTables();
+        using var machineGunnerRuntime = new MachineGunnerBattleRuntime(
+            combatants,
+            enemyIds,
+            player.Id,
+            cardRandomSeed: 2468);
+        var playerZones = new Dictionary<CombatantId, BattleCardZonesData>
+        {
+            [player.Id] = zones,
+        };
+        var rules = new BattleCardPlayRules(
+            combatants,
+            playerZones,
+            enemyIds,
+            tables,
+            machineGunnerRuntime);
+        var turn = new BattleTurnData(
+            BattleTurnPhase.PlayerAction,
+            roundNumber: 1,
+            new Dictionary<CombatantId, PlayerTurnData>
+            {
+                [player.Id] = new PlayerTurnData(
+                    energy: 0,
+                    energyMaximum: 3,
+                    energyGainPerRound: 3,
+                    ammo: 5,
+                    ammoMaximum: 5,
+                    ammoGainPerRound: 1,
+                    hasEndedAction: false),
+            },
+            currentActingEnemyId: null);
+
+        BattleCardPlayEvaluation evaluation = rules.Evaluate(
+            turn,
+            new PlayCardCommand(player.Id, zones.Hand[0], targetId: null));
+
+        Assert.That(evaluation.Succeeded, Is.True);
+        Assert.That(evaluation.CanPayCost, Is.True);
+        Assert.That(evaluation.CanStartInteraction, Is.True);
+    }
+
     /// <summary>从另一个聚合分配不会与当前最小场景碰撞的正数目标标识。</summary>
     private static CombatantId CreateUnknownCombatantId()
     {
@@ -315,6 +372,9 @@ public sealed class BattleCardPlayRulesTests
                     ["illustration_key"] = string.Empty,
                     ["program_id"] = (int)cfg.battle.MachineGunnerProgramId.None,
                     ["is_innate"] = false,
+                    ["upgrade_track_kind"] = 0,
+                    ["infinite_upgrade_rule_kind"] = 0,
+                    ["infinite_upgrade_value_per_level"] = 0,
                 }
             },
             ["battle_tbcardeffect"] = JArray.Parse(
@@ -323,7 +383,70 @@ public sealed class BattleCardPlayRulesTests
             ["battle_tbenemybehaviorgroup"] = JArray.Parse(
                 "[{\"id\":6001,\"behavior_ids\":[7001]}]"),
             ["battle_tbenemybehavior"] = JArray.Parse(
-                "[{\"id\":7001,\"intent_type\":0,\"target_rule\":1,\"effect_id\":4999,\"weight\":1,\"cooldown_selections\":0,\"max_consecutive\":0}]")
+                "[{\"id\":7001,\"intent_type\":0,\"target_rule\":1,\"effect_id\":4999,\"weight\":1,\"cooldown_selections\":0,\"max_consecutive\":0}]"),
+            ["battle_tbcardupgradelevel"] = new JArray(),
+        };
+
+        return new Tables(tableName => data[tableName]);
+    }
+
+    /// <summary>创建一张有限一级零费用 Output Adjust 及其明确升级行。</summary>
+    private static Tables CreateOutputAdjustTables()
+    {
+        var data = new Dictionary<string, JArray>
+        {
+            ["battle_tbhero"] = new JArray(),
+            ["battle_tbenemy"] = new JArray(),
+            ["battle_tbdeck"] = new JArray(),
+            ["battle_tbcard"] = new JArray
+            {
+                new JObject
+                {
+                    ["id"] = 3207,
+                    ["external_key"] = "TEST_MARINE_OUTPUT_ADJUST",
+                    ["catalog_snapshot_key"] = "test-g4-output-adjust",
+                    ["name_i18n_key"] = "battle.card.marine.output_adjust.name",
+                    ["description_i18n_key"] = "battle.card.marine.output_adjust.description",
+                    ["upgraded_description_i18n_key"] =
+                        "battle.card.marine.output_adjust.upgrade_description",
+                    ["card_type"] = (int)cfg.battle.CardType.Power,
+                    ["rarity"] = (int)cfg.battle.CardRarity.Uncommon,
+                    ["cost"] = 1,
+                    ["cost_kind"] = (int)cfg.battle.CardCostKind.Fixed,
+                    ["upgraded_cost"] = 0,
+                    ["target_rule"] = (int)cfg.battle.TargetRule.Self,
+                    ["play_destination"] = (int)cfg.battle.CardPlayDestination.Power,
+                    ["upgraded_play_destination"] = (int)cfg.battle.CardPlayDestination.Power,
+                    ["has_upgrade"] = true,
+                    ["implementation_status"] =
+                        (int)cfg.battle.CardImplementationStatus.Implemented,
+                    ["effect_bindings"] = new JArray(),
+                    ["illustration_key"] = "art_placeholder",
+                    ["program_id"] = (int)cfg.battle.MachineGunnerProgramId.OutputAdjust,
+                    ["is_innate"] = false,
+                    ["upgrade_track_kind"] = 1,
+                    ["infinite_upgrade_rule_kind"] = 0,
+                    ["infinite_upgrade_value_per_level"] = 0,
+                },
+            },
+            ["battle_tbcardeffect"] = new JArray(),
+            ["battle_tbencounter"] = new JArray(),
+            ["battle_tbenemybehaviorgroup"] = new JArray(),
+            ["battle_tbenemybehavior"] = new JArray(),
+            ["battle_tbcardupgradelevel"] = new JArray
+            {
+                new JObject
+                {
+                    ["card_id"] = 3207,
+                    ["next_upgrade_level"] = 1,
+                    ["description_i18n_key"] =
+                        "battle.card.marine.output_adjust.upgrade_description",
+                    ["cost"] = 0,
+                    ["play_destination"] = (int)cfg.battle.CardPlayDestination.Power,
+                    ["rule_kind"] = 0,
+                    ["rule_value"] = 0,
+                },
+            },
         };
 
         return new Tables(tableName => data[tableName]);

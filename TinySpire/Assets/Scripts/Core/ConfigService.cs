@@ -20,7 +20,8 @@ public sealed class ConfigService
         "battle_tbcardeffect",
         "battle_tbencounter",
         "battle_tbenemybehaviorgroup",
-        "battle_tbenemybehavior"
+        "battle_tbenemybehavior",
+        "battle_tbcardupgradelevel"
     };
 
     public Tables Tables { get; private set; }
@@ -217,6 +218,7 @@ public sealed class ConfigService
             ConfigInitializationFailureReason.MissingRequiredGameConfigField);
     }
 
+    /// <summary>把稳定配置文件名转换为统一的 GameData Addressables 地址。</summary>
     private static string ToGameDataAddress(string fileName)
     {
         return $"Assets/GameData/{fileName}";

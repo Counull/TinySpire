@@ -5,6 +5,7 @@ using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using R3;
 using TinySpire.Battle;
+using TinySpire.Run;
 
 public sealed class BattleEffectCommandQueueTests
 {
@@ -132,6 +133,111 @@ public sealed class BattleEffectCommandQueueTests
             Assert.That(scenario.Enemy.CurrentBlock, Is.Zero);
             Assert.That(scenario.Enemy.CurrentHealth, Is.EqualTo(33));
             Assert.That(scenario.Zones.DiscardPile, Is.EqualTo(new[] { cardId }));
+        }
+    }
+
+    /// <summary>有限轨道一级 Strike 必须把同一实例的明确伤害九真实送入 Effect 执行。</summary>
+    [Test]
+    public void Submit_FiniteLevelOneStrike_ExecutesConfiguredDamageValue()
+    {
+        JObject strike = CreateCard(
+            3002,
+            cost: 1,
+            cfg.battle.TargetRule.Enemy,
+            4101);
+        strike["upgrade_track_kind"] = (int)cfg.battle.CardUpgradeTrackKind.Finite;
+        JObject damage = CreateEffect(
+            4101,
+            cfg.battle.EffectType.DealDamage,
+            cfg.battle.Attribute.None,
+            value: 6);
+        JObject upgrade = CreateUpgradeLevel(
+            cardId: 3002,
+            nextUpgradeLevel: 1,
+            cost: 1,
+            cfg.battle.CardPlayDestination.DiscardPile,
+            cfg.battle.CardUpgradeRuleKind.DamageValue,
+            ruleValue: 9);
+        var runCard = new RunCard(
+            new RunCardInstanceId(1),
+            templateId: 3002,
+            upgradeLevel: 1);
+        using (var scenario = new QueueScenario(
+                   new[] { strike },
+                   new[] { damage },
+                   deck: Array.Empty<int>(),
+                   playerStrength: 0,
+                   energyPerRound: 3,
+                   runCards: new[] { runCard },
+                   upgradeLevels: new[] { upgrade }))
+        {
+            CardInstanceId cardId = scenario.FindRunCard(runCard.InstanceId);
+
+            scenario.Queue.Submit(new PlayCardCommand(
+                scenario.Player.Id,
+                cardId,
+                scenario.Enemy.Id));
+
+            var damageRecord = scenario.Presentation.Results[1].Settlements
+                .OfType<BattleDamageAppliedSettlement>()
+                .Single();
+            Assert.That(damageRecord.AttackValue, Is.EqualTo(9));
+            Assert.That(scenario.Enemy.CurrentHealth, Is.EqualTo(31));
+        }
+    }
+
+    /// <summary>同模板基础与无限二级实例必须分别执行三十二与五十二，禁止按模板混同。</summary>
+    [Test]
+    public void Submit_SameInfiniteTemplateAtDifferentLevels_ExecutesPerInstanceDamage()
+    {
+        JObject bludgeon = CreateCard(
+            3123,
+            cost: 3,
+            cfg.battle.TargetRule.Enemy,
+            4107);
+        bludgeon["upgrade_track_kind"] = (int)cfg.battle.CardUpgradeTrackKind.Infinite;
+        bludgeon["infinite_upgrade_rule_kind"] =
+            (int)cfg.battle.CardUpgradeRuleKind.DamageValue;
+        bludgeon["infinite_upgrade_value_per_level"] = 10;
+        JObject damage = CreateEffect(
+            4107,
+            cfg.battle.EffectType.DealDamage,
+            cfg.battle.Attribute.None,
+            value: 32);
+        var baseCard = new RunCard(
+            new RunCardInstanceId(1),
+            templateId: 3123,
+            upgradeLevel: 0);
+        var upgradedCard = new RunCard(
+            new RunCardInstanceId(2),
+            templateId: 3123,
+            upgradeLevel: 2);
+        using (var scenario = new QueueScenario(
+                   new[] { bludgeon },
+                   new[] { damage },
+                   deck: Array.Empty<int>(),
+                   playerStrength: 0,
+                   energyPerRound: 6,
+                   enemyHealth: 200,
+                   runCards: new[] { baseCard, upgradedCard }))
+        {
+            scenario.Queue.Submit(new PlayCardCommand(
+                scenario.Player.Id,
+                scenario.FindRunCard(baseCard.InstanceId),
+                scenario.Enemy.Id));
+            scenario.Presentation.CompleteNext();
+            scenario.Queue.Submit(new PlayCardCommand(
+                scenario.Player.Id,
+                scenario.FindRunCard(upgradedCard.InstanceId),
+                scenario.Enemy.Id));
+
+            int[] attacks = scenario.Presentation.Results
+                .SelectMany(result => result.Settlements)
+                .OfType<BattleDamageAppliedSettlement>()
+                .Select(record => record.AttackValue)
+                .ToArray();
+            Assert.That(attacks, Is.EqualTo(new[] { 32, 52 }));
+            Assert.That(scenario.Enemy.CurrentHealth, Is.EqualTo(116));
         }
     }
 
@@ -3049,6 +3155,49 @@ public sealed class BattleEffectCommandQueueTests
         }
     }
 
+    /// <summary>验证有限升级轨道也必须在投影前把缺失 Effect 映射为稳定失败，而不是队列 Fault。</summary>
+    [Test]
+    public void Submit_FiniteCardWithMissingEffect_FailsBeforeProjectionFault()
+    {
+        const int cardId = 3904;
+        JObject invalidCard = CreateCard(
+            cardId,
+            cost: 1,
+            cfg.battle.TargetRule.Self,
+            499999);
+        invalidCard["upgrade_track_kind"] = (int)cfg.battle.CardUpgradeTrackKind.Finite;
+        JObject upgrade = CreateUpgradeLevel(
+            cardId,
+            nextUpgradeLevel: 1,
+            cost: 0,
+            cfg.battle.CardPlayDestination.DiscardPile,
+            cfg.battle.CardUpgradeRuleKind.None,
+            ruleValue: 0);
+        using (var scenario = new QueueScenario(
+                   new[] { invalidCard },
+                   Array.Empty<JObject>(),
+                   new[] { cardId },
+                   playerStrength: 1,
+                   energyPerRound: 3,
+                   upgradeLevels: new[] { upgrade }))
+        {
+            using BattleCommandLifecycleExecutionRecorder recorder =
+                scenario.Queue.RecordExecutionLifecycle();
+            BattleCommandSubmissionResult submission = scenario.Queue.Submit(
+                new PlayCardCommand(
+                    scenario.Player.Id,
+                    scenario.FindCard(cardId),
+                    scenario.Player.Id));
+
+            BattleCommandLifecycleEvent result = recorder.RequireTerminal(submission);
+            Assert.That(result.Stage, Is.EqualTo(BattleCommandLifecycleStage.ExecutionFailed));
+            Assert.That(
+                result.FailureReason,
+                Is.EqualTo(BattleCommandExecutionFailureReason.EffectTemplateNotFound));
+            Assert.That(result.Settlements, Is.Empty);
+        }
+    }
+
     /// <summary>验证 Card 边缘拒绝零 Effect 绑定，并在支付能量、写状态或移牌前整体失败。</summary>
     [TestCase(0)]
     [TestCase(-1)]
@@ -3210,8 +3359,32 @@ public sealed class BattleEffectCommandQueueTests
             ["implementation_status"] = (int)implementationStatus,
             ["program_id"] = (int)cfg.battle.MachineGunnerProgramId.None,
             ["is_innate"] = false,
+            ["upgrade_track_kind"] = (int)cfg.battle.CardUpgradeTrackKind.None,
+            ["infinite_upgrade_rule_kind"] = (int)cfg.battle.CardUpgradeRuleKind.None,
+            ["infinite_upgrade_value_per_level"] = 0,
             ["effect_bindings"] = bindings,
             ["illustration_key"] = string.Empty,
+        };
+    }
+
+    /// <summary>创建一条由 G4 配置驱动的有限升级等级测试行。</summary>
+    private static JObject CreateUpgradeLevel(
+        int cardId,
+        int nextUpgradeLevel,
+        int cost,
+        cfg.battle.CardPlayDestination playDestination,
+        cfg.battle.CardUpgradeRuleKind ruleKind,
+        int ruleValue)
+    {
+        return new JObject
+        {
+            ["card_id"] = cardId,
+            ["next_upgrade_level"] = nextUpgradeLevel,
+            ["description_i18n_key"] = $"battle.card.test_{cardId}.upgrade_{nextUpgradeLevel}",
+            ["cost"] = cost,
+            ["play_destination"] = (int)playDestination,
+            ["rule_kind"] = (int)ruleKind,
+            ["rule_value"] = ruleValue,
         };
     }
 
@@ -3270,7 +3443,9 @@ public sealed class BattleEffectCommandQueueTests
             int initialHandCount = 0,
             IReadOnlyList<int> enemyHealths = null,
             uint battleSeed = 4321,
-            int enemyDamage = 1)
+            int enemyDamage = 1,
+            IEnumerable<RunCard> runCards = null,
+            IEnumerable<JObject> upgradeLevels = null)
         {
             Combatants = new BattleCombatantsData();
             Player = Combatants.AddPlayer(101, 30, playerStrength);
@@ -3284,11 +3459,13 @@ public sealed class BattleEffectCommandQueueTests
 
             Enemies = enemies;
             CombatantId[] enemyIds = Enemies.Select(enemy => enemy.Id).ToArray();
-            Zones = new BattleCardZonesData(deck, shuffleSeed: 1234);
+            Zones = runCards == null
+                ? new BattleCardZonesData(deck, shuffleSeed: 1234)
+                : new BattleCardZonesData(runCards, shuffleSeed: 1234);
             int resolvedInitialHandCount = drawDeckIntoHand
                 ? Zones.Cards.Count
                 : initialHandCount;
-            Tables = CreateTables(cards, effects, Enemies, enemyDamage);
+            Tables = CreateTables(cards, effects, Enemies, enemyDamage, upgradeLevels);
             EnemyIntents = new BattleEnemyIntentsData(
                 Combatants,
                 enemyIds,
@@ -3353,6 +3530,19 @@ public sealed class BattleEffectCommandQueueTests
             throw new InvalidOperationException($"测试手牌中不存在模板 {templateId}。");
         }
 
+        /// <summary>按稳定 RunCard 身份查找同模板也不会混同的当前手牌实例。</summary>
+        internal CardInstanceId FindRunCard(RunCardInstanceId runCardInstanceId)
+        {
+            foreach (CardInstanceId cardId in Zones.Hand)
+            {
+                if (Zones.Cards[cardId].OriginRunCardInstanceId == runCardInstanceId)
+                    return cardId;
+            }
+
+            throw new InvalidOperationException(
+                $"测试手牌中不存在 RunCard 实例 {runCardInstanceId}。");
+        }
+
         /// <summary>按所有权逆序释放队列、意图、卡区与参与者。</summary>
         public void Dispose()
         {
@@ -3367,7 +3557,8 @@ public sealed class BattleEffectCommandQueueTests
             IEnumerable<JObject> cards,
             IEnumerable<JObject> effects,
             IReadOnlyList<EnemyCombatantData> enemies,
-            int enemyDamage)
+            int enemyDamage,
+            IEnumerable<JObject> upgradeLevels)
         {
             var effectRows = new JArray();
             foreach (JObject effect in effects)
@@ -3404,6 +3595,9 @@ public sealed class BattleEffectCommandQueueTests
                     "[{\"id\":6001,\"behavior_ids\":[7001]}]"),
                 ["battle_tbenemybehavior"] = JArray.Parse(
                     "[{\"id\":7001,\"intent_type\":0,\"target_rule\":1,\"effect_id\":4999,\"weight\":1,\"cooldown_selections\":0,\"max_consecutive\":0}]"),
+                ["battle_tbcardupgradelevel"] = upgradeLevels == null
+                    ? new JArray()
+                    : new JArray(upgradeLevels),
             };
             return new cfg.Tables(tableName => data[tableName]);
         }

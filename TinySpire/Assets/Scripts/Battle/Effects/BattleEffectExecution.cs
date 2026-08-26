@@ -16,11 +16,24 @@ namespace TinySpire.Battle
         /// <summary>按调用方领域顺序冻结的强类型 Effect 标识。</summary>
         public IReadOnlyList<BattleEffectId> EffectIds { get; }
 
+        /// <summary>卡牌出牌链携带的实例等级投影；敌人与非卡牌 Effect 保持为空。</summary>
+        internal BattleCardLevelProjection CardLevelProjection { get; }
+
         /// <summary>复制并冻结一次 Effect 执行请求。</summary>
         public BattleEffectExecutionRequest(
             CombatantId sourceId,
             CombatantId targetId,
             IEnumerable<BattleEffectId> effectIds)
+            : this(sourceId, targetId, effectIds, cardLevelProjection: null)
+        {
+        }
+
+        /// <summary>为卡牌出牌链冻结同一实例等级投影，避免执行阶段重新按模板猜测等级。</summary>
+        internal BattleEffectExecutionRequest(
+            CombatantId sourceId,
+            CombatantId targetId,
+            IEnumerable<BattleEffectId> effectIds,
+            BattleCardLevelProjection cardLevelProjection)
         {
             if (effectIds == null)
             {
@@ -31,6 +44,7 @@ namespace TinySpire.Battle
             TargetId = targetId;
             EffectIds = new ReadOnlyCollection<BattleEffectId>(
                 new List<BattleEffectId>(effectIds));
+            CardLevelProjection = cardLevelProjection;
         }
     }
 

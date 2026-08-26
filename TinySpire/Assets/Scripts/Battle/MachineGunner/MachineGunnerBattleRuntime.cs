@@ -3844,6 +3844,7 @@ namespace TinySpire.Battle
             BattleCardZonesData cardZones,
             CardInstanceData card,
             cfg.battle.Card cardTemplate,
+            BattleCardLevelProjection cardLevelProjection,
             BattleBlockRetention blockRetention,
             cfg.Tables tables,
             BattleTriggeredCardPlayExecution triggeredCardPlayExecution,
@@ -3860,6 +3861,8 @@ namespace TinySpire.Battle
                 throw new ArgumentNullException(nameof(card));
             if (cardTemplate == null)
                 throw new ArgumentNullException(nameof(cardTemplate));
+            if (cardLevelProjection == null)
+                throw new ArgumentNullException(nameof(cardLevelProjection));
             if (blockRetention == null)
                 throw new ArgumentNullException(nameof(blockRetention));
             if (tables == null)
@@ -3874,6 +3877,12 @@ namespace TinySpire.Battle
             if (card.TemplateId != cardTemplate.Id)
                 return MachineGunnerCardProgramExecutionResult.Failed(
                     BattleCommandExecutionFailureReason.CardTemplateNotFound);
+            if (cardLevelProjection.Template.Id != cardTemplate.Id ||
+                cardLevelProjection.UpgradeLevel != card.UpgradeLevel)
+            {
+                return MachineGunnerCardProgramExecutionResult.Failed(
+                    BattleCommandExecutionFailureReason.CardTemplateNotFound);
+            }
             if (!MachineGunnerCardProgramRegistry.TryGet(cardTemplate.ProgramId, out MachineGunnerCardProgram program))
             {
                 return MachineGunnerCardProgramExecutionResult.Failed(
@@ -3884,21 +3893,21 @@ namespace TinySpire.Battle
                 return MachineGunnerCardProgramExecutionResult.Failed(
                     BattleCommandExecutionFailureReason.AttackBlockedByShackle);
             }
-            if (cardTemplate.PlayDestination == cfg.battle.CardPlayDestination.Power &&
+            if (cardLevelProjection.PlayDestination == cfg.battle.CardPlayDestination.Power &&
                 !program.PowerKind.HasValue)
             {
                 return MachineGunnerCardProgramExecutionResult.Failed(
                     BattleCommandExecutionFailureReason.UnsupportedMachineGunnerProgram);
             }
-            if (cardTemplate.PlayDestination != cfg.battle.CardPlayDestination.DiscardPile &&
-                cardTemplate.PlayDestination != cfg.battle.CardPlayDestination.Power &&
-                cardTemplate.PlayDestination != cfg.battle.CardPlayDestination.ExhaustPile)
+            if (cardLevelProjection.PlayDestination != cfg.battle.CardPlayDestination.DiscardPile &&
+                cardLevelProjection.PlayDestination != cfg.battle.CardPlayDestination.Power &&
+                cardLevelProjection.PlayDestination != cfg.battle.CardPlayDestination.ExhaustPile)
             {
                 return MachineGunnerCardProgramExecutionResult.Failed(
                     BattleCommandExecutionFailureReason.UnsupportedMachineGunnerProgram);
             }
             if (program.PowerKind.HasValue &&
-                cardTemplate.PlayDestination != cfg.battle.CardPlayDestination.Power)
+                cardLevelProjection.PlayDestination != cfg.battle.CardPlayDestination.Power)
             {
                 return MachineGunnerCardProgramExecutionResult.Failed(
                     BattleCommandExecutionFailureReason.UnsupportedMachineGunnerProgram);
@@ -3911,7 +3920,7 @@ namespace TinySpire.Battle
             BattleCardPaymentMode requestedPaymentMode = incomingTriggeredPlayRequest?.PaymentMode ??
                 BattleCardPaymentMode.Normal;
             BattleCardZone playedCardDestination = incomingTriggeredPlayRequest?.Destination ??
-                MapPlayedCardDestination(cardTemplate.PlayDestination);
+                MapPlayedCardDestination(cardLevelProjection.PlayDestination);
 
             GameRandom candidateRandom = CreateCardRandomCandidate();
             IReadOnlyList<CombatantId> targetIds = null;
@@ -3939,6 +3948,7 @@ namespace TinySpire.Battle
             }
             if (!TryPrepareCost(
                     cardTemplate,
+                    cardLevelProjection.Cost,
                     playerTurn,
                     program,
                     prismaticInitialStatusKindCount,
@@ -4026,6 +4036,7 @@ namespace TinySpire.Battle
                          player,
                          targetIds,
                          program,
+                         cardLevelProjection,
                          cost,
                          candidateRandom,
                          out operations,
@@ -4784,6 +4795,29 @@ namespace TinySpire.Battle
         {
             return TryResolveCost(
                 cardTemplate,
+                cardTemplate.Cost,
+                playerTurn,
+                program,
+                prismaticInitialStatusKindCount: null,
+                BattleCardPaymentMode.Normal,
+                out cost,
+                out failureReason);
+        }
+
+        /// <summary>按实例等级投影预览费用，其余职业减免、X 费和弹药语义保持同一口径。</summary>
+        internal bool TryPreviewCost(
+            BattleCardLevelProjection cardLevelProjection,
+            PlayerTurnData playerTurn,
+            MachineGunnerCardProgram program,
+            out MachineGunnerCostResolution cost,
+            out BattleCommandExecutionFailureReason failureReason)
+        {
+            if (cardLevelProjection == null)
+                throw new ArgumentNullException(nameof(cardLevelProjection));
+
+            return TryResolveCost(
+                cardLevelProjection.Template,
+                cardLevelProjection.Cost,
                 playerTurn,
                 program,
                 prismaticInitialStatusKindCount: null,
@@ -4807,6 +4841,34 @@ namespace TinySpire.Battle
                     : (int?)null;
             return TryResolveCost(
                 cardTemplate,
+                cardTemplate.Cost,
+                playerTurn,
+                program,
+                initialStatusKindCount,
+                BattleCardPaymentMode.Normal,
+                out cost,
+                out failureReason);
+        }
+
+        /// <summary>按实例等级投影和显式目标起始状态精确预览动态职业费用。</summary>
+        internal bool TryPreviewCost(
+            BattleCardLevelProjection cardLevelProjection,
+            PlayerTurnData playerTurn,
+            MachineGunnerCardProgram program,
+            CombatantId targetId,
+            out MachineGunnerCostResolution cost,
+            out BattleCommandExecutionFailureReason failureReason)
+        {
+            if (cardLevelProjection == null)
+                throw new ArgumentNullException(nameof(cardLevelProjection));
+
+            int? initialStatusKindCount = program.ExecutionKind ==
+                MachineGunnerProgramExecutionKind.InitialThenRepeatByTargetStatusKinds
+                    ? CountInitialActiveStatusKindsForCombatant(targetId)
+                    : (int?)null;
+            return TryResolveCost(
+                cardLevelProjection.Template,
+                cardLevelProjection.Cost,
                 playerTurn,
                 program,
                 initialStatusKindCount,
@@ -4825,6 +4887,7 @@ namespace TinySpire.Battle
         {
             return TryPrepareCost(
                 cardTemplate,
+                cardTemplate.Cost,
                 playerTurn,
                 program,
                 prismaticInitialStatusKindCount: null,
@@ -4836,6 +4899,7 @@ namespace TinySpire.Battle
         /// <summary>使用可选目标起始状态种类冻结动态弹药费用，其余程序沿用既有费用口径。</summary>
         private bool TryPrepareCost(
             cfg.battle.Card cardTemplate,
+            int resolvedCardCost,
             PlayerTurnData playerTurn,
             MachineGunnerCardProgram program,
             int? prismaticInitialStatusKindCount,
@@ -4845,6 +4909,7 @@ namespace TinySpire.Battle
         {
             if (!TryResolveCost(
                     cardTemplate,
+                    resolvedCardCost,
                     playerTurn,
                     program,
                     prismaticInitialStatusKindCount,
@@ -4922,6 +4987,7 @@ namespace TinySpire.Battle
         /// <summary>按同一命令开始快照解析能量、弹药、兴奋剂和游击名义费用，不写入任何运行时事实。</summary>
         private bool TryResolveCost(
             cfg.battle.Card cardTemplate,
+            int resolvedCardCost,
             PlayerTurnData playerTurn,
             MachineGunnerCardProgram program,
             int? prismaticInitialStatusKindCount,
@@ -4935,6 +5001,8 @@ namespace TinySpire.Battle
                 throw new ArgumentNullException(nameof(playerTurn));
             if (program == null)
                 throw new ArgumentNullException(nameof(program));
+            if (resolvedCardCost < 0 && cardTemplate.CostKind == cfg.battle.CardCostKind.Fixed)
+                throw new ArgumentOutOfRangeException(nameof(resolvedCardCost));
 
             bool waivedByNextAttack = _nextAttackFree && program.IsAttack;
             bool waivedByRecentNonShootAttack =
@@ -4949,7 +5017,7 @@ namespace TinySpire.Battle
                     : BattleCardPaymentMode.Normal;
             if (!BattleCardCostResolver.TryResolveEnergy(
                     cardTemplate.CostKind,
-                    cardTemplate.Cost,
+                    resolvedCardCost,
                     playerTurn.Energy,
                     energyPaymentMode,
                     out BattleCardEnergyCostResolution energyCost,
@@ -5289,6 +5357,7 @@ namespace TinySpire.Battle
             CombatantData source,
             IReadOnlyList<CombatantId> targetIds,
             MachineGunnerCardProgram program,
+            BattleCardLevelProjection cardLevelProjection,
             MachineGunnerCostResolution cost,
             GameRandom candidateRandom,
             out IReadOnlyList<MachineGunnerPreparedOperation> operations,
@@ -5300,6 +5369,13 @@ namespace TinySpire.Battle
                 throw new ArgumentNullException(nameof(targetIds));
             if (program == null)
                 throw new ArgumentNullException(nameof(program));
+            if (cardLevelProjection == null)
+                throw new ArgumentNullException(nameof(cardLevelProjection));
+            if (cardLevelProjection.Template.ProgramId != program.Id)
+            {
+                throw new InvalidOperationException(
+                    "卡牌等级投影与机枪兵程序身份不一致。");
+            }
             if (candidateRandom == null)
                 throw new ArgumentNullException(nameof(candidateRandom));
 
@@ -5360,7 +5436,7 @@ namespace TinySpire.Battle
                                             ? CalculateLinearTargetOrdinalDamage(
                                                 operation.Value,
                                                 targetOrdinal)
-                                            : (int?)null;
+                                            : cardLevelProjection.ProgramDamageValue;
                                     AppendPreparedHitAndPostHitOperations(
                                         sourceId,
                                         source,
@@ -5395,7 +5471,8 @@ namespace TinySpire.Battle
                                         operation,
                                         cost,
                                         projectedTargets,
-                                        prepared);
+                                        prepared,
+                                        cardLevelProjection.ProgramDamageValue);
                                     if (!appended &&
                                         program.TargetInputMode != MachineGunnerTargetInputMode.RandomLivingEnemy)
                                     {

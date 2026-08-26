@@ -141,31 +141,75 @@ namespace TinySpire.Run
             return input;
         }
 
-        /// <summary>仅为当前节点 attempt 原子写回胜利生命，并把承诺节点追加为已完成路径。</summary>
-        public RunState ApplyVictory(
+        /// <summary>只为当前 attempt 生成一次奖励，并原子冻结胜利生命与 RewardPending。</summary>
+        public RunState RecordVictoryAndFreezeReward(
             RunBattleId battleId,
             int heroTemplateId,
             int settledHealth,
-            int maxHealth)
+            int maxHealth,
+            Func<RunBattleInput, PendingCardReward> rewardFactory)
         {
             RunState state = RequireActiveBattle(battleId);
             ValidateResultPlayer(state, heroTemplateId, settledHealth, maxHealth);
             if (settledHealth <= 0)
                 throw new ArgumentOutOfRangeException(nameof(settledHealth));
+            if (rewardFactory == null)
+                throw new ArgumentNullException(nameof(rewardFactory));
 
-            MapNodeId completedNodeId = state.CommittedNodeId.Value;
-            MapNodeId[] completedPath = state.PathNodeIds
-                .Concat(new[] { completedNodeId })
-                .ToArray();
+            PendingCardReward pendingCardReward = rewardFactory(state.ActiveBattle)
+                ?? throw new InvalidOperationException("Victory reward factory returned null.");
+            if (pendingCardReward.Id.BattleId != battleId)
+            {
+                throw new InvalidOperationException(
+                    "Victory reward id does not match the active run battle.");
+            }
+
             Publish(new RunState(
                 state,
                 settledHealth,
-                completedPath,
-                RunProgressPhase.MapReady,
-                committedNodeId: null,
+                state.PathNodeIds,
+                RunProgressPhase.RewardPending,
+                committedNodeId: state.CommittedNodeId,
                 battleAttemptSequence: state.BattleAttemptSequence,
                 activeBattle: null,
-                terminalReason: null));
+                terminalReason: null,
+                pendingCardReward: pendingCardReward));
+            return Current;
+        }
+
+        /// <summary>校验奖励身份与候选并构造结算后快照，但不发布任何 Run 业务事实。</summary>
+        internal RunState PreviewCardRewardSettlement(
+            RunCardRewardId rewardId,
+            int? selectedCardTemplateId)
+        {
+            return CreateCardRewardSettlement(rewardId, selectedCardTemplateId);
+        }
+
+        /// <summary>再次校验同一奖励命令，并通过唯一写入口发布已完成节点的稳定快照。</summary>
+        internal RunState CommitCardRewardSettlement(
+            RunCardRewardId rewardId,
+            int? selectedCardTemplateId)
+        {
+            RunState settled = CreateCardRewardSettlement(rewardId, selectedCardTemplateId);
+            Publish(settled);
+            return Current;
+        }
+
+        /// <summary>在地图稳定态预演指定实例恰好升一级，但不发布任何 Run 业务事实。</summary>
+        internal RunState PreviewCardUpgrade(
+            RunCardInstanceId instanceId,
+            IRunCardUpgradeConfigurationCatalog catalog)
+        {
+            return CreateCardUpgrade(instanceId, catalog);
+        }
+
+        /// <summary>再次校验指定实例的下一等级，并通过唯一写入口发布升级后的稳定快照。</summary>
+        internal RunState CommitCardUpgrade(
+            RunCardInstanceId instanceId,
+            IRunCardUpgradeConfigurationCatalog catalog)
+        {
+            RunState upgraded = CreateCardUpgrade(instanceId, catalog);
+            Publish(upgraded);
             return Current;
         }
 
@@ -225,6 +269,80 @@ namespace TinySpire.Run
             }
 
             return state;
+        }
+
+        /// <summary>从当前唯一 Pending 纯计算选择或跳过后的 MapReady 后继。</summary>
+        private RunState CreateCardRewardSettlement(
+            RunCardRewardId rewardId,
+            int? selectedCardTemplateId)
+        {
+            RunState state = RequireCurrent();
+            if (state.ProgressPhase != RunProgressPhase.RewardPending ||
+                state.PendingCardReward == null ||
+                state.CommittedNodeId == null)
+            {
+                throw new InvalidOperationException("The Run does not have a pending card reward.");
+            }
+            if (state.PendingCardReward.Id != rewardId)
+                throw new InvalidOperationException("The card reward id is stale or forged.");
+            if (selectedCardTemplateId.HasValue &&
+                !state.PendingCardReward.CandidateTemplateIds.Contains(
+                    selectedCardTemplateId.Value))
+            {
+                throw new InvalidOperationException(
+                    "The selected card template is not a frozen reward candidate.");
+            }
+
+            RunDeck settledDeck = selectedCardTemplateId.HasValue
+                ? state.RunDeck.AppendNewInstance(selectedCardTemplateId.Value)
+                : state.RunDeck;
+            MapNodeId[] settledPath = state.PathNodeIds
+                .Concat(new[] { state.CommittedNodeId.Value })
+                .ToArray();
+            return new RunState(
+                state,
+                state.CurrentHealth,
+                settledPath,
+                RunProgressPhase.MapReady,
+                committedNodeId: null,
+                battleAttemptSequence: state.BattleAttemptSequence,
+                activeBattle: null,
+                terminalReason: null,
+                pendingCardReward: null,
+                runDeck: settledDeck);
+        }
+
+        /// <summary>从当前 MapReady 快照纯计算一次实例升级后继，不引入篝火或其他选择入口。</summary>
+        private RunState CreateCardUpgrade(
+            RunCardInstanceId instanceId,
+            IRunCardUpgradeConfigurationCatalog catalog)
+        {
+            RunState state = RequireCurrent();
+            if (catalog == null)
+                throw new ArgumentNullException(nameof(catalog));
+            if (state.ProgressPhase != RunProgressPhase.MapReady ||
+                state.ActiveBattle != null ||
+                state.CommittedNodeId != null ||
+                state.PendingCardReward != null)
+            {
+                throw new InvalidOperationException(
+                    "Run cards can only be upgraded from a map-stable Run snapshot.");
+            }
+
+            RunDeck upgradedDeck = state.RunDeck.UpgradeInstanceOneLevel(
+                instanceId,
+                catalog.IsCardUpgradeLevelValid);
+            return new RunState(
+                state,
+                state.CurrentHealth,
+                state.PathNodeIds,
+                RunProgressPhase.MapReady,
+                committedNodeId: null,
+                battleAttemptSequence: state.BattleAttemptSequence,
+                activeBattle: null,
+                terminalReason: null,
+                pendingCardReward: null,
+                runDeck: upgradedDeck);
         }
 
         /// <summary>确认单玩家结果身份、生命与当前 Run 的冻结上限一致。</summary>

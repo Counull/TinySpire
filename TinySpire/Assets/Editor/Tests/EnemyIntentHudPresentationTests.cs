@@ -169,7 +169,8 @@ public sealed class EnemyIntentHudPresentationTests
                 "[{\"id\":4002,\"effect_type\":1,\"attribute\":0,\"value\":6},{\"id\":4003,\"effect_type\":2,\"attribute\":0,\"value\":5}]"),
             ["battle_tbencounter"] = new JArray(),
             ["battle_tbenemybehaviorgroup"] = groups,
-            ["battle_tbenemybehavior"] = behaviors
+            ["battle_tbenemybehavior"] = behaviors,
+            ["battle_tbcardupgradelevel"] = new JArray(),
         };
         return new Tables(tableName => data[tableName]);
     }

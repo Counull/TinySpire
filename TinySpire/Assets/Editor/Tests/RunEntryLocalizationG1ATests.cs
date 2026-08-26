@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Reflection;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
@@ -9,6 +10,7 @@ public sealed class RunEntryLocalizationG1ATests
 {
     private const string EnglishTablePath = "Assets/Localization/Battle Cards_en.asset";
     private const string ChineseTablePath = "Assets/Localization/Battle Cards_zh-CN.asset";
+    private const string CardDataPath = "Assets/GameData/battle_tbcard.json";
     private const string HeroDataPath = "Assets/GameData/battle_tbhero.json";
 
     private static readonly string[] ExpectedRunEntryKeys =
@@ -29,6 +31,8 @@ public sealed class RunEntryLocalizationG1ATests
         "run.entry.map.battle_node",
         "run.entry.map.cleared",
         "run.entry.map.health",
+        "run.entry.reward.title",
+        "run.entry.reward.skip",
         "run.entry.failure.title",
         "run.entry.failure.restart",
         "run.entry.menu.continue",
@@ -73,6 +77,8 @@ public sealed class RunEntryLocalizationG1ATests
         new object[] { "run.entry.map.battle_node", "Encounter", "遭遇", false },
         new object[] { "run.entry.map.cleared", "Node cleared; later content is not connected yet", "节点已清除、后续内容未接入", false },
         new object[] { "run.entry.map.health", "HP {current}/{max}", "生命 {current}/{max}", true },
+        new object[] { "run.entry.reward.title", "Card Reward", "卡牌奖励", false },
+        new object[] { "run.entry.reward.skip", "Skip", "跳过", false },
         new object[] { "run.entry.failure.title", "Battle Failed", "战斗失败", false },
         new object[] { "run.entry.failure.restart", "Restart Battle", "重开本关", false },
         new object[] { "run.entry.menu.continue", "Continue", "继续游戏", false },
@@ -100,7 +106,7 @@ public sealed class RunEntryLocalizationG1ATests
         new object[] { "battle.hero.test_warrior.name", "Warrior", "战士", false },
     };
 
-    /// <summary>构建门禁必须显式冻结 G2-A 入口运行时会读取的全部 40 个键。</summary>
+    /// <summary>构建门禁必须显式冻结入口运行时会读取的全部 42 个键。</summary>
     [Test]
     public void LocalizationBuildGate_RequiresAllRuntimeRunEntryKeys()
     {
@@ -110,8 +116,29 @@ public sealed class RunEntryLocalizationG1ATests
 
         Assert.That(field, Is.Not.Null);
         var actual = (string[])field.GetValue(null);
-        Assert.That(actual, Has.Length.EqualTo(40));
+        Assert.That(actual, Has.Length.EqualTo(42));
         Assert.That(actual, Is.EquivalentTo(ExpectedRunEntryKeys));
+    }
+
+    /// <summary>Shoot 的生产程序伤害投影必须让本地化门禁接受无 Effect 绑定的 damage 参数。</summary>
+    [Test]
+    public void LocalizationBuildGate_ShootProgramOwnsDamageArgumentWithoutEffectBinding()
+    {
+        TextAsset cardAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(CardDataPath);
+        Assert.That(cardAsset, Is.Not.Null);
+        JObject card = JObject.Parse(cardAsset.text)["3201"] as JObject;
+        Assert.That(card, Is.Not.Null);
+        Assert.That(
+            card.Value<int>("program_id"),
+            Is.EqualTo((int)cfg.battle.MachineGunnerProgramId.Shoot));
+        Assert.That(card.Value<JArray>("effect_bindings"), Is.Empty);
+
+        HashSet<string> arguments = LocalizationBuildTools.ResolveExpectedCardArguments(
+            "3201",
+            card,
+            new JObject());
+
+        Assert.That(arguments, Is.EquivalentTo(new[] { "damage" }));
     }
 
     /// <summary>生成的中英文 StringTable 必须逐项匹配冻结文案与 Smart 标记。</summary>

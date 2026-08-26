@@ -3,7 +3,7 @@ title: Daedalus · 代码决策记录
 page_type: decision
 lifecycle: active
 created: 2026-07-06
-updated: 2026-08-24
+updated: 2026-08-26
 status_source: STATUS.md
 ---
 
@@ -1312,3 +1312,31 @@ Run 规划采用递归切片门禁：每个可执行切片先处于 `needs-grill
 **Supersede 与保留边界**：本决定只对 G3 Run-managed 流程 supersede CD-112 的 `RunBattleSnapshot / RestartBattle` 和 CD-113 的“当前写入 schema v1、Defeat 不写盘、失败页可同节点重开”口径；G1/G2 验收记录仍作为当时历史事实保留。CD-112 的 child-scope Result bridge、attempt 身份与唯一 Store/Flow 所有权，以及 CD-113 的 Bootstrap root、save port、同目录 temp、durable validation、Move/Replace 和失败不覆盖已提交事实继续有效。真实 Boss 战/Boss 阶段、奖励、Run 胜利、遗物实际效果、非战斗节点、多人/FishNet、云/多槽与战中存档均不在本决定内。
 
 **实施状态与验收门**：当前为 `verified`。静态编译证据为生产 **0 errors / 6 warnings**、Editor **0 errors / 12 warnings**；Mono 定向 runner 为 map+store 25/25、save 21/21、atomic 19/19、flow 22/22、presenter 15/15，Unity View 为 13/13。首次完整 Unity 暴露的 i18n workbook 四格漂移与测试构造参数问题均已修正；最终交互式完整 EditMode job `8e910a98b14f4fe4b4901ba78bf060dc` 为 **993/993 passed**、0 failed、0 skipped、44.1991795 秒。`Sync and Build All` 与 Local Addressables 成功；Packed Play 已实走普通战斗多节点胜利到 `BossGateReached` 并进程级冷启动恢复，以及失败原子终局、冷启动失败页和确认删除两条生产链，各产品检查点 Console Error=0。完整证据见 `06_testing/2026-08-24-g3-deterministic-act-map.md`，方案见 `plans/2026-08-24-g3-deterministic-act-map.md`。
+
+## CD-117：G4-A 以有序 RunDeck、schema v3 canonical RunCards 与 Battle origin 投影建立跨战实例身份
+
+**问题**：G3 的 Run 只保存 `DeckTemplateId`，Battle setup 再从模板解析一组 CardTemplateId；同模板副本没有稳定身份，升级事实也没有跨场景载体。Battle 现有 `CardInstanceId` 又是每场会话局部分配并与临时卡共用，若直接把它提升为 Run 身份，会让洗牌/临时卡/新 Battle 的 allocator 反向污染跨战存档；若继续同时保存 deck template 和实例列表，则恢复、Battle setup 与结果 bridge 会出现两份可冲突的牌组权威。
+
+**RunDeck 与身份选择**：新增正整数值对象 `RunCardInstanceId`，以及只保存 `InstanceId / TemplateId / UpgradeLevel` 的不可变 `RunCard`。`RunDeck` 防御性复制有序序列并拒绝默认或非正实例 ID、重复实例 ID、非正模板 ID和负等级。新 Run 只在创建时按 Hero initial deck 配置顺序展开一次并分配 1..N；此后 `RunStateStore` 持有 ordered RunDeck 作为唯一牌组业务事实，下一实例序号可由当前最大值加一派生，不另存 allocator。Flow 只编排配置解析与 Store 命令，View 不持有牌组事实。
+
+**持久化与 migration 选择**：当前写入 schema 为 v3，canonical 文档只保存 ordered `runCards`，不保存费用、文本、伤害、归宿或其他可由 Card 配置与 UpgradeLevel 派生的值。v2 codec 只接受严格正整数 `deckTemplateId`，迁移为 v3 的显式 `legacyDeckTemplateId`；恢复时按当前合法 deck 配置展开一次，首个后续稳定提交改写为 canonical RunCards。schema v1 继续依 CD-116 fail-fast。canonical 与 legacy 字段必须二选一；恢复还校验每个 card template 存在，Atomic adapter 的 durable equality 按顺序比较每个实例三项事实。
+
+**Battle 边界选择**：`RunBattleInput/BattleSetupOptions` 传入不可变 RunCard 投影。Battle 仍为每张初始卡分配自己的局部 `CardInstanceId`，同时把对应 `RunCardInstanceId?` 作为 `OriginRunCardInstanceId` 并原样携带 opaque UpgradeLevel；抽牌、弃牌、手牌与卡区移动只搬运 Battle instance。动态临时卡 origin 为 null、level 为 0。存在 canonical RunCards 时 Battle 不再解析 Hero initial deck；若 setup 同时声称 canonical RunDeck 与 deck template 权威则拒绝。BattleSession、卡区、临时卡、敌人、队列和动画绝不回写 RunDeck 或 Run save。
+
+**Supersede 与保留边界**：本决定仅 supersede CD-112/113/116 中“DeckTemplateId 是持续 Run 牌组权威”和“schema v2 是当前写入版本”的口径；G1 的 child-scope Result bridge/attempt 身份、G2 的 Bootstrap root/save port/原子提交、G3 的 map recipe/fingerprint/BossGate/Terminal(Defeat) 与 v1 fail-fast 继续有效。UpgradeLevel 在 G4-A 只是保存与投影事实，费用、文本、规则解释仍留给 G4-D；奖励池、Reward RNG、Pending 与选择/跳过仍留给 G4-B/C。本决定不授权 G5 或任何 Scene、Prefab、asmdef、ProjectSettings、HybridCLR、DI 改动。
+
+**实施状态与验收门**：G4-A 当前为 `verified`，G4 整体仍为 `implementing`。终审补强的 legacy Deck 缺失 Card 先由 job `2b353e13f9224f10b76bd44db5b980f1` 得到预期 RED，再由 `2470f01dddc9430bb0a209deef2fd3f1` 转绿；canonical 冷启动→Battle setup 与 atomic 顺序/实例/等级漂移也已直接覆盖。最终八类定向聚合 job `c210e4b045aa454780e22a38d02e9445` 为 **120/120 passed、0 failed、0 skipped**；Rider 相关文件分析、Unity 刷新编译与最终 Console 均为 0 errors。本停止点没有 DataTables/i18n 变更，未运行 Luban、Sync/Build、完整 EditMode 或产品链；这些仍是完整 G4 的最终门。证据见 `06_testing/2026-08-25-g4-run-deck-rewards-upgrades.md`，计划见 `plans/2026-08-25-g4-run-deck-rewards-upgrades.md`。
+
+## CD-118：G4 以独立冻结奖励事务、schema v4 与有限/无限等级投影闭合 RunDeck
+
+**问题**：G4-A 已建立跨战 RunCard 身份，但普通胜利仍会直接回图，奖励候选、选择结算和升级规则没有 Run-owned 持久事实。若 Presenter 重抽候选、Flow 保留第二份 Pending、Reward 与 Map/Battle 共用随机流，或选择后先发布内存再写盘，刷新、读档、崩溃窗口和重试都会改变候选或重复加牌。升级若继续只读旧 `upgraded_*` 两态字段，则无法表达实例级多级有限轨道与无限轨道，也会让文本、费用、预演和真实执行各自解释等级。
+
+**奖励池与随机选择**：两名当前 Hero 在既有 Hero 配置中各保存显式、互不共享的 Implemented 奖励模板池；1001/1002 当前分别为 12/76 张。候选只允许 Common/Uncommon/Rare，Basic 与 Ancient 由 rarity 白名单拒绝，CatalogOnly、缺卡、重复、少于三张、跨 Hero 共享模板及动态临时卡由构建门禁拒绝；不额外禁止同时出现在初始牌组中的非 Basic 模板。用户授权 Agent 自行处理阻塞后，Common/Uncommon/Rare 权重冻结为 `60/37/3`，每次奖励无状态独立抽取，不实现累积或重置的稀有保底。Reward seed 只由独立随机域派生，不推进 Map 或 Battle 随机状态；同页按顺序冻结三个不同 TemplateId，跨战允许再次获得同模板的新实例。
+
+**Pending 与 exactly-once 事务**：当前 schema v4 在 canonical ordered RunCards 之外只保存稳定 `PendingCardReward`；v2 仍按旧 deck template 一次展开，v3 无损迁移到 v4，v1 继续 fail-fast。普通胜利以当前 Run/Battle 身份生成稳定 RewardId，Store 一次发布 `RewardPending`；UI、语言和场景重建只重投影。选择命令携带 RewardId 与候选 TemplateId，跳过只携带 RewardId；Store 最终校验 phase/identity/membership，并以 preview/commit 冻结唯一后继。Flow 先写 reward intent 和 canonical save，成功后才发布 MapReady 与追加的新 RunCard；失败保留同一 Pending/后继供 exact retry，重复、过期或伪造输入零写入。下一实例 ID 由现有最大值加一派生，选择同模板仍创建独立身份，跳过无补偿。
+
+**多级升级投影**：每张卡配置严格二选一。有限轨道按 `CardId + NextUpgradeLevel` 读取连续显式行；无限轨道只允许一条类型化 `DamageValue` 每级增量并使用 checked 算术；有限轨道没有无限尾巴。首批生产覆盖为 Warrior 3002 Strike（有限，L1 伤害 9）、3123 Bludgeon（无限，伤害 32 +10/level），Machine Gunner 3201 Shoot（无限，程序伤害 6 +3/level）、3207 OutputAdjust（有限，L1 费用 0，Power 规则与 PowerPile 不变）。普通卡先校验 `ImplementationStatus` 与 effect binding/reference，再做等级投影；坏绑定返回类型化失败并保持 Queue/Run 零写入。同一只读 `BattleCardLevelProjection` 驱动文本参数、费用、归宿、合法性、通用 Effect 与 MachineGunner Program 的本次真实执行；3207 L1 的 0 费成功出牌仍生成既有规范的 `EnergySpent(0)` settlement，不用“缺少 settlement”表达免费。不修改全局 registry，不新增公式 DSL、事件总线或职业框架。Store 只提供把一个合法实例升一级的领域命令，G4 没有玩家升级 UI，首个主动入口仍属于 G6 篝火。
+
+**Supersede 与边界**：本决定仅 supersede CD-117 中“schema v3 是当前写入版本”和“UpgradeLevel 尚不解释”的当前口径；CD-117 的 ordered identity、v2 fallback、Battle origin 与唯一 Store/Flow 所有权继续有效。Scene、Prefab、asmdef、ProjectSettings、HybridCLR、DI 架构以及 G5 遗物/药水、金币、商店、事件、宝箱、真实 Boss、RunOutcome、云/多槽/战中存档、多人和商业化均不在本决定内。
+
+**实施状态与验收门**：G4-A～D 已完成并 `verified`。legacy fallback 已按 RED→GREEN 补强为 Continue 在发布 active Run 前先耐久改写 canonical；G4 定向结果为 120/120、30/30、35/35、258/258，生产双 Hero 自动化为 1/1，完整 Unity EditMode job `7cad4b02d38248f298227ea06804c949` 为 1093/1093，Rider build 0 errors。`Sync and Build All`、Local Addressables/BuildLayout、Packed Play 双 Hero 选择/跳过、冷启动冻结 Pending、下一战 origin 实例投影与最终 Console 0 均通过；完整证据记录于 `06_testing/2026-08-25-g4-run-deck-rewards-upgrades.md`。G4 授权在此结束，不进入 G5。

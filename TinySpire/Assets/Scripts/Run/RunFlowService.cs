@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using cfg;
 using Cysharp.Threading.Tasks;
 using TinySpire.Battle;
@@ -24,6 +26,9 @@ namespace TinySpire.Run
 
         private RunSaveDocument _continuableDocument;
         private RunSaveDocument _pendingCommitDocument;
+        private bool _hasPendingRewardSettlement;
+        private RunCardRewardId _pendingRewardId;
+        private int? _pendingRewardCardTemplateId;
 
         /// <summary>存档发现、校验与提交状态变化时通知当前入口 Presenter。</summary>
         public event Action PersistenceChanged;
@@ -87,8 +92,8 @@ namespace TinySpire.Run
             Tables tables = RequireTables();
             cfg.battle.Hero hero = tables.TbHero.GetOrDefault(heroTemplateId)
                 ?? throw new InvalidOperationException($"Hero template {heroTemplateId} does not exist.");
-            if (tables.TbDeck.GetOrDefault(hero.InitialDeckId) == null)
-                throw new InvalidOperationException($"Deck template {hero.InitialDeckId} does not exist.");
+            cfg.battle.Deck initialDeck = tables.TbDeck.GetOrDefault(hero.InitialDeckId)
+                ?? throw new InvalidOperationException($"Deck template {hero.InitialDeckId} does not exist.");
             ActMapProfile profile = TinySpireActMapProfiles.Current;
             foreach (int encounterId in profile.EncounterIds)
             {
@@ -108,7 +113,7 @@ namespace TinySpire.Run
                 hero.Id,
                 hero.MaxHealth,
                 hero.MaxHealth,
-                hero.InitialDeckId,
+                RunDeck.CreateInitial(initialDeck.CardTemplateIds),
                 entropy.RandomRootSeed,
                 map));
             BeginCheckpointCommit(RunSaveDocumentMapper.Create(created));
@@ -147,7 +152,8 @@ namespace TinySpire.Run
                 input.EncounterTemplateId,
                 checked((int)input.RandomSeed),
                 input.InitialHealth,
-                input.DeckTemplateId);
+                deckTemplateId: null,
+                runCards: input.RunCards);
         }
 
         /// <summary>确认 BattleScope 冻结参数仍精确对应当前 attempt，并返回关联身份。</summary>
@@ -161,12 +167,35 @@ namespace TinySpire.Run
                 setup.EncounterTemplateId != input.EncounterTemplateId ||
                 setup.RandomSeed != input.RandomSeed ||
                 setup.PlayerInitialHealth != input.InitialHealth ||
-                setup.DeckTemplateId != input.DeckTemplateId)
+                !RunCardsMatch(setup.RunCards, input.RunCards))
             {
                 throw new InvalidOperationException("Battle setup does not match the active Run attempt.");
             }
 
             return input.BattleId;
+        }
+
+        /// <summary>按顺序比较 Battle setup 与当前 attempt 的实例级只读投影。</summary>
+        private static bool RunCardsMatch(
+            IReadOnlyList<RunCard> setupCards,
+            IReadOnlyList<RunCard> activeCards)
+        {
+            if (setupCards == null || activeCards == null || setupCards.Count != activeCards.Count)
+                return false;
+
+            for (int index = 0; index < setupCards.Count; index++)
+            {
+                RunCard setupCard = setupCards[index];
+                RunCard activeCard = activeCards[index];
+                if (setupCard.InstanceId != activeCard.InstanceId ||
+                    setupCard.TemplateId != activeCard.TemplateId ||
+                    setupCard.UpgradeLevel != activeCard.UpgradeLevel)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         /// <summary>消费当前 attempt 的单玩家稳定结果，先写回 Run 再返回入口场景。</summary>
@@ -183,14 +212,27 @@ namespace TinySpire.Run
             switch (result.Kind)
             {
                 case BattleResultKind.Victory:
-                    RunState completed = _store.ApplyVictory(
+                    RunState pending = _store.RecordVictoryAndFreezeReward(
                         battleId,
                         player.TemplateId,
                         player.Health,
-                        player.MaxHealth);
-                    BeginCheckpointCommit(RunSaveDocumentMapper.Create(completed));
-                    await _scenes.LoadSceneWithLoadingAsync(RunSceneAddresses.RunEntry);
+                        player.MaxHealth,
+                        battleInput =>
+                        {
+                            HeroCardRewardPool pool = TablesHeroCardRewardPoolCatalog.Create(
+                                RequireTables(),
+                                battleInput.HeroTemplateId);
+                            uint rewardSeed = RunRandomDomains.DeriveRewardSeed(
+                                _store.Current.RandomRootSeed,
+                                battleInput.BattleId.AttemptSequence);
+                            return RunCardRewardGenerator.Generate(
+                                new RunCardRewardId(battleInput.BattleId),
+                                pool,
+                                rewardSeed);
+                        });
+                    BeginCheckpointCommit(RunSaveDocumentMapper.Create(pending));
                     CommitPendingCheckpoint();
+                    await _scenes.LoadSceneWithLoadingAsync(RunSceneAddresses.RunEntry);
                     return;
                 case BattleResultKind.Defeat:
                     RunState terminal = _store.RecordDefeat(
@@ -206,6 +248,30 @@ namespace TinySpire.Run
             }
 
             await _scenes.LoadSceneWithLoadingAsync(RunSceneAddresses.RunEntry);
+        }
+
+        /// <summary>校验选择或跳过命令，先提交其完整后继文档，成功后才让 Store 发布结算。</summary>
+        public RunSaveCommitResult SettleCardReward(
+            RunCardRewardId rewardId,
+            int? selectedCardTemplateId)
+        {
+            if (Persistence.Status == RunPersistenceStatus.CommitPending ||
+                Persistence.Status == RunPersistenceStatus.CommitFailed ||
+                _hasPendingRewardSettlement)
+            {
+                throw new InvalidOperationException(
+                    "A Run checkpoint is already pending and must be resolved first.");
+            }
+
+            RunState preview = _store.PreviewCardRewardSettlement(
+                rewardId,
+                selectedCardTemplateId);
+            RunSaveDocument document = RunSaveDocumentMapper.Create(preview);
+            _hasPendingRewardSettlement = true;
+            _pendingRewardId = rewardId;
+            _pendingRewardCardTemplateId = selectedCardTemplateId;
+            BeginCheckpointCommit(document);
+            return CommitPendingCheckpoint();
         }
 
         /// <summary>在没有 active Run 时发现并配置校验最近成功的地图检查点，但不自动 hydrate。</summary>
@@ -287,6 +353,18 @@ namespace TinySpire.Run
                 throw new InvalidOperationException(restore.Detail);
             }
 
+            if (_continuableDocument.LegacyDeckTemplateId.HasValue)
+            {
+                RunSaveDocument canonicalDocument = RunSaveDocumentMapper.Create(restore.Options);
+                BeginCheckpointCommit(canonicalDocument);
+                RunSaveCommitResult commit = CommitPendingCheckpoint();
+                if (commit.Status != RunSaveCommitStatus.Success)
+                {
+                    throw new InvalidOperationException(
+                        $"Legacy Run deck canonical commit failed: {commit.Detail}");
+                }
+            }
+
             return _store.RestoreRun(restore.Options);
         }
 
@@ -337,10 +415,12 @@ namespace TinySpire.Run
         {
             if (Persistence.Status != RunPersistenceStatus.CommitFailed)
                 throw new InvalidOperationException("The current Run does not have a failed checkpoint commit.");
-            if (_store.Current?.ProgressPhase == RunProgressPhase.Terminal)
+            if (_store.Current?.ProgressPhase == RunProgressPhase.Terminal ||
+                _store.Current?.ProgressPhase == RunProgressPhase.RewardPending ||
+                _hasPendingRewardSettlement)
             {
                 throw new InvalidOperationException(
-                    "A terminal Run cannot roll back to a previous continuable checkpoint.");
+                    "A terminal or reward-pending Run cannot roll back to a previous checkpoint.");
             }
 
             _pendingCommitDocument = null;
@@ -404,7 +484,7 @@ namespace TinySpire.Run
                 case RunSaveRestoreStatus.MissingDeckTemplate:
                     status = RunPersistenceStatus.MissingDeckTemplate;
                     missingKind = "Deck";
-                    missingId = document?.DeckTemplateId;
+                    missingId = document?.LegacyDeckTemplateId;
                     break;
                 case RunSaveRestoreStatus.MissingEncounterTemplate:
                     status = RunPersistenceStatus.MissingEncounterTemplate;
@@ -446,6 +526,14 @@ namespace TinySpire.Run
             RunSaveCommitResult result = _saveStore.Commit(document);
             if (result.Status == RunSaveCommitStatus.Success)
             {
+                if (_hasPendingRewardSettlement)
+                {
+                    _store.CommitCardRewardSettlement(
+                        _pendingRewardId,
+                        _pendingRewardCardTemplateId);
+                    ClearPendingRewardSettlement();
+                }
+
                 _pendingCommitDocument = null;
                 if (document.ProgressPhase == RunSaveProgressPhase.Terminal)
                 {
@@ -468,6 +556,14 @@ namespace TinySpire.Run
                 fallback.HasStoredData,
                 fallback.HasPendingTemporaryFile));
             return result;
+        }
+
+        /// <summary>仅在同一奖励后继已经成功落盘后清除编排层的 retry 命令。</summary>
+        private void ClearPendingRewardSettlement()
+        {
+            _hasPendingRewardSettlement = false;
+            _pendingRewardId = default;
+            _pendingRewardCardTemplateId = null;
         }
 
         /// <summary>替换存档状态并同步通知当前场景 Presenter。</summary>
@@ -509,7 +605,9 @@ namespace TinySpire.Run
     }
 
     /// <summary>以当前 Luban 表实现读档所需的稳定配置 ID 存在性目录。</summary>
-    internal sealed class TablesRunSaveConfigurationCatalog : IRunSaveConfigurationCatalog
+    internal sealed class TablesRunSaveConfigurationCatalog :
+        IRunSaveConfigurationCatalog,
+        IRunCardUpgradeConfigurationCatalog
     {
         private readonly Tables _tables;
 
@@ -537,6 +635,41 @@ namespace TinySpire.Run
         public bool DeckExists(int templateId)
         {
             return _tables.TbDeck.GetOrDefault(templateId) != null;
+        }
+
+        /// <summary>按配置顺序复制已存在 Deck 的全部初始卡牌模板。</summary>
+        public IReadOnlyList<int> GetDeckCardTemplateIds(int templateId)
+        {
+            cfg.battle.Deck deck = _tables.TbDeck.GetOrDefault(templateId)
+                ?? throw new InvalidOperationException($"Deck template {templateId} does not exist.");
+            return Array.AsReadOnly(deck.CardTemplateIds.ToArray());
+        }
+
+        /// <summary>判断 Card 模板是否仍存在。</summary>
+        public bool CardExists(int templateId)
+        {
+            return _tables.TbCard.GetOrDefault(templateId) != null;
+        }
+
+        /// <summary>用统一 Battle 等级投影确认存档或实例命令中的完整升级等级可执行。</summary>
+        public bool IsCardUpgradeLevelValid(int templateId, int upgradeLevel)
+        {
+            return BattleCardLevelProjection.IsUpgradeLevelValid(
+                _tables,
+                templateId,
+                upgradeLevel);
+        }
+
+        /// <summary>核对模板仍在 Hero 显式池中，且当前 Card 仍为 Implemented 可奖励稀有度。</summary>
+        public bool IsRewardCardForHero(int heroTemplateId, int cardTemplateId)
+        {
+            cfg.battle.Hero hero = _tables.TbHero.GetOrDefault(heroTemplateId);
+            cfg.battle.Card card = _tables.TbCard.GetOrDefault(cardTemplateId);
+            return hero != null &&
+                   card != null &&
+                   hero.RewardCardTemplateIds.Contains(cardTemplateId) &&
+                   card.ImplementationStatus == cfg.battle.CardImplementationStatus.Implemented &&
+                   CardRewardCandidate.IsRewardableRarity(card.Rarity);
         }
 
         /// <summary>判断 Encounter 模板是否仍存在。</summary>

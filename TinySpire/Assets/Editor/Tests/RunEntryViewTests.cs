@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using TMPro;
+using TinySpire.Run;
 using TinySpire.Run.Map;
 using TinySpire.UI.Run;
 using UnityEngine;
@@ -12,6 +13,45 @@ using UnityEngine.UI;
 
 public sealed class RunEntryViewTests
 {
+    /// <summary>奖励选择与跳过动作必须分别携带精确奖励身份及合法模板载荷。</summary>
+    [Test]
+    public void CardRewardActions_RequireExactRewardIdentityAndTemplatePayload()
+    {
+        RunCardRewardId rewardId = CreateRewardId();
+
+        var select = new RunEntryAction(
+            RunEntryActionKind.SelectCardReward,
+            cardRewardId: rewardId,
+            cardTemplateId: 3105);
+        var skip = new RunEntryAction(
+            RunEntryActionKind.SkipCardReward,
+            cardRewardId: rewardId);
+
+        Assert.That(select.CardRewardId, Is.EqualTo(rewardId));
+        Assert.That(select.CardTemplateId, Is.EqualTo(3105));
+        Assert.That(skip.CardRewardId, Is.EqualTo(rewardId));
+        Assert.That(skip.CardTemplateId, Is.Null);
+        Assert.Throws<ArgumentException>(() =>
+        {
+            _ = new RunEntryAction(
+                RunEntryActionKind.SelectCardReward,
+                cardRewardId: rewardId);
+        });
+        Assert.Throws<ArgumentException>(() =>
+        {
+            _ = new RunEntryAction(
+                RunEntryActionKind.SkipCardReward,
+                cardRewardId: rewardId,
+                cardTemplateId: 3105);
+        });
+        Assert.Throws<ArgumentException>(() =>
+        {
+            _ = new RunEntryAction(
+                RunEntryActionKind.StartGame,
+                cardRewardId: rewardId);
+        });
+    }
+
     /// <summary>主菜单继续按钮按 ViewModel 启用，并只发布一次 ContinueGame 意图。</summary>
     [Test]
     public void RenderMainMenu_EnabledContinueButton_EmitsContinueAction()
@@ -206,6 +246,64 @@ public sealed class RunEntryViewTests
 
             Assert.That(actions, Has.Count.EqualTo(1));
             Assert.That(actions[0].Kind, Is.EqualTo(expectedAction));
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(root);
+        }
+    }
+
+    /// <summary>奖励页固定绘制三张候选与跳过，并在重复投影后只发布最新身份的一次动作。</summary>
+    [Test]
+    public void RenderCardReward_ReplacesProjectionWithoutStackingListeners()
+    {
+        var root = new GameObject("RunEntryViewRoot");
+        try
+        {
+            var view = root.AddComponent<RunEntryView>();
+            view.BuildForTesting();
+            var actions = new List<RunEntryAction>();
+            view.ActionRequested += actions.Add;
+            RunCardRewardId rewardId = CreateRewardId();
+            RunCardRewardViewModel first = CreateCardRewardModel(
+                rewardId,
+                "Strike",
+                "Defend",
+                "Focus");
+            RunCardRewardViewModel localized = CreateCardRewardModel(
+                rewardId,
+                "重击",
+                "防御",
+                "专注");
+
+            view.Render(CreateModel(
+                RunEntryPage.CardReward,
+                selectedHeroTemplateId: 1001,
+                confirmEnabled: false,
+                cardReward: first));
+            view.Render(CreateModel(
+                RunEntryPage.CardReward,
+                selectedHeroTemplateId: 1001,
+                confirmEnabled: false,
+                cardReward: localized));
+
+            GameObject rewardPage = view.GetPageForTesting(RunEntryPage.CardReward);
+            Assert.That(rewardPage.GetComponentsInChildren<Button>(true), Has.Length.EqualTo(4));
+            Assert.That(
+                view.GetButtonForTesting("CardRewardCandidate1Button")
+                    .GetComponentInChildren<TMP_Text>(true).text,
+                Does.Contain("防御"));
+
+            view.GetButtonForTesting("CardRewardCandidate1Button").onClick.Invoke();
+            view.GetButtonForTesting("SkipCardRewardButton").onClick.Invoke();
+
+            Assert.That(actions, Has.Count.EqualTo(2));
+            Assert.That(actions[0].Kind, Is.EqualTo(RunEntryActionKind.SelectCardReward));
+            Assert.That(actions[0].CardRewardId, Is.EqualTo(rewardId));
+            Assert.That(actions[0].CardTemplateId, Is.EqualTo(3123));
+            Assert.That(actions[1].Kind, Is.EqualTo(RunEntryActionKind.SkipCardReward));
+            Assert.That(actions[1].CardRewardId, Is.EqualTo(rewardId));
+            Assert.That(actions[1].CardTemplateId, Is.Null);
         }
         finally
         {
@@ -415,7 +513,8 @@ public sealed class RunEntryViewTests
         bool confirmEnabled,
         RunMapViewModel map = null,
         bool continueEnabled = false,
-        bool canRollbackFailedSave = false)
+        bool canRollbackFailedSave = false,
+        RunCardRewardViewModel cardReward = null)
     {
         var texts = new Dictionary<RunEntryTextSlot, string>();
         foreach (RunEntryTextSlot slot in Enum.GetValues(typeof(RunEntryTextSlot)))
@@ -428,7 +527,26 @@ public sealed class RunEntryViewTests
             confirmEnabled,
             map,
             continueEnabled,
-            canRollbackFailedSave);
+            canRollbackFailedSave,
+            cardReward);
+    }
+
+    /// <summary>创建按固定模板顺序排列的三张奖励候选投影。</summary>
+    private static RunCardRewardViewModel CreateCardRewardModel(
+        RunCardRewardId rewardId,
+        string firstName,
+        string secondName,
+        string thirdName)
+    {
+        return new RunCardRewardViewModel(
+            rewardId,
+            new[]
+            {
+                new RunCardRewardCandidateViewModel(3105, firstName, "Deal 8 damage.", "1"),
+                new RunCardRewardCandidateViewModel(3123, secondName, "Gain 6 block.", "1"),
+                new RunCardRewardCandidateViewModel(3157, thirdName, "Draw 2 cards.", "X"),
+            },
+            actionsEnabled: true);
     }
 
     /// <summary>创建含两条分支与两个不同 Boss 的完整地图 View 投影。</summary>
@@ -521,5 +639,14 @@ public sealed class RunEntryViewTests
         return Enumerable.Range(0, anchor.childCount)
             .Select(index => anchor.GetChild(index).name)
             .ToArray();
+    }
+
+    /// <summary>建立含稳定 Run、attempt 与节点身份的测试奖励标识。</summary>
+    private static RunCardRewardId CreateRewardId()
+    {
+        return new RunCardRewardId(new RunBattleId(
+            new RunId(Guid.Parse("cdef1234-5678-90ab-cdef-1234567890ab")),
+            attemptSequence: 2,
+            new MapNodeId("L01-S00")));
     }
 }

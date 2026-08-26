@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using R3;
 using TinySpire.Core;
+using TinySpire.Run;
 
 namespace TinySpire.Battle
 {
@@ -68,11 +69,36 @@ namespace TinySpire.Battle
         /// <summary>静态 Card 配置表中的模板标识。</summary>
         public int TemplateId { get; }
 
+        /// <summary>来自 RunDeck 时对应的稳定实例身份；战斗临时卡与旧入口为空。</summary>
+        public RunCardInstanceId? OriginRunCardInstanceId { get; }
+
+        /// <summary>进入本战时冻结的升级等级；G4-A 只透传，不解释升级规则。</summary>
+        public int UpgradeLevel { get; }
+
         /// <summary>由卡区聚合建立模板引用与实例标识的对应关系。</summary>
         internal CardInstanceData(CardInstanceId id, int templateId)
+            : this(id, templateId, originRunCardInstanceId: null, upgradeLevel: 0)
         {
+        }
+
+        /// <summary>由卡区聚合建立 Run 来源与战内实例之间的只读投影。</summary>
+        internal CardInstanceData(
+            CardInstanceId id,
+            int templateId,
+            RunCardInstanceId? originRunCardInstanceId,
+            int upgradeLevel)
+        {
+            if (templateId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(templateId));
+            if (originRunCardInstanceId.HasValue && originRunCardInstanceId.Value.Sequence <= 0)
+                throw new ArgumentOutOfRangeException(nameof(originRunCardInstanceId));
+            if (upgradeLevel < 0)
+                throw new ArgumentOutOfRangeException(nameof(upgradeLevel));
+
             Id = id;
             TemplateId = templateId;
+            OriginRunCardInstanceId = originRunCardInstanceId;
+            UpgradeLevel = upgradeLevel;
         }
     }
 
@@ -606,6 +632,40 @@ namespace TinySpire.Battle
 
                 var cardId = AllocateCardInstanceId();
                 _cards.Add(cardId, new CardInstanceData(cardId, templateId));
+                drawPile.Add(cardId);
+            }
+
+            _shuffleRandom.Shuffle(drawPile);
+            _layout = new ReactiveProperty<CardZoneLayoutData>(
+                new CardZoneLayoutData(
+                    drawPile,
+                    Array.Empty<CardInstanceId>(),
+                    Array.Empty<CardInstanceId>(),
+                    Array.Empty<CardInstanceId>(),
+                    Array.Empty<CardInstanceId>()));
+            Layout = _layout.ToReadOnlyReactiveProperty();
+        }
+
+        /// <summary>从冻结 RunCard 投影创建战内实例，并保留来源身份、顺序、模板与等级事实。</summary>
+        public BattleCardZonesData(IEnumerable<RunCard> runCards, uint shuffleSeed)
+        {
+            if (runCards == null)
+                throw new ArgumentNullException(nameof(runCards));
+
+            var runDeck = new RunDeck(runCards);
+            _shuffleRandom = new GameRandom(shuffleSeed);
+            _cards = new Dictionary<CardInstanceId, CardInstanceData>();
+            var drawPile = new List<CardInstanceId>(runDeck.Cards.Count);
+
+            _nextInstanceId = 1;
+            foreach (RunCard runCard in runDeck.Cards)
+            {
+                CardInstanceId cardId = AllocateCardInstanceId();
+                _cards.Add(cardId, new CardInstanceData(
+                    cardId,
+                    runCard.TemplateId,
+                    runCard.InstanceId,
+                    runCard.UpgradeLevel));
                 drawPile.Add(cardId);
             }
 
