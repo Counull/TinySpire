@@ -3,11 +3,21 @@ title: Daedalus · 会话变更日志
 page_type: changelog
 lifecycle: active
 created: 2026-07-06
-updated: 2026-08-26
+updated: 2026-08-27
 status_source: STATUS.md
 ---
 
 > 当前可变状态只查 [STATUS.md](STATUS.md)。本页保留按日期排列的审计与恢复线索；其中旧状态快照不构成当前事实。
+
+## 2026-08-27 G5/G6 持有物与非战斗节点（completed / verified）
+
+- 用户授权从共同 Run 持有物/非战斗一次性结算边界开始，串行交付 G5→G6，并随后明确取消逐片 Grill。S0、G5-B～D、G6-A～E 均已按窄计划实现：schema v5、唯一 `RunHoldings`、类型化 `PendingNodeVisit`、BattleStart 遗物、BattleResult 药水消费、首次奖励 attached loot、mixed map v2，以及 Rest/Chest/Shop/Event 的 save-before-publish 结算。
+- 最终范围审查发现 schema v5 只校验 attached loot 模板存在，第二场 RewardPending 冷档可伪造合法 Potion 9001 并重复获利。新增测试先得到 `Expected InvalidDocument / But was Success` 的真实 RED，再让恢复从已完成 Combat 路径与 holdings 重建权威 attached loot；篡改的后续奖励与删除首战应有 loot 均 fail-closed。修复后 G5 当前源码离线聚合为 **155 passed、0 failed、4 个真实 GameObject 用例明确 skipped**；G6 最终非 Unity 聚合为 **312/312 passed、0 failed、0 skipped**。
+- 生产与 Editor 静态 build 分别为 0 errors / 6 warnings 与 0 errors / 12 warnings；Luban `gen.bat` 与 `TinySpire/Build/Sync and Build All` 均成功，新增 12 个 `.meta` GUID 唯一。Rider MCP project problems 为 0。独立 G6-D/G6-E 审查未发现其他 P1/P2，Shop 审查指出的三个直接证据缺口已补测试后复审通过。
+- 先前两次 Unity 批处理因 license/entitlement 返回 code 198 的历史阻塞已解除。完整 Unity EditMode 最终于 2026-08-27 21:43:42 得到 **1348/1348 passed、0 failed、0 skipped**，耗时 74.8235407s；首次全量运行暴露 G4 production acceptance 假定奖励后直接进入下一战的旧路径假设，补齐穿越 G6 必经非战斗节点的验收接线后重跑全绿。
+- 最新 BuildLayout `BuildError` 为空、12/12 bundles `BuildStatus=0`；`run_tbrelic.json` 与 `run_tbpotion.json` 位于 `AssetBundleProvider` bundle，物理 bundle SHA-256 为 `BB0FB1DB789F8851538E07C4A6ECF50014C4987CF93792F54D7FDE2925FA9610`。
+- UnityMCP 在 Packed Play active builder index 1 下从 Bootstrap 进入 RunEntry，以 Hero 1001 新建 schema v5 Run；实际 profile 为 `tinyspire.act1.g6.v1`，路线为 `Combat→Rest→Chest→Shop→Event→Combat→BossGate`。Console Error、InvalidKey 与 ConfigInitializationException 均为 0；验收后已恢复 active builder index 0，并按 SHA-256 `419058435D82A48EA08DBF3121F6127417EAC700D302388BFFFA4586DFEE54B9` 恢复用户原 `run-save.json`。
+- 本轮严格没有进入 G7、真实 Boss/Boss 阶段、精英或 RunOutcome，也没有实现云存档、多槽或架构重构；Scene、Prefab、asmdef、ProjectSettings、HybridCLR、DI 与启动流程均未纳入功能改动。完整证据见 `06_testing/2026-08-27-g5-g6-run-holdings-noncombat-nodes.md`，决策见 CD-119、CD-120。
 
 ## 2026-08-26 G4 RunDeck、奖励闭环与多级升级（verified）
 

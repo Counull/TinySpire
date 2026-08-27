@@ -275,12 +275,19 @@ namespace TinySpire.UI.Battle
         {
             LocalizationService localization = resolver.Resolve<LocalizationService>();
             ISceneFlowService sceneFlow = resolver.Resolve<ISceneFlowService>();
+            RunFlowService runFlow = null;
+            if (resolver.TryResolve(out RunFlowService resolvedFlow) &&
+                resolvedFlow.HasActiveBattleInput)
+            {
+                runFlow = resolvedFlow;
+            }
             ConfigureFlowFeedbackView(
                 view,
                 key => localization.GetString(key),
                 sceneFlow,
-                IsRunManaged(resolver),
-                () => Application.Quit());
+                runFlow != null,
+                () => Application.Quit(),
+                runFlow);
         }
 
         /// <summary>只有父 Scope 同时持有 RunFlow 与 active attempt 时才启用 Run 托管终局。</summary>
@@ -299,7 +306,8 @@ namespace TinySpire.UI.Battle
             Func<string, string> localize,
             ISceneFlowService sceneFlow,
             bool runManaged,
-            Action quitApplication)
+            Action quitApplication,
+            RunFlowService runFlow = null)
         {
             if (view == null)
                 throw new ArgumentNullException(nameof(view));
@@ -314,7 +322,8 @@ namespace TinySpire.UI.Battle
                 localize,
                 () => sceneFlow.LoadSceneWithLoadingAsync(RunSceneAddresses.Battle),
                 quitApplication,
-                showLegacyTerminalActions: !runManaged);
+                showLegacyTerminalActions: !runManaged,
+                runFlow: runManaged ? runFlow : null);
         }
 
         /// <summary>从当前 Scope 保留延迟解析入口，避免 adapter 构造时递归创建仍依赖 Queue 的 Hand。</summary>

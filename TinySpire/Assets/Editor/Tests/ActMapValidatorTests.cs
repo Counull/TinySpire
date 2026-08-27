@@ -125,7 +125,7 @@ public sealed class ActMapValidatorTests
             .ToArray();
         var broken = new MapDefinition(
             profileId: "drifted.profile",
-            generatorVersion: ActMapGenerator.CurrentVersion + 1,
+            generatorVersion: profile.GeneratorVersion + 1,
             generated.MapSeed,
             nodes,
             generated.Edges);
@@ -202,6 +202,61 @@ public sealed class ActMapValidatorTests
         Assert.That(codes, Does.Contain(MapValidationErrorCode.MissingEdgeEndpoint));
         Assert.That(codes, Does.Contain(MapValidationErrorCode.NonAdjacentEdge));
         Assert.That(codes, Does.Contain(MapValidationErrorCode.BossHasOutgoingEdge));
+    }
+
+    /// <summary>G6 mixed 的任一 playable 节点既要从 Start 可达，也要能够继续抵达 BossGate。</summary>
+    [Test]
+    public void Validate_G6MixedWhenRestBreaksReachability_ReportsPlayableFailures()
+    {
+        ActMapProfile profile = TinySpireActMapProfiles.NewRunG6V1;
+        MapDefinition generated = ActMapGenerator.Generate(profile, mapSeed: 123456u);
+        MapNodeId restNodeId = MapNodeId.FromPosition(layer: 2, slot: 0);
+        var unreachable = new MapDefinition(
+            generated.ProfileId,
+            generated.GeneratorVersion,
+            generated.MapSeed,
+            generated.Nodes,
+            generated.Edges.Where(edge => edge.ToNodeId != restNodeId).ToArray());
+        var stranded = new MapDefinition(
+            generated.ProfileId,
+            generated.GeneratorVersion,
+            generated.MapSeed,
+            generated.Nodes,
+            generated.Edges.Where(edge => edge.FromNodeId != restNodeId).ToArray());
+
+        MapValidationResult unreachableResult = ActMapValidator.Validate(unreachable, profile);
+        MapValidationResult strandedResult = ActMapValidator.Validate(stranded, profile);
+
+        Assert.That(unreachableResult.Errors.Select(error => error.Code),
+            Does.Contain(MapValidationErrorCode.PlayableNodeUnreachableFromStart));
+        Assert.That(strandedResult.Errors.Select(error => error.Code),
+            Does.Contain(MapValidationErrorCode.PlayableNodeCannotReachBoss));
+    }
+
+    /// <summary>G6 mixed 每层的种类、程序化内容 anchor 与 profile 自有生成器版本都必须精确匹配。</summary>
+    [Test]
+    public void Validate_G6MixedWhenLayerOrVersionDrifts_ReportsTypedFailures()
+    {
+        ActMapProfile profile = TinySpireActMapProfiles.NewRunG6V1;
+        MapDefinition generated = ActMapGenerator.Generate(profile, mapSeed: 123456u);
+        MapNodeId chestNodeId = MapNodeId.FromPosition(layer: 3, slot: 0);
+        MapNode[] nodes = generated.Nodes
+            .Select(node => node.Id == chestNodeId
+                ? new MapNode(node.Id, node.Layer, node.Slot, node.Kind, contentId: 7299)
+                : node)
+            .ToArray();
+        var broken = new MapDefinition(
+            generated.ProfileId,
+            ActMapGenerator.LegacyG3Version,
+            generated.MapSeed,
+            nodes,
+            generated.Edges);
+
+        MapValidationResult result = ActMapValidator.Validate(broken, profile);
+        MapValidationErrorCode[] codes = result.Errors.Select(error => error.Code).ToArray();
+
+        Assert.That(codes, Does.Contain(MapValidationErrorCode.GeneratorVersionMismatch));
+        Assert.That(codes, Does.Contain(MapValidationErrorCode.ContentReferenceViolation));
     }
 
     /// <summary>创建覆盖两个普通层与重复 Boss 终点的固定校验 profile。</summary>

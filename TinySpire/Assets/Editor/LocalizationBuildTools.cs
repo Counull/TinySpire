@@ -20,6 +20,10 @@ public static class LocalizationBuildTools
     private const string CardEffectDataPath = "Assets/GameData/battle_tbcardeffect.json";
     private const string HeroDataPath = "Assets/GameData/battle_tbhero.json";
     private const string EnemyDataPath = "Assets/GameData/battle_tbenemy.json";
+    private const string RelicDataPath = "Assets/GameData/run_tbrelic.json";
+    private const string PotionDataPath = "Assets/GameData/run_tbpotion.json";
+    private const string RelicTableName = "run_tbrelic";
+    private const string PotionTableName = "run_tbpotion";
     private const string I18nWorkbookRelativePath = "DataTables/Datas/i18n.xlsx";
     private const string I18nSheetName = "i18n";
 
@@ -82,6 +86,24 @@ public static class LocalizationBuildTools
         "run.entry.map.health",
         "run.entry.reward.title",
         "run.entry.reward.skip",
+        "run.entry.rest.title",
+        "run.entry.rest.heal",
+        "run.entry.rest.upgrade",
+        "run.entry.chest.title",
+        "run.entry.chest.claim",
+        "run.entry.chest.skip",
+        "run.entry.chest.full",
+        "run.entry.shop.title",
+        "run.entry.shop.purchase",
+        "run.entry.shop.purchased",
+        "run.entry.shop.leave",
+        "run.entry.event.title",
+        "run.entry.event.gain_gold",
+        "run.entry.event.paid_heal",
+        "run.entry.holdings.gold",
+        "run.entry.holdings.relics",
+        "run.entry.holdings.potions",
+        "run.entry.holdings.empty",
         "run.entry.failure.title",
         "run.entry.failure.restart",
         "run.entry.menu.continue",
@@ -133,7 +155,7 @@ public static class LocalizationBuildTools
         Debug.Log("TinySpire battle card localization validation passed.");
     }
 
-    /// <summary>按每种要求语言校验卡牌 key、参数模板和效果绑定。</summary>
+    /// <summary>按每种要求语言校验卡牌、参与者与 Run 持有物的 key 和参数模板。</summary>
     private static void ValidateCardLocalization(
         StringTableCollection collection,
         IReadOnlyList<I18nExcelEntry> entries)
@@ -148,10 +170,16 @@ public static class LocalizationBuildTools
             ?? throw new InvalidOperationException($"Generated hero data does not exist: {HeroDataPath}");
         TextAsset enemyData = AssetDatabase.LoadAssetAtPath<TextAsset>(EnemyDataPath)
             ?? throw new InvalidOperationException($"Generated enemy data does not exist: {EnemyDataPath}");
+        TextAsset relicData = AssetDatabase.LoadAssetAtPath<TextAsset>(RelicDataPath)
+            ?? throw new InvalidOperationException($"Generated Relic data does not exist: {RelicDataPath}");
+        TextAsset potionData = AssetDatabase.LoadAssetAtPath<TextAsset>(PotionDataPath)
+            ?? throw new InvalidOperationException($"Generated Potion data does not exist: {PotionDataPath}");
         JObject cards = JObject.Parse(cardData.text);
         JObject effects = JObject.Parse(effectData.text);
         JObject heroes = JObject.Parse(heroData.text);
         JObject enemies = JObject.Parse(enemyData.text);
+        JObject relics = JObject.Parse(relicData.text);
+        JObject potions = JObject.Parse(potionData.text);
         Dictionary<string, I18nExcelEntry> entriesByKey = IndexEntries(entries);
         var requiredKeys = new HashSet<string>(RequiredKeywordKeys, StringComparer.Ordinal);
         requiredKeys.UnionWith(RequiredBattleHudKeys);
@@ -166,6 +194,8 @@ public static class LocalizationBuildTools
         }
         AddParticipantNameKeys(requiredKeys, heroes, "Hero");
         AddParticipantNameKeys(requiredKeys, enemies, "Enemy");
+        AddRunItemTextKeys(requiredKeys, relics, "Relic");
+        AddRunItemTextKeys(requiredKeys, potions, "Potion");
         ValidateExcelCoverage(entriesByKey, requiredKeys);
 
         foreach (string localeCode in RequiredLocaleCodes)
@@ -185,6 +215,8 @@ public static class LocalizationBuildTools
                 RequireEntry(table, runEntryKey);
             ValidateParticipantNames(table, heroes, "Hero");
             ValidateParticipantNames(table, enemies, "Enemy");
+            ValidateRunItemLocalization(table, RelicTableName, relics, "Relic");
+            ValidateRunItemLocalization(table, PotionTableName, potions, "Potion");
 
             foreach (JProperty cardProperty in cards.Properties())
             {
@@ -279,6 +311,51 @@ public static class LocalizationBuildTools
         return expectedArguments;
     }
 
+    /// <summary>从类型化 Run 持有物配置推导正文必须且只能使用的 Smart 参数。</summary>
+    internal static HashSet<string> ResolveExpectedRunItemArguments(
+        string tableName,
+        string itemId,
+        JObject item)
+    {
+        if (string.IsNullOrWhiteSpace(tableName))
+            throw new ArgumentException("Run item table name must not be empty.", nameof(tableName));
+        if (string.IsNullOrWhiteSpace(itemId))
+            throw new ArgumentException("Run item id must not be empty.", nameof(itemId));
+        if (item == null)
+            throw new ArgumentNullException(nameof(item));
+
+        var expectedArguments = new HashSet<string>(StringComparer.Ordinal);
+        switch (tableName)
+        {
+            case RelicTableName:
+                RequirePositiveRunItemAmount(item, itemId, "battle_start_strength");
+                expectedArguments.Add("strength");
+                break;
+            case PotionTableName:
+                RequirePositiveRunItemAmount(item, itemId, "heal_amount");
+                expectedArguments.Add("heal");
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(
+                    nameof(tableName),
+                    tableName,
+                    "Unsupported Run item table.");
+        }
+
+        return expectedArguments;
+    }
+
+    /// <summary>拒绝缺失、非整数或非正数的 Run 持有物展示数值。</summary>
+    private static void RequirePositiveRunItemAmount(JObject item, string itemId, string fieldName)
+    {
+        JToken amountToken = item[fieldName];
+        if (amountToken == null || amountToken.Type != JTokenType.Integer || amountToken.Value<int>() <= 0)
+        {
+            throw new InvalidOperationException(
+                $"Run item {itemId} must define positive integer field '{fieldName}'.");
+        }
+    }
+
     /// <summary>让 Shoot 复用生产 ProgramDamageValue 的 damage 参数，并拒绝与效果绑定重名。</summary>
     private static void AddProgramArguments(
         string cardId,
@@ -371,6 +448,27 @@ public static class LocalizationBuildTools
         }
     }
 
+    /// <summary>将遗物或药水配置引用的名称与正文 key 加入本地化覆盖范围。</summary>
+    private static void AddRunItemTextKeys(
+        ISet<string> requiredKeys,
+        JObject items,
+        string itemType)
+    {
+        foreach (JProperty itemProperty in items.Properties())
+        {
+            string nameKey = itemProperty.Value.Value<string>("name_i18n_key");
+            string descriptionKey = itemProperty.Value.Value<string>("description_i18n_key");
+            if (string.IsNullOrWhiteSpace(nameKey) || string.IsNullOrWhiteSpace(descriptionKey))
+            {
+                throw new InvalidOperationException(
+                    $"{itemType} {itemProperty.Name} must define name_i18n_key and description_i18n_key.");
+            }
+
+            requiredKeys.Add(nameKey);
+            requiredKeys.Add(descriptionKey);
+        }
+    }
+
     /// <summary>确认静态参与者名称存在且不被声明为 Smart String。</summary>
     private static void ValidateParticipantNames(StringTable table, JObject participants, string participantType)
     {
@@ -383,6 +481,50 @@ public static class LocalizationBuildTools
                 throw new InvalidOperationException(
                     $"{participantType} {participantProperty.Name} name '{key}' for locale " +
                     $"'{table.LocaleIdentifier.Code}' must not be a Smart String.");
+            }
+        }
+    }
+
+    /// <summary>确认遗物或药水名称非 Smart，正文为 Smart 且参数与生成数值严格一致。</summary>
+    private static void ValidateRunItemLocalization(
+        StringTable table,
+        string tableName,
+        JObject items,
+        string itemType)
+    {
+        foreach (JProperty itemProperty in items.Properties())
+        {
+            JObject item = (JObject)itemProperty.Value;
+            string nameKey = item.Value<string>("name_i18n_key");
+            string descriptionKey = item.Value<string>("description_i18n_key");
+            StringTableEntry name = RequireEntry(table, nameKey);
+            StringTableEntry description = RequireEntry(table, descriptionKey);
+            if (name.IsSmart)
+            {
+                throw new InvalidOperationException(
+                    $"{itemType} {itemProperty.Name} name '{nameKey}' for locale " +
+                    $"'{table.LocaleIdentifier.Code}' must not be a Smart String.");
+            }
+            if (!description.IsSmart)
+            {
+                throw new InvalidOperationException(
+                    $"{itemType} {itemProperty.Name} description '{descriptionKey}' for locale " +
+                    $"'{table.LocaleIdentifier.Code}' must be a Smart String.");
+            }
+
+            HashSet<string> expectedArguments = ResolveExpectedRunItemArguments(
+                tableName,
+                itemProperty.Name,
+                item);
+            var actualArguments = new HashSet<string>(StringComparer.Ordinal);
+            foreach (Match match in ArgumentPattern.Matches(description.LocalizedValue))
+                actualArguments.Add(match.Groups[1].Value);
+
+            if (!expectedArguments.SetEquals(actualArguments))
+            {
+                throw new InvalidOperationException(
+                    $"{itemType} {itemProperty.Name} template arguments for locale " +
+                    $"'{table.LocaleIdentifier.Code}' do not match its generated values.");
             }
         }
     }

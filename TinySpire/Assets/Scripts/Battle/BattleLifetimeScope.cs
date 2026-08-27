@@ -112,7 +112,9 @@ public sealed class BattleLifetimeScope : LifetimeScope
             presentation,
             coordinator,
             session.MachineGunnerRuntime,
-            session.CardTargetRandomSeed);
+            session.CardTargetRandomSeed,
+            session.BattleStartRelicEffects,
+            session.PotionLedger);
     }
 
     /// <summary>把当前唯一玩家映射到 Session 卡区，并在生产接线超出 DEP-008 边界时立即失败。</summary>

@@ -473,6 +473,7 @@ namespace TinySpire.UI.Battle
                 settlement is BattleBlockClearedSettlement ||
                 settlement is BattleEnergyRefilledSettlement ||
                 settlement is BattleAmmoRefilledSettlement ||
+                settlement is BattlePotionConsumedSettlement ||
                 settlement is BattleEnemyActionSkippedSettlement)
             {
                 return;

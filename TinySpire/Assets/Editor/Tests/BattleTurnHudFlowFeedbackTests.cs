@@ -428,6 +428,143 @@ public sealed class BattleTurnHudFlowFeedbackTests
         }
     }
 
+    /// <summary>Run 战斗保存失败后必须在遮罩内暴露可重复 Retry Save，并仅在同一文档成功后导航。</summary>
+    [Test]
+    public async System.Threading.Tasks.Task BattleOutcome_RunSaveFailure_ExposesRetryUntilExactSuccessNavigates()
+    {
+        GameObject root = null;
+        Sequence timeline = null;
+        BattleCommandPresentationTween lease = null;
+        using var store = new RunStateStore();
+        try
+        {
+            MapDefinition map = ActMapGenerator.Generate(
+                TinySpireActMapProfiles.Current,
+                97531u);
+            RunState created = store.CreateNewRun(new RunCreationOptions(
+                new RunId(Guid.Parse("22222222-3333-4444-5555-666666666666")),
+                heroTemplateId: 1001,
+                initialHealth: 80,
+                maxHealth: 80,
+                runDeck: RunDeck.CreateInitial(new[] { 3002, 3003 }),
+                randomRootSeed: 97531u,
+                map: map));
+            MapNodeId selectedNodeId = MapReachability.GetSelectableNodeIds(
+                map,
+                created.CurrentNodeId,
+                MapTraversalMode.Ordinary)[0];
+            store.CommitNode(selectedNodeId);
+            RunBattleInput input = store.BeginCommittedBattle();
+            var scenes = new RecordingSceneFlow();
+            var saves = new SequencedRunSaveStore();
+            saves.EnqueueCommit(RunSaveCommitResult.Failed(
+                RunSaveCommitStatus.IoFailure,
+                "result save failed"));
+            saves.EnqueueCommit(RunSaveCommitResult.Failed(
+                RunSaveCommitStatus.IoFailure,
+                "retry save failed"));
+            saves.EnqueueCommit(RunSaveCommitResult.Succeeded());
+            var flow = new RunFlowService(
+                store,
+                () => null,
+                scenes,
+                new UnusedRunEntropySource(),
+                saves);
+
+            root = new GameObject(
+                "BattleTurnHudRunSaveRetryTest",
+                typeof(RectTransform),
+                typeof(BattleTurnHudView));
+            BattleTurnHudView view = root.GetComponent<BattleTurnHudView>();
+            CanvasGroup outcomePanel = CreatePanel(
+                root.transform,
+                "BattleOutcomePanel",
+                raycastTarget: true);
+            Text outcomeText = CreateText(outcomePanel.transform, "BattleOutcomeText");
+            Button restartButton = CreateButton(outcomePanel.transform, "RestartButton");
+            Text restartText = CreateText(restartButton.transform, "RestartText");
+            Button exitButton = CreateButton(outcomePanel.transform, "ExitButton");
+            Text exitText = CreateText(exitButton.transform, "ExitText");
+            SetPrivateField(view, "_battleOutcomePanel", outcomePanel);
+            SetPrivateField(view, "_battleOutcomeText", outcomeText);
+            SetPrivateField(view, "_restartButton", restartButton);
+            SetPrivateField(view, "_restartButtonText", restartText);
+            SetPrivateField(view, "_exitButton", exitButton);
+            SetPrivateField(view, "_exitButtonText", exitText);
+            BattleCommandPresentationAdapter.ConfigureFlowFeedbackView(
+                view,
+                key => $"localized:{key}",
+                scenes,
+                runManaged: true,
+                quitApplication: () => { },
+                runFlow: flow);
+            BattleCommandPresentationAdapter.ConfigureFlowFeedbackView(
+                view,
+                key => $"localized:{key}",
+                scenes,
+                runManaged: true,
+                quitApplication: () => { },
+                runFlow: flow);
+
+            lease = view.CreateFlowFeedbackTween(new BattleFlowFeedbackCue(
+                BattleFlowFeedbackCueKind.BattleOutcome,
+                "battle.ui.result.defeat",
+                blocksSystemPointer: true));
+            timeline = CreateAndStartTimeline(lease);
+            timeline.Complete(withCallbacks: true);
+            await flow.HandleBattleResultAsync(
+                input.BattleId,
+                new BattleResult(
+                    BattleResultKind.Defeat,
+                    authoritySequence: 1,
+                    roundNumber: 1,
+                    new[]
+                    {
+                        new BattleResultPlayerSnapshot(
+                            new CombatantId(1),
+                            templateId: 1001,
+                            health: 0,
+                            maxHealth: 80),
+                    }));
+
+            Assert.That(flow.Persistence.Status, Is.EqualTo(RunPersistenceStatus.CommitFailed));
+            Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.InBattle));
+            Assert.That(restartButton.gameObject.activeSelf, Is.True);
+            Assert.That(restartButton.interactable, Is.True);
+            Assert.That(restartText.text, Is.EqualTo("localized:run.entry.save.retry"));
+            Assert.That(exitButton.gameObject.activeSelf, Is.False);
+            Assert.That(outcomePanel.interactable, Is.True);
+            Assert.That(outcomePanel.blocksRaycasts, Is.True);
+            Assert.That(scenes.LoadedAddresses, Is.Empty);
+            RunSaveDocument frozenDocument = saves.CommitAttempts[0];
+
+            restartButton.onClick.Invoke();
+
+            Assert.That(flow.Persistence.Status, Is.EqualTo(RunPersistenceStatus.CommitFailed));
+            Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.InBattle));
+            Assert.That(saves.CommitAttempts, Has.Count.EqualTo(2));
+            Assert.That(saves.CommitAttempts[1], Is.SameAs(frozenDocument));
+            Assert.That(restartButton.gameObject.activeSelf, Is.True);
+            Assert.That(restartButton.interactable, Is.True);
+            Assert.That(scenes.LoadedAddresses, Is.Empty);
+
+            restartButton.onClick.Invoke();
+
+            Assert.That(saves.CommitAttempts, Has.Count.EqualTo(3));
+            Assert.That(saves.CommitAttempts[2], Is.SameAs(frozenDocument));
+            Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.Terminal));
+            Assert.That(restartButton.gameObject.activeSelf, Is.False);
+            Assert.That(scenes.LoadedAddresses, Is.EqualTo(new[] { RunSceneAddresses.RunEntry }));
+        }
+        finally
+        {
+            timeline?.Kill(complete: false);
+            lease?.Cleanup();
+            if (root != null)
+                UnityEngine.Object.DestroyImmediate(root);
+        }
+    }
+
     /// <summary>legacy/debug 的 Restart 必须固定重载 BattleScene，不再复用 Bootstrap 初始入口。</summary>
     [Test]
     public void ConfigureProductionFlowFeedback_LegacyRestartAlwaysLoadsBattleScene()
@@ -737,6 +874,44 @@ public sealed class BattleTurnHudFlowFeedbackTests
         public RunEntropy Next()
         {
             throw new InvalidOperationException("Run management detection must not create a Run.");
+        }
+    }
+
+    /// <summary>按测试编排返回 commit 结果，并记录每次 exact 文档身份的存档端口。</summary>
+    private sealed class SequencedRunSaveStore : IRunSaveStore
+    {
+        private readonly System.Collections.Generic.Queue<RunSaveCommitResult> _results =
+            new System.Collections.Generic.Queue<RunSaveCommitResult>();
+
+        /// <summary>按调用顺序记录全部提交文档。</summary>
+        public System.Collections.Generic.List<RunSaveDocument> CommitAttempts { get; } =
+            new System.Collections.Generic.List<RunSaveDocument>();
+
+        /// <summary>编排下一次提交的明确结果。</summary>
+        public void EnqueueCommit(RunSaveCommitResult result)
+        {
+            _results.Enqueue(result ?? throw new ArgumentNullException(nameof(result)));
+        }
+
+        /// <summary>本夹具没有旧成功档，失败回退读取稳定返回 NotFound。</summary>
+        public RunSaveLoadResult Load()
+        {
+            return RunSaveLoadResult.NotFound();
+        }
+
+        /// <summary>记录 exact 文档并消费下一条编排结果。</summary>
+        public RunSaveCommitResult Commit(RunSaveDocument document)
+        {
+            CommitAttempts.Add(document ?? throw new ArgumentNullException(nameof(document)));
+            return _results.Count > 0
+                ? _results.Dequeue()
+                : RunSaveCommitResult.Succeeded();
+        }
+
+        /// <summary>本夹具不关注删除，保持幂等成功。</summary>
+        public RunSaveDeleteResult Delete()
+        {
+            return RunSaveDeleteResult.Succeeded();
         }
     }
 }

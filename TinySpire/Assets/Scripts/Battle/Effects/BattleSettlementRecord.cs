@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using TinySpire.Run;
 
 namespace TinySpire.Battle
 {
@@ -290,6 +291,40 @@ namespace TinySpire.Battle
         }
     }
 
+    /// <summary>一次药水治疗成功后形成的不可变消费记录。</summary>
+    public sealed class BattlePotionConsumedSettlement : BattleSettlementRecord
+    {
+        /// <summary>本次真正消费的 Run 药水实例。</summary>
+        public RunPotionInstanceId InstanceId { get; }
+
+        /// <summary>该实例引用的静态药水模板。</summary>
+        public int TemplateId { get; }
+
+        /// <summary>冻结一次不伪造 EffectId 的药水消费事实。</summary>
+        internal BattlePotionConsumedSettlement(
+            int order,
+            RunPotionInstanceId instanceId,
+            int templateId,
+            CombatantId ownerId)
+            : base(
+                order,
+                BattleSettlementRecordType.PotionConsumed,
+                effectId: null,
+                sourceId: ownerId,
+                targetId: ownerId)
+        {
+            if (instanceId.Sequence <= 0)
+                throw new ArgumentException("Potion instance id cannot be empty.", nameof(instanceId));
+            if (templateId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(templateId));
+            if (ownerId.Value <= 0)
+                throw new ArgumentException("Potion owner id cannot be empty.", nameof(ownerId));
+
+            InstanceId = instanceId;
+            TemplateId = templateId;
+        }
+    }
+
     /// <summary>一次格挡累加的不可变结果。</summary>
     public sealed class BattleBlockGainedSettlement : BattleSettlementRecord
     {
@@ -341,7 +376,7 @@ namespace TinySpire.Battle
         /// <summary>冻结一次属性修改结果。</summary>
         internal BattleAttributeModifiedSettlement(
             int order,
-            BattleEffectId effectId,
+            BattleEffectId? effectId,
             CombatantId sourceId,
             CombatantId targetId,
             BattleAttributeType attribute,

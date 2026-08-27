@@ -1,0 +1,8 @@
+{
+  "8001": {
+    "id": 8001,
+    "name_i18n_key": "run.relic.strength_charm.name",
+    "description_i18n_key": "run.relic.strength_charm.description",
+    "battle_start_strength": 1
+  }
+}

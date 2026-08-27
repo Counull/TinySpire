@@ -24,10 +24,14 @@ namespace TinySpire.UI.Run
         Statistics,
         Map,
         CardReward,
+        Rest,
         Failure,
         AbandonConfirmation,
         SaveFailure,
         RollbackConfirmation,
+        Chest,
+        Shop,
+        Event,
     }
 
     /// <summary>入口 View 可提交给 Presenter 的有限动作集合。</summary>
@@ -49,6 +53,13 @@ namespace TinySpire.UI.Run
         ConfirmRollback,
         SelectCardReward,
         SkipCardReward,
+        HealAtRest,
+        UpgradeCardAtRest,
+        ClaimChest,
+        SkipChest,
+        PurchaseShopStock,
+        LeaveShop,
+        ChooseEvent,
     }
 
     /// <summary>入口投影中每个 TMP 文本的稳定槽位。</summary>
@@ -74,6 +85,7 @@ namespace TinySpire.UI.Run
         Health,
         CardRewardTitle,
         SkipCardReward,
+        RestTitle,
         FailureTitle,
         LeaveRun,
         ContinueGame,
@@ -89,6 +101,9 @@ namespace TinySpire.UI.Run
         RollbackTitle,
         RollbackMessage,
         RollbackConfirm,
+        ChestTitle,
+        ShopTitle,
+        EventTitle,
     }
 
     /// <summary>View 发出的单个不可变入口动作；选择类动作只携带对应领域身份。</summary>
@@ -109,13 +124,29 @@ namespace TinySpire.UI.Run
         /// <summary>选择奖励动作携带的卡牌模板标识，其余动作为空。</summary>
         public int? CardTemplateId { get; }
 
+        /// <summary>非战斗节点结算动作携带的稳定访问身份，其余动作为空。</summary>
+        public RunNodeVisitId? NodeVisitId { get; }
+
+        /// <summary>Rest 升级动作携带的稳定卡牌实例身份，其余动作为空。</summary>
+        public RunCardInstanceId? CardInstanceId { get; }
+
+        /// <summary>Shop 购买动作携带的专用库存条目标识，其余动作为空。</summary>
+        public int? ShopStockEntryId { get; }
+
+        /// <summary>Event 动作携带的闭合类型化选择，其余动作为空。</summary>
+        public RunEventChoiceKind? EventChoice { get; }
+
         /// <summary>创建并验证一个入口 UI 意图。</summary>
         public RunEntryAction(
             RunEntryActionKind kind,
             int? heroTemplateId = null,
             MapNodeId? mapNodeId = null,
             RunCardRewardId? cardRewardId = null,
-            int? cardTemplateId = null)
+            int? cardTemplateId = null,
+            RunNodeVisitId? nodeVisitId = null,
+            RunCardInstanceId? cardInstanceId = null,
+            int? shopStockEntryId = null,
+            RunEventChoiceKind? eventChoice = null)
         {
             if (kind == RunEntryActionKind.SelectHero)
             {
@@ -166,11 +197,95 @@ namespace TinySpire.UI.Run
                     "Only card reward actions may carry reward payload.");
             }
 
+
+            if (kind == RunEntryActionKind.HealAtRest)
+            {
+                if (!IsValidNodeVisitId(nodeVisitId) ||
+                    cardInstanceId.HasValue ||
+                    shopStockEntryId.HasValue ||
+                    eventChoice.HasValue)
+                {
+                    throw new ArgumentException(
+                        "HealAtRest requires only a stable node visit id.");
+                }
+            }
+            else if (kind == RunEntryActionKind.UpgradeCardAtRest)
+            {
+                if (!IsValidNodeVisitId(nodeVisitId) ||
+                    !cardInstanceId.HasValue ||
+                    cardInstanceId.Value.Sequence <= 0 ||
+                    shopStockEntryId.HasValue ||
+                    eventChoice.HasValue)
+                {
+                    throw new ArgumentException(
+                        "UpgradeCardAtRest requires a stable visit id and card instance id.");
+                }
+            }
+            else if (kind == RunEntryActionKind.ClaimChest ||
+                     kind == RunEntryActionKind.SkipChest)
+            {
+                if (!IsValidNodeVisitId(nodeVisitId) ||
+                    cardInstanceId.HasValue ||
+                    shopStockEntryId.HasValue ||
+                    eventChoice.HasValue)
+                {
+                    throw new ArgumentException(
+                    "Chest actions require only a stable node visit id.");
+                }
+            }
+            else if (kind == RunEntryActionKind.PurchaseShopStock)
+            {
+                if (!IsValidNodeVisitId(nodeVisitId) ||
+                    cardInstanceId.HasValue ||
+                    !shopStockEntryId.HasValue ||
+                    shopStockEntryId.Value <= 0 ||
+                    eventChoice.HasValue)
+                {
+                    throw new ArgumentException(
+                        "PurchaseShopStock requires a stable visit id and positive stock entry id.");
+                }
+            }
+            else if (kind == RunEntryActionKind.LeaveShop)
+            {
+                if (!IsValidNodeVisitId(nodeVisitId) ||
+                    cardInstanceId.HasValue ||
+                    shopStockEntryId.HasValue ||
+                    eventChoice.HasValue)
+                {
+                    throw new ArgumentException(
+                        "LeaveShop requires only a stable node visit id.");
+                }
+            }
+            else if (kind == RunEntryActionKind.ChooseEvent)
+            {
+                if (!IsValidNodeVisitId(nodeVisitId) ||
+                    cardInstanceId.HasValue ||
+                    shopStockEntryId.HasValue ||
+                    !eventChoice.HasValue ||
+                    !Enum.IsDefined(typeof(RunEventChoiceKind), eventChoice.Value))
+                {
+                    throw new ArgumentException(
+                        "ChooseEvent requires a stable visit id and defined Event choice.");
+                }
+            }
+            else if (nodeVisitId.HasValue ||
+                     cardInstanceId.HasValue ||
+                     shopStockEntryId.HasValue ||
+                     eventChoice.HasValue)
+            {
+                throw new ArgumentException(
+                    "Only non-combat node settlement actions may carry node visit payload.");
+            }
+
             Kind = kind;
             HeroTemplateId = heroTemplateId;
             MapNodeId = mapNodeId;
             CardRewardId = cardRewardId;
             CardTemplateId = cardTemplateId;
+            NodeVisitId = nodeVisitId;
+            CardInstanceId = cardInstanceId;
+            ShopStockEntryId = shopStockEntryId;
+            EventChoice = eventChoice;
         }
 
         /// <summary>检查可空奖励身份是否含完整 Run、attempt 与节点事实。</summary>
@@ -180,6 +295,14 @@ namespace TinySpire.UI.Run
                    rewardId.Value.BattleId.RunId.Value != Guid.Empty &&
                    rewardId.Value.BattleId.AttemptSequence > 0 &&
                    !string.IsNullOrEmpty(rewardId.Value.BattleId.NodeId.Value);
+        }
+
+        /// <summary>检查可空访问身份是否含完整 Run 与节点事实。</summary>
+        private static bool IsValidNodeVisitId(RunNodeVisitId? visitId)
+        {
+            return visitId.HasValue &&
+                   visitId.Value.RunId.Value != Guid.Empty &&
+                   !string.IsNullOrEmpty(visitId.Value.NodeId.Value);
         }
     }
 
@@ -199,6 +322,10 @@ namespace TinySpire.UI.Run
         StartFlag,
         EncounterSlimeSilhouette,
         EncounterSentrySilhouette,
+        RestCampfire,
+        ChestCache,
+        ShopBag,
+        EventQuestionMark,
         BossAlphaCrown,
         BossBetaHorns,
         BossGammaEye,
@@ -271,10 +398,44 @@ namespace TinySpire.UI.Run
                     throw new InvalidOperationException("Start map identity must use content id 0.");
                 case MapNodeKind.Combat:
                     return ResolveEncounter(contentId);
+                case MapNodeKind.Rest:
+                case MapNodeKind.Chest:
+                case MapNodeKind.Shop:
+                case MapNodeKind.Event:
+                    return ResolveG6ProgrammaticIdentity(kind, contentId);
                 case MapNodeKind.Boss:
                     return ResolveG3BossTestIdentity(contentId);
                 default:
                     throw new ArgumentOutOfRangeException(nameof(kind));
+            }
+        }
+
+        /// <summary>为 G6 非战斗节点解析唯一程序化内容 anchor，不依赖尚未进入的配置表或结算实现。</summary>
+        private static RunMapIdentityDescriptor ResolveG6ProgrammaticIdentity(
+            MapNodeKind kind,
+            int contentId)
+        {
+            switch (kind)
+            {
+                case MapNodeKind.Rest when contentId == RunNodeVisitIdentityCatalog.RestContentId:
+                    return new RunMapIdentityDescriptor(
+                        "REST",
+                        RunMapVisualAnchorKind.RestCampfire);
+                case MapNodeKind.Chest when contentId == RunNodeVisitIdentityCatalog.ChestContentId:
+                    return new RunMapIdentityDescriptor(
+                        "CHEST",
+                        RunMapVisualAnchorKind.ChestCache);
+                case MapNodeKind.Shop when contentId == RunNodeVisitIdentityCatalog.ShopContentId:
+                    return new RunMapIdentityDescriptor(
+                        "SHOP",
+                        RunMapVisualAnchorKind.ShopBag);
+                case MapNodeKind.Event when contentId == RunNodeVisitIdentityCatalog.EventContentId:
+                    return new RunMapIdentityDescriptor(
+                        "EVENT",
+                        RunMapVisualAnchorKind.EventQuestionMark);
+                default:
+                    throw new InvalidOperationException(
+                        $"G6 programmatic map identity {kind}/{contentId} is not defined.");
             }
         }
 
@@ -432,21 +593,124 @@ namespace TinySpire.UI.Run
             MapNodeKind nodeKind,
             RunMapVisualAnchorKind visualAnchorKind)
         {
-            bool isValid = nodeKind == MapNodeKind.Start
-                ? visualAnchorKind == RunMapVisualAnchorKind.StartFlag
-                : nodeKind == MapNodeKind.Combat
-                    ? visualAnchorKind == RunMapVisualAnchorKind.EncounterSlimeSilhouette ||
-                      visualAnchorKind == RunMapVisualAnchorKind.EncounterSentrySilhouette
-                    : nodeKind == MapNodeKind.Boss &&
-                      (visualAnchorKind == RunMapVisualAnchorKind.BossAlphaCrown ||
-                       visualAnchorKind == RunMapVisualAnchorKind.BossBetaHorns ||
-                       visualAnchorKind == RunMapVisualAnchorKind.BossGammaEye);
+            bool isValid;
+            switch (nodeKind)
+            {
+                case MapNodeKind.Start:
+                    isValid = visualAnchorKind == RunMapVisualAnchorKind.StartFlag;
+                    break;
+                case MapNodeKind.Combat:
+                    isValid = visualAnchorKind == RunMapVisualAnchorKind.EncounterSlimeSilhouette ||
+                              visualAnchorKind == RunMapVisualAnchorKind.EncounterSentrySilhouette;
+                    break;
+                case MapNodeKind.Rest:
+                    isValid = visualAnchorKind == RunMapVisualAnchorKind.RestCampfire;
+                    break;
+                case MapNodeKind.Chest:
+                    isValid = visualAnchorKind == RunMapVisualAnchorKind.ChestCache;
+                    break;
+                case MapNodeKind.Shop:
+                    isValid = visualAnchorKind == RunMapVisualAnchorKind.ShopBag;
+                    break;
+                case MapNodeKind.Event:
+                    isValid = visualAnchorKind == RunMapVisualAnchorKind.EventQuestionMark;
+                    break;
+                case MapNodeKind.Boss:
+                    isValid = visualAnchorKind == RunMapVisualAnchorKind.BossAlphaCrown ||
+                              visualAnchorKind == RunMapVisualAnchorKind.BossBetaHorns ||
+                              visualAnchorKind == RunMapVisualAnchorKind.BossGammaEye;
+                    break;
+                default:
+                    isValid = false;
+                    break;
+            }
             if (!isValid)
             {
                 throw new ArgumentException(
                     $"Visual anchor '{visualAnchorKind}' is invalid for map node kind '{nodeKind}'.",
                     nameof(visualAnchorKind));
             }
+        }
+    }
+
+    /// <summary>一个地图节点在 820×480 宿主内的确定性矩形布局。</summary>
+    internal sealed class RunMapNodeLayout
+    {
+        public string NodeId { get; }
+        public float CenterX { get; }
+        public float CenterY { get; }
+        public float Width { get; }
+        public float Height { get; }
+        public float Left => CenterX - Width * 0.5f;
+        public float Right => CenterX + Width * 0.5f;
+        public float Bottom => CenterY - Height * 0.5f;
+        public float Top => CenterY + Height * 0.5f;
+
+        /// <summary>冻结一个节点中心与正尺寸，供 View 和纯布局测试共享。</summary>
+        internal RunMapNodeLayout(
+            string nodeId,
+            float centerX,
+            float centerY,
+            float width,
+            float height)
+        {
+            if (string.IsNullOrWhiteSpace(nodeId))
+                throw new ArgumentException("Map layout node id cannot be empty.", nameof(nodeId));
+            if (width <= 0f)
+                throw new ArgumentOutOfRangeException(nameof(width));
+            if (height <= 0f)
+                throw new ArgumentOutOfRangeException(nameof(height));
+
+            NodeId = nodeId;
+            CenterX = centerX;
+            CenterY = centerY;
+            Width = width;
+            Height = height;
+        }
+    }
+
+    /// <summary>把短 G3 图与八层 G6 mixed 图确定性排入同一个固定地图宿主。</summary>
+    internal static class RunMapLayout
+    {
+        /// <summary>按 Layer/Slot 生成只读矩形；六层以上自动使用无重叠紧凑规格。</summary>
+        internal static IReadOnlyList<RunMapNodeLayout> Build(
+            IReadOnlyList<RunMapNodeViewModel> nodes)
+        {
+            if (nodes == null)
+                throw new ArgumentNullException(nameof(nodes));
+            if (nodes.Count == 0)
+                return Array.Empty<RunMapNodeLayout>();
+
+            int maxLayer = nodes.Max(node => node.Layer);
+            bool compact = maxLayer >= 6;
+            float horizontalExtent = compact ? 300f : 315f;
+            float verticalExtent = compact ? 200f : 185f;
+            var layouts = new List<RunMapNodeLayout>(nodes.Count);
+            foreach (IGrouping<int, RunMapNodeViewModel> layer in nodes.GroupBy(node => node.Layer))
+            {
+                RunMapNodeViewModel[] layerNodes = layer.OrderBy(node => node.Slot).ToArray();
+                int maxSlot = layerNodes.Length == 0 ? 0 : layerNodes.Max(node => node.Slot);
+                foreach (RunMapNodeViewModel node in layerNodes)
+                {
+                    float centerX = maxSlot == 0
+                        ? 0f
+                        : -horizontalExtent +
+                          horizontalExtent * 2f * (node.Slot / (float)maxSlot);
+                    float centerY = maxLayer == 0
+                        ? 0f
+                        : -verticalExtent +
+                          verticalExtent * 2f * (node.Layer / (float)maxLayer);
+                    bool boss = node.Kind == MapNodeKind.Boss;
+                    layouts.Add(new RunMapNodeLayout(
+                        node.NodeId,
+                        centerX,
+                        centerY,
+                        compact ? (boss ? 156f : 144f) : (boss ? 196f : 176f),
+                        compact ? (boss ? 52f : 46f) : (boss ? 98f : 88f)));
+                }
+            }
+
+            return Array.AsReadOnly(layouts.ToArray());
         }
     }
 
@@ -585,6 +849,430 @@ namespace TinySpire.UI.Run
         }
     }
 
+    /// <summary>Rest 页上一张冻结升级候选的实例身份、文本与交互门禁。</summary>
+    public sealed class RunRestUpgradeCandidateViewModel
+    {
+        /// <summary>升级命令必须回传的稳定 Run 卡牌实例身份。</summary>
+        public RunCardInstanceId CardInstanceId { get; }
+
+        /// <summary>候选当前引用的静态卡牌模板身份。</summary>
+        public int TemplateId { get; }
+
+        /// <summary>候选当前升级等级。</summary>
+        public int CurrentUpgradeLevel { get; }
+
+        /// <summary>填入卡名与下一等级后的当前语言按钮文本。</summary>
+        public string Text { get; }
+
+        /// <summary>当前存档与配置门禁下是否允许发出升级动作。</summary>
+        public bool Enabled { get; }
+
+        /// <summary>验证并冻结单张 Rest 升级候选投影。</summary>
+        public RunRestUpgradeCandidateViewModel(
+            RunCardInstanceId cardInstanceId,
+            int templateId,
+            int currentUpgradeLevel,
+            string text,
+            bool enabled)
+        {
+            if (cardInstanceId.Sequence <= 0)
+                throw new ArgumentException("Rest card instance id cannot be empty.", nameof(cardInstanceId));
+            if (templateId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(templateId));
+            if (currentUpgradeLevel < 0)
+                throw new ArgumentOutOfRangeException(nameof(currentUpgradeLevel));
+            if (string.IsNullOrWhiteSpace(text))
+                throw new ArgumentException("Rest upgrade text cannot be empty.", nameof(text));
+
+            CardInstanceId = cardInstanceId;
+            TemplateId = templateId;
+            CurrentUpgradeLevel = currentUpgradeLevel;
+            Text = text;
+            Enabled = enabled;
+        }
+    }
+
+    /// <summary>Rest 访问身份、治疗动作与冻结有序升级候选的完整页面投影。</summary>
+    public sealed class RunRestViewModel
+    {
+        private readonly ReadOnlyCollection<RunRestUpgradeCandidateViewModel> _upgradeCandidates;
+
+        /// <summary>Heal 或 Upgrade 动作必须回传的稳定访问身份。</summary>
+        public RunNodeVisitId VisitId { get; }
+
+        /// <summary>进入 Rest 时冻结的治疗量。</summary>
+        public int HealAmount { get; }
+
+        /// <summary>填入冻结治疗量后的当前语言按钮文本。</summary>
+        public string HealText { get; }
+
+        /// <summary>只有英雄受伤且没有存档提交时才允许治疗。</summary>
+        public bool HealEnabled { get; }
+
+        /// <summary>按 Pending 冻结顺序排列的升级候选。</summary>
+        public IReadOnlyList<RunRestUpgradeCandidateViewModel> UpgradeCandidates =>
+            _upgradeCandidates;
+
+        /// <summary>验证访问身份并防御性冻结全部 Rest 选择。</summary>
+        public RunRestViewModel(
+            RunNodeVisitId visitId,
+            int healAmount,
+            string healText,
+            bool healEnabled,
+            IReadOnlyList<RunRestUpgradeCandidateViewModel> upgradeCandidates)
+        {
+            if (visitId.RunId.Value == Guid.Empty || string.IsNullOrEmpty(visitId.NodeId.Value))
+                throw new ArgumentException("Rest visit id cannot be empty.", nameof(visitId));
+            if (healAmount <= 0)
+                throw new ArgumentOutOfRangeException(nameof(healAmount));
+            if (string.IsNullOrWhiteSpace(healText))
+                throw new ArgumentException("Rest heal text cannot be empty.", nameof(healText));
+            if (upgradeCandidates == null)
+                throw new ArgumentNullException(nameof(upgradeCandidates));
+            RunRestUpgradeCandidateViewModel[] frozenCandidates = upgradeCandidates.ToArray();
+            if (frozenCandidates.Any(candidate => candidate == null) ||
+                frozenCandidates.Select(candidate => candidate.CardInstanceId).Distinct().Count() !=
+                frozenCandidates.Length)
+            {
+                throw new ArgumentException(
+                    "Rest upgrade candidates must be non-null and instance-distinct.",
+                    nameof(upgradeCandidates));
+            }
+
+            VisitId = visitId;
+            HealAmount = healAmount;
+            HealText = healText;
+            HealEnabled = healEnabled;
+            _upgradeCandidates = Array.AsReadOnly(frozenCandidates);
+        }
+    }
+
+    /// <summary>Chest 访问身份、冻结药水奖励与领取/跳过可用性的完整页面投影。</summary>
+    public sealed class RunChestViewModel
+    {
+        /// <summary>领取或跳过动作必须回传的稳定访问身份。</summary>
+        public RunNodeVisitId VisitId { get; }
+
+        /// <summary>由冻结 PotionTemplateId 与当前配置构建的本地化奖励投影。</summary>
+        public RunHoldingItemViewModel Potion { get; }
+
+        /// <summary>当前语言的领取按钮文本。</summary>
+        public string ClaimText { get; }
+
+        /// <summary>当前语言的跳过按钮文本。</summary>
+        public string SkipText { get; }
+
+        /// <summary>药水槽满时显示的当前语言说明。</summary>
+        public string CapacityFullText { get; }
+
+        /// <summary>只有容量可用且没有存档提交时才允许领取。</summary>
+        public bool ClaimEnabled { get; }
+
+        /// <summary>只要没有存档提交就允许跳过。</summary>
+        public bool SkipEnabled { get; }
+
+        /// <summary>当前三槽容量是否已满，仅供表现显示说明。</summary>
+        public bool IsCapacityFull { get; }
+
+        /// <summary>验证身份、奖励与文本后冻结完整 Chest 页面投影。</summary>
+        public RunChestViewModel(
+            RunNodeVisitId visitId,
+            RunHoldingItemViewModel potion,
+            string claimText,
+            string skipText,
+            string capacityFullText,
+            bool claimEnabled,
+            bool skipEnabled,
+            bool isCapacityFull)
+        {
+            if (visitId.RunId.Value == Guid.Empty || string.IsNullOrEmpty(visitId.NodeId.Value))
+                throw new ArgumentException("Chest visit id cannot be empty.", nameof(visitId));
+            Potion = potion ?? throw new ArgumentNullException(nameof(potion));
+            if (string.IsNullOrWhiteSpace(claimText))
+                throw new ArgumentException("Chest claim text cannot be empty.", nameof(claimText));
+            if (string.IsNullOrWhiteSpace(skipText))
+                throw new ArgumentException("Chest skip text cannot be empty.", nameof(skipText));
+            if (string.IsNullOrWhiteSpace(capacityFullText))
+                throw new ArgumentException(
+                    "Chest capacity text cannot be empty.",
+                    nameof(capacityFullText));
+            if (isCapacityFull && claimEnabled)
+                throw new ArgumentException("A full potion belt cannot enable Chest claim.");
+
+            VisitId = visitId;
+            ClaimText = claimText;
+            SkipText = skipText;
+            CapacityFullText = capacityFullText;
+            ClaimEnabled = claimEnabled;
+            SkipEnabled = skipEnabled;
+            IsCapacityFull = isCapacityFull;
+        }
+    }
+
+    /// <summary>Shop 页上一项冻结库存的身份、当前语言文本与购买门禁。</summary>
+    public sealed class RunShopStockEntryViewModel
+    {
+        /// <summary>购买命令必须回传的 Shop 内稳定条目标识。</summary>
+        public int EntryId { get; }
+
+        /// <summary>库存内容种类。</summary>
+        public RunShopStockKind Kind { get; }
+
+        /// <summary>冻结的当前配置模板身份。</summary>
+        public int TemplateId { get; }
+
+        /// <summary>进入 Shop 时冻结的购买价格。</summary>
+        public int Price { get; }
+
+        /// <summary>当前语言的物品名称；配置缺失时使用稳定身份占位。</summary>
+        public string ItemName { get; }
+
+        /// <summary>当前购买或已购状态的完整按钮文本。</summary>
+        public string Text { get; }
+
+        /// <summary>该库存是否已经在本次访问中购买。</summary>
+        public bool Purchased { get; }
+
+        /// <summary>当前余额、容量、持有物、配置与存档状态下是否允许购买。</summary>
+        public bool PurchaseEnabled { get; }
+
+        /// <summary>验证并冻结一项 Shop 库存投影。</summary>
+        public RunShopStockEntryViewModel(
+            int entryId,
+            RunShopStockKind kind,
+            int templateId,
+            int price,
+            string itemName,
+            string text,
+            bool purchased,
+            bool purchaseEnabled)
+        {
+            if (entryId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(entryId));
+            if (!Enum.IsDefined(typeof(RunShopStockKind), kind))
+                throw new ArgumentOutOfRangeException(nameof(kind));
+            if (templateId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(templateId));
+            if (price <= 0)
+                throw new ArgumentOutOfRangeException(nameof(price));
+            if (string.IsNullOrWhiteSpace(itemName))
+                throw new ArgumentException("Shop item name cannot be empty.", nameof(itemName));
+            if (string.IsNullOrWhiteSpace(text))
+                throw new ArgumentException("Shop stock text cannot be empty.", nameof(text));
+            if (purchased && purchaseEnabled)
+                throw new ArgumentException("Purchased Shop stock cannot remain enabled.");
+
+            EntryId = entryId;
+            Kind = kind;
+            TemplateId = templateId;
+            Price = price;
+            ItemName = itemName;
+            Text = text;
+            Purchased = purchased;
+            PurchaseEnabled = purchaseEnabled;
+        }
+    }
+
+    /// <summary>Shop 访问身份、固定三项库存与离开动作的完整页面投影。</summary>
+    public sealed class RunShopViewModel
+    {
+        private readonly ReadOnlyCollection<RunShopStockEntryViewModel> _entries;
+
+        /// <summary>购买或离开动作必须回传的稳定访问身份。</summary>
+        public RunNodeVisitId VisitId { get; }
+
+        /// <summary>按冻结库存顺序排列的恰好三项投影。</summary>
+        public IReadOnlyList<RunShopStockEntryViewModel> Entries => _entries;
+
+        /// <summary>当前语言的离开按钮文本。</summary>
+        public string LeaveText { get; }
+
+        /// <summary>只有没有存档提交时才允许离开。</summary>
+        public bool LeaveEnabled { get; }
+
+        /// <summary>验证访问身份并防御性冻结三类 Shop 库存。</summary>
+        public RunShopViewModel(
+            RunNodeVisitId visitId,
+            IReadOnlyList<RunShopStockEntryViewModel> entries,
+            string leaveText,
+            bool leaveEnabled)
+        {
+            if (visitId.RunId.Value == Guid.Empty || string.IsNullOrEmpty(visitId.NodeId.Value))
+                throw new ArgumentException("Shop visit id cannot be empty.", nameof(visitId));
+            if (entries == null)
+                throw new ArgumentNullException(nameof(entries));
+            RunShopStockEntryViewModel[] frozenEntries = entries.ToArray();
+            if (frozenEntries.Length != 3 ||
+                frozenEntries.Any(entry => entry == null) ||
+                frozenEntries.Select(entry => entry.EntryId).Distinct().Count() != 3 ||
+                frozenEntries.Select(entry => entry.Kind).Distinct().Count() != 3)
+            {
+                throw new ArgumentException(
+                    "Shop projection must contain three distinct entries and item kinds.",
+                    nameof(entries));
+            }
+            if (string.IsNullOrWhiteSpace(leaveText))
+                throw new ArgumentException("Shop leave text cannot be empty.", nameof(leaveText));
+
+            VisitId = visitId;
+            _entries = Array.AsReadOnly(frozenEntries);
+            LeaveText = leaveText;
+            LeaveEnabled = leaveEnabled;
+        }
+    }
+
+    /// <summary>Event 访问身份、冻结数值、双选择文案与表现门禁的完整投影。</summary>
+    public sealed class RunEventViewModel
+    {
+        /// <summary>选择动作必须回传的稳定访问身份。</summary>
+        public RunNodeVisitId VisitId { get; }
+
+        /// <summary>免费选择冻结的金币获得量。</summary>
+        public int GainGoldAmount { get; }
+
+        /// <summary>付费治疗冻结的金币成本。</summary>
+        public int PaidHealCost { get; }
+
+        /// <summary>付费治疗冻结的最大治疗量。</summary>
+        public int PaidHealAmount { get; }
+
+        /// <summary>当前语言的免费金币选择文本。</summary>
+        public string GainGoldText { get; }
+
+        /// <summary>当前语言的付费治疗选择文本。</summary>
+        public string PaidHealText { get; }
+
+        /// <summary>金币 checked 加法安全且没有提交中检查点时允许免费选择。</summary>
+        public bool GainGoldEnabled { get; }
+
+        /// <summary>余额足够、英雄受伤且没有提交中检查点时允许付费治疗。</summary>
+        public bool PaidHealEnabled { get; }
+
+        /// <summary>验证并冻结 Event 的两个有限选择投影。</summary>
+        public RunEventViewModel(
+            RunNodeVisitId visitId,
+            int gainGoldAmount,
+            int paidHealCost,
+            int paidHealAmount,
+            string gainGoldText,
+            string paidHealText,
+            bool gainGoldEnabled,
+            bool paidHealEnabled)
+        {
+            if (visitId.RunId.Value == Guid.Empty || string.IsNullOrEmpty(visitId.NodeId.Value))
+                throw new ArgumentException("Event visit id cannot be empty.", nameof(visitId));
+            if (gainGoldAmount <= 0)
+                throw new ArgumentOutOfRangeException(nameof(gainGoldAmount));
+            if (paidHealCost <= 0)
+                throw new ArgumentOutOfRangeException(nameof(paidHealCost));
+            if (paidHealAmount <= 0)
+                throw new ArgumentOutOfRangeException(nameof(paidHealAmount));
+            if (string.IsNullOrWhiteSpace(gainGoldText))
+                throw new ArgumentException("Event gain-gold text cannot be empty.", nameof(gainGoldText));
+            if (string.IsNullOrWhiteSpace(paidHealText))
+                throw new ArgumentException("Event paid-heal text cannot be empty.", nameof(paidHealText));
+
+            VisitId = visitId;
+            GainGoldAmount = gainGoldAmount;
+            PaidHealCost = paidHealCost;
+            PaidHealAmount = paidHealAmount;
+            GainGoldText = gainGoldText;
+            PaidHealText = paidHealText;
+            GainGoldEnabled = gainGoldEnabled;
+            PaidHealEnabled = paidHealEnabled;
+        }
+    }
+
+    /// <summary>一个遗物或药水实例在 RunEntry 中的已本地化只读投影。</summary>
+    public sealed class RunHoldingItemViewModel
+    {
+        /// <summary>对应 cfg.run 静态配置的稳定模板标识。</summary>
+        public int TemplateId { get; }
+
+        /// <summary>当前语言下的物品名称。</summary>
+        public string Name { get; }
+
+        /// <summary>以当前配置数值填充后的当前语言描述。</summary>
+        public string Description { get; }
+
+        /// <summary>验证并冻结一个只读持有物条目。</summary>
+        public RunHoldingItemViewModel(int templateId, string name, string description)
+        {
+            if (templateId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(templateId));
+            if (string.IsNullOrWhiteSpace(name))
+                throw new ArgumentException("Run holding item name cannot be empty.", nameof(name));
+            if (description == null)
+                throw new ArgumentNullException(nameof(description));
+
+            TemplateId = templateId;
+            Name = name;
+            Description = description;
+        }
+    }
+
+    /// <summary>当前 Run 金币、遗物获得顺序与药水槽位顺序的完整只读投影。</summary>
+    public sealed class RunHoldingsViewModel
+    {
+        private readonly ReadOnlyCollection<RunHoldingItemViewModel> _relics;
+        private readonly ReadOnlyCollection<RunHoldingItemViewModel> _potions;
+
+        /// <summary>包含当前金币数的已本地化文本。</summary>
+        public string GoldText { get; }
+
+        /// <summary>遗物区已本地化标题。</summary>
+        public string RelicsTitle { get; }
+
+        /// <summary>药水区已本地化标题。</summary>
+        public string PotionsTitle { get; }
+
+        /// <summary>空列表使用的已本地化占位文本。</summary>
+        public string EmptyText { get; }
+
+        /// <summary>按获得顺序冻结的遗物显示条目。</summary>
+        public IReadOnlyList<RunHoldingItemViewModel> Relics => _relics;
+
+        /// <summary>按槽位顺序冻结的药水显示条目。</summary>
+        public IReadOnlyList<RunHoldingItemViewModel> Potions => _potions;
+
+        /// <summary>验证文本并防御性冻结当前持有物投影。</summary>
+        public RunHoldingsViewModel(
+            string goldText,
+            string relicsTitle,
+            string potionsTitle,
+            string emptyText,
+            IReadOnlyList<RunHoldingItemViewModel> relics,
+            IReadOnlyList<RunHoldingItemViewModel> potions)
+        {
+            if (string.IsNullOrWhiteSpace(goldText))
+                throw new ArgumentException("Run holdings gold text cannot be empty.", nameof(goldText));
+            if (string.IsNullOrWhiteSpace(relicsTitle))
+                throw new ArgumentException("Run holdings relic title cannot be empty.", nameof(relicsTitle));
+            if (string.IsNullOrWhiteSpace(potionsTitle))
+                throw new ArgumentException("Run holdings potion title cannot be empty.", nameof(potionsTitle));
+            if (emptyText == null)
+                throw new ArgumentNullException(nameof(emptyText));
+            if (relics == null)
+                throw new ArgumentNullException(nameof(relics));
+            if (potions == null)
+                throw new ArgumentNullException(nameof(potions));
+
+            RunHoldingItemViewModel[] frozenRelics = relics.ToArray();
+            RunHoldingItemViewModel[] frozenPotions = potions.ToArray();
+            if (frozenRelics.Any(item => item == null))
+                throw new ArgumentException("Run holdings cannot contain null relic projections.", nameof(relics));
+            if (frozenPotions.Any(item => item == null))
+                throw new ArgumentException("Run holdings cannot contain null potion projections.", nameof(potions));
+
+            GoldText = goldText;
+            RelicsTitle = relicsTitle;
+            PotionsTitle = potionsTitle;
+            EmptyText = emptyText;
+            _relics = Array.AsReadOnly(frozenRelics);
+            _potions = Array.AsReadOnly(frozenPotions);
+        }
+    }
+
     /// <summary>由 Presenter 一次冻结、供 View 无业务判断渲染的完整页面投影。</summary>
     public sealed class RunEntryViewModel
     {
@@ -611,6 +1299,21 @@ namespace TinySpire.UI.Run
         /// <summary>当前普通战斗奖励投影；仅奖励页非空。</summary>
         public RunCardRewardViewModel CardReward { get; }
 
+        /// <summary>当前 Run 的已本地化只读持有物投影；尚未创建 Run 时为空。</summary>
+        public RunHoldingsViewModel Holdings { get; }
+
+        /// <summary>当前 Rest Pending 的冻结选择投影；仅 Rest 页非空。</summary>
+        public RunRestViewModel Rest { get; }
+
+        /// <summary>当前 Chest Pending 的冻结奖励投影；仅 Chest 页非空。</summary>
+        public RunChestViewModel Chest { get; }
+
+        /// <summary>当前 Shop Pending 的冻结库存投影；仅 Shop 页非空。</summary>
+        public RunShopViewModel Shop { get; }
+
+        /// <summary>当前 Event Pending 的冻结双选择投影；仅 Event 页非空。</summary>
+        public RunEventViewModel Event { get; }
+
         /// <summary>冻结当前页面、交互状态与全部本地化文本。</summary>
         public RunEntryViewModel(
             RunEntryPage page,
@@ -620,7 +1323,12 @@ namespace TinySpire.UI.Run
             RunMapViewModel map,
             bool continueEnabled = false,
             bool canRollbackFailedSave = false,
-            RunCardRewardViewModel cardReward = null)
+            RunCardRewardViewModel cardReward = null,
+            RunHoldingsViewModel holdings = null,
+            RunRestViewModel rest = null,
+            RunChestViewModel chest = null,
+            RunShopViewModel shop = null,
+            RunEventViewModel eventNode = null)
         {
             if (texts == null)
                 throw new ArgumentNullException(nameof(texts));
@@ -632,6 +1340,11 @@ namespace TinySpire.UI.Run
             ContinueEnabled = continueEnabled;
             CanRollbackFailedSave = canRollbackFailedSave;
             CardReward = cardReward;
+            Holdings = holdings;
+            Rest = rest;
+            Chest = chest;
+            Shop = shop;
+            Event = eventNode;
             _texts = new ReadOnlyDictionary<RunEntryTextSlot, string>(
                 new Dictionary<RunEntryTextSlot, string>(texts));
         }
@@ -681,6 +1394,24 @@ namespace TinySpire.UI.Run
         private const string HealthKey = "run.entry.map.health";
         private const string CardRewardTitleKey = "run.entry.reward.title";
         private const string SkipCardRewardKey = "run.entry.reward.skip";
+        private const string RestTitleKey = "run.entry.rest.title";
+        private const string RestHealKey = "run.entry.rest.heal";
+        private const string RestUpgradeKey = "run.entry.rest.upgrade";
+        private const string ChestTitleKey = "run.entry.chest.title";
+        private const string ChestClaimKey = "run.entry.chest.claim";
+        private const string ChestSkipKey = "run.entry.chest.skip";
+        private const string ChestFullKey = "run.entry.chest.full";
+        private const string ShopTitleKey = "run.entry.shop.title";
+        private const string ShopPurchaseKey = "run.entry.shop.purchase";
+        private const string ShopPurchasedKey = "run.entry.shop.purchased";
+        private const string ShopLeaveKey = "run.entry.shop.leave";
+        private const string EventTitleKey = "run.entry.event.title";
+        private const string EventGainGoldKey = "run.entry.event.gain_gold";
+        private const string EventPaidHealKey = "run.entry.event.paid_heal";
+        private const string HoldingsGoldKey = "run.entry.holdings.gold";
+        private const string HoldingsRelicsKey = "run.entry.holdings.relics";
+        private const string HoldingsPotionsKey = "run.entry.holdings.potions";
+        private const string HoldingsEmptyKey = "run.entry.holdings.empty";
         private const string StrengthKeywordKey = "battle.keyword.strength.name";
         private const string VulnerableKeywordKey = "battle.keyword.vulnerable.name";
         private const string FailureTitleKey = "run.entry.failure.title";
@@ -926,10 +1657,80 @@ namespace TinySpire.UI.Run
             {
                 _flow.SettleCardReward(action.CardRewardId.Value, selectedCardTemplateId: null);
             }
+            else if (action.Kind == RunEntryActionKind.HealAtRest &&
+                     action.NodeVisitId.HasValue &&
+                     state.ProgressPhase == RunProgressPhase.NodeVisitPending &&
+                     state.PendingNodeVisit?.Kind == MapNodeKind.Rest &&
+                     _flow.Persistence.Status != RunPersistenceStatus.CommitPending &&
+                     _flow.Persistence.Status != RunPersistenceStatus.CommitFailed)
+            {
+                _flow.SettleRestHeal(action.NodeVisitId.Value);
+            }
+            else if (action.Kind == RunEntryActionKind.UpgradeCardAtRest &&
+                     action.NodeVisitId.HasValue &&
+                     action.CardInstanceId.HasValue &&
+                     state.ProgressPhase == RunProgressPhase.NodeVisitPending &&
+                     state.PendingNodeVisit?.Kind == MapNodeKind.Rest &&
+                     _flow.Persistence.Status != RunPersistenceStatus.CommitPending &&
+                     _flow.Persistence.Status != RunPersistenceStatus.CommitFailed)
+            {
+                _flow.SettleRestUpgrade(
+                    action.NodeVisitId.Value,
+                    action.CardInstanceId.Value);
+            }
+            else if (action.Kind == RunEntryActionKind.ClaimChest &&
+                     action.NodeVisitId.HasValue &&
+                     state.ProgressPhase == RunProgressPhase.NodeVisitPending &&
+                     state.PendingNodeVisit?.Kind == MapNodeKind.Chest &&
+                     _flow.Persistence.Status != RunPersistenceStatus.CommitPending &&
+                     _flow.Persistence.Status != RunPersistenceStatus.CommitFailed)
+            {
+                _flow.SettleChestClaim(action.NodeVisitId.Value);
+            }
+            else if (action.Kind == RunEntryActionKind.SkipChest &&
+                     action.NodeVisitId.HasValue &&
+                     state.ProgressPhase == RunProgressPhase.NodeVisitPending &&
+                     state.PendingNodeVisit?.Kind == MapNodeKind.Chest &&
+                     _flow.Persistence.Status != RunPersistenceStatus.CommitPending &&
+                     _flow.Persistence.Status != RunPersistenceStatus.CommitFailed)
+            {
+                _flow.SettleChestSkip(action.NodeVisitId.Value);
+            }
+            else if (action.Kind == RunEntryActionKind.PurchaseShopStock &&
+                     action.NodeVisitId.HasValue &&
+                     action.ShopStockEntryId.HasValue &&
+                     state.ProgressPhase == RunProgressPhase.NodeVisitPending &&
+                     state.PendingNodeVisit?.Kind == MapNodeKind.Shop &&
+                     _flow.Persistence.Status != RunPersistenceStatus.CommitPending &&
+                     _flow.Persistence.Status != RunPersistenceStatus.CommitFailed)
+            {
+                _flow.SettleShopPurchase(
+                    action.NodeVisitId.Value,
+                    action.ShopStockEntryId.Value);
+            }
+            else if (action.Kind == RunEntryActionKind.LeaveShop &&
+                     action.NodeVisitId.HasValue &&
+                     state.ProgressPhase == RunProgressPhase.NodeVisitPending &&
+                     state.PendingNodeVisit?.Kind == MapNodeKind.Shop &&
+                     _flow.Persistence.Status != RunPersistenceStatus.CommitPending &&
+                     _flow.Persistence.Status != RunPersistenceStatus.CommitFailed)
+            {
+                _flow.SettleShopLeave(action.NodeVisitId.Value);
+            }
+            else if (action.Kind == RunEntryActionKind.ChooseEvent &&
+                     action.NodeVisitId.HasValue &&
+                     action.EventChoice.HasValue &&
+                     state.ProgressPhase == RunProgressPhase.NodeVisitPending &&
+                     state.PendingNodeVisit?.Kind == MapNodeKind.Event &&
+                     _flow.Persistence.Status != RunPersistenceStatus.CommitPending &&
+                     _flow.Persistence.Status != RunPersistenceStatus.CommitFailed)
+            {
+                _flow.SettleEventChoice(
+                    action.NodeVisitId.Value,
+                    action.EventChoice.Value);
+            }
             else if (action.Kind == RunEntryActionKind.RequestExitAfterSaveFailure &&
-                     _flow.Persistence.Status == RunPersistenceStatus.CommitFailed &&
-                     state.ProgressPhase != RunProgressPhase.Terminal &&
-                     state.ProgressPhase != RunProgressPhase.RewardPending)
+                     _flow.CanRollbackFailedCheckpoint)
             {
                 _localPage = RunEntryPage.RollbackConfirmation;
                 Render();
@@ -941,9 +1742,7 @@ namespace TinySpire.UI.Run
                 Render();
             }
             else if (action.Kind == RunEntryActionKind.ConfirmRollback &&
-                     _flow.Persistence.Status == RunPersistenceStatus.CommitFailed &&
-                     state.ProgressPhase != RunProgressPhase.Terminal &&
-                     state.ProgressPhase != RunProgressPhase.RewardPending)
+                     _flow.CanRollbackFailedCheckpoint)
             {
                 _localPage = RunEntryPage.MainMenu;
                 _selectedHeroTemplateId = null;
@@ -974,6 +1773,11 @@ namespace TinySpire.UI.Run
             var texts = BuildTexts(state);
             RunMapViewModel map = state == null ? null : BuildMapViewModel(state);
             RunCardRewardViewModel cardReward = BuildCardRewardViewModel(state);
+            RunHoldingsViewModel holdings = BuildHoldingsViewModel(state);
+            RunRestViewModel rest = BuildRestViewModel(state);
+            RunChestViewModel chest = BuildChestViewModel(state);
+            RunShopViewModel shop = BuildShopViewModel(state);
+            RunEventViewModel eventNode = BuildEventViewModel(state);
 
             _view.Render(new RunEntryViewModel(
                 page,
@@ -987,10 +1791,81 @@ namespace TinySpire.UI.Run
                                  page == RunEntryPage.MainMenu &&
                                  _flow.Persistence.CanContinue,
                 canRollbackFailedSave: state != null &&
-                                        state.ProgressPhase != RunProgressPhase.Terminal &&
-                                        state.ProgressPhase != RunProgressPhase.RewardPending &&
-                                        _flow.Persistence.Status == RunPersistenceStatus.CommitFailed,
-                cardReward: cardReward));
+                                        _flow.CanRollbackFailedCheckpoint,
+                cardReward: cardReward,
+                holdings: holdings,
+                rest: rest,
+                chest: chest,
+                shop: shop,
+                eventNode: eventNode));
+        }
+
+        /// <summary>按 Run 持有物领域顺序从 cfg.run 构建当前语言的金币、遗物与药水投影。</summary>
+        private RunHoldingsViewModel BuildHoldingsViewModel(RunState state)
+        {
+            if (state == null)
+                return null;
+
+            Tables tables = _tablesProvider()
+                ?? throw new InvalidOperationException(
+                    "ConfigService must be initialized before rendering Run holdings.");
+            RunHoldingItemViewModel[] relics = state.Holdings.Relics
+                .Select(relic => BuildRelicHoldingItem(tables, relic))
+                .ToArray();
+            RunHoldingItemViewModel[] potions = state.Holdings.Potions
+                .Select(potion => BuildPotionHoldingItem(tables, potion))
+                .ToArray();
+            return new RunHoldingsViewModel(
+                _localize(
+                    HoldingsGoldKey,
+                    new Dictionary<string, object> { ["gold"] = state.Holdings.Gold }),
+                Localize(HoldingsRelicsKey),
+                Localize(HoldingsPotionsKey),
+                Localize(HoldingsEmptyKey),
+                relics,
+                potions);
+        }
+
+        /// <summary>以 cfg.run 遗物模板和 strength Smart 参数投影一个已持有遗物。</summary>
+        private RunHoldingItemViewModel BuildRelicHoldingItem(Tables tables, RunRelic relic)
+        {
+            cfg.run.Relic template = tables.TbRelic.GetOrDefault(relic.TemplateId)
+                ?? throw new InvalidOperationException(
+                    $"Relic template {relic.TemplateId} does not exist.");
+            return new RunHoldingItemViewModel(
+                template.Id,
+                Localize(template.NameI18nKey),
+                _localize(
+                    template.DescriptionI18nKey,
+                    new Dictionary<string, object>
+                    {
+                        ["strength"] = template.BattleStartStrength,
+                    }));
+        }
+
+        /// <summary>以 cfg.run 药水模板和 heal Smart 参数投影一个药水槽位。</summary>
+        private RunHoldingItemViewModel BuildPotionHoldingItem(Tables tables, RunPotion potion)
+        {
+            if (potion == null)
+                throw new ArgumentNullException(nameof(potion));
+            return BuildPotionTemplateItem(tables, potion.TemplateId);
+        }
+
+        /// <summary>以冻结药水模板身份和 heal Smart 参数投影一个尚未领取或已持有的药水。</summary>
+        private RunHoldingItemViewModel BuildPotionTemplateItem(Tables tables, int templateId)
+        {
+            cfg.run.Potion template = tables.TbPotion.GetOrDefault(templateId)
+                ?? throw new InvalidOperationException(
+                    $"Potion template {templateId} does not exist.");
+            return new RunHoldingItemViewModel(
+                template.Id,
+                Localize(template.NameI18nKey),
+                _localize(
+                    template.DescriptionI18nKey,
+                    new Dictionary<string, object>
+                    {
+                        ["heal"] = template.HealAmount,
+                    }));
         }
 
         /// <summary>让 RunState 决定地图或失败页；尚未创建 Run 时才使用场景内导航。</summary>
@@ -1010,7 +1885,265 @@ namespace TinySpire.UI.Run
                 return RunEntryPage.Failure;
             if (state.ProgressPhase == RunProgressPhase.RewardPending)
                 return RunEntryPage.CardReward;
+            if (state.ProgressPhase == RunProgressPhase.NodeVisitPending &&
+                state.PendingNodeVisit?.Kind == MapNodeKind.Rest)
+            {
+                return RunEntryPage.Rest;
+            }
+            if (state.ProgressPhase == RunProgressPhase.NodeVisitPending &&
+                state.PendingNodeVisit?.Kind == MapNodeKind.Chest)
+            {
+                return RunEntryPage.Chest;
+            }
+            if (state.ProgressPhase == RunProgressPhase.NodeVisitPending &&
+                state.PendingNodeVisit?.Kind == MapNodeKind.Shop)
+            {
+                return RunEntryPage.Shop;
+            }
+            if (state.ProgressPhase == RunProgressPhase.NodeVisitPending &&
+                state.PendingNodeVisit?.Kind == MapNodeKind.Event)
+            {
+                return RunEntryPage.Event;
+            }
             return RunEntryPage.Map;
+        }
+
+        /// <summary>按 Pending 冻结顺序投影 Rest 治疗量与当前配置终审后的实例升级动作。</summary>
+        private RunRestViewModel BuildRestViewModel(RunState state)
+        {
+            if (state?.ProgressPhase != RunProgressPhase.NodeVisitPending ||
+                state.PendingNodeVisit?.Kind != MapNodeKind.Rest)
+            {
+                return null;
+            }
+
+            Tables tables = _tablesProvider()
+                ?? throw new InvalidOperationException(
+                    "ConfigService must be initialized before rendering Rest choices.");
+            var catalog = new TablesRunSaveConfigurationCatalog(tables);
+            PendingRunNodeVisit pending = state.PendingNodeVisit;
+            bool actionsEnabled = _flow.Persistence.Status != RunPersistenceStatus.CommitPending &&
+                                  _flow.Persistence.Status != RunPersistenceStatus.CommitFailed;
+            RunRestUpgradeCandidateViewModel[] candidates = pending.RestPayload
+                .UpgradeCandidateInstanceIds
+                .Select(instanceId =>
+                {
+                    RunCard card = state.RunDeck.Cards.Single(value => value.InstanceId == instanceId);
+                    cfg.battle.Card template = tables.TbCard.GetOrDefault(card.TemplateId)
+                        ?? throw new InvalidOperationException(
+                            $"Card template {card.TemplateId} does not exist.");
+                    int nextLevel = checked(card.UpgradeLevel + 1);
+                    string text = _localize(
+                        RestUpgradeKey,
+                        new Dictionary<string, object>
+                        {
+                            ["card"] = Localize(template.NameI18nKey),
+                            ["level"] = nextLevel,
+                        });
+                    return new RunRestUpgradeCandidateViewModel(
+                        card.InstanceId,
+                        card.TemplateId,
+                        card.UpgradeLevel,
+                        text,
+                        actionsEnabled &&
+                        catalog.IsCardUpgradeLevelValid(card.TemplateId, nextLevel));
+                })
+                .ToArray();
+            string healText = _localize(
+                RestHealKey,
+                new Dictionary<string, object>
+                {
+                    ["amount"] = pending.RestPayload.HealAmount,
+                });
+            return new RunRestViewModel(
+                pending.Id,
+                pending.RestPayload.HealAmount,
+                healText,
+                actionsEnabled && state.CurrentHealth < state.MaxHealth,
+                candidates);
+        }
+
+        /// <summary>从 Chest Pending 冻结模板构建本地化奖励，并仅以容量和存档状态控制双动作表现。</summary>
+        private RunChestViewModel BuildChestViewModel(RunState state)
+        {
+            if (state?.ProgressPhase != RunProgressPhase.NodeVisitPending ||
+                state.PendingNodeVisit?.Kind != MapNodeKind.Chest)
+            {
+                return null;
+            }
+
+            Tables tables = _tablesProvider()
+                ?? throw new InvalidOperationException(
+                    "ConfigService must be initialized before rendering Chest choices.");
+            PendingRunNodeVisit pending = state.PendingNodeVisit;
+            bool actionsEnabled = _flow.Persistence.Status != RunPersistenceStatus.CommitPending &&
+                                  _flow.Persistence.Status != RunPersistenceStatus.CommitFailed;
+            bool capacityFull = state.Holdings.Potions.Count >= 3;
+            return new RunChestViewModel(
+                pending.Id,
+                BuildPotionTemplateItem(tables, pending.ChestPayload.PotionTemplateId),
+                Localize(ChestClaimKey),
+                Localize(ChestSkipKey),
+                Localize(ChestFullKey),
+                claimEnabled: actionsEnabled && !capacityFull,
+                skipEnabled: actionsEnabled,
+                isCapacityFull: capacityFull);
+        }
+
+        /// <summary>从 Shop Pending 构建固定三项库存，并以当前余额、容量、持有物和 Hero 配置投影门禁。</summary>
+        private RunShopViewModel BuildShopViewModel(RunState state)
+        {
+            if (state?.ProgressPhase != RunProgressPhase.NodeVisitPending ||
+                state.PendingNodeVisit?.Kind != MapNodeKind.Shop)
+            {
+                return null;
+            }
+
+            Tables tables = _tablesProvider()
+                ?? throw new InvalidOperationException(
+                    "ConfigService must be initialized before rendering Shop stock.");
+            var catalog = new TablesRunSaveConfigurationCatalog(tables);
+            HeroCardRewardPool cardPool = TryCreateShopHeroCardPool(catalog, state.HeroTemplateId);
+            PendingRunNodeVisit pending = state.PendingNodeVisit;
+            bool actionsEnabled = _flow.Persistence.Status != RunPersistenceStatus.CommitPending &&
+                                  _flow.Persistence.Status != RunPersistenceStatus.CommitFailed;
+            RunShopStockEntryViewModel[] entries = pending.ShopPayload.Entries
+                .Select(entry => BuildShopStockEntryViewModel(
+                    tables,
+                    state,
+                    entry,
+                    cardPool,
+                    actionsEnabled))
+                .ToArray();
+            return new RunShopViewModel(
+                pending.Id,
+                entries,
+                Localize(ShopLeaveKey),
+                leaveEnabled: actionsEnabled);
+        }
+
+        /// <summary>按库存种类解析名称与当前配置合法性，再叠加余额、容量、重复持有和 Purchased 门禁。</summary>
+        private RunShopStockEntryViewModel BuildShopStockEntryViewModel(
+            Tables tables,
+            RunState state,
+            RunShopStockEntry entry,
+            HeroCardRewardPool cardPool,
+            bool actionsEnabled)
+        {
+            string itemName;
+            bool configurationAvailable;
+            bool domainBlocked;
+            switch (entry.Kind)
+            {
+                case RunShopStockKind.Relic:
+                    cfg.run.Relic relic = tables.TbRelic.GetOrDefault(entry.TemplateId);
+                    itemName = relic == null ? $"#{entry.TemplateId}" : Localize(relic.NameI18nKey);
+                    configurationAvailable = relic != null;
+                    domainBlocked = state.Holdings.Relics.Any(
+                        held => held.TemplateId == entry.TemplateId);
+                    break;
+                case RunShopStockKind.Potion:
+                    cfg.run.Potion potion = tables.TbPotion.GetOrDefault(entry.TemplateId);
+                    itemName = potion == null ? $"#{entry.TemplateId}" : Localize(potion.NameI18nKey);
+                    configurationAvailable = potion != null;
+                    domainBlocked = state.Holdings.Potions.Count >= 3;
+                    break;
+                case RunShopStockKind.Card:
+                    cfg.battle.Card card = tables.TbCard.GetOrDefault(entry.TemplateId);
+                    itemName = card == null ? $"#{entry.TemplateId}" : Localize(card.NameI18nKey);
+                    configurationAvailable = card != null &&
+                                             cardPool != null &&
+                                             cardPool.HeroTemplateId == state.HeroTemplateId &&
+                                             cardPool.Candidates.Any(
+                                                 candidate => candidate.TemplateId == entry.TemplateId);
+                    domainBlocked = false;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(entry.Kind));
+            }
+
+            string text = entry.Purchased
+                ? _localize(
+                    ShopPurchasedKey,
+                    new Dictionary<string, object> { ["item"] = itemName })
+                : _localize(
+                    ShopPurchaseKey,
+                    new Dictionary<string, object>
+                    {
+                        ["item"] = itemName,
+                        ["price"] = entry.Price,
+                    });
+            bool purchaseEnabled = actionsEnabled &&
+                                   !entry.Purchased &&
+                                   configurationAvailable &&
+                                   !domainBlocked &&
+                                   state.Holdings.Gold >= entry.Price;
+            return new RunShopStockEntryViewModel(
+                entry.EntryId,
+                entry.Kind,
+                entry.TemplateId,
+                entry.Price,
+                itemName,
+                text,
+                entry.Purchased,
+                purchaseEnabled);
+        }
+
+        /// <summary>Hero 奖励池配置不完整时只返回空门禁结果，让 Shop 页面仍可显示冻结身份并禁用卡项。</summary>
+        private static HeroCardRewardPool TryCreateShopHeroCardPool(
+            TablesRunSaveConfigurationCatalog catalog,
+            int heroTemplateId)
+        {
+            try
+            {
+                return catalog.CreateHeroCardRewardPool(heroTemplateId);
+            }
+            catch (InvalidOperationException)
+            {
+                return null;
+            }
+            catch (ArgumentException)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>从 Event Pending 冻结数值构建双选择文本，并按金币边界、余额、生命与存档状态门禁。</summary>
+        private RunEventViewModel BuildEventViewModel(RunState state)
+        {
+            if (state?.ProgressPhase != RunProgressPhase.NodeVisitPending ||
+                state.PendingNodeVisit?.Kind != MapNodeKind.Event)
+            {
+                return null;
+            }
+
+            PendingRunNodeVisit pending = state.PendingNodeVisit;
+            RunEventNodeVisitPayload payload = pending.EventPayload;
+            bool actionsEnabled = _flow.Persistence.Status != RunPersistenceStatus.CommitPending &&
+                                  _flow.Persistence.Status != RunPersistenceStatus.CommitFailed;
+            bool gainGoldSafe = (long)state.Holdings.Gold + payload.GainGoldAmount <= int.MaxValue;
+            return new RunEventViewModel(
+                pending.Id,
+                payload.GainGoldAmount,
+                payload.PaidHealCost,
+                payload.PaidHealAmount,
+                _localize(
+                    EventGainGoldKey,
+                    new Dictionary<string, object>
+                    {
+                        ["gold"] = payload.GainGoldAmount,
+                    }),
+                _localize(
+                    EventPaidHealKey,
+                    new Dictionary<string, object>
+                    {
+                        ["cost"] = payload.PaidHealCost,
+                        ["heal"] = payload.PaidHealAmount,
+                    }),
+                gainGoldEnabled: actionsEnabled && gainGoldSafe,
+                paidHealEnabled: actionsEnabled &&
+                                 state.Holdings.Gold >= payload.PaidHealCost &&
+                                 state.CurrentHealth < state.MaxHealth);
         }
 
         /// <summary>从 Pending 身份与卡牌配置构建当前语言的固定三候选投影。</summary>
@@ -1222,6 +2355,10 @@ namespace TinySpire.UI.Run
                 [RunEntryTextSlot.Health] = _localize(HealthKey, healthArguments),
                 [RunEntryTextSlot.CardRewardTitle] = Localize(CardRewardTitleKey),
                 [RunEntryTextSlot.SkipCardReward] = Localize(SkipCardRewardKey),
+                [RunEntryTextSlot.RestTitle] = Localize(RestTitleKey),
+                [RunEntryTextSlot.ChestTitle] = Localize(ChestTitleKey),
+                [RunEntryTextSlot.ShopTitle] = Localize(ShopTitleKey),
+                [RunEntryTextSlot.EventTitle] = Localize(EventTitleKey),
                 [RunEntryTextSlot.FailureTitle] = Localize(FailureTitleKey),
                 [RunEntryTextSlot.LeaveRun] = Localize(ExitKey),
                 [RunEntryTextSlot.Cancel] = Localize(CancelKey),

@@ -21,7 +21,9 @@ public sealed class ConfigService
         "battle_tbencounter",
         "battle_tbenemybehaviorgroup",
         "battle_tbenemybehavior",
-        "battle_tbcardupgradelevel"
+        "battle_tbcardupgradelevel",
+        "run_tbrelic",
+        "run_tbpotion"
     };
 
     public Tables Tables { get; private set; }

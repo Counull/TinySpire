@@ -2,7 +2,7 @@
 title: Daedalus · 测试与验收索引
 page_type: index
 lifecycle: active
-updated: 2026-08-26
+updated: 2026-08-27
 status_source: ../STATUS.md
 ---
 
@@ -12,6 +12,7 @@ status_source: ../STATUS.md
 
 ## 最近记录
 
+- [G5/G6 Run 持有物与非战斗节点](2026-08-27-g5-g6-run-holdings-noncombat-nodes.md) — `completed / verified`；完整 EditMode 1348/1348、Rider problems 0、Sync/BuildLayout 真实 bundle、Packed Play schema v5 mixed route 与 Console Error/InvalidKey/配置失败 0。
 - [G4 RunDeck、普通战斗奖励与多级升级](2026-08-25-g4-run-deck-rewards-upgrades.md) — G4-A～D 权威验收：完整 EditMode 1093/1093、生产双 Hero 自动化、Sync/BuildLayout、Packed Play 双 Hero 选择/跳过与冷启动链、Console Error 0。
 - [ByteRover 项目知识关联](2026-08-24-byterover-project-context.md) — verified local；5 文件 seed、4/4 confirmed、带精确来源回查与本地 context-tree commit 通过，未配置云同步。
 - [LLM 项目知识工作流 V2](2026-08-24-llm-project-knowledge-workflow-v2.md) — Status 路由、预算、链接与离线校验器。

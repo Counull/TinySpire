@@ -91,7 +91,9 @@ public sealed class RunG4ProductionAcceptanceTests
                 restoredStore.Current.RunDeck.Cards.Count(card => card.InstanceId == rewardedCard.InstanceId),
                 Is.EqualTo(1));
 
-            await restoredFlow.EnterMapNodeAsync(GetFirstSelectableNodeId(restoredStore.Current));
+            await EnterNextBattleThroughRequiredNonCombatNodesAsync(
+                restoredFlow,
+                restoredStore);
             BattleSetupOptions nextSetup = restoredFlow.CreateBattleSetupOptions();
             restoredFlow.BindBattleAttempt(nextSetup);
             using BattleSession nextSession = BattleSession.FromConfig(configs.Tables, nextSetup);
@@ -105,6 +107,50 @@ public sealed class RunG4ProductionAcceptanceTests
             Assert.That(drawnRewardInstances[0].TemplateId, Is.EqualTo(selectedTemplateId));
             Assert.That(drawnRewardInstances[0].UpgradeLevel, Is.Zero);
         }
+    }
+
+    /// <summary>按生产地图的类型化语义完成战斗间非战斗节点，直到下一场战斗输入被冻结。</summary>
+    private static async UniTask EnterNextBattleThroughRequiredNonCombatNodesAsync(
+        RunFlowService flow,
+        RunStateStore store)
+    {
+        const int MaxTraversalSteps = 8;
+        for (int step = 0; step < MaxTraversalSteps; step++)
+        {
+            await flow.EnterMapNodeAsync(GetFirstSelectableNodeId(store.Current));
+            if (store.Current.ProgressPhase == RunProgressPhase.InBattle)
+                return;
+
+            Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.NodeVisitPending));
+            PendingRunNodeVisit pending = store.Current.PendingNodeVisit;
+            Assert.That(pending, Is.Not.Null);
+
+            RunSaveCommitResult result;
+            switch (pending.Kind)
+            {
+                case MapNodeKind.Rest:
+                    result = flow.SettleRestHeal(pending.Id);
+                    break;
+                case MapNodeKind.Chest:
+                    result = flow.SettleChestSkip(pending.Id);
+                    break;
+                case MapNodeKind.Shop:
+                    result = flow.SettleShopLeave(pending.Id);
+                    break;
+                case MapNodeKind.Event:
+                    result = flow.SettleEventChoice(
+                        pending.Id,
+                        RunEventChoiceKind.GainGold);
+                    break;
+                default:
+                    throw new InvalidOperationException(
+                        $"下一场战斗前遇到未定义的非战斗节点 {pending.Kind}。");
+            }
+
+            Assert.That(result.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        }
+
+        Assert.Fail($"生产地图在 {MaxTraversalSteps} 步内未进入下一场战斗。");
     }
 
     /// <summary>以确定 Run 身份与根 seed 创建生产 Flow，场景切换使用无副作用测试端口。</summary>

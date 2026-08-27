@@ -9429,7 +9429,8 @@ public sealed class MachineGunnerStarterRuntimeTests
                         ruleValue: 0),
                 },
             };
-            return new Tables(tableName => data[tableName]);
+        return new Tables(tableName =>
+            data.TryGetValue(tableName, out JArray rows) ? rows : new JArray());
         }
 
         /// <summary>创建满足生成 Card 全部字段的机枪兵程序卡记录。</summary>

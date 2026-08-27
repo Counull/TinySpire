@@ -4,7 +4,7 @@ owner: Daedalus
 page_type: roadmap
 lifecycle: active
 created: 2026-08-14
-updated: 2026-08-26
+updated: 2026-08-27
 status_source: STATUS.md
 predecessor: ROADMAP.md
 note: 本文件承担 BattleScene 之后的 Run 阶段结果、候选切片、依赖与门禁；任何阶段或切片都不因出现在本文而获得实施授权。
@@ -59,12 +59,12 @@ Run MVP 的终点不是“把所有 STS 内容做完”，而是至少用一个�
 | G2 | `completed` | G2-A `verified` | 关闭并重启游戏后，可从最近稳定地图检查点继续同一个 Run | 单槽存档可原子写入、坏档安全失败、恢复事实与后续随机一致 | G1 的 Run 生命周期与 setup/result seam |
 | G3 | `completed` | G3 `verified` | 生成并游玩一张可保存、可复现、开局明牌的确定性 Act 地图，胜利推进至 Boss 门，普通战斗失败立即终结 Run | 合法路线可完整推进至 `BossGateReached`；recipe 重建、失败终局冷启动与完整 Unity 验收均通过 | G2 的持久化 Run facts 与随机边界；决策 012～016 |
 | G4 | `completed` | G4-A～D `verified` | 胜利后选择/跳过冻结奖励，Run 牌组变化真实进入下一战 | 奖励不重随机、不重复领取，逐卡实例与升级事实可保存 | G1 结果 bridge、G2 schema；节点绑定时依赖 G3 |
-| G5 | `not-started` | G5-A `candidate` | 获得并跨战使用至少一个遗物和一个药水 | 触发顺序稳定、消费 exactly-once、保存/重开语义明确 | G2 持久化、G4 奖励/实例 seam |
-| G6 | `not-started` | G6-A `candidate` | 商店、事件、休息点、宝箱各有一个可完成样本 | 候选冻结、结算原子、重进/读档不可重复获利 | G2 经济事实、G3 节点契约、所需 G4/G5 seam |
+| G5 | `completed` | G5-A～D `verified` | 获得并跨战使用至少一个遗物和一个药水 | 触发顺序稳定、消费 exactly-once、保存/重开语义明确 | G2 持久化、G4 奖励/实例 seam |
+| G6 | `completed` | G6-A～E `verified` | 商店、事件、休息点、宝箱各有一个可完成样本 | 候选冻结、结算原子、重进/读档不可重复获利 | G2 经济事实、G3 节点契约、所需 G4/G5 seam |
 | G7 | `not-started` | G7-A `candidate` | 从新 Run 贯通一个 Act、一个精英和一个 Boss，再进入 Run 终局 | 单 Act 全链可达且内容门禁拒绝坏引用，终局只结算一次 | G3 地图/Act 结构与 G4～G6 内容流程 |
 | G8 | `not-started` | G8-A `candidate` | 设置、教程、可访问性、正式表现、统计和发布验证形成产品闭环 | 目标 Player build 完整 Run 通过，兼容/性能/输入/分辨率矩阵有证据 | G1～G7 的产品关键验收 |
 
-当前事实：G1 没有“剩余范围”。G1-A 当时明确排除的内容属于后续阶段：存档/继续在 G2；多节点 Act 地图、明牌 Boss 终点与 `BossGateReached` 在 G3；奖励与卡牌实例在 G4；遗物/药水在 G5；非战斗节点在 G6；真实 Boss 战、Boss 阶段与最终 Run 结算在 G7；真实设置/教程/统计/产品表现收口在 G8。联网和多人不属于当前 G1～G8 Run MVP。
+当前事实：G1～G6 已完成。G5/G6 已取得 `Sync and Build All`、完整 EditMode 1348/1348、最新 BuildLayout、Packed Play schema v5 mixed route 与 Console 0 的本轮证据，阶段为 `completed`、切片为 `verified`；先前 Unity license code 198 阻塞已经解除。G7 仍为 `not-started`，真实 Boss 战、Boss 阶段与最终 Run 结算未获得授权；联网和多人不属于当前 G1～G8 Run MVP。
 
 ## 4. 已完成基础 · G1～G3（按需历史）
 
@@ -106,6 +106,8 @@ G1～G3 的完整计划、RED→GREEN、BuildLayout 与 Packed Play 细节保留
 
 **明确不做：** 大型随机池、装备/制作、通用事件总线、持久充能遗物、选择目标药水、重构 Battle 队列或 DI。
 
+**当前状态（2026-08-27）：** G5-A～D 已实现并通过完整 EditMode、BuildLayout 与 Packed Play 聚合产品验收；阶段为 `completed`，切片均为 `verified`。权威证据见 [G5/G6 验收记录](06_testing/2026-08-27-g5-g6-run-holdings-noncombat-nodes.md)。
+
 ## 7. G6 · 商店、事件、休息点与宝箱
 
 **阶段结果：** 复用 G3 的节点生命周期和一套冻结/认领事务，分别交付四类非战斗节点的一个真实样本。
@@ -121,6 +123,8 @@ G1～G3 的完整计划、RED→GREEN、BuildLayout 与 Packed Play 细节保留
 **G6 完成门槛：** 一条混合路线能分别进入并完成休息、宝箱、商店和事件；每类节点都独立通过保存/恢复、重进和 exactly-once 验收。
 
 **明确不做：** 动态经济、出售/回购/刷新、事件脚本语言、大事件池、连锁事件、复杂动画和多人投票。
+
+**当前状态（2026-08-27）：** G6-A～E 已实现并通过完整 Unity 聚合验证；schema v5 mixed profile 在 Packed Play 实际生成 `Combat → Rest → Chest → Shop → Event → Combat → BossGate`，阶段为 `completed`，切片均为 `verified`。
 
 ## 8. G7 · 单 Act、精英、Boss 与 Run 终局
 
@@ -169,6 +173,6 @@ G1～G3 的完整计划、RED→GREEN、BuildLayout 与 Packed Play 细节保留
 
 ## 11. 下一步
 
-G3「确定性尖塔式 Act 地图」与 G4「战斗奖励、Run 牌组与卡牌实例」均已完成并 `verified`。G4-A～D 已取得 RED→GREEN、定向回归、`Sync and Build All`、完整 EditMode、Local Addressables/BuildLayout、Packed Play 双 Hero 选择/跳过与冷启动链以及 Console 0 的本轮证据；详细记录见 [G4 验收](06_testing/2026-08-25-g4-run-deck-rewards-upgrades.md)。
+G3「确定性尖塔式 Act 地图」、G4「战斗奖励、Run 牌组与卡牌实例」以及 G5/G6「持有物与非战斗节点」均已完成并 `verified`。G5/G6 的完整 EditMode、`Sync and Build All`、Local Addressables/BuildLayout、Packed Play mixed route 与 Console 0 证据见 [G5/G6 验收](06_testing/2026-08-27-g5-g6-run-holdings-noncombat-nodes.md)。
 
-当前立即停在 G4，没有实施中的 Run 切片。G5 仍为 `not-started / candidate`；G5+、Platform Save Spike、平台 SDK、云存档、多槽、真实 Boss 战和遗物实际效果均未获授权，任何新范围仍须重新经过 Grill、窄计划、明确授权和独立验收。
+当前立即停在 G6，没有实施中的 Run 切片。G7 仍为 `not-started / candidate`；真实 Boss/Boss 阶段、RunOutcome、Platform Save Spike、平台 SDK、云存档与多槽均未获授权，任何新范围仍须重新经过窄计划、明确授权和独立验收。

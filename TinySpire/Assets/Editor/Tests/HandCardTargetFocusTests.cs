@@ -899,6 +899,7 @@ public sealed class HandCardTargetFocusTests
                 "\"max_consecutive\":0}]"),
             ["battle_tbcardupgradelevel"] = new JArray(),
         };
-        return new cfg.Tables(tableName => data[tableName]);
+        return new cfg.Tables(tableName =>
+            data.TryGetValue(tableName, out JArray rows) ? rows : new JArray());
     }
 }

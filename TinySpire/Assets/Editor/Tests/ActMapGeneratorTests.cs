@@ -1,11 +1,129 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using NUnit.Framework;
+using TinySpire.Run;
 using TinySpire.Run.Map;
 
 public sealed class ActMapGeneratorTests
 {
+    /// <summary>G3 v1 原始三组与额外历史指纹及一份完整节点边 golden 必须逐字节保持不变。</summary>
+    [Test]
+    public void Generate_LegacyG3V1_PreservesHistoricalFingerprintsAndGoldenGraph()
+    {
+        ActMapProfile profile = TinySpireActMapProfiles.GetById("tinyspire.act1.g3.v1");
+
+        Assert.That(profile, Is.Not.Null);
+        Assert.That(
+            ActMapGenerator.Generate(profile, mapSeed: 123456u).Fingerprint,
+            Is.EqualTo("bbdecb909ced3e6f49de02f49ebeec79c395733f5f8bf0c6820d53f8039eb6af"));
+        Assert.That(
+            ActMapGenerator.Generate(profile, mapSeed: 314159265u).Fingerprint,
+            Is.EqualTo("fcb0e1b95636e416183fa68e5049a03e4cb268178008ca7153cafcb26ffcb2b3"));
+        Assert.That(
+            ActMapGenerator.Generate(profile, mapSeed: 42424242u).Fingerprint,
+            Is.EqualTo("0b9834fadc2e41d66b33deaac6107fd1e18e7074b54b7c048eb02392b5a283eb"));
+        Assert.That(
+            ActMapGenerator.Generate(profile, mapSeed: 1u).Fingerprint,
+            Is.EqualTo("cc993cc9fcbf25a6a82efaee024afaeb8695f176a03042c19c6fb7f30ce9b7fe"));
+        Assert.That(
+            ActMapGenerator.Generate(profile, mapSeed: 424242u).Fingerprint,
+            Is.EqualTo("bc6a55a66d86e845dcf6d659ac472d89bb4685e80baba2040da1e4a0ca609704"));
+
+        MapDefinition golden = ActMapGenerator.Generate(profile, mapSeed: 123456u);
+        Assert.That(golden.GeneratorVersion, Is.EqualTo(1));
+        Assert.That(golden.Nodes.Select(DescribeNode), Is.EqualTo(new[]
+        {
+            "L00-S00|0|0|Start|0",
+            "L01-S00|1|0|Combat|5001",
+            "L01-S01|1|1|Combat|5001",
+            "L02-S00|2|0|Combat|5001",
+            "L02-S01|2|1|Combat|5001",
+            "L03-S00|3|0|Boss|9001",
+            "L03-S01|3|1|Boss|9002",
+            "L03-S02|3|2|Boss|9001",
+        }));
+        Assert.That(golden.Edges.Select(DescribeEdge), Is.EqualTo(new[]
+        {
+            "L00-S00>L01-S00",
+            "L00-S00>L01-S01",
+            "L01-S00>L02-S00",
+            "L01-S00>L02-S01",
+            "L01-S01>L02-S00",
+            "L02-S00>L03-S00",
+            "L02-S00>L03-S01",
+            "L02-S01>L03-S02",
+        }));
+    }
+
+    /// <summary>生产 G6 profile v1 必须以生成器 v2 生成经过四类非战斗节点的固定单路线。</summary>
+    [Test]
+    public void Generate_NewRunG6V1WithGeneratorV2_ProducesMixedPlayableRoute()
+    {
+        ActMapProfile profile = TinySpireActMapProfiles.GetById("tinyspire.act1.g6.v1");
+
+        Assert.That(profile, Is.Not.Null, "G6-A must register the production mixed profile.");
+        MapDefinition map = ActMapGenerator.Generate(profile, mapSeed: 123456u);
+
+        Assert.That(map.ProfileId, Is.EqualTo("tinyspire.act1.g6.v1"));
+        Assert.That(map.GeneratorVersion, Is.EqualTo(2));
+        Assert.That(map.Nodes.Select(DescribeNode), Is.EqualTo(new[]
+        {
+            "L00-S00|0|0|Start|0",
+            "L01-S00|1|0|Combat|5001",
+            "L02-S00|2|0|Rest|7101",
+            "L03-S00|3|0|Chest|7201",
+            "L04-S00|4|0|Shop|7301",
+            "L05-S00|5|0|Event|7401",
+            "L06-S00|6|0|Combat|5001",
+            "L07-S00|7|0|Boss|9001",
+            "L07-S01|7|1|Boss|9002",
+                "L07-S02|7|2|Boss|9002",
+        }));
+        Assert.That(map.Edges.Select(DescribeEdge), Is.EqualTo(new[]
+        {
+            "L00-S00>L01-S00",
+            "L01-S00>L02-S00",
+            "L02-S00>L03-S00",
+            "L03-S00>L04-S00",
+            "L04-S00>L05-S00",
+            "L05-S00>L06-S00",
+            "L06-S00>L07-S00",
+            "L06-S00>L07-S01",
+            "L06-S00>L07-S02",
+        }));
+        Assert.That(ActMapValidator.Validate(map, profile).IsValid, Is.True);
+    }
+
+    /// <summary>新增 Shop/Event 域不得改变既有 Map/Reward 派生结果且必须彼此隔离。</summary>
+    [Test]
+    public void RandomDomains_ShopAndEvent_AreStableAndIsolatedFromExistingDomains()
+    {
+        MethodInfo shopMethod = typeof(RunRandomDomains).GetMethod(
+            "DeriveShopSeed",
+            BindingFlags.Public | BindingFlags.Static);
+        MethodInfo eventMethod = typeof(RunRandomDomains).GetMethod(
+            "DeriveEventSeed",
+            BindingFlags.Public | BindingFlags.Static);
+
+        Assert.That(shopMethod, Is.Not.Null);
+        Assert.That(eventMethod, Is.Not.Null);
+        Assert.That(RunRandomDomains.DeriveMapSeed(123456u), Is.EqualTo(3967031089u));
+        Assert.That(RunRandomDomains.DeriveRewardSeed(123456u, 2), Is.EqualTo(4036868525u));
+
+        object[] arguments = { 123456u, new MapNodeId("L04-S00") };
+        uint shopSeed = (uint)shopMethod.Invoke(null, arguments);
+        uint eventSeed = (uint)eventMethod.Invoke(null, arguments);
+        Assert.That(shopSeed, Is.EqualTo(1145244530u));
+        Assert.That(eventSeed, Is.EqualTo(2377970197u));
+        Assert.That(shopSeed, Is.Not.Zero);
+        Assert.That(eventSeed, Is.Not.Zero);
+        Assert.That(shopSeed, Is.Not.EqualTo(eventSeed));
+        Assert.That(shopSeed, Is.Not.EqualTo(RunRandomDomains.DeriveMapSeed(123456u)));
+        Assert.That(eventSeed, Is.Not.EqualTo(RunRandomDomains.DeriveRewardSeed(123456u, 2)));
+    }
+
     /// <summary>相同 profile 与地图 seed 必须冻结完全相同的整图定义。</summary>
     [Test]
     public void Generate_WithSameProfileAndSeed_ProducesIdenticalFrozenDefinition()
@@ -16,7 +134,7 @@ public sealed class ActMapGeneratorTests
         MapDefinition second = ActMapGenerator.Generate(profile, mapSeed: 123456u);
 
         Assert.That(first.ProfileId, Is.EqualTo("test.act.g3.v1"));
-        Assert.That(first.GeneratorVersion, Is.EqualTo(ActMapGenerator.CurrentVersion));
+        Assert.That(first.GeneratorVersion, Is.EqualTo(profile.GeneratorVersion));
         Assert.That(first.MapSeed, Is.EqualTo(123456u));
         Assert.That(first.Nodes, Has.Count.EqualTo(8));
         Assert.That(first.Nodes.Select(DescribeNode), Is.EqualTo(second.Nodes.Select(DescribeNode)));
@@ -105,7 +223,7 @@ public sealed class ActMapGeneratorTests
         MapEdge[] sourceEdges = { new MapEdge(startNode.Id, combatNode.Id) };
         var map = new MapDefinition(
             "test.immutable.g3.v1",
-            ActMapGenerator.CurrentVersion,
+            ActMapGenerator.LegacyG3Version,
             mapSeed: 42u,
             sourceNodes,
             sourceEdges);

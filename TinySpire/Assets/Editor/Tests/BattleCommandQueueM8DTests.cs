@@ -1178,7 +1178,8 @@ public sealed class BattleCommandQueueM8DTests
                 ["battle_tbenemybehavior"] = behaviors,
                 ["battle_tbcardupgradelevel"] = new JArray(),
             };
-            return new Tables(tableName => data[tableName]);
+        return new Tables(tableName =>
+            data.TryGetValue(tableName, out JArray rows) ? rows : new JArray());
         }
 
         /// <summary>创建一名固定引用指定行为组的最小敌人表行。</summary>

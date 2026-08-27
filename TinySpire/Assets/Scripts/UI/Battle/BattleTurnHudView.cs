@@ -1,9 +1,12 @@
 using System;
+using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using DG.Tweening;
 using R3;
 using TinySpire.Battle;
+using TinySpire.Run;
 using UnityEngine;
+using UnityEngine.Events;
 using UnityEngine.UI;
 using VContainer;
 
@@ -15,6 +18,28 @@ namespace TinySpire.UI.Battle
     [DisallowMultipleComponent]
     public sealed class BattleTurnHudView : MonoBehaviour
     {
+        /// <summary>持有一个代码构建药水按钮及其唯一监听，供幂等清理与状态刷新。</summary>
+        private sealed class PotionButtonBinding
+        {
+            internal BattlePotionEntry Entry { get; }
+            internal Button Button { get; }
+            internal Text Label { get; }
+            internal UnityAction Click { get; }
+
+            /// <summary>冻结按钮、文本、账本实例和唯一点击回调。</summary>
+            internal PotionButtonBinding(
+                BattlePotionEntry entry,
+                Button button,
+                Text label,
+                UnityAction click)
+            {
+                Entry = entry ?? throw new ArgumentNullException(nameof(entry));
+                Button = button ?? throw new ArgumentNullException(nameof(button));
+                Label = label ?? throw new ArgumentNullException(nameof(label));
+                Click = click ?? throw new ArgumentNullException(nameof(click));
+            }
+        }
+
         private const float BattleStartFadeDurationSeconds = 0.12f;
         private const float BattleStartHoldDurationSeconds = 0.36f;
         private const float TurnBannerFadeDurationSeconds = 0.1f;
@@ -47,10 +72,15 @@ namespace TinySpire.UI.Battle
         private BattleParticipantPresenter _participantPresenter;
         private PlayerCombatantData _player;
         private BattleCommandHandle _pendingEndActionHandle;
+        private BattleCommandHandle _pendingPotionHandle;
+        private readonly List<PotionButtonBinding> _potionButtons =
+            new List<PotionButtonBinding>();
+        private bool _potionButtonsCreated;
         private bool _lastParticipantPresentationReady;
         private Func<string, string> _localizeFlowText;
         private Func<UniTask> _restartBattle;
         private Action _quitApplication;
+        private RunFlowService _runFlow;
         private bool _terminalActionSubmitted;
         private bool _showLegacyTerminalActions = true;
 
@@ -74,19 +104,30 @@ namespace TinySpire.UI.Battle
             Func<string, string> localizeFlowText,
             Func<UniTask> restartBattle,
             Action quitApplication,
-            bool showLegacyTerminalActions = true)
+            bool showLegacyTerminalActions = true,
+            RunFlowService runFlow = null)
         {
-            _localizeFlowText = localizeFlowText
-                ?? throw new ArgumentNullException(nameof(localizeFlowText));
-            _restartBattle = restartBattle
-                ?? throw new ArgumentNullException(nameof(restartBattle));
-            _quitApplication = quitApplication
-                ?? throw new ArgumentNullException(nameof(quitApplication));
+            if (localizeFlowText == null)
+                throw new ArgumentNullException(nameof(localizeFlowText));
+            if (restartBattle == null)
+                throw new ArgumentNullException(nameof(restartBattle));
+            if (quitApplication == null)
+                throw new ArgumentNullException(nameof(quitApplication));
+
+            if (_runFlow != null)
+                _runFlow.PersistenceChanged -= HandleRunPersistenceChanged;
+            _localizeFlowText = localizeFlowText;
+            _restartBattle = restartBattle;
+            _quitApplication = quitApplication;
             _showLegacyTerminalActions = showLegacyTerminalActions;
+            _runFlow = showLegacyTerminalActions ? null : runFlow;
             HideFlowGroup(_battleStartOverlay);
             HideFlowGroup(_turnBannerGroup);
             HideBattleOutcomePanel();
             ConfigureTerminalButtonListeners();
+            if (_runFlow != null)
+                _runFlow.PersistenceChanged += HandleRunPersistenceChanged;
+            RefreshRunSaveRetryVisibility();
         }
 
         /// <summary>把一个冻结流程 cue 转换为只操作本 View 的短生命周期 Tween lease。</summary>
@@ -256,6 +297,7 @@ namespace TinySpire.UI.Battle
                     _battleOutcomePanel.interactable = _showLegacyTerminalActions;
                     _battleOutcomePanel.blocksRaycasts = true;
                     SetTerminalButtonsInteractable(_showLegacyTerminalActions);
+                    RefreshRunSaveRetryVisibility();
                 });
             return new BattleCommandPresentationTween(
                 sequence,
@@ -272,8 +314,11 @@ namespace TinySpire.UI.Battle
             if (_restartButton != null)
             {
                 _restartButton.onClick.RemoveListener(RestartBattle);
+                _restartButton.onClick.RemoveListener(RetryRunSave);
                 if (_showLegacyTerminalActions)
                     _restartButton.onClick.AddListener(RestartBattle);
+                else if (_runFlow != null)
+                    _restartButton.onClick.AddListener(RetryRunSave);
             }
             if (_exitButton != null)
             {
@@ -290,6 +335,59 @@ namespace TinySpire.UI.Battle
                 return;
 
             _restartBattle.Invoke().Forget();
+        }
+
+        /// <summary>只在当前 Run 战斗后继落盘失败时重试同一冻结提交，结果状态继续由 RunFlow 发布。</summary>
+        private void RetryRunSave()
+        {
+            if (_runFlow == null ||
+                _runFlow.Persistence.Status != RunPersistenceStatus.CommitFailed ||
+                _terminalActionSubmitted ||
+                _battleOutcomePanel == null ||
+                !_battleOutcomePanel.gameObject.activeInHierarchy ||
+                _restartButton == null ||
+                !_restartButton.interactable)
+            {
+                return;
+            }
+
+            _terminalActionSubmitted = true;
+            _restartButton.interactable = false;
+            _runFlow.RetryPendingCommit();
+        }
+
+        /// <summary>把 RunFlow 的持久化状态变化投影为终局遮罩内唯一的 Retry Save 动作。</summary>
+        private void HandleRunPersistenceChanged()
+        {
+            RefreshRunSaveRetryVisibility();
+        }
+
+        /// <summary>仅在 Run 托管终局已显示且提交失败时开放重试，其他状态继续阻断下层战斗输入。</summary>
+        private void RefreshRunSaveRetryVisibility()
+        {
+            if (_showLegacyTerminalActions)
+                return;
+
+            bool showRetry = _runFlow != null &&
+                             _runFlow.Persistence.Status == RunPersistenceStatus.CommitFailed &&
+                             _battleOutcomePanel != null &&
+                             _battleOutcomePanel.gameObject.activeSelf;
+            if (_restartButton != null)
+            {
+                _restartButton.gameObject.SetActive(showRetry);
+                _restartButton.interactable = showRetry;
+            }
+            if (_restartButtonText != null && showRetry)
+                _restartButtonText.text = _localizeFlowText.Invoke("run.entry.save.retry");
+            if (_exitButton != null)
+            {
+                _exitButton.gameObject.SetActive(false);
+                _exitButton.interactable = false;
+            }
+            if (_battleOutcomePanel != null)
+                _battleOutcomePanel.interactable = showRetry;
+            if (showRetry)
+                _terminalActionSubmitted = false;
         }
 
         /// <summary>首次终局按钮动作调用退出应用 thin seam，Editor 与 Player 共用同一接线。</summary>
@@ -373,11 +471,62 @@ namespace TinySpire.UI.Battle
 
             _player = ResolveCurrentPlayer();
             _lastParticipantPresentationReady = IsParticipantPresentationReady();
+            EnsurePotionButtons();
             _endActionButton.onClick.AddListener(SubmitEndPlayerAction);
             _queue.Turn.Subscribe(RefreshTurn).AddTo(this);
             _queue.Queue.Subscribe(_ => RefreshTurn(_queue.Turn.CurrentValue)).AddTo(this);
             _queue.Lifecycle.Subscribe(HandleCommandLifecycle).AddTo(this);
             RefreshTurn(_queue.Turn.CurrentValue);
+        }
+
+        /// <summary>按本战账本稳定顺序从现有结束按钮代码构建最多三个药水入口，重复调用不叠加。</summary>
+        private void EnsurePotionButtons()
+        {
+            if (_potionButtonsCreated)
+                return;
+
+            _potionButtonsCreated = true;
+            int visibleCount = BattleTurnHudPresentation.GetVisiblePotionSlotCount(
+                _session.PotionLedger.Entries.Count);
+            for (int index = 0; index < visibleCount; index++)
+            {
+                BattlePotionEntry entry = _session.PotionLedger.Entries[index];
+                Button button = Instantiate(
+                    _endActionButton,
+                    _endActionButton.transform.parent,
+                    worldPositionStays: false);
+                button.name = $"PotionButton_{index + 1}";
+                button.onClick.RemoveAllListeners();
+                Text label = button.GetComponentInChildren<Text>(includeInactive: true)
+                    ?? throw new InvalidOperationException(
+                        "The cloned potion button does not contain a Text label.");
+                label.text = BattleTurnHudPresentation.FormatPotion(entry.HealAmount);
+                PositionPotionButton(button, index);
+
+                RunPotionInstanceId instanceId = entry.InstanceId;
+                UnityAction click = () => SubmitPotion(instanceId);
+                button.onClick.AddListener(click);
+                _potionButtons.Add(new PotionButtonBinding(entry, button, label, click));
+            }
+        }
+
+        /// <summary>把代码构建药水按钮依次放到结束行动按钮左侧，不修改 Scene 或 Prefab。</summary>
+        private void PositionPotionButton(Button button, int index)
+        {
+            if (!(button.transform is RectTransform potionRect) ||
+                !(_endActionButton.transform is RectTransform sourceRect))
+            {
+                throw new InvalidOperationException(
+                    "Battle HUD command buttons must use RectTransform.");
+            }
+
+            float width = sourceRect.rect.width > 0f
+                ? sourceRect.rect.width
+                : sourceRect.sizeDelta.x;
+            if (width <= 0f)
+                width = 140f;
+            potionRect.anchoredPosition = sourceRect.anchoredPosition +
+                                          Vector2.left * ((width + 12f) * (index + 1));
         }
 
         /// <summary>只在参与者映射 readiness 变化时重派生系统指针入口，不轮询或修改战斗事实。</summary>
@@ -421,6 +570,45 @@ namespace TinySpire.UI.Battle
             RefreshTurn(_queue.Turn.CurrentValue);
         }
 
+        /// <summary>在表现层预检通过后只向 Queue 提交稳定药水实例身份，消费仍由结算层终审。</summary>
+        private void SubmitPotion(RunPotionInstanceId instanceId)
+        {
+            BattlePotionEntry entry = null;
+            foreach (PotionButtonBinding binding in _potionButtons)
+            {
+                if (binding.Entry.InstanceId == instanceId)
+                {
+                    entry = binding.Entry;
+                    break;
+                }
+            }
+
+            BattleTurnData turn = _queue.Turn.CurrentValue;
+            if (entry == null ||
+                !turn.Players.TryGetValue(_player.Id, out PlayerTurnData playerTurn) ||
+                !BattleTurnHudPresentation.CanSubmitPotion(
+                    turn.Phase,
+                    playerTurn.HasEndedAction,
+                    _player.CurrentHealth,
+                    _player.MaxHealth,
+                    _session.PotionLedger.IsConsumed(instanceId),
+                    _pendingPotionHandle != null,
+                    _queue.Queue.CurrentValue.IsFaulted,
+                    IsParticipantPresentationReady()))
+            {
+                return;
+            }
+
+            BattleCommandSubmissionResult submission = _queue.Submit(
+                new UsePotionCommand(instanceId));
+            if (!submission.Accepted || !submission.AuthoritySequence.HasValue)
+            {
+                _commandStatusText.text = $"Rejected · {submission.FailureReason}";
+            }
+
+            RefreshTurn(_queue.Turn.CurrentValue);
+        }
+
         /// <summary>从最新权威快照即时派生能量、轮次、阶段与输入可用性。</summary>
         private void RefreshTurn(BattleTurnData turn)
         {
@@ -447,29 +635,69 @@ namespace TinySpire.UI.Battle
                 _pendingEndActionHandle != null,
                 _queue.Queue.CurrentValue.IsFaulted,
                 IsParticipantPresentationReady());
+            RefreshPotionButtons(turn, playerTurn);
         }
 
-        /// <summary>显示 Queue 生命周期，并只用精确句柄清除结束命令待定状态。</summary>
+        /// <summary>从权威回合、生命、账本消费与待定句柄同步刷新全部药水入口。</summary>
+        private void RefreshPotionButtons(BattleTurnData turn, PlayerTurnData playerTurn)
+        {
+            foreach (PotionButtonBinding binding in _potionButtons)
+            {
+                bool consumed = _session.PotionLedger.IsConsumed(binding.Entry.InstanceId);
+                binding.Label.text = consumed
+                    ? "Potion Used"
+                    : BattleTurnHudPresentation.FormatPotion(binding.Entry.HealAmount);
+                binding.Button.interactable = BattleTurnHudPresentation.CanSubmitPotion(
+                    turn.Phase,
+                    playerTurn.HasEndedAction,
+                    _player.CurrentHealth,
+                    _player.MaxHealth,
+                    consumed,
+                    _pendingPotionHandle != null,
+                    _queue.Queue.CurrentValue.IsFaulted,
+                    IsParticipantPresentationReady());
+            }
+        }
+
+        /// <summary>显示 Queue 生命周期，并只用精确句柄维护结束行动与药水命令待定状态。</summary>
         private void HandleCommandLifecycle(BattleCommandLifecycleEvent feedback)
         {
             _commandStatusText.text = BattleTurnHudPresentation.FormatFeedback(feedback);
             if (feedback.Stage == BattleCommandLifecycleStage.Queued)
             {
+                bool changed = false;
                 if (feedback.Command is EndPlayerActionCommand command &&
                     command.ActorId == _player.Id)
                 {
                     _pendingEndActionHandle = feedback.Handle;
-                    RefreshTurn(_queue.Turn.CurrentValue);
+                    changed = true;
                 }
+                else if (feedback.Command is UsePotionCommand)
+                {
+                    _pendingPotionHandle = feedback.Handle;
+                    changed = true;
+                }
+
+                if (changed)
+                    RefreshTurn(_queue.Turn.CurrentValue);
 
                 return;
             }
 
-            if (!ReferenceEquals(feedback.Handle, _pendingEndActionHandle))
-                return;
+            bool cleared = false;
+            if (ReferenceEquals(feedback.Handle, _pendingEndActionHandle))
+            {
+                _pendingEndActionHandle = null;
+                cleared = true;
+            }
+            if (ReferenceEquals(feedback.Handle, _pendingPotionHandle))
+            {
+                _pendingPotionHandle = null;
+                cleared = true;
+            }
 
-            _pendingEndActionHandle = null;
-            RefreshTurn(_queue.Turn.CurrentValue);
+            if (cleared)
+                RefreshTurn(_queue.Turn.CurrentValue);
         }
 
         /// <summary>从当前生产 Session 中解析唯一玩家，保持单玩家限制只存在于接线层。</summary>
@@ -525,13 +753,26 @@ namespace TinySpire.UI.Battle
             }
         }
 
-        /// <summary>销毁 View 时移除结束按钮监听，响应式订阅由 GameObject 生命周期释放。</summary>
+        /// <summary>销毁 View 时移除静态与代码构建按钮监听，响应式订阅由 GameObject 生命周期释放。</summary>
         private void OnDestroy()
         {
+            if (_runFlow != null)
+            {
+                _runFlow.PersistenceChanged -= HandleRunPersistenceChanged;
+                _runFlow = null;
+            }
             if (_endActionButton != null)
                 _endActionButton.onClick.RemoveListener(SubmitEndPlayerAction);
+            foreach (PotionButtonBinding binding in _potionButtons)
+            {
+                if (binding.Button != null)
+                    binding.Button.onClick.RemoveListener(binding.Click);
+            }
             if (_restartButton != null)
+            {
                 _restartButton.onClick.RemoveListener(RestartBattle);
+                _restartButton.onClick.RemoveListener(RetryRunSave);
+            }
             if (_exitButton != null)
                 _exitButton.onClick.RemoveListener(QuitApplication);
         }

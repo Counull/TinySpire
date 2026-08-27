@@ -12,6 +12,42 @@ using VContainer;
 
 public sealed class BattleResultRunBridgeTests
 {
+    /// <summary>BattleResult 对消费身份排序并防御复制，调用方随后改动原列表不得篡改结果。</summary>
+    [Test]
+    public void BattleResult_ConsumedPotionIds_AreSortedAndDefensivelyFrozen()
+    {
+        var consumedIds = new List<RunPotionInstanceId>
+        {
+            new RunPotionInstanceId(9),
+            new RunPotionInstanceId(2),
+        };
+        var result = new BattleResult(
+            BattleResultKind.Victory,
+            authoritySequence: 7,
+            roundNumber: 2,
+            new[]
+            {
+                new BattleResultPlayerSnapshot(
+                    new CombatantId(1),
+                    templateId: 1001,
+                    health: 31,
+                    maxHealth: 80),
+            },
+            consumedIds);
+
+        consumedIds.Clear();
+
+        Assert.That(
+            result.ConsumedPotionInstanceIds.Select(id => id.Sequence),
+            Is.EqualTo(new[] { 2, 9 }));
+        Assert.Throws<ArgumentException>(() => new BattleResult(
+            BattleResultKind.Victory,
+            authoritySequence: 8,
+            roundNumber: 2,
+            result.Players,
+            new[] { new RunPotionInstanceId(2), new RunPotionInstanceId(2) }));
+    }
+
     /// <summary>bridge 忽略初始空值，并只把首个稳定结果转发给当前 Run attempt。</summary>
     [Test]
     public void Initialize_FirstStableResult_IsForwardedExactlyOnce()

@@ -7,8 +7,9 @@ namespace TinySpire.Run.Map
     /// <summary>从固定 profile 与独立 seed 一次性生成完整确定性 Act 地图。</summary>
     public static class ActMapGenerator
     {
-        /// <summary>当前生成算法的持久化兼容版本。</summary>
-        public const int CurrentVersion = 1;
+        public const int LegacyG3Version = 1;
+        public const int NewRunG6Version = 2;
+        public const int CurrentVersion = NewRunG6Version;
 
         /// <summary>生成并冻结整张地图；相同输入在同版本内得到相同定义。</summary>
         public static MapDefinition Generate(ActMapProfile profile, uint mapSeed)
@@ -18,6 +19,21 @@ namespace TinySpire.Run.Map
             if (mapSeed == 0)
                 throw new ArgumentOutOfRangeException(nameof(mapSeed));
 
+            switch (profile.GeneratorVersion)
+            {
+                case LegacyG3Version:
+                    return GenerateLegacyG3V1(profile, mapSeed);
+                case NewRunG6Version:
+                    return GenerateMixedG6V2(profile, mapSeed);
+                default:
+                    throw new InvalidOperationException(
+                        $"Map generator version {profile.GeneratorVersion} is unsupported.");
+            }
+        }
+
+        /// <summary>隔离执行原始 G3 v1 算法，保证历史节点、边与指纹逐字节不漂移。</summary>
+        private static MapDefinition GenerateLegacyG3V1(ActMapProfile profile, uint mapSeed)
+        {
             var nodes = new List<MapNode>();
             var edges = new List<MapEdge>();
             var edgeKeys = new HashSet<string>(StringComparer.Ordinal);
@@ -84,10 +100,62 @@ namespace TinySpire.Run.Map
                 .ToArray();
             return new MapDefinition(
                 profile.ProfileId,
-                CurrentVersion,
+                LegacyG3Version,
                 mapSeed,
                 nodes,
                 orderedEdges);
+        }
+
+        /// <summary>生成 Start 到假 BossGate 的固定单 Slot mixed 路线。</summary>
+        private static MapDefinition GenerateMixedG6V2(ActMapProfile profile, uint mapSeed)
+        {
+            var nodes = new List<MapNode>
+            {
+                CreateNode(layer: 0, slot: 0, MapNodeKind.Start, contentId: 0),
+            };
+            for (int index = 0; index < profile.PlayableLayers.Count; index++)
+            {
+                ActMapPlayableLayer playableLayer = profile.PlayableLayers[index];
+                nodes.Add(CreateNode(
+                    layer: index + 1,
+                    slot: 0,
+                    playableLayer.Kind,
+                    playableLayer.ContentId));
+            }
+
+            IReadOnlyList<int> bossEndpointIds = FreezeBossEndpointIds(profile, mapSeed);
+            for (int slot = 0; slot < bossEndpointIds.Count; slot++)
+            {
+                nodes.Add(CreateNode(
+                    profile.BossLayer,
+                    slot,
+                    MapNodeKind.Boss,
+                    bossEndpointIds[slot]));
+            }
+
+            var edges = new List<MapEdge>();
+            for (int layer = 0; layer < profile.BossLayer - 1; layer++)
+            {
+                edges.Add(new MapEdge(
+                    MapNodeId.FromPosition(layer, slot: 0),
+                    MapNodeId.FromPosition(layer + 1, slot: 0)));
+            }
+            MapNodeId finalPlayableNodeId = MapNodeId.FromPosition(
+                profile.BossLayer - 1,
+                slot: 0);
+            for (int slot = 0; slot < bossEndpointIds.Count; slot++)
+            {
+                edges.Add(new MapEdge(
+                    finalPlayableNodeId,
+                    MapNodeId.FromPosition(profile.BossLayer, slot)));
+            }
+
+            return new MapDefinition(
+                profile.ProfileId,
+                NewRunG6Version,
+                mapSeed,
+                nodes,
+                edges);
         }
 
         /// <summary>按地图 seed 无放回冻结 Boss 候选，并让每名候选至少占有一个终点。</summary>

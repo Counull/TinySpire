@@ -970,7 +970,8 @@ public sealed class BattleEffectExecutorTests
             ["battle_tbenemybehavior"] = new JArray(),
             ["battle_tbcardupgradelevel"] = new JArray(),
         };
-        return new cfg.Tables(tableName => data[tableName]);
+        return new cfg.Tables(tableName =>
+            data.TryGetValue(tableName, out JArray rows) ? rows : new JArray());
     }
 
     /// <summary>创建一条最小静态 Effect JSON。</summary>

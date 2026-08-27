@@ -104,6 +104,8 @@ namespace TinySpire.Battle
         private readonly BattleStatusTiming _statusTiming;
         private readonly BattlePoisonApplication _poisonApplication;
         private readonly BattleTerminalRules _terminalRules;
+        private readonly BattleCombatantEffectOperations _combatantEffectOperations;
+        private readonly IReadOnlyList<BattleStartRelicEffect> _battleStartRelicEffects;
         private readonly IReadOnlyDictionary<CombatantId, BattlePlayerResourceProfile> _playerResourceProfiles;
         private readonly int _initialHandCount;
         private readonly MachineGunnerBattleRuntime _machineGunnerRuntime;
@@ -135,7 +137,8 @@ namespace TinySpire.Battle
             int initialHandCount,
             MachineGunnerBattleRuntime machineGunnerRuntime = null,
             uint cardTargetRandomSeed = 1u,
-            BattleSettlementTriggerEngine settlementTriggerEngine = null)
+            BattleSettlementTriggerEngine settlementTriggerEngine = null,
+            IReadOnlyList<BattleStartRelicEffect> battleStartRelicEffects = null)
         {
             _combatants = combatants ?? throw new ArgumentNullException(nameof(combatants));
             _playerCardZones = playerCardZones ?? throw new ArgumentNullException(nameof(playerCardZones));
@@ -188,6 +191,10 @@ namespace TinySpire.Battle
             _statusTiming = new BattleStatusTiming(_combatants, _blockRetention);
             _poisonApplication = new BattlePoisonApplication(_combatants);
             _terminalRules = new BattleTerminalRules(_combatants);
+            _combatantEffectOperations = new BattleCombatantEffectOperations(_combatants);
+            _battleStartRelicEffects = new ReadOnlyCollection<BattleStartRelicEffect>(
+                new List<BattleStartRelicEffect>(
+                    battleStartRelicEffects ?? Array.Empty<BattleStartRelicEffect>()));
 
             var profiles = new Dictionary<CombatantId, BattlePlayerResourceProfile>();
             _players = new Dictionary<CombatantId, PlayerTurnData>();
@@ -241,6 +248,7 @@ namespace TinySpire.Battle
                 try
                 {
                     _stateMachine.Dispatch(BattleTurnEvent.StartBattle);
+                    ApplyBattleStartRelicEffects();
                     TickAutomaticPhasesAndFinalizePendingBattleEnd();
                 }
                 finally
@@ -248,6 +256,35 @@ namespace TinySpire.Battle
                     _preparedOpeningHands = null;
                 }
             });
+        }
+
+        /// <summary>在 BattleStart 已发布且自动首轮尚未推进时，按 Run 获得顺序追加遗物力量结算。</summary>
+        private void ApplyBattleStartRelicEffects()
+        {
+            if (_activeSettlements == null)
+                throw new InvalidOperationException("当前没有可追加遗物开战记录的命令结算作用域。");
+
+            foreach (BattleStartRelicEffect relicEffect in _battleStartRelicEffects)
+            {
+                BattleCombatantEffectOperationResult result =
+                    _combatantEffectOperations.ModifyStrength(
+                        relicEffect.OwnerId,
+                        relicEffect.StrengthAmount);
+                if (result.Status != BattleCombatantEffectOperationStatus.Applied)
+                {
+                    throw new InvalidOperationException(
+                        $"已验证的遗物 {relicEffect.TemplateId} 开战效果意外失败：{result.Status}。");
+                }
+
+                _activeSettlements.Add(new BattleAttributeModifiedSettlement(
+                    CurrentSettlementOrder,
+                    effectId: null,
+                    relicEffect.OwnerId,
+                    relicEffect.OwnerId,
+                    BattleAttributeType.Strength,
+                    result.ValueBefore,
+                    result.ValueAfter));
+            }
         }
 
         /// <summary>按队首事实预构建全部 Effect，再依次支付、执行和把当前卡牌移入配置归宿。</summary>

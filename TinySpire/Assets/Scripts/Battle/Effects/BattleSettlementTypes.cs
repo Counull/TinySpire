@@ -23,6 +23,7 @@ namespace TinySpire.Battle
         CardCreated,
         HealthRestored,
         PoisonTicked,
+        PotionConsumed,
     }
 
     /// <summary>M7 可被 Effect 修改的参与者属性。</summary>

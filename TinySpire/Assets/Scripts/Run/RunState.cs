@@ -67,6 +67,7 @@ namespace TinySpire.Run
         RewardPending,
         BossGateReached,
         Terminal,
+        NodeVisitPending,
     }
 
     /// <summary>Run 进入不可继续终局的类型化原因。</summary>
@@ -93,6 +94,9 @@ namespace TinySpire.Run
         /// <summary>创建时已从初始牌组模板一次展开的有序 RunDeck。</summary>
         public RunDeck RunDeck { get; }
 
+        /// <summary>创建时冻结的遗物、药水与金币持有物。</summary>
+        public RunHoldings Holdings { get; }
+
         /// <summary>后续本战随机输入的非零根种子。</summary>
         public uint RandomRootSeed { get; }
 
@@ -107,7 +111,8 @@ namespace TinySpire.Run
             int maxHealth,
             RunDeck runDeck,
             uint randomRootSeed,
-            MapDefinition map)
+            MapDefinition map,
+            RunHoldings holdings = null)
         {
             if (runId.Value == Guid.Empty)
                 throw new ArgumentException("Run id cannot be empty.", nameof(runId));
@@ -129,6 +134,7 @@ namespace TinySpire.Run
             InitialHealth = initialHealth;
             MaxHealth = maxHealth;
             RunDeck = runDeck;
+            Holdings = holdings ?? RunHoldings.Empty(initialGold: 100);
             RandomRootSeed = randomRootSeed;
             Map = map;
         }
@@ -142,6 +148,7 @@ namespace TinySpire.Run
         public int CurrentHealth { get; }
         public int MaxHealth { get; }
         public RunDeck RunDeck { get; }
+        public RunHoldings Holdings { get; }
         public uint RandomRootSeed { get; }
         public MapDefinition Map { get; }
         public IReadOnlyList<MapNodeId> PathNodeIds { get; }
@@ -150,9 +157,10 @@ namespace TinySpire.Run
         public RunTerminalReason? TerminalReason { get; }
         public int BattleAttemptSequence { get; }
         public PendingCardReward PendingCardReward { get; }
+        public PendingRunNodeVisit PendingNodeVisit { get; }
 
         /// <summary>冻结并验证一份不含 Battle transient 的稳定恢复输入。</summary>
-        public RunRestoreOptions(
+        internal RunRestoreOptions(
             RunId runId,
             int heroTemplateId,
             int currentHealth,
@@ -164,7 +172,9 @@ namespace TinySpire.Run
             RunProgressPhase progressPhase,
             MapNodeId? committedNodeId,
             RunTerminalReason? terminalReason,
-            PendingCardReward pendingCardReward = null)
+            RunHoldings holdings,
+            PendingCardReward pendingCardReward = null,
+            PendingRunNodeVisit pendingNodeVisit = null)
         {
             if (runId.Value == Guid.Empty)
                 throw new ArgumentException("Run id cannot be empty.", nameof(runId));
@@ -180,12 +190,15 @@ namespace TinySpire.Run
                 throw new ArgumentOutOfRangeException(nameof(randomRootSeed));
             if (map == null)
                 throw new ArgumentNullException(nameof(map));
+            if (holdings == null)
+                throw new ArgumentNullException(nameof(holdings));
             if (pathNodeIds == null || pathNodeIds.Count == 0)
                 throw new ArgumentException("A restored Run path must contain Start.", nameof(pathNodeIds));
             if (progressPhase != RunProgressPhase.MapReady &&
                 progressPhase != RunProgressPhase.RewardPending &&
                 progressPhase != RunProgressPhase.BossGateReached &&
-                progressPhase != RunProgressPhase.Terminal)
+                progressPhase != RunProgressPhase.Terminal &&
+                progressPhase != RunProgressPhase.NodeVisitPending)
             {
                 throw new ArgumentOutOfRangeException(nameof(progressPhase));
             }
@@ -201,11 +214,19 @@ namespace TinySpire.Run
                     "Only RewardPending restore facts may carry a pending card reward.",
                     nameof(pendingCardReward));
             }
+            if ((progressPhase == RunProgressPhase.NodeVisitPending) !=
+                (pendingNodeVisit != null))
+            {
+                throw new ArgumentException(
+                    "Only NodeVisitPending restore facts may carry a pending node visit.",
+                    nameof(pendingNodeVisit));
+            }
             RunId = runId;
             HeroTemplateId = heroTemplateId;
             CurrentHealth = currentHealth;
             MaxHealth = maxHealth;
             RunDeck = runDeck;
+            Holdings = holdings;
             RandomRootSeed = randomRootSeed;
             Map = map;
             PathNodeIds = Array.AsReadOnly(pathNodeIds.ToArray());
@@ -217,6 +238,7 @@ namespace TinySpire.Run
                 pathNodeIds,
                 progressPhase);
             PendingCardReward = pendingCardReward;
+            PendingNodeVisit = pendingNodeVisit;
         }
 
         /// <summary>无重试语义下，从完成 Combat 路径与失败中的当前 Combat 唯一推导 attempt 序号。</summary>
@@ -319,6 +341,9 @@ namespace TinySpire.Run
         /// <summary>按 RunDeck 顺序复制的不可变实例投影。</summary>
         public IReadOnlyList<RunCard> RunCards { get; }
 
+        /// <summary>按 Run 快照签发的不可变遗物、药水与金币投影。</summary>
+        public RunHoldings Holdings { get; }
+
         /// <summary>本战遭遇模板标识。</summary>
         public int EncounterTemplateId { get; }
 
@@ -347,6 +372,7 @@ namespace TinySpire.Run
             InitialHealth = state.CurrentHealth;
             MaxHealth = state.MaxHealth;
             RunCards = Array.AsReadOnly(state.RunDeck.Cards.ToArray());
+            Holdings = state.Holdings;
             EncounterTemplateId = committedNode.ContentId;
             RandomSeed = randomSeed;
         }
@@ -371,6 +397,9 @@ namespace TinySpire.Run
 
         /// <summary>跨战斗保持顺序、实例身份与升级事实的不可变牌组。</summary>
         public RunDeck RunDeck { get; }
+
+        /// <summary>跨战斗保持顺序、实例身份与金币事实的不可变持有物。</summary>
+        public RunHoldings Holdings { get; }
 
         /// <summary>派生本战随机输入的根种子。</summary>
         public uint RandomRootSeed { get; }
@@ -402,6 +431,9 @@ namespace TinySpire.Run
         /// <summary>胜利后已冻结且尚未选择或跳过的普通战斗卡牌奖励。</summary>
         public PendingCardReward PendingCardReward { get; }
 
+        /// <summary>已耐久进入且尚未完成的一次非战斗节点访问。</summary>
+        public PendingRunNodeVisit PendingNodeVisit { get; }
+
         /// <summary>从已验证创建参数建立初始 Run 事实。</summary>
         internal RunState(RunCreationOptions options)
         {
@@ -413,6 +445,7 @@ namespace TinySpire.Run
             CurrentHealth = options.InitialHealth;
             MaxHealth = options.MaxHealth;
             RunDeck = options.RunDeck;
+            Holdings = options.Holdings;
             RandomRootSeed = options.RandomRootSeed;
             MapDefinition = options.Map;
             _pathNodeIds = Array.AsReadOnly(new[]
@@ -425,6 +458,7 @@ namespace TinySpire.Run
             BattleAttemptSequence = 0;
             ActiveBattle = null;
             PendingCardReward = null;
+            PendingNodeVisit = null;
             ValidateShape();
         }
 
@@ -439,6 +473,7 @@ namespace TinySpire.Run
             CurrentHealth = options.CurrentHealth;
             MaxHealth = options.MaxHealth;
             RunDeck = options.RunDeck;
+            Holdings = options.Holdings;
             RandomRootSeed = options.RandomRootSeed;
             MapDefinition = options.Map;
             _pathNodeIds = Array.AsReadOnly(options.PathNodeIds.ToArray());
@@ -448,6 +483,7 @@ namespace TinySpire.Run
             BattleAttemptSequence = options.BattleAttemptSequence;
             ActiveBattle = null;
             PendingCardReward = options.PendingCardReward;
+            PendingNodeVisit = options.PendingNodeVisit;
             ValidateShape();
         }
 
@@ -462,7 +498,9 @@ namespace TinySpire.Run
             RunBattleInput activeBattle,
             RunTerminalReason? terminalReason,
             PendingCardReward pendingCardReward = null,
-            RunDeck runDeck = null)
+            RunDeck runDeck = null,
+            RunHoldings holdings = null,
+            PendingRunNodeVisit pendingNodeVisit = null)
         {
             if (previous == null)
                 throw new ArgumentNullException(nameof(previous));
@@ -478,6 +516,7 @@ namespace TinySpire.Run
             CurrentHealth = currentHealth;
             MaxHealth = previous.MaxHealth;
             RunDeck = runDeck ?? previous.RunDeck;
+            Holdings = holdings ?? previous.Holdings;
             RandomRootSeed = previous.RandomRootSeed;
             MapDefinition = previous.MapDefinition;
             _pathNodeIds = Array.AsReadOnly(pathNodeIds.ToArray());
@@ -487,12 +526,16 @@ namespace TinySpire.Run
             BattleAttemptSequence = battleAttemptSequence;
             ActiveBattle = activeBattle;
             PendingCardReward = pendingCardReward;
+            PendingNodeVisit = pendingNodeVisit;
             ValidateShape();
         }
 
         /// <summary>验证不可变快照内部阶段、地图、路径与 transient 的组合一致。</summary>
         private void ValidateShape()
         {
+            if (Holdings == null)
+                throw new InvalidOperationException("Run holdings cannot be null.");
+
             ValidateCompletedPath();
 
             bool activeBattleMatches = ProgressPhase == RunProgressPhase.InBattle
@@ -514,6 +557,16 @@ namespace TinySpire.Run
             {
                 throw new InvalidOperationException(
                     "Run pending card reward does not match its progress phase.");
+            }
+
+            bool pendingNodeVisitMatches = ProgressPhase == RunProgressPhase.NodeVisitPending
+                ? PendingNodeVisit != null &&
+                  PendingNodeVisit.Id.RunId == RunId
+                : PendingNodeVisit == null;
+            if (!pendingNodeVisitMatches)
+            {
+                throw new InvalidOperationException(
+                    "Run pending node visit does not match its progress phase.");
             }
 
             switch (ProgressPhase)
@@ -551,6 +604,11 @@ namespace TinySpire.Run
                     }
                     ValidateCommittedCombat();
                     break;
+                case RunProgressPhase.NodeVisitPending:
+                    if (CommittedNodeId != null || TerminalReason != null || CurrentHealth <= 0)
+                        throw new InvalidOperationException("NodeVisitPending Run facts are inconsistent.");
+                    ValidatePendingNodeVisit();
+                    break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(ProgressPhase));
             }
@@ -579,10 +637,10 @@ namespace TinySpire.Run
                 bool isFinalBossGate = index == _pathNodeIds.Count - 1 &&
                                        ProgressPhase == RunProgressPhase.BossGateReached &&
                                        node.Kind == MapNodeKind.Boss;
-                if (node.Kind != MapNodeKind.Combat && !isFinalBossGate)
+                if (!IsCompletableOrdinaryNodeKind(node.Kind) && !isFinalBossGate)
                 {
                     throw new InvalidOperationException(
-                        "Run path may contain a Boss only as its reached final gate.");
+                        "Run path contains a node kind that cannot be completed ordinarily.");
                 }
 
                 MapNodeId previousNodeId = _pathNodeIds[index - 1];
@@ -604,6 +662,40 @@ namespace TinySpire.Run
                 edge.FromNodeId == CurrentNodeId && edge.ToNodeId == committed.Id);
             if (committed.Kind != MapNodeKind.Combat || !hasOrdinaryEdge)
                 throw new InvalidOperationException("Committed node is not an ordinary reachable Combat.");
+        }
+
+        /// <summary>确认 Pending 访问严格绑定当前位置的普通直接出边及冻结内容。</summary>
+        private void ValidatePendingNodeVisit()
+        {
+            if (PendingNodeVisit == null)
+                throw new InvalidOperationException("The Run phase requires a pending node visit.");
+
+            MapNode node = MapDefinition.GetNode(PendingNodeVisit.NodeId);
+            bool hasOrdinaryEdge = MapDefinition.Edges.Any(edge =>
+                edge.FromNodeId == CurrentNodeId && edge.ToNodeId == node.Id);
+            if (!hasOrdinaryEdge ||
+                !IsNonCombatNodeKind(node.Kind) ||
+                node.Kind != PendingNodeVisit.Kind ||
+                node.ContentId != PendingNodeVisit.ContentId)
+            {
+                throw new InvalidOperationException(
+                    "Pending node visit does not match an ordinary reachable non-combat node.");
+            }
+        }
+
+        /// <summary>判断节点是否可在成功结算后进入已完成路径。</summary>
+        private static bool IsCompletableOrdinaryNodeKind(MapNodeKind kind)
+        {
+            return kind == MapNodeKind.Combat || IsNonCombatNodeKind(kind);
+        }
+
+        /// <summary>判断节点是否属于本轮支持的四种非战斗访问。</summary>
+        private static bool IsNonCombatNodeKind(MapNodeKind kind)
+        {
+            return kind == MapNodeKind.Rest ||
+                   kind == MapNodeKind.Chest ||
+                   kind == MapNodeKind.Shop ||
+                   kind == MapNodeKind.Event;
         }
     }
 }

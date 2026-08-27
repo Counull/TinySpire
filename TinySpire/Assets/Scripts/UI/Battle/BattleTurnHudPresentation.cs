@@ -8,6 +8,8 @@ namespace TinySpire.UI.Battle
     /// </summary>
     public static class BattleTurnHudPresentation
     {
+        private const int VisiblePotionSlotLimit = 3;
+
         /// <summary>把当前能量与每轮基础能量格式化为稳定展示文本。</summary>
         public static string FormatEnergy(int energy, int energyPerRound)
         {
@@ -67,6 +69,50 @@ namespace TinySpire.UI.Battle
                    phase == BattleTurnPhase.PlayerAction &&
                    !hasEndedAction &&
                    !hasPendingEndAction &&
+                   !queueFaulted;
+        }
+
+        /// <summary>把本战冻结的正数治疗量格式化为最小药水按钮文本。</summary>
+        public static string FormatPotion(int healAmount)
+        {
+            if (healAmount <= 0)
+                throw new ArgumentOutOfRangeException(nameof(healAmount));
+
+            return $"Potion +{healAmount} HP";
+        }
+
+        /// <summary>把账本槽位数限制为本切片可见的三个药水入口。</summary>
+        public static int GetVisiblePotionSlotCount(int ledgerEntryCount)
+        {
+            if (ledgerEntryCount < 0)
+                throw new ArgumentOutOfRangeException(nameof(ledgerEntryCount));
+
+            return Math.Min(ledgerEntryCount, VisiblePotionSlotLimit);
+        }
+
+        /// <summary>只在完整玩家行动窗口、受伤存活且实例仍可用时开放药水系统指针。</summary>
+        public static bool CanSubmitPotion(
+            BattleTurnPhase phase,
+            bool hasEndedAction,
+            int currentHealth,
+            int maxHealth,
+            bool isConsumed,
+            bool hasPendingPotion,
+            bool queueFaulted = false,
+            bool participantPresentationReady = true)
+        {
+            if (maxHealth <= 0)
+                throw new ArgumentOutOfRangeException(nameof(maxHealth));
+            if (currentHealth < 0 || currentHealth > maxHealth)
+                throw new ArgumentOutOfRangeException(nameof(currentHealth));
+
+            return participantPresentationReady &&
+                   phase == BattleTurnPhase.PlayerAction &&
+                   !hasEndedAction &&
+                   currentHealth > 0 &&
+                   currentHealth < maxHealth &&
+                   !isConsumed &&
+                   !hasPendingPotion &&
                    !queueFaulted;
         }
     }

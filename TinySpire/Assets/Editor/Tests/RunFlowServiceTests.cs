@@ -65,12 +65,18 @@ public sealed class RunFlowServiceTests
             new RunSaveCardDocument(instanceId: 29, templateId: 3002, upgradeLevel: 0),
             new RunSaveCardDocument(instanceId: 61, templateId: 3123, upgradeLevel: 2),
         };
+        var expectedRelics = new[]
+        {
+            new RunSaveRelicDocument(instanceId: 8, templateId: 8002),
+            new RunSaveRelicDocument(instanceId: 9, templateId: 8001),
+        };
         var saves = new RecordingRunSaveStore(CreateDocument(
             heroTemplateId: 1002,
             deckTemplateId: 1002,
             randomRootSeed: 246810u,
             completedCombatCount: 1,
-            runCards: expectedCards));
+            runCards: expectedCards,
+            relics: expectedRelics));
         var entropy = new CountingRunEntropySource(new RunEntropy(
             new RunId(Guid.Parse("11111111-2222-3333-4444-555555555555")),
             randomRootSeed: 999u));
@@ -113,6 +119,32 @@ public sealed class RunFlowServiceTests
         Assert.That(
             setup.RunCards.Select(card => card.UpgradeLevel),
             Is.EqualTo(new[] { 1, 0, 2 }));
+        Assert.That(setup.Holdings, Is.Not.SameAs(nextAttempt.Holdings));
+        Assert.That(
+            setup.Holdings.Relics.Select(relic => relic.InstanceId.Sequence),
+            Is.EqualTo(new[] { 8, 9 }));
+        Assert.That(
+            setup.Holdings.Relics.Select(relic => relic.TemplateId),
+            Is.EqualTo(new[] { 8002, 8001 }));
+        var reorderedHoldings = new RunHoldings(
+            new[]
+            {
+                new RunRelic(new RunRelicInstanceId(9), templateId: 8001),
+                new RunRelic(new RunRelicInstanceId(8), templateId: 8002),
+            },
+            setup.Holdings.Potions,
+            setup.Holdings.Gold);
+        var driftedSetup = new BattleSetupOptions(
+            setup.HeroTemplateId,
+            setup.EncounterTemplateId,
+            checked((int)setup.RandomSeed),
+            setup.PlayerInitialHealth,
+            deckTemplateId: null,
+            runCards: setup.RunCards,
+            holdings: reorderedHoldings);
+        Assert.That(
+            () => flow.BindBattleAttempt(driftedSetup),
+            Throws.TypeOf<InvalidOperationException>());
         Assert.That(
             nextAttempt.RandomSeed,
             Is.EqualTo(RunStateStore.DeriveBattleSeed(246810u, attemptSequence: 2)));
@@ -182,6 +214,45 @@ public sealed class RunFlowServiceTests
         Assert.That(
             restored.RunDeck.Cards.Select(card => card.TemplateId),
             Is.EqualTo(canonicalDocument.RunCards.Select(card => card.TemplateId)));
+    }
+
+    /// <summary>已有 canonical RunCards 的 v4 旧档也必须先耐久改写 v5，而不能只依赖 legacy deck 信号。</summary>
+    [Test]
+    public void ContinueMigratedV4Checkpoint_CommitsCanonicalHoldingsBeforePublishingRun()
+    {
+        RunSaveDocument current = CreateDocument(
+            heroTemplateId: 1001,
+            deckTemplateId: 1001,
+            randomRootSeed: 246814u,
+            runCards: new[]
+            {
+                new RunSaveCardDocument(instanceId: 1, templateId: 3002, upgradeLevel: 0),
+                new RunSaveCardDocument(instanceId: 2, templateId: 3003, upgradeLevel: 0),
+            });
+        JObject legacyJson = JObject.Parse(RunSaveDocumentCodec.Serialize(current));
+        legacyJson["schemaVersion"] = 4;
+        legacyJson.Remove("relics");
+        legacyJson.Remove("potions");
+        legacyJson.Remove("gold");
+        legacyJson.Remove("pendingNodeVisit");
+        RunSaveDocumentReadResult read = RunSaveDocumentCodec.Read(legacyJson.ToString());
+        Assert.That(read.Status, Is.EqualTo(RunSaveDocumentReadStatus.Success));
+        Assert.That(read.Document.RequiresCanonicalRewrite, Is.True);
+
+        using var store = new RunStateStore();
+        var saves = new RecordingRunSaveStore(read.Document);
+        var flow = CreateFlow(store, new RecordingSceneFlow(), saves, randomRootSeed: 97534u);
+        flow.RefreshSaveAvailability();
+
+        RunState restored = flow.ContinueSavedRun();
+
+        Assert.That(store.Current, Is.SameAs(restored));
+        Assert.That(restored.Holdings.Gold, Is.EqualTo(100));
+        Assert.That(restored.Holdings.Relics, Is.Empty);
+        Assert.That(restored.Holdings.Potions, Is.Empty);
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(1));
+        Assert.That(saves.CommitAttempts[0].RequiresCanonicalRewrite, Is.False);
+        Assert.That(saves.CommitAttempts[0].SchemaVersion, Is.EqualTo(5));
     }
 
     /// <summary>有效 RewardPending 文档只在 Continue 后恢复，且不重新生成奖励或漂移牌组实例。</summary>
@@ -266,7 +337,45 @@ public sealed class RunFlowServiceTests
         Assert.That(() => flow.CreateBattleSetupOptions(), Throws.TypeOf<InvalidOperationException>());
     }
 
-    /// <summary>两名 Hero 胜利后都先提交各自冻结奖励，再等待 RunEntry 场景加载完成。</summary>
+    /// <summary>四类 NodeVisitPending 必须经 Flow 冷恢复同一冻结事实，且重复进入在触达 save port 前失败。</summary>
+    [TestCase(MapNodeKind.Rest)]
+    [TestCase(MapNodeKind.Chest)]
+    [TestCase(MapNodeKind.Shop)]
+    [TestCase(MapNodeKind.Event)]
+    public async Task RefreshNodeVisitPending_RestoresExactPayloadAndRejectsDuplicateEntry(
+        MapNodeKind kind)
+    {
+        RunSaveDocument document = CreateAuthoritativeNodeVisitPendingDocument(kind);
+        using var store = new RunStateStore();
+        var saves = new RecordingRunSaveStore(document);
+        var flow = CreateFlow(
+            store,
+            new RecordingSceneFlow(),
+            saves,
+            randomRootSeed: 975310u);
+
+        RunPersistenceState availability = flow.RefreshSaveAvailability();
+
+        Assert.That(availability.CanContinue, Is.True);
+        Assert.That(store.Current, Is.Null);
+
+        RunState restored = flow.ContinueSavedRun();
+        string restoredJson = RunSaveDocumentCodec.Serialize(
+            RunSaveDocumentMapper.Create(restored));
+
+        Assert.That(restored.ProgressPhase, Is.EqualTo(RunProgressPhase.NodeVisitPending));
+        Assert.That(restored.PendingNodeVisit.Kind, Is.EqualTo(kind));
+        Assert.That(restored.PendingNodeVisit.Id.ToString(),
+            Is.EqualTo(document.PendingNodeVisit.VisitId));
+        Assert.That(restoredJson, Is.EqualTo(RunSaveDocumentCodec.Serialize(document)));
+        Assert.That(saves.CommitAttempts, Is.Empty);
+        Assert.That(
+            async () => await flow.EnterMapNodeAsync(restored.PendingNodeVisit.NodeId),
+            Throws.TypeOf<InvalidOperationException>());
+        Assert.That(saves.CommitAttempts, Is.Empty);
+    }
+
+    /// <summary>两名 Hero 胜利后都先提交卡牌与首战附着掉落冻结事实，再等待 RunEntry。</summary>
     [TestCase(1001, 80, 41)]
     [TestCase(1002, 90, 51)]
     public async Task Victory_CommitsHeroOwnedFrozenRewardBeforeLoadingRunEntry(
@@ -309,6 +418,12 @@ public sealed class RunFlowServiceTests
             : new[] { 3206, 3227, 3264 };
         Assert.That(store.Current.PendingCardReward.CandidateTemplateIds,
             Is.SubsetOf(legalPool));
+        Assert.That(store.Current.PendingCardReward.AttachedLoot.RelicTemplateId,
+            Is.EqualTo(8001));
+        Assert.That(store.Current.PendingCardReward.AttachedLoot.PotionTemplateId,
+            Is.EqualTo(9001));
+        Assert.That(store.Current.Holdings.Relics, Is.Empty);
+        Assert.That(store.Current.Holdings.Potions, Is.Empty);
         Assert.That(flow.Persistence.Status, Is.EqualTo(RunPersistenceStatus.ContinueAvailable));
         Assert.That(saves.CommitAttempts, Has.Count.EqualTo(2));
         Assert.That(saves.CommitAttempts[1].ProgressPhase,
@@ -317,6 +432,10 @@ public sealed class RunFlowServiceTests
             Is.EqualTo(store.Current.PendingCardReward.Id.ToString()));
         Assert.That(saves.CommitAttempts[1].PendingCardReward.CandidateTemplateIds,
             Is.EqualTo(store.Current.PendingCardReward.CandidateTemplateIds));
+        Assert.That(saves.CommitAttempts[1].PendingCardReward.AttachedLoot.RelicTemplateId,
+            Is.EqualTo(8001));
+        Assert.That(saves.CommitAttempts[1].PendingCardReward.AttachedLoot.PotionTemplateId,
+            Is.EqualTo(9001));
         Assert.That(saves.CommitAttempts[1].PathNodeIds,
             Is.EqualTo(new[] { MapNodeId.FromPosition(0, 0).Value }));
         Assert.That(saves.CommitAttempts[1].CommittedNodeId, Is.EqualTo(selectedNodeId.Value));
@@ -333,7 +452,7 @@ public sealed class RunFlowServiceTests
         Assert.That(saves.SuccessfulDocument, Is.SameAs(saves.CommitAttempts[1]));
     }
 
-    /// <summary>胜利检查点提交失败时保留上一正式档与内存路径，并只重试同一新文档。</summary>
+    /// <summary>胜利保存失败时 Store 保持 InBattle，重试同一文档成功后才发布同一冻结奖励。</summary>
     [Test]
     public async Task VictoryCommitFailure_PreservesPreviousCheckpointAndRetriesSameDocument()
     {
@@ -344,7 +463,8 @@ public sealed class RunFlowServiceTests
             RunSaveCommitStatus.IoFailure,
             "replace failed"));
         saves.EnqueueCommitResult(RunSaveCommitResult.Succeeded());
-        var flow = CreateFlow(store, new RecordingSceneFlow(), saves, randomRootSeed: 45678u);
+        var scenes = new RecordingSceneFlow();
+        var flow = CreateFlow(store, scenes, saves, randomRootSeed: 45678u);
         flow.CreateNewRun(heroTemplateId: 1001);
         RunSaveDocument openingCheckpoint = saves.SuccessfulDocument;
         await flow.EnterMapNodeAsync(GetFirstSelectableNodeId(store.Current));
@@ -355,28 +475,121 @@ public sealed class RunFlowServiceTests
             CreateBattleResult(BattleResultKind.Victory, 1001, health: 29, maxHealth: 80));
 
         Assert.That(flow.Persistence.Status, Is.EqualTo(RunPersistenceStatus.CommitFailed));
-        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.RewardPending));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.InBattle));
         Assert.That(store.Current.PathNodeIds, Has.Count.EqualTo(1));
         Assert.That(store.Current.CommittedNodeId, Is.EqualTo(battleId.NodeId));
-        Assert.That(store.Current.PendingCardReward, Is.Not.Null);
-        Assert.That(store.Current.ActiveBattle, Is.Null);
+        Assert.That(store.Current.PendingCardReward, Is.Null);
+        Assert.That(store.Current.ActiveBattle, Is.Not.Null);
         Assert.That(saves.SuccessfulDocument, Is.SameAs(openingCheckpoint));
         Assert.That(openingCheckpoint.PathNodeIds, Has.Count.EqualTo(1));
+        Assert.That(
+            scenes.LoadedAddresses,
+            Is.EqualTo(new[] { RunSceneAddresses.Battle }));
         RunSaveDocument failedCheckpoint = saves.CommitAttempts[1];
+        string frozenRewardId = failedCheckpoint.PendingCardReward.RewardId;
+        Assert.That(failedCheckpoint.PendingCardReward.AttachedLoot.RelicTemplateId,
+            Is.EqualTo(8001));
+        Assert.That(failedCheckpoint.PendingCardReward.AttachedLoot.PotionTemplateId,
+            Is.EqualTo(9001));
 
         flow.RetryPendingCommit();
 
         Assert.That(saves.CommitAttempts, Has.Count.EqualTo(3));
         Assert.That(saves.CommitAttempts[2], Is.SameAs(failedCheckpoint));
         Assert.That(saves.SuccessfulDocument, Is.SameAs(failedCheckpoint));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.RewardPending));
+        Assert.That(store.Current.ActiveBattle, Is.Null);
         Assert.That(saves.SuccessfulDocument.ProgressPhase,
             Is.EqualTo(RunSaveProgressPhase.RewardPending));
         Assert.That(saves.SuccessfulDocument.PathNodeIds, Has.Count.EqualTo(1));
         Assert.That(saves.SuccessfulDocument.PendingCardReward.RewardId,
-            Is.EqualTo(store.Current.PendingCardReward.Id.ToString()));
+            Is.EqualTo(frozenRewardId));
+        Assert.That(store.Current.PendingCardReward.Id.ToString(), Is.EqualTo(frozenRewardId));
+        Assert.That(store.Current.PendingCardReward.AttachedLoot.RelicTemplateId,
+            Is.EqualTo(8001));
+        Assert.That(store.Current.PendingCardReward.AttachedLoot.PotionTemplateId,
+            Is.EqualTo(9001));
+        Assert.That(store.Current.Holdings.Relics, Is.Empty);
+        Assert.That(store.Current.Holdings.Potions, Is.Empty);
+        Assert.That(
+            scenes.LoadedAddresses,
+            Is.EqualTo(new[] { RunSceneAddresses.Battle, RunSceneAddresses.RunEntry }));
     }
 
-    /// <summary>选择冻结候选必须先提交完整 MapReady 文档，再发布新实例并让下一战收到同一实例。</summary>
+    /// <summary>失败重试复用同一冻结文档，消费药水先移除但附着掉落尚不提前发放。</summary>
+    [Test]
+    public async Task VictoryWithConsumedPotion_SaveFailureKeepsBattleHoldingsAndRetryCommitsSameSuccessor()
+    {
+        RunHoldings holdings = RunHoldings.Empty(initialGold: 73)
+            .AddPotion(templateId: 9001)
+            .AddPotion(templateId: 9002);
+        RunPotionInstanceId consumedId = holdings.Potions[0].InstanceId;
+        uint randomRootSeed = 45679u;
+        MapDefinition map = ActMapGenerator.Generate(
+            TinySpireActMapProfiles.Current,
+            RunRandomDomains.DeriveMapSeed(randomRootSeed));
+        using var store = new RunStateStore();
+        RunState created = store.CreateNewRun(new RunCreationOptions(
+            new RunId(Guid.Parse("45678901-aaaa-bbbb-cccc-123456789012")),
+            heroTemplateId: 1001,
+            initialHealth: 80,
+            maxHealth: 80,
+            runDeck: RunDeck.CreateInitial(new[] { 3002 }),
+            randomRootSeed,
+            map,
+            holdings));
+        var saves = new RecordingRunSaveStore();
+        saves.EnqueueCommitResult(RunSaveCommitResult.Failed(
+            RunSaveCommitStatus.IoFailure,
+            "replace failed"));
+        saves.EnqueueCommitResult(RunSaveCommitResult.Succeeded());
+        var scenes = new RecordingSceneFlow();
+        var flow = CreateFlow(store, scenes, saves, randomRootSeed);
+        await flow.EnterMapNodeAsync(GetFirstSelectableNodeId(created));
+        RunBattleId battleId = flow.BindBattleAttempt(flow.CreateBattleSetupOptions());
+
+        await flow.HandleBattleResultAsync(
+            battleId,
+            CreateBattleResult(
+                BattleResultKind.Victory,
+                1001,
+                health: 29,
+                maxHealth: 80,
+                consumedPotionInstanceIds: new[] { consumedId }));
+
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.InBattle));
+        Assert.That(
+            store.Current.Holdings.Potions.Select(potion => potion.TemplateId),
+            Is.EqualTo(new[] { 9001, 9002 }));
+        RunSaveDocument failedDocument = saves.CommitAttempts[0];
+        Assert.That(
+            failedDocument.Potions.Select(potion => potion.TemplateId),
+            Is.EqualTo(new[] { 9002 }));
+        string frozenRewardId = failedDocument.PendingCardReward.RewardId;
+        Assert.That(failedDocument.PendingCardReward.AttachedLoot.RelicTemplateId,
+            Is.EqualTo(8001));
+        Assert.That(failedDocument.PendingCardReward.AttachedLoot.PotionTemplateId,
+            Is.EqualTo(9001));
+        Assert.That(
+            scenes.LoadedAddresses,
+            Is.EqualTo(new[] { RunSceneAddresses.Battle }));
+
+        RunSaveCommitResult retry = flow.RetryPendingCommit();
+
+        Assert.That(retry.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(saves.CommitAttempts[1], Is.SameAs(failedDocument));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.RewardPending));
+        Assert.That(
+            store.Current.Holdings.Potions.Select(potion => potion.TemplateId),
+            Is.EqualTo(new[] { 9002 }));
+        Assert.That(store.Current.Holdings.Relics, Is.Empty);
+        Assert.That(store.Current.PendingCardReward.Id.ToString(), Is.EqualTo(frozenRewardId));
+        Assert.That(
+            scenes.LoadedAddresses,
+            Is.EqualTo(new[] { RunSceneAddresses.Battle, RunSceneAddresses.RunEntry }));
+    }
+
+    /// <summary>选择冻结候选必须先提交卡牌与附着掉落完整后继，再让下一战收到相同事实。</summary>
     [TestCase(1001, 80, 37)]
     [TestCase(1002, 90, 47)]
     public async Task SelectCardReward_CommitsBeforePublishingAndNextBattleReceivesSelectedInstance(
@@ -415,18 +628,37 @@ public sealed class RunFlowServiceTests
         Assert.That(rewardedCard.InstanceId.Sequence, Is.EqualTo(2));
         Assert.That(rewardedCard.TemplateId, Is.EqualTo(selectedTemplateId));
         Assert.That(rewardedCard.UpgradeLevel, Is.Zero);
+        Assert.That(store.Current.Holdings.Relics.Select(relic => relic.TemplateId),
+            Is.EqualTo(new[] { 8001 }));
+        Assert.That(store.Current.Holdings.Potions.Select(potion => potion.TemplateId),
+            Is.EqualTo(new[] { 9001 }));
         Assert.That(saves.CommitAttempts, Has.Count.EqualTo(3));
         Assert.That(saves.CommitAttempts[2].ProgressPhase,
             Is.EqualTo(RunSaveProgressPhase.MapReady));
         Assert.That(saves.CommitAttempts[2].PendingCardReward, Is.Null);
         Assert.That(saves.CommitAttempts[2].RunCards.Last().InstanceId, Is.EqualTo(2));
+        Assert.That(saves.CommitAttempts[2].Relics.Select(relic => relic.TemplateId),
+            Is.EqualTo(new[] { 8001 }));
+        Assert.That(saves.CommitAttempts[2].Potions.Select(potion => potion.TemplateId),
+            Is.EqualTo(new[] { 9001 }));
 
-        await flow.EnterMapNodeAsync(GetFirstSelectableNodeId(store.Current));
-        BattleSetupOptions nextBattle = flow.CreateBattleSetupOptions();
+        using RunStateStore nextBattleStore = RestoreBeforeNextCombatAfterMixedRoute(store.Current);
+        var nextBattleFlow = CreateFlow(
+            nextBattleStore,
+            scenes,
+            saves,
+            randomRootSeed: 56789u);
+        MapNodeId nextCombatNodeId = GetFirstSelectableCombatNodeId(nextBattleStore.Current);
+        await nextBattleFlow.EnterMapNodeAsync(nextCombatNodeId);
+        BattleSetupOptions nextBattle = nextBattleFlow.CreateBattleSetupOptions();
 
         Assert.That(nextBattle.RunCards.Select(card => card.InstanceId.Sequence),
             Is.EqualTo(new[] { 1, 2 }));
         Assert.That(nextBattle.RunCards.Last().TemplateId, Is.EqualTo(selectedTemplateId));
+        Assert.That(nextBattle.Holdings.Relics.Select(relic => relic.TemplateId),
+            Is.EqualTo(new[] { 8001 }));
+        Assert.That(nextBattle.Holdings.Potions.Select(potion => potion.TemplateId),
+            Is.EqualTo(new[] { 9001 }));
 
         using BattleSession nextSession = BattleSession.FromConfig(CreateTables(), nextBattle);
         nextSession.CardZones.Draw(nextSession.CardZones.Cards.Count);
@@ -444,7 +676,7 @@ public sealed class RunFlowServiceTests
         Assert.That(drawnRewardInstances[0].UpgradeLevel, Is.Zero);
     }
 
-    /// <summary>跳过冻结奖励必须原子完成节点，但不能新增、替换或重排任何 RunCard。</summary>
+    /// <summary>跳过卡牌仍须原子发放同一附着掉落，但不能改变任何 RunCard。</summary>
     [Test]
     public async Task SkipCardReward_CommitsCompletedPathWithoutChangingDeck()
     {
@@ -471,11 +703,19 @@ public sealed class RunFlowServiceTests
         Assert.That(settlement.Status, Is.EqualTo(RunSaveCommitStatus.Success));
         Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
         Assert.That(store.Current.RunDeck.Cards, Is.EqualTo(openingCards));
+        Assert.That(store.Current.Holdings.Relics.Select(relic => relic.TemplateId),
+            Is.EqualTo(new[] { 8001 }));
+        Assert.That(store.Current.Holdings.Potions.Select(potion => potion.TemplateId),
+            Is.EqualTo(new[] { 9001 }));
         Assert.That(saves.SuccessfulDocument.RunCards.Select(card => card.InstanceId),
             Is.EqualTo(openingCards.Select(card => card.InstanceId.Sequence)));
+        Assert.That(saves.SuccessfulDocument.Relics.Select(relic => relic.TemplateId),
+            Is.EqualTo(new[] { 8001 }));
+        Assert.That(saves.SuccessfulDocument.Potions.Select(potion => potion.TemplateId),
+            Is.EqualTo(new[] { 9001 }));
     }
 
-    /// <summary>结算落盘失败时 Store 必须保持 Pending，重试同一文档后才只发布一次所选实例。</summary>
+    /// <summary>结算落盘失败保持 Pending，重试同一文档后才一次发布卡牌与附着掉落。</summary>
     [Test]
     public async Task CardRewardCommitFailure_RetriesSameDocumentBeforePublishingExactlyOnce()
     {
@@ -509,8 +749,15 @@ public sealed class RunFlowServiceTests
         Assert.That(failed.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
         Assert.That(store.Current, Is.SameAs(pending));
         Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.RewardPending));
-        Assert.That(store.Current.RunDeck.Cards, Has.Count.EqualTo(1));
+        Assert.That(store.Current.RunDeck.Cards,
+            Has.Count.EqualTo(pending.RunDeck.Cards.Count));
         Assert.That(failedDocument.RunCards.Last().InstanceId, Is.EqualTo(2));
+        Assert.That(store.Current.Holdings.Relics, Is.Empty);
+        Assert.That(store.Current.Holdings.Potions, Is.Empty);
+        Assert.That(failedDocument.Relics.Select(relic => relic.TemplateId),
+            Is.EqualTo(new[] { 8001 }));
+        Assert.That(failedDocument.Potions.Select(potion => potion.TemplateId),
+            Is.EqualTo(new[] { 9001 }));
 
         RunSaveCommitResult retry = flow.RetryPendingCommit();
 
@@ -520,6 +767,10 @@ public sealed class RunFlowServiceTests
         Assert.That(store.Current.RunDeck.Cards.Count(card =>
             card.TemplateId == selectedTemplateId), Is.EqualTo(1));
         Assert.That(store.Current.RunDeck.Cards.Last().InstanceId.Sequence, Is.EqualTo(2));
+        Assert.That(store.Current.Holdings.Relics.Select(relic => relic.TemplateId),
+            Is.EqualTo(new[] { 8001 }));
+        Assert.That(store.Current.Holdings.Potions.Select(potion => potion.TemplateId),
+            Is.EqualTo(new[] { 9001 }));
     }
 
     /// <summary>伪造、过期和重复奖励命令必须在 save port 之前拒绝，保持提交计数不变。</summary>
@@ -560,6 +811,689 @@ public sealed class RunFlowServiceTests
         Assert.Throws<InvalidOperationException>(() =>
             flow.SettleCardReward(validRewardId, validTemplateId));
         Assert.That(saves.CommitAttempts, Has.Count.EqualTo(writesAfterSettlement));
+    }
+
+    /// <summary>节点进入必须先保存同一 Pending，失败时零发布且 exact retry 不重建文档。</summary>
+    [Test]
+    public async Task NodeVisitEntryCommitFailure_RetriesSameDocumentBeforePublishing()
+    {
+        MapDefinition map = CreateSingleNonCombatMap(
+            MapNodeKind.Rest,
+            contentId: 7101);
+        using var store = new RunStateStore();
+        RunState created = store.CreateNewRun(new RunCreationOptions(
+            new RunId(Guid.Parse("15151515-3737-5959-8181-939393939393")),
+            heroTemplateId: 1001,
+            initialHealth: 70,
+            maxHealth: 80,
+            runDeck: RunDeck.CreateInitial(new[] { 3002 }),
+            randomRootSeed: map.MapSeed,
+            map: map));
+        var saves = new RecordingRunSaveStore(RunSaveDocumentMapper.Create(created));
+        saves.EnqueueCommitResult(RunSaveCommitResult.Failed(
+            RunSaveCommitStatus.IoFailure,
+            "node enter failed"));
+        saves.EnqueueCommitResult(RunSaveCommitResult.Succeeded());
+        var flow = CreateFlow(
+            store,
+            new RecordingSceneFlow(),
+            saves,
+            randomRootSeed: 151515u);
+        MapNodeId restNodeId = MapNodeId.FromPosition(layer: 1, slot: 0);
+
+        await flow.EnterMapNodeAsync(restNodeId);
+        RunSaveDocument enterDocument = saves.CommitAttempts[0];
+
+        Assert.That(flow.Persistence.Status, Is.EqualTo(RunPersistenceStatus.CommitFailed));
+        Assert.That(store.Current, Is.SameAs(created));
+        Assert.That(enterDocument.ProgressPhase,
+            Is.EqualTo(RunSaveProgressPhase.NodeVisitPending));
+        Assert.That(enterDocument.PendingNodeVisit.NodeId, Is.EqualTo(restNodeId.Value));
+        Assert.That(enterDocument.PendingNodeVisit.RestPayload.HealAmount, Is.EqualTo(24));
+        Assert.That(flow.CanRollbackFailedCheckpoint, Is.False);
+        Assert.Throws<InvalidOperationException>(() => flow.ExitPendingRunToMenu());
+        Assert.That(store.Current, Is.SameAs(created));
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(1));
+
+        RunSaveCommitResult enterRetry = flow.RetryPendingCommit();
+
+        Assert.That(enterRetry.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(saves.CommitAttempts[1], Is.SameAs(enterDocument));
+        RunState entered = store.Current;
+        Assert.That(entered.ProgressPhase, Is.EqualTo(RunProgressPhase.NodeVisitPending));
+        Assert.That(entered.PendingNodeVisit.Id,
+            Is.EqualTo(new RunNodeVisitId(created.RunId, restNodeId)));
+        Assert.That(entered.PathNodeIds, Is.EqualTo(created.PathNodeIds));
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(2));
+    }
+
+    /// <summary>Rest 治疗必须先保存完整后继，失败保持原 Pending 并以同一文档 hard retry。</summary>
+    [Test]
+    public async Task RestHealCommitFailure_PreservesPendingAndRetriesSameDocumentBeforePublishing()
+    {
+        MapDefinition map = CreateSingleNonCombatMap(
+            MapNodeKind.Rest,
+            contentId: 7101);
+        using var store = new RunStateStore();
+        RunState created = store.CreateNewRun(new RunCreationOptions(
+            new RunId(Guid.Parse("20202020-4242-6464-8686-989898989898")),
+            heroTemplateId: 1001,
+            initialHealth: 40,
+            maxHealth: 80,
+            runDeck: RunDeck.CreateInitial(new[] { 3002 }),
+            randomRootSeed: map.MapSeed,
+            map: map));
+        var saves = new RecordingRunSaveStore(RunSaveDocumentMapper.Create(created));
+        var scenes = new RecordingSceneFlow();
+        var flow = CreateFlow(store, scenes, saves, randomRootSeed: 202020u);
+        await flow.EnterMapNodeAsync(MapNodeId.FromPosition(layer: 1, slot: 0));
+        RunState pending = store.Current;
+        RunNodeVisitId visitId = pending.PendingNodeVisit.Id;
+        saves.EnqueueCommitResult(RunSaveCommitResult.Failed(
+            RunSaveCommitStatus.IoFailure,
+            "rest heal replace failed"));
+        saves.EnqueueCommitResult(RunSaveCommitResult.Succeeded());
+
+        RunSaveCommitResult failed = flow.SettleRestHeal(visitId);
+        RunSaveDocument failedDocument = saves.CommitAttempts[1];
+
+        Assert.That(failed.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
+        Assert.That(store.Current, Is.SameAs(pending));
+        Assert.That(store.Current.CurrentHealth, Is.EqualTo(40));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.NodeVisitPending));
+        Assert.That(failedDocument.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.MapReady));
+        Assert.That(failedDocument.CurrentHealth, Is.EqualTo(64));
+        Assert.That(failedDocument.PendingNodeVisit, Is.Null);
+        Assert.That(failedDocument.PathNodeIds.Last(), Is.EqualTo(visitId.NodeId.Value));
+        Assert.That(flow.CanRollbackFailedCheckpoint, Is.False);
+        Assert.Throws<InvalidOperationException>(() => flow.SettleRestHeal(visitId));
+        Assert.Throws<InvalidOperationException>(() => flow.SettleRestUpgrade(
+            visitId,
+            new RunCardInstanceId(1)));
+        Assert.Throws<InvalidOperationException>(() => flow.ExitPendingRunToMenu());
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(2));
+        Assert.That(scenes.LoadedAddresses, Is.Empty);
+
+        RunSaveCommitResult retried = flow.RetryPendingCommit();
+
+        Assert.That(retried.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(saves.CommitAttempts[2], Is.SameAs(failedDocument));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(store.Current.CurrentHealth, Is.EqualTo(64));
+        Assert.That(store.Current.PendingNodeVisit, Is.Null);
+        Assert.That(store.Current.PathNodeIds.Last(), Is.EqualTo(visitId.NodeId));
+        Assert.That(scenes.LoadedAddresses, Is.Empty);
+    }
+
+    /// <summary>冷恢复的 Rest 只能升级冻结候选，成功存档后再冷启动保持等级与一次路径完成。</summary>
+    [Test]
+    public void RestUpgrade_FromColdPendingPersistsExactSuccessorAndRejectsDuplicate()
+    {
+        RunSaveDocument pendingDocument = CreateAuthoritativeNodeVisitPendingDocument(MapNodeKind.Rest);
+        var saves = new RecordingRunSaveStore(pendingDocument);
+        using var store = new RunStateStore();
+        var scenes = new RecordingSceneFlow();
+        var flow = CreateFlow(store, scenes, saves, randomRootSeed: 212121u);
+        flow.RefreshSaveAvailability();
+        RunState pending = flow.ContinueSavedRun();
+        RunNodeVisitId visitId = pending.PendingNodeVisit.Id;
+        RunCardInstanceId selected = pending.PendingNodeVisit.RestPayload
+            .UpgradeCandidateInstanceIds[0];
+
+        RunSaveCommitResult result = flow.SettleRestUpgrade(visitId, selected);
+
+        Assert.That(result.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(store.Current.PendingNodeVisit, Is.Null);
+        Assert.That(store.Current.PathNodeIds.Last(), Is.EqualTo(visitId.NodeId));
+        Assert.That(store.Current.RunDeck.Cards.Single(card => card.InstanceId == selected).UpgradeLevel,
+            Is.EqualTo(1));
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(1));
+        Assert.That(saves.CommitAttempts[0].PendingNodeVisit, Is.Null);
+        Assert.That(scenes.LoadedAddresses, Is.Empty);
+        Assert.Throws<InvalidOperationException>(() => flow.SettleRestUpgrade(visitId, selected));
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(1));
+
+        using var coldStore = new RunStateStore();
+        var coldScenes = new RecordingSceneFlow();
+        var coldFlow = CreateFlow(coldStore, coldScenes, saves, randomRootSeed: 222222u);
+        coldFlow.RefreshSaveAvailability();
+        RunState restored = coldFlow.ContinueSavedRun();
+
+        Assert.That(restored.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(restored.PendingNodeVisit, Is.Null);
+        Assert.That(restored.PathNodeIds, Is.EqualTo(store.Current.PathNodeIds));
+        Assert.That(restored.RunDeck.Cards.Single(card => card.InstanceId == selected).UpgradeLevel,
+            Is.EqualTo(1));
+        Assert.That(coldScenes.LoadedAddresses, Is.Empty);
+    }
+
+    /// <summary>Rest 进入后配置若失去下一等级，升级命令必须在首次 save write 前终审拒绝。</summary>
+    [Test]
+    public void RestUpgrade_WhenConfigurationDrifts_IsRejectedBeforeSaveWrite()
+    {
+        RunSaveDocument pendingDocument = CreateAuthoritativeNodeVisitPendingDocument(MapNodeKind.Rest);
+        var saves = new RecordingRunSaveStore(pendingDocument);
+        using var store = new RunStateStore();
+        Tables currentTables = CreateTables();
+        var flow = new RunFlowService(
+            store,
+            () => currentTables,
+            new RecordingSceneFlow(),
+            new FixedRunEntropySource(new RunEntropy(
+                new RunId(Guid.Parse("23232323-4545-6767-8989-010101010101")),
+                randomRootSeed: 232323u)),
+            saves);
+        flow.RefreshSaveAvailability();
+        RunState pending = flow.ContinueSavedRun();
+        RunCardInstanceId selected = pending.PendingNodeVisit.RestPayload
+            .UpgradeCandidateInstanceIds[0];
+        currentTables = CreateTables(includeEncounter: true, includeUpgrade: false);
+
+        Assert.Throws<InvalidOperationException>(() => flow.SettleRestUpgrade(
+            pending.PendingNodeVisit.Id,
+            selected));
+        Assert.That(store.Current, Is.SameAs(pending));
+        Assert.That(saves.CommitAttempts, Is.Empty);
+    }
+
+    /// <summary>Rest 升级后继一旦冻结，保存失败期间配置漂移也只能重试同一文档而不得重新终审。</summary>
+    [Test]
+    public void RestUpgradeCommitFailure_ConfigurationDriftStillRetriesFrozenSuccessor()
+    {
+        RunSaveDocument pendingDocument = CreateAuthoritativeNodeVisitPendingDocument(MapNodeKind.Rest);
+        var saves = new RecordingRunSaveStore(pendingDocument);
+        saves.EnqueueCommitResult(RunSaveCommitResult.Failed(
+            RunSaveCommitStatus.IoFailure,
+            "rest upgrade replace failed"));
+        saves.EnqueueCommitResult(RunSaveCommitResult.Succeeded());
+        using var store = new RunStateStore();
+        Tables currentTables = CreateTables();
+        var scenes = new RecordingSceneFlow();
+        var flow = new RunFlowService(
+            store,
+            () => currentTables,
+            scenes,
+            new FixedRunEntropySource(new RunEntropy(
+                new RunId(Guid.Parse("24242424-4646-6868-9090-020202020202")),
+                randomRootSeed: 242424u)),
+            saves);
+        flow.RefreshSaveAvailability();
+        RunState pending = flow.ContinueSavedRun();
+        RunCardInstanceId selected = pending.PendingNodeVisit.RestPayload
+            .UpgradeCandidateInstanceIds[0];
+
+        RunSaveCommitResult failed = flow.SettleRestUpgrade(
+            pending.PendingNodeVisit.Id,
+            selected);
+        RunSaveDocument failedDocument = saves.CommitAttempts[0];
+        currentTables = CreateTables(includeEncounter: true, includeUpgrade: false);
+
+        Assert.That(failed.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
+        Assert.That(store.Current, Is.SameAs(pending));
+        Assert.That(store.Current.RunDeck.Cards.Single(card => card.InstanceId == selected).UpgradeLevel,
+            Is.Zero);
+
+        RunSaveCommitResult retried = flow.RetryPendingCommit();
+
+        Assert.That(retried.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(saves.CommitAttempts[1], Is.SameAs(failedDocument));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(store.Current.RunDeck.Cards.Single(card => card.InstanceId == selected).UpgradeLevel,
+            Is.EqualTo(1));
+        Assert.That(store.Current.PendingNodeVisit, Is.Null);
+        Assert.That(scenes.LoadedAddresses, Is.Empty);
+    }
+
+    /// <summary>宝箱领取必须先保存冻结后继，失败保留原 Pending，并以同一文档重试后才发布持有物与路径。</summary>
+    [Test]
+    public async Task ChestClaimCommitFailure_PreservesPendingAndRetriesExactSuccessorWithoutNavigation()
+    {
+        MapDefinition map = CreateSingleNonCombatMap(
+            MapNodeKind.Chest,
+            RunNodeVisitIdentityCatalog.ChestContentId);
+        var holdings = new RunHoldings(
+            Array.Empty<RunRelic>(),
+            new[]
+            {
+                new RunPotion(new RunPotionInstanceId(4), templateId: 9002),
+                new RunPotion(new RunPotionInstanceId(9), templateId: 9002),
+            },
+            gold: 100);
+        using var store = new RunStateStore();
+        RunState created = store.CreateNewRun(new RunCreationOptions(
+            new RunId(Guid.Parse("25252525-4747-6969-9191-131313131313")),
+            heroTemplateId: 1001,
+            initialHealth: 80,
+            maxHealth: 80,
+            runDeck: RunDeck.CreateInitial(new[] { 3002 }),
+            randomRootSeed: map.MapSeed,
+            map: map,
+            holdings: holdings));
+        var saves = new RecordingRunSaveStore(RunSaveDocumentMapper.Create(created));
+        var scenes = new RecordingSceneFlow();
+        var flow = CreateFlow(store, scenes, saves, randomRootSeed: 252525u);
+        await flow.EnterMapNodeAsync(MapNodeId.FromPosition(layer: 1, slot: 0));
+        RunState pending = store.Current;
+        saves.EnqueueCommitResult(RunSaveCommitResult.Failed(
+            RunSaveCommitStatus.IoFailure,
+            "chest claim replace failed"));
+        saves.EnqueueCommitResult(RunSaveCommitResult.Succeeded());
+
+        RunSaveCommitResult failed = flow.SettleChestClaim(pending.PendingNodeVisit.Id);
+        RunSaveDocument failedDocument = saves.CommitAttempts[1];
+
+        Assert.That(failed.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
+        Assert.That(store.Current, Is.SameAs(pending));
+        Assert.That(store.Current.Holdings.Potions.Select(potion => potion.InstanceId.Sequence),
+            Is.EqualTo(new[] { 4, 9 }));
+        Assert.That(failedDocument.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.MapReady));
+        Assert.That(failedDocument.PendingNodeVisit, Is.Null);
+        Assert.That(failedDocument.Potions.Select(potion => potion.InstanceId),
+            Is.EqualTo(new[] { 4, 9, 10 }));
+        Assert.That(failedDocument.Potions.Last().TemplateId,
+            Is.EqualTo(RunNodeVisitIdentityCatalog.SamplePotionTemplateId));
+        Assert.That(flow.CanRollbackFailedCheckpoint, Is.False);
+        Assert.Throws<InvalidOperationException>(() =>
+            flow.SettleChestSkip(pending.PendingNodeVisit.Id));
+        Assert.Throws<InvalidOperationException>(() => flow.ExitPendingRunToMenu());
+        Assert.That(scenes.LoadedAddresses, Is.Empty);
+
+        RunSaveCommitResult retried = flow.RetryPendingCommit();
+
+        Assert.That(retried.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(saves.CommitAttempts[2], Is.SameAs(failedDocument));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(store.Current.PendingNodeVisit, Is.Null);
+        Assert.That(store.Current.Holdings.Potions.Select(potion => potion.InstanceId.Sequence),
+            Is.EqualTo(new[] { 4, 9, 10 }));
+        Assert.That(store.Current.PathNodeIds.Last(), Is.EqualTo(pending.PendingNodeVisit.NodeId));
+        Assert.That(scenes.LoadedAddresses, Is.Empty);
+    }
+
+    /// <summary>冷启动恢复的宝箱可跳过且保持持有物，成功后路径只完成一次并拒绝重复结算。</summary>
+    [Test]
+    public void ChestSkip_FromColdPendingPersistsExactSuccessorAndRejectsDuplicate()
+    {
+        RunSaveDocument pendingDocument = CreateAuthoritativeNodeVisitPendingDocument(MapNodeKind.Chest);
+        var saves = new RecordingRunSaveStore(pendingDocument);
+        using var store = new RunStateStore();
+        var scenes = new RecordingSceneFlow();
+        var flow = CreateFlow(store, scenes, saves, randomRootSeed: 262626u);
+        flow.RefreshSaveAvailability();
+        RunState pending = flow.ContinueSavedRun();
+        RunNodeVisitId visitId = pending.PendingNodeVisit.Id;
+
+        RunSaveCommitResult result = flow.SettleChestSkip(visitId);
+
+        Assert.That(result.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(store.Current.PendingNodeVisit, Is.Null);
+        Assert.That(store.Current.Holdings, Is.SameAs(pending.Holdings));
+        Assert.That(store.Current.PathNodeIds.Last(), Is.EqualTo(visitId.NodeId));
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(1));
+        Assert.That(saves.CommitAttempts[0].PendingNodeVisit, Is.Null);
+        Assert.Throws<InvalidOperationException>(() => flow.SettleChestSkip(visitId));
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(1));
+        Assert.That(scenes.LoadedAddresses, Is.Empty);
+
+        using var coldStore = new RunStateStore();
+        var coldFlow = CreateFlow(
+            coldStore,
+            new RecordingSceneFlow(),
+            saves,
+            randomRootSeed: 272727u);
+        coldFlow.RefreshSaveAvailability();
+        RunState restored = coldFlow.ContinueSavedRun();
+
+        Assert.That(restored.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(restored.PendingNodeVisit, Is.Null);
+        Assert.That(restored.PathNodeIds, Is.EqualTo(store.Current.PathNodeIds));
+        Assert.That(restored.Holdings.Potions, Is.Empty);
+    }
+
+    /// <summary>宝箱伪造身份与满槽领取必须在首次结算写盘前拒绝，而满槽仍允许显式跳过。</summary>
+    [Test]
+    public async Task ChestClaim_ForgedIdentityAndFullCapacityAreRejectedBeforeSaveWhileSkipRemainsAvailable()
+    {
+        MapDefinition map = CreateSingleNonCombatMap(
+            MapNodeKind.Chest,
+            RunNodeVisitIdentityCatalog.ChestContentId);
+        var fullHoldings = new RunHoldings(
+            Array.Empty<RunRelic>(),
+            new[]
+            {
+                new RunPotion(new RunPotionInstanceId(1), templateId: 9002),
+                new RunPotion(new RunPotionInstanceId(2), templateId: 9002),
+                new RunPotion(new RunPotionInstanceId(3), templateId: 9002),
+            },
+            gold: 100);
+        using var store = new RunStateStore();
+        RunState created = store.CreateNewRun(new RunCreationOptions(
+            new RunId(Guid.Parse("28282828-4848-7070-9292-141414141414")),
+            heroTemplateId: 1001,
+            initialHealth: 80,
+            maxHealth: 80,
+            runDeck: RunDeck.CreateInitial(new[] { 3002 }),
+            randomRootSeed: map.MapSeed,
+            map: map,
+            holdings: fullHoldings));
+        var saves = new RecordingRunSaveStore(RunSaveDocumentMapper.Create(created));
+        var scenes = new RecordingSceneFlow();
+        var flow = CreateFlow(store, scenes, saves, randomRootSeed: 282828u);
+        await flow.EnterMapNodeAsync(MapNodeId.FromPosition(layer: 1, slot: 0));
+        RunState pending = store.Current;
+        int writesAfterEntry = saves.CommitAttempts.Count;
+
+        Assert.Throws<InvalidOperationException>(() => flow.SettleChestClaim(
+            new RunNodeVisitId(
+                new RunId(Guid.Parse("29292929-4949-7171-9393-151515151515")),
+                pending.PendingNodeVisit.NodeId)));
+        Assert.Throws<InvalidOperationException>(() =>
+            flow.SettleChestClaim(pending.PendingNodeVisit.Id));
+        Assert.That(store.Current, Is.SameAs(pending));
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(writesAfterEntry));
+
+        RunSaveCommitResult skipped = flow.SettleChestSkip(pending.PendingNodeVisit.Id);
+
+        Assert.That(skipped.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(store.Current.Holdings.Potions, Has.Count.EqualTo(3));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(scenes.LoadedAddresses, Is.Empty);
+    }
+
+    /// <summary>Shop 购买失败必须保留原 Pending 并 exact retry 同一后继；冷恢复后可连买且只在 Leave 完成路径。</summary>
+    [Test]
+    public void ShopPurchaseCommitFailure_RetriesExactPendingThenColdRestoresAndLeavesWithoutNavigation()
+    {
+        RunSaveDocument pendingDocument = CreateAuthoritativeNodeVisitPendingDocument(
+            MapNodeKind.Shop);
+        var saves = new RecordingRunSaveStore(pendingDocument);
+        using var store = new RunStateStore();
+        var scenes = new RecordingSceneFlow();
+        Tables currentTables = CreateTables();
+        var flow = new RunFlowService(
+            store,
+            () => currentTables,
+            scenes,
+            new FixedRunEntropySource(new RunEntropy(
+                new RunId(Guid.Parse("33333333-5555-7777-9999-212121212121")),
+                randomRootSeed: 323232u)),
+            saves);
+        flow.RefreshSaveAvailability();
+        RunState pending = flow.ContinueSavedRun();
+        RunNodeVisitId visitId = pending.PendingNodeVisit.Id;
+        saves.EnqueueCommitResult(RunSaveCommitResult.Failed(
+            RunSaveCommitStatus.IoFailure,
+            "shop card replace failed"));
+        saves.EnqueueCommitResult(RunSaveCommitResult.Succeeded());
+
+        RunSaveCommitResult failed = flow.SettleShopPurchase(visitId, stockEntryId: 3);
+        RunSaveDocument failedDocument = saves.CommitAttempts[0];
+
+        Assert.That(failed.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
+        Assert.That(store.Current, Is.SameAs(pending));
+        Assert.That(store.Current.Holdings.Gold, Is.EqualTo(100));
+        Assert.That(store.Current.RunDeck.Cards,
+            Has.Count.EqualTo(pending.RunDeck.Cards.Count));
+        Assert.That(failedDocument.ProgressPhase,
+            Is.EqualTo(RunSaveProgressPhase.NodeVisitPending));
+        Assert.That(failedDocument.Gold, Is.EqualTo(50));
+        Assert.That(failedDocument.RunCards,
+            Has.Count.EqualTo(pending.RunDeck.Cards.Count + 1));
+        Assert.That(failedDocument.PendingNodeVisit.ShopPayload.Entries
+                .Select(entry => entry.Purchased),
+            Is.EqualTo(new[] { false, false, true }));
+        Assert.That(failedDocument.PathNodeIds, Is.EqualTo(pending.PathNodeIds
+            .Select(nodeId => nodeId.Value)));
+        Assert.That(flow.CanRollbackFailedCheckpoint, Is.False);
+        Assert.Throws<InvalidOperationException>(() => flow.SettleShopPurchase(visitId, 2));
+        Assert.Throws<InvalidOperationException>(() => flow.SettleShopLeave(visitId));
+        Assert.Throws<InvalidOperationException>(() => flow.ExitPendingRunToMenu());
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(1));
+        Assert.That(scenes.LoadedAddresses, Is.Empty);
+
+        currentTables = CreateTables(
+            includeEncounter: true,
+            includeUpgrade: true,
+            includeHero1001ShopCards: false);
+        RunSaveCommitResult retried = flow.RetryPendingCommit();
+
+        Assert.That(retried.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(saves.CommitAttempts[1], Is.SameAs(failedDocument));
+        Assert.That(store.Current.ProgressPhase,
+            Is.EqualTo(RunProgressPhase.NodeVisitPending));
+        Assert.That(store.Current.PendingNodeVisit.ShopPayload.Entries[2].Purchased, Is.True);
+        Assert.That(store.Current.Holdings.Gold, Is.EqualTo(50));
+        Assert.That(store.Current.PathNodeIds, Is.EqualTo(pending.PathNodeIds));
+        Assert.That(scenes.LoadedAddresses, Is.Empty);
+
+        currentTables = CreateTables();
+        using var coldStore = new RunStateStore();
+        var coldScenes = new RecordingSceneFlow();
+        var coldFlow = new RunFlowService(
+            coldStore,
+            () => currentTables,
+            coldScenes,
+            new FixedRunEntropySource(new RunEntropy(
+                new RunId(Guid.Parse("34343434-5656-7878-aaaa-222222222222")),
+                randomRootSeed: 343434u)),
+            saves);
+        coldFlow.RefreshSaveAvailability();
+        RunState restored = coldFlow.ContinueSavedRun();
+
+        Assert.That(restored.PendingNodeVisit.ShopPayload.Entries
+                .Select(entry => entry.Purchased),
+            Is.EqualTo(new[] { false, false, true }));
+        Assert.That(restored.Holdings.Gold, Is.EqualTo(50));
+        Assert.That(restored.RunDeck.Cards,
+            Has.Count.EqualTo(pending.RunDeck.Cards.Count + 1));
+        Assert.That(coldFlow.SettleShopPurchase(restored.PendingNodeVisit.Id, 2).Status,
+            Is.EqualTo(RunSaveCommitStatus.Success));
+        RunState afterPotion = coldStore.Current;
+        Assert.That(afterPotion.ProgressPhase,
+            Is.EqualTo(RunProgressPhase.NodeVisitPending));
+        Assert.That(afterPotion.Holdings.Gold, Is.EqualTo(25));
+        Assert.That(afterPotion.PendingNodeVisit.ShopPayload.Entries
+                .Select(entry => entry.Purchased),
+            Is.EqualTo(new[] { false, true, true }));
+
+        using var afterPotionColdStore = new RunStateStore();
+        var afterPotionColdScenes = new RecordingSceneFlow();
+        var afterPotionColdFlow = new RunFlowService(
+            afterPotionColdStore,
+            () => currentTables,
+            afterPotionColdScenes,
+            new FixedRunEntropySource(new RunEntropy(
+                new RunId(Guid.Parse("38383838-6060-7c7c-aeae-262626262626")),
+                randomRootSeed: 363636u)),
+            saves);
+        afterPotionColdFlow.RefreshSaveAvailability();
+        RunState restoredAfterPotion = afterPotionColdFlow.ContinueSavedRun();
+        Assert.That(restoredAfterPotion.PendingNodeVisit.ShopPayload.Entries
+                .Select(entry => entry.Purchased),
+            Is.EqualTo(new[] { false, true, true }));
+        Assert.That(restoredAfterPotion.Holdings.Gold, Is.EqualTo(25));
+        Assert.That(restoredAfterPotion.Holdings.Potions.Single().InstanceId.Sequence,
+            Is.EqualTo(1));
+        Assert.That(restoredAfterPotion.RunDeck.Cards,
+            Has.Count.EqualTo(pending.RunDeck.Cards.Count + 1));
+
+        Assert.That(afterPotionColdFlow.SettleShopLeave(
+                restoredAfterPotion.PendingNodeVisit.Id).Status,
+            Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(afterPotionColdStore.Current.ProgressPhase,
+            Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(afterPotionColdStore.Current.PendingNodeVisit, Is.Null);
+        Assert.That(afterPotionColdStore.Current.PathNodeIds.Last(), Is.EqualTo(visitId.NodeId));
+        Assert.That(afterPotionColdStore.Current.Holdings.Gold, Is.EqualTo(25));
+        Assert.That(coldScenes.LoadedAddresses, Is.Empty);
+        Assert.That(afterPotionColdScenes.LoadedAddresses, Is.Empty);
+    }
+
+    /// <summary>冻结卡仍全局存在但已移出当前 Hero 奖励池时，Shop Card 购买必须在首次 save write 前拒绝。</summary>
+    [Test]
+    public async Task ShopCardPurchase_HeroPoolDriftIsRejectedBeforeSaveWrite()
+    {
+        MapDefinition map = CreateSingleNonCombatMap(
+            MapNodeKind.Shop,
+            RunNodeVisitIdentityCatalog.ShopContentId);
+        using var store = new RunStateStore();
+        RunState created = store.CreateNewRun(new RunCreationOptions(
+            new RunId(Guid.Parse("35353535-5757-7979-abab-232323232323")),
+            heroTemplateId: 1001,
+            initialHealth: 80,
+            maxHealth: 80,
+            runDeck: RunDeck.CreateInitial(new[] { 3002 }),
+            randomRootSeed: map.MapSeed,
+            map: map,
+            holdings: RunHoldings.Empty(initialGold: 100)));
+        var saves = new RecordingRunSaveStore(RunSaveDocumentMapper.Create(created));
+        Tables currentTables = CreateTables();
+        var flow = new RunFlowService(
+            store,
+            () => currentTables,
+            new RecordingSceneFlow(),
+            new FixedRunEntropySource(new RunEntropy(
+                new RunId(Guid.Parse("36363636-5858-7a7a-acac-242424242424")),
+                randomRootSeed: 353535u)),
+            saves);
+        await flow.EnterMapNodeAsync(MapNodeId.FromPosition(layer: 1, slot: 0));
+        RunState pending = store.Current;
+        int writesAfterEntry = saves.CommitAttempts.Count;
+        currentTables = CreateTables(
+            includeEncounter: true,
+            includeUpgrade: true,
+            includeHero1001ShopCards: false);
+
+        Assert.Throws<InvalidOperationException>(() => flow.SettleShopPurchase(
+            pending.PendingNodeVisit.Id,
+            stockEntryId: 3));
+        Assert.That(store.Current, Is.SameAs(pending));
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(writesAfterEntry));
+    }
+
+    /// <summary>零购买 Leave 替换失败保持原 Shop，重试同文档只完成一次路径，完成后生产 Flow 拒绝再入。</summary>
+    [Test]
+    public async Task ShopLeaveWithoutPurchaseCommitFailure_RetriesExactDocumentAndRejectsReentry()
+    {
+        RunSaveDocument pendingDocument = CreateAuthoritativeNodeVisitPendingDocument(
+            MapNodeKind.Shop);
+        var saves = new RecordingRunSaveStore(pendingDocument);
+        using var store = new RunStateStore();
+        var scenes = new RecordingSceneFlow();
+        var flow = CreateFlow(store, scenes, saves, randomRootSeed: 363637u);
+        flow.RefreshSaveAvailability();
+        RunState pending = flow.ContinueSavedRun();
+        RunNodeVisitId visitId = pending.PendingNodeVisit.Id;
+        saves.EnqueueCommitResult(RunSaveCommitResult.Failed(
+            RunSaveCommitStatus.IoFailure,
+            "shop leave replace failed"));
+        saves.EnqueueCommitResult(RunSaveCommitResult.Succeeded());
+
+        RunSaveCommitResult failed = flow.SettleShopLeave(visitId);
+        RunSaveDocument failedDocument = saves.CommitAttempts[0];
+
+        Assert.That(failed.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
+        Assert.That(store.Current, Is.SameAs(pending));
+        Assert.That(store.Current.PendingNodeVisit.ShopPayload.Entries
+                .Select(entry => entry.Purchased),
+            Is.EqualTo(new[] { false, false, false }));
+        Assert.That(failedDocument.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.MapReady));
+        Assert.That(failedDocument.PendingNodeVisit, Is.Null);
+        Assert.That(failedDocument.Gold, Is.EqualTo(pending.Holdings.Gold));
+        Assert.That(failedDocument.PathNodeIds,
+            Is.EqualTo(pending.PathNodeIds.Select(nodeId => nodeId.Value)
+                .Concat(new[] { visitId.NodeId.Value })));
+        Assert.That(flow.CanRollbackFailedCheckpoint, Is.False);
+
+        RunSaveCommitResult retried = flow.RetryPendingCommit();
+
+        Assert.That(retried.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(saves.CommitAttempts[1], Is.SameAs(failedDocument));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(store.Current.PendingNodeVisit, Is.Null);
+        Assert.That(store.Current.Holdings.Gold, Is.EqualTo(pending.Holdings.Gold));
+        Assert.That(store.Current.PathNodeIds.Count, Is.EqualTo(pending.PathNodeIds.Count + 1));
+        Assert.That(store.Current.PathNodeIds.Last(), Is.EqualTo(visitId.NodeId));
+        Assert.That(
+            async () => await flow.EnterMapNodeAsync(visitId.NodeId),
+            Throws.TypeOf<InvalidOperationException>());
+        Assert.Throws<InvalidOperationException>(() => flow.SettleShopLeave(visitId));
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(2));
+        Assert.That(scenes.LoadedAddresses, Is.Empty);
+    }
+
+    /// <summary>事件选择保存失败必须保留原 Pending、锁死两项与回退，并以同一文档重试后支持冷恢复。</summary>
+    [Test]
+    public void EventChoiceCommitFailure_RetriesExactDocumentThenColdRestoresWithoutNavigation()
+    {
+        RunSaveDocument pendingDocument = CreateAuthoritativeNodeVisitPendingDocument(
+            MapNodeKind.Event);
+        var saves = new RecordingRunSaveStore(pendingDocument);
+        using var store = new RunStateStore();
+        var scenes = new RecordingSceneFlow();
+        var flow = CreateFlow(store, scenes, saves, randomRootSeed: 373737u);
+        flow.RefreshSaveAvailability();
+        RunState pending = flow.ContinueSavedRun();
+        RunNodeVisitId visitId = pending.PendingNodeVisit.Id;
+        saves.EnqueueCommitResult(RunSaveCommitResult.Failed(
+            RunSaveCommitStatus.IoFailure,
+            "event choice replace failed"));
+        saves.EnqueueCommitResult(RunSaveCommitResult.Succeeded());
+
+        RunSaveCommitResult failed = flow.SettleEventChoice(
+            visitId,
+            RunEventChoiceKind.PaidHeal);
+        RunSaveDocument failedDocument = saves.CommitAttempts[0];
+
+        Assert.That(failed.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
+        Assert.That(store.Current, Is.SameAs(pending));
+        Assert.That(store.Current.CurrentHealth, Is.EqualTo(61));
+        Assert.That(store.Current.Holdings.Gold, Is.EqualTo(100));
+        Assert.That(failedDocument.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.MapReady));
+        Assert.That(failedDocument.PendingNodeVisit, Is.Null);
+        Assert.That(failedDocument.CurrentHealth, Is.EqualTo(76));
+        Assert.That(failedDocument.Gold, Is.EqualTo(75));
+        Assert.That(failedDocument.PathNodeIds.Last(), Is.EqualTo(visitId.NodeId.Value));
+        Assert.That(flow.CanRollbackFailedCheckpoint, Is.False);
+        Assert.Throws<InvalidOperationException>(() => flow.SettleEventChoice(
+            visitId,
+            RunEventChoiceKind.GainGold));
+        Assert.Throws<InvalidOperationException>(() => flow.SettleEventChoice(
+            visitId,
+            RunEventChoiceKind.PaidHeal));
+        Assert.Throws<InvalidOperationException>(() => flow.ExitPendingRunToMenu());
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(1));
+        Assert.That(scenes.LoadedAddresses, Is.Empty);
+
+        RunSaveCommitResult retried = flow.RetryPendingCommit();
+
+        Assert.That(retried.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(saves.CommitAttempts[1], Is.SameAs(failedDocument));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(store.Current.PendingNodeVisit, Is.Null);
+        Assert.That(store.Current.CurrentHealth, Is.EqualTo(76));
+        Assert.That(store.Current.Holdings.Gold, Is.EqualTo(75));
+        Assert.That(store.Current.PathNodeIds.Last(), Is.EqualTo(visitId.NodeId));
+        Assert.Throws<InvalidOperationException>(() => flow.SettleEventChoice(
+            visitId,
+            RunEventChoiceKind.PaidHeal));
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(2));
+        Assert.That(scenes.LoadedAddresses, Is.Empty);
+
+        using var coldStore = new RunStateStore();
+        var coldScenes = new RecordingSceneFlow();
+        var coldFlow = CreateFlow(coldStore, coldScenes, saves, randomRootSeed: 383838u);
+        coldFlow.RefreshSaveAvailability();
+        RunState restored = coldFlow.ContinueSavedRun();
+
+        Assert.That(restored.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(restored.PendingNodeVisit, Is.Null);
+        Assert.That(restored.CurrentHealth, Is.EqualTo(76));
+        Assert.That(restored.Holdings.Gold, Is.EqualTo(75));
+        Assert.That(restored.PathNodeIds.Last(), Is.EqualTo(visitId.NodeId));
+        Assert.That(coldScenes.LoadedAddresses, Is.Empty);
     }
 
     /// <summary>坏 JSON、未知 schema、中断提交与加载 IO 都禁用 Continue、保留数据且不隐式删除。</summary>
@@ -675,7 +1609,7 @@ public sealed class RunFlowServiceTests
         Assert.That(continued.RunId.ToString(), Is.EqualTo(saves.SuccessfulDocument.RunId));
     }
 
-    /// <summary>冻结奖励存档失败不得回退战前档，必须保留同一 Pending 与 retry 文档。</summary>
+    /// <summary>冻结奖励存档失败保持 InBattle 来源，retry 同一文档成功后才发布 RewardPending 后继。</summary>
     [Test]
     public async Task ExitAfterFailedVictoryCheckpoint_IsRejectedAndPreservesRetryDocument()
     {
@@ -693,18 +1627,20 @@ public sealed class RunFlowServiceTests
             battleId,
             CreateBattleResult(BattleResultKind.Victory, 1002, health: 33, maxHealth: 90));
 
-        RunState pending = store.Current;
+        RunState failedSource = store.Current;
         RunSaveDocument failedCheckpoint = saves.CommitAttempts[1];
 
         Assert.That(() => flow.ExitPendingRunToMenu(), Throws.TypeOf<InvalidOperationException>());
-        Assert.That(store.Current, Is.SameAs(pending));
-        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.RewardPending));
+        Assert.That(store.Current, Is.SameAs(failedSource));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.InBattle));
         Assert.That(flow.Persistence.Status, Is.EqualTo(RunPersistenceStatus.CommitFailed));
 
         flow.RetryPendingCommit();
 
         Assert.That(saves.CommitAttempts[2], Is.SameAs(failedCheckpoint));
-        Assert.That(store.Current, Is.SameAs(pending));
+        Assert.That(store.Current, Is.Not.SameAs(failedSource));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.RewardPending));
+        Assert.That(store.Current.PendingCardReward, Is.Not.Null);
         Assert.That(flow.Persistence.Status, Is.EqualTo(RunPersistenceStatus.ContinueAvailable));
     }
 
@@ -729,7 +1665,24 @@ public sealed class RunFlowServiceTests
         BattleSetupOptions setup = flow.CreateBattleSetupOptions();
 
         Assert.That(created.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
-        Assert.That(created.MapDefinition.ProfileId, Is.EqualTo(TinySpireActMapProfiles.CurrentProfileId));
+        Assert.That(created.MapDefinition.ProfileId,
+            Is.EqualTo(TinySpireActMapProfiles.NewRunG6V1ProfileId));
+        Assert.That(created.MapDefinition.GeneratorVersion,
+            Is.EqualTo(ActMapGenerator.NewRunG6Version));
+        Assert.That(
+            created.MapDefinition.Nodes
+                .Where(node => node.Kind != MapNodeKind.Start && node.Kind != MapNodeKind.Boss)
+                .OrderBy(node => node.Layer)
+                .Select(node => node.Kind),
+            Is.EqualTo(new[]
+            {
+                MapNodeKind.Combat,
+                MapNodeKind.Rest,
+                MapNodeKind.Chest,
+                MapNodeKind.Shop,
+                MapNodeKind.Event,
+                MapNodeKind.Combat,
+            }));
         Assert.That(created.MapDefinition.Nodes.Any(node => node.Kind == MapNodeKind.Boss), Is.True);
         Assert.That(saves.SuccessfulDocument.MapSeed, Is.EqualTo(created.MapDefinition.MapSeed));
         Assert.That(saves.SuccessfulDocument.MapFingerprint, Is.EqualTo(created.MapDefinition.Fingerprint));
@@ -753,7 +1706,8 @@ public sealed class RunFlowServiceTests
         var scenes = new RecordingSceneFlow();
         var saves = new RecordingRunSaveStore();
         var flow = CreateFlow(store, scenes, saves, randomRootSeed: 12345u);
-        RunState created = flow.CreateNewRun(heroTemplateId: 1002);
+        RunState created = CreateLegacyBossGateRun(store, randomRootSeed: 12345u);
+        saves.Commit(RunSaveDocumentMapper.Create(created));
 
         int victories = await AdvanceFirstOrdinaryRouteToBossAsync(flow, store);
 
@@ -844,6 +1798,9 @@ public sealed class RunFlowServiceTests
         saves.EnqueueCommitResult(RunSaveCommitResult.Failed(
             RunSaveCommitStatus.IoFailure,
             "terminal replace failed"));
+        saves.EnqueueCommitResult(RunSaveCommitResult.Failed(
+            RunSaveCommitStatus.IoFailure,
+            "terminal retry failed"));
         saves.EnqueueCommitResult(RunSaveCommitResult.Succeeded());
         var flow = CreateFlow(store, scenes, saves, randomRootSeed: 654321u);
         flow.CreateNewRun(heroTemplateId: 1001);
@@ -854,18 +1811,33 @@ public sealed class RunFlowServiceTests
             battleId,
             CreateBattleResult(BattleResultKind.Defeat, 1001, health: 0, maxHealth: 80));
 
-        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.Terminal));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.InBattle));
+        Assert.That(store.Current.ActiveBattle, Is.Not.Null);
         Assert.That(flow.Persistence.Status, Is.EqualTo(RunPersistenceStatus.CommitFailed));
         RunSaveDocument failedTerminal = saves.CommitAttempts[1];
         Assert.That(failedTerminal.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.Terminal));
         Assert.That(() => flow.ExitPendingRunToMenu(), Throws.TypeOf<InvalidOperationException>());
-        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.Terminal));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.InBattle));
+        Assert.That(
+            scenes.LoadedAddresses,
+            Is.EqualTo(new[] { RunSceneAddresses.Battle }));
 
-        RunSaveCommitResult retry = flow.RetryPendingCommit();
+        RunSaveCommitResult failedRetry = flow.RetryPendingCommit();
 
-        Assert.That(retry.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(failedRetry.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
         Assert.That(saves.CommitAttempts[2], Is.SameAs(failedTerminal));
+        Assert.That(flow.Persistence.Status, Is.EqualTo(RunPersistenceStatus.CommitFailed));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.InBattle));
+        Assert.That(
+            scenes.LoadedAddresses,
+            Is.EqualTo(new[] { RunSceneAddresses.Battle }));
+
+        RunSaveCommitResult successfulRetry = flow.RetryPendingCommit();
+
+        Assert.That(successfulRetry.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(saves.CommitAttempts[3], Is.SameAs(failedTerminal));
         Assert.That(flow.Persistence.Status, Is.EqualTo(RunPersistenceStatus.TerminalDefeat));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.Terminal));
         Assert.That(flow.Persistence.CanContinue, Is.False);
         Assert.That(() => flow.CreateBattleSetupOptions(), Throws.TypeOf<InvalidOperationException>());
         Assert.That(scenes.LoadedAddresses, Is.EqualTo(new[]
@@ -949,6 +1921,158 @@ public sealed class RunFlowServiceTests
             .First();
     }
 
+    /// <summary>沿正式 G6 mixed 普通路径补齐相邻非战斗节点，并恢复到下一 Combat 的稳定前驱。</summary>
+    private static RunStateStore RestoreBeforeNextCombatAfterMixedRoute(RunState source)
+    {
+        if (source == null)
+            throw new ArgumentNullException(nameof(source));
+        if (source.ProgressPhase != RunProgressPhase.MapReady)
+            throw new InvalidOperationException("A stable MapReady source is required.");
+
+        var path = source.PathNodeIds.ToList();
+        var traversedKinds = new List<MapNodeKind>();
+        MapNodeId cursor = source.CurrentNodeId;
+        int safetyLimit = source.MapDefinition.Nodes.Count;
+        while (traversedKinds.Count < safetyLimit)
+        {
+            MapNodeId next = MapReachability.GetSelectableNodeIds(
+                    source.MapDefinition,
+                    cursor,
+                    MapTraversalMode.Ordinary)
+                .First();
+            MapNode node = source.MapDefinition.GetNode(next);
+            if (node.Kind == MapNodeKind.Combat)
+                break;
+            if (node.Kind == MapNodeKind.Boss)
+                throw new InvalidOperationException("The mixed route reached Boss before another Combat.");
+
+            path.Add(next);
+            traversedKinds.Add(node.Kind);
+            cursor = next;
+        }
+
+        Assert.That(traversedKinds, Is.EqualTo(new[]
+        {
+            MapNodeKind.Rest,
+            MapNodeKind.Chest,
+            MapNodeKind.Shop,
+            MapNodeKind.Event,
+        }));
+        int restHealAmount = (int)Math.Ceiling(source.MaxHealth * 0.3m);
+        int restoredHealth = (int)Math.Min(
+            source.MaxHealth,
+            (long)source.CurrentHealth + restHealAmount);
+        var restoredStore = new RunStateStore();
+        restoredStore.RestoreRun(new RunRestoreOptions(
+            source.RunId,
+            source.HeroTemplateId,
+            restoredHealth,
+            source.MaxHealth,
+            source.RunDeck,
+            source.RandomRootSeed,
+            source.MapDefinition,
+            path,
+            RunProgressPhase.MapReady,
+            committedNodeId: null,
+            terminalReason: null,
+            source.Holdings));
+        return restoredStore;
+    }
+
+    /// <summary>只从当前普通直接出边中选择 Combat，避免把 Rest 等 Pending 当作战斗。</summary>
+    private static MapNodeId GetFirstSelectableCombatNodeId(RunState state)
+    {
+        if (state == null)
+            throw new ArgumentNullException(nameof(state));
+
+        return MapReachability.GetSelectableNodeIds(
+                state.MapDefinition,
+                state.CurrentNodeId,
+                MapTraversalMode.Ordinary)
+            .First(nodeId => state.MapDefinition.GetNode(nodeId).Kind == MapNodeKind.Combat);
+    }
+
+    /// <summary>建立只含 Start 与一个直接可达非战斗节点的最小 Flow 测试地图。</summary>
+    private static MapDefinition CreateSingleNonCombatMap(
+        MapNodeKind kind,
+        int contentId)
+    {
+        MapNodeId startNodeId = MapNodeId.FromPosition(layer: 0, slot: 0);
+        MapNodeId destinationNodeId = MapNodeId.FromPosition(layer: 1, slot: 0);
+        return new MapDefinition(
+            profileId: "tinyspire.test.flow.noncombat.v1",
+            generatorVersion: 1,
+            mapSeed: 42420002u,
+            nodes: new[]
+            {
+                new MapNode(startNodeId, layer: 0, slot: 0, MapNodeKind.Start, contentId: 0),
+                new MapNode(destinationNodeId, layer: 1, slot: 0, kind, contentId),
+            },
+            edges: new[]
+            {
+                new MapEdge(startNodeId, destinationNodeId),
+            });
+    }
+
+    /// <summary>以 legacy G3 v1 直接建立仍可独立验证假 BossGate 的旧路线夹具。</summary>
+    private static RunState CreateLegacyBossGateRun(
+        RunStateStore store,
+        uint randomRootSeed)
+    {
+        MapDefinition map = ActMapGenerator.Generate(
+            TinySpireActMapProfiles.LegacyG3V1,
+            RunRandomDomains.DeriveMapSeed(randomRootSeed));
+        return store.CreateNewRun(new RunCreationOptions(
+            new RunId(Guid.Parse("21212121-3434-5656-7878-909090909090")),
+            heroTemplateId: 1002,
+            initialHealth: 90,
+            maxHealth: 90,
+            runDeck: RunDeck.CreateInitial(new[] { 3201 }),
+            randomRootSeed,
+            map,
+            RunHoldings.Empty(initialGold: 100)));
+    }
+
+    /// <summary>沿 G6 mixed 路径恢复到目标前一层，并由生产 entry 工厂建立冷启动测试文档。</summary>
+    private static RunSaveDocument CreateAuthoritativeNodeVisitPendingDocument(
+        MapNodeKind kind)
+    {
+        ActMapProfile profile = TinySpireActMapProfiles.NewRunG6V1;
+        MapDefinition map = ActMapGenerator.Generate(profile, mapSeed: 24681357u);
+        MapNode target = map.Nodes.Single(node => node.Kind == kind);
+        MapNodeId[] path = map.Nodes
+            .Where(node => node.Slot == 0 && node.Layer < target.Layer)
+            .OrderBy(node => node.Layer)
+            .Select(node => node.Id)
+            .ToArray();
+        string runId = kind switch
+        {
+            MapNodeKind.Rest => "31313131-4242-5353-6464-757575757571",
+            MapNodeKind.Chest => "31313131-4242-5353-6464-757575757572",
+            MapNodeKind.Shop => "31313131-4242-5353-6464-757575757573",
+            MapNodeKind.Event => "31313131-4242-5353-6464-757575757574",
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
+        };
+        using var store = new RunStateStore();
+        store.RestoreRun(new RunRestoreOptions(
+            new RunId(Guid.Parse(runId)),
+            heroTemplateId: 1001,
+            currentHealth: 61,
+            maxHealth: 80,
+            runDeck: RunDeck.CreateInitial(new[] { 3002, 3123 }),
+            randomRootSeed: 123456u,
+            map,
+            path,
+            RunProgressPhase.MapReady,
+            committedNodeId: null,
+            terminalReason: null,
+            holdings: RunHoldings.Empty(initialGold: 100)));
+        RunNodeVisitEntrySettlement settlement = store.PreviewNodeVisitEntry(
+            target.Id,
+            new TablesRunSaveConfigurationCatalog(CreateTables()));
+        return RunSaveDocumentMapper.Create(settlement.Successor);
+    }
+
     /// <summary>沿第一条普通路线逐战胜利，最后只提交并保存 Boss 门。</summary>
     private static async UniTask<int> AdvanceFirstOrdinaryRouteToBossAsync(
         RunFlowService flow,
@@ -987,7 +2111,8 @@ public sealed class RunFlowServiceTests
         BattleResultKind kind,
         int heroTemplateId,
         int health,
-        int maxHealth)
+        int maxHealth,
+        IEnumerable<RunPotionInstanceId> consumedPotionInstanceIds = null)
     {
         return new BattleResult(
             kind,
@@ -1000,7 +2125,8 @@ public sealed class RunFlowServiceTests
                     heroTemplateId,
                     health,
                     maxHealth),
-            });
+            },
+            consumedPotionInstanceIds);
     }
 
     /// <summary>创建一份可覆盖配置引用、RunCards、冻结奖励与稳定阶段的 schema v4 文档。</summary>
@@ -1011,7 +2137,8 @@ public sealed class RunFlowServiceTests
         RunSaveProgressPhase progressPhase = RunSaveProgressPhase.MapReady,
         int completedCombatCount = 0,
         string mapProfileId = null,
-        IReadOnlyList<RunSaveCardDocument> runCards = null)
+        IReadOnlyList<RunSaveCardDocument> runCards = null,
+        IReadOnlyList<RunSaveRelicDocument> relics = null)
     {
         ActMapProfile profile = TinySpireActMapProfiles.Current;
         uint mapSeed = RunRandomDomains.DeriveMapSeed(randomRootSeed);
@@ -1060,7 +2187,11 @@ public sealed class RunFlowServiceTests
             progressPhase,
             committedNodeId,
             terminal ? RunSaveTerminalReason.Defeat : (RunSaveTerminalReason?)null,
-            pendingCardReward);
+            pendingCardReward,
+            relics: relics ?? Array.Empty<RunSaveRelicDocument>(),
+            potions: Array.Empty<RunSavePotionDocument>(),
+            gold: 100,
+            pendingNodeVisit: null);
     }
 
     /// <summary>沿普通直接边构造含指定数量已完成 Combat 的合法稳定路径。</summary>
@@ -1111,12 +2242,18 @@ public sealed class RunFlowServiceTests
     }
 
     /// <summary>按测试需要创建可显式缺失 Encounter 的最小配置表。</summary>
-    private static Tables CreateTables(bool includeEncounter)
+    private static Tables CreateTables(
+        bool includeEncounter,
+        bool includeUpgrade = true,
+        bool includeHero1001ShopCards = true)
     {
+        string hero1001RewardCards = includeHero1001ShopCards
+            ? "[3105,3123,3157]"
+            : "[3206,3227,3264]";
         var data = new Dictionary<string, JArray>
         {
             ["battle_tbhero"] = JArray.Parse(
-                "[{\"id\":1001,\"name_i18n_key\":\"battle.hero.test_warrior.name\",\"view_prefab_key\":\"pfb_char_player\",\"max_health\":80,\"base_strength\":1,\"initial_deck_id\":1001,\"initial_energy\":3,\"max_energy\":3,\"energy_gain_per_round\":3,\"initial_ammo\":0,\"max_ammo\":0,\"ammo_gain_per_round\":0,\"runtime_profile\":0,\"reward_card_template_ids\":[3105,3123,3157],\"reward_common_weight\":60,\"reward_uncommon_weight\":37,\"reward_rare_weight\":3}," +
+                "[{\"id\":1001,\"name_i18n_key\":\"battle.hero.test_warrior.name\",\"view_prefab_key\":\"pfb_char_player\",\"max_health\":80,\"base_strength\":1,\"initial_deck_id\":1001,\"initial_energy\":3,\"max_energy\":3,\"energy_gain_per_round\":3,\"initial_ammo\":0,\"max_ammo\":0,\"ammo_gain_per_round\":0,\"runtime_profile\":0,\"reward_card_template_ids\":" + hero1001RewardCards + ",\"reward_common_weight\":60,\"reward_uncommon_weight\":37,\"reward_rare_weight\":3}," +
                 "{\"id\":1002,\"name_i18n_key\":\"battle.hero.machine_gunner.name\",\"view_prefab_key\":\"pfb_char_player\",\"max_health\":90,\"base_strength\":2,\"initial_deck_id\":1002,\"initial_energy\":4,\"max_energy\":4,\"energy_gain_per_round\":4,\"initial_ammo\":3,\"max_ammo\":6,\"ammo_gain_per_round\":1,\"runtime_profile\":1,\"reward_card_template_ids\":[3206,3227,3264],\"reward_common_weight\":60,\"reward_uncommon_weight\":37,\"reward_rare_weight\":3}]"),
             ["battle_tbdeck"] = JArray.Parse(
                 "[{\"id\":1001,\"card_template_ids\":[3002]},{\"id\":1002,\"card_template_ids\":[3003]}]"),
@@ -1132,10 +2269,12 @@ public sealed class RunFlowServiceTests
                 CreateTestCardRow(3264, rarity: 3)),
             ["battle_tbcardeffect"] = JArray.Parse(
                 "[{\"id\":4002,\"effect_type\":1,\"attribute\":0,\"value\":6}]"),
-            ["battle_tbcardupgradelevel"] = JArray.Parse(
-                "[{\"card_id\":3002,\"next_upgrade_level\":1," +
-                "\"description_i18n_key\":\"battle.card.3002.upgrade_description\"," +
-                "\"cost\":1,\"play_destination\":0,\"rule_kind\":1,\"rule_value\":9}]"),
+            ["battle_tbcardupgradelevel"] = includeUpgrade
+                ? JArray.Parse(
+                    "[{\"card_id\":3002,\"next_upgrade_level\":1," +
+                    "\"description_i18n_key\":\"battle.card.3002.upgrade_description\"," +
+                    "\"cost\":1,\"play_destination\":0,\"rule_kind\":1,\"rule_value\":9}]")
+                : new JArray(),
             ["battle_tbenemy"] = JArray.Parse(
                 "[{\"id\":2001,\"name_i18n_key\":\"battle.enemy.test.name\",\"view_prefab_key\":\"pfb_char_enemy\",\"max_health\":20,\"base_strength\":0,\"behavior_group_id\":6001}]"),
             ["battle_tbencounter"] = includeEncounter
@@ -1145,6 +2284,12 @@ public sealed class RunFlowServiceTests
                 "[{\"id\":6001,\"behavior_ids\":[7001]}]"),
             ["battle_tbenemybehavior"] = JArray.Parse(
                 "[{\"id\":7001,\"intent_type\":0,\"target_rule\":1,\"effect_id\":4002,\"weight\":1,\"cooldown_selections\":0,\"max_consecutive\":0}]"),
+            ["run_tbrelic"] = JArray.Parse(
+                "[{\"id\":8001,\"name_i18n_key\":\"run.relic.test_8001.name\",\"description_i18n_key\":\"run.relic.test_8001.description\",\"battle_start_strength\":1}," +
+                "{\"id\":8002,\"name_i18n_key\":\"run.relic.test_8002.name\",\"description_i18n_key\":\"run.relic.test_8002.description\",\"battle_start_strength\":2}]"),
+            ["run_tbpotion"] = JArray.Parse(
+                "[{\"id\":9001,\"name_i18n_key\":\"run.potion.test_9001.name\",\"description_i18n_key\":\"run.potion.test_9001.description\",\"heal_amount\":10}," +
+                "{\"id\":9002,\"name_i18n_key\":\"run.potion.test_9002.name\",\"description_i18n_key\":\"run.potion.test_9002.description\",\"heal_amount\":25}]"),
         };
 
         return new Tables(tableName =>

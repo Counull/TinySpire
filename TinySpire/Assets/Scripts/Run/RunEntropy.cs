@@ -1,5 +1,6 @@
 using System;
 using System.Security.Cryptography;
+using TinySpire.Run.Map;
 
 namespace TinySpire.Run
 {
@@ -68,6 +69,48 @@ namespace TinySpire.Run
             {
                 mixed ^= 0x52574400u;
                 mixed += (uint)attemptSequence * 0x9E3779B9u;
+                mixed ^= mixed >> 16;
+                mixed *= 0x7FEB352Du;
+                mixed ^= mixed >> 15;
+                mixed *= 0x846CA68Bu;
+                mixed ^= mixed >> 16;
+            }
+
+            return mixed == 0 ? 1u : mixed;
+        }
+
+        /// <summary>从根种子与稳定节点身份派生 Shop 专属非零 seed。</summary>
+        public static uint DeriveShopSeed(uint randomRootSeed, MapNodeId nodeId)
+        {
+            return DeriveNodeDomainSeed(randomRootSeed, nodeId, domainSalt: 0x53484F50u);
+        }
+
+        /// <summary>从根种子与稳定节点身份派生 Event 专属非零 seed。</summary>
+        public static uint DeriveEventSeed(uint randomRootSeed, MapNodeId nodeId)
+        {
+            return DeriveNodeDomainSeed(randomRootSeed, nodeId, domainSalt: 0x45564E54u);
+        }
+
+        /// <summary>以稳定文本逐字符混合节点身份，避免依赖进程随机化哈希。</summary>
+        private static uint DeriveNodeDomainSeed(
+            uint randomRootSeed,
+            MapNodeId nodeId,
+            uint domainSalt)
+        {
+            if (randomRootSeed == 0)
+                throw new ArgumentOutOfRangeException(nameof(randomRootSeed));
+            if (string.IsNullOrEmpty(nodeId.Value))
+                throw new ArgumentException("Node id cannot be empty.", nameof(nodeId));
+
+            uint mixed = randomRootSeed;
+            unchecked
+            {
+                mixed ^= domainSalt;
+                foreach (char character in nodeId.Value)
+                {
+                    mixed ^= character;
+                    mixed *= 0x01000193u;
+                }
                 mixed ^= mixed >> 16;
                 mixed *= 0x7FEB352Du;
                 mixed ^= mixed >> 15;

@@ -387,7 +387,8 @@ public sealed class BattleCardPlayRulesTests
             ["battle_tbcardupgradelevel"] = new JArray(),
         };
 
-        return new Tables(tableName => data[tableName]);
+        return new Tables(tableName =>
+            data.TryGetValue(tableName, out JArray rows) ? rows : new JArray());
     }
 
     /// <summary>创建一张有限一级零费用 Output Adjust 及其明确升级行。</summary>
@@ -449,7 +450,8 @@ public sealed class BattleCardPlayRulesTests
             },
         };
 
-        return new Tables(tableName => data[tableName]);
+        return new Tables(tableName =>
+            data.TryGetValue(tableName, out JArray rows) ? rows : new JArray());
     }
 
     private sealed class RuleScenario : IDisposable

@@ -527,7 +527,8 @@ public sealed class ParticipantHudViewTests
                 "\"max_consecutive\":0}]"),
             ["battle_tbcardupgradelevel"] = new JArray(),
         };
-        return new cfg.Tables(tableName => data[tableName]);
+        return new cfg.Tables(tableName =>
+            data.TryGetValue(tableName, out JArray rows) ? rows : new JArray());
     }
 
     /// <summary>验证三个状态槽均显示传入的当前层数。</summary>

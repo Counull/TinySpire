@@ -57,6 +57,12 @@ MonoBehaviour:
     m_SerializedLabels:
     - GameData
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 9e82eb1cbfb335a43917993404da0b0c
+    m_Address: Assets/GameData/run_tbrelic.json
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - GameData
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: a7a51b1d109c3b1488de5c219b344717
     m_Address: Assets/GameData/battle_tbcard.json
     m_ReadOnly: 0
@@ -71,6 +77,12 @@ MonoBehaviour:
     FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: cb671fc9d59388f489a021eaa39a9f44
     m_Address: Assets/GameData/game-config.json
+    m_ReadOnly: 0
+    m_SerializedLabels:
+    - GameData
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: e4200afa1b290724981c9a1282843c14
+    m_Address: Assets/GameData/run_tbpotion.json
     m_ReadOnly: 0
     m_SerializedLabels:
     - GameData

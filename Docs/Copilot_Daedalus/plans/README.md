@@ -2,7 +2,7 @@
 title: Daedalus · 实施计划索引
 page_type: index
 lifecycle: active
-updated: 2026-08-26
+updated: 2026-08-27
 status_source: ../STATUS.md
 ---
 
@@ -14,10 +14,11 @@ status_source: ../STATUS.md
 
 当前是否存在实施中的切片、已授权计划或下一候选，只查 [STATUS.md](../STATUS.md)。本索引不复制这些可变事实；由状态页给出精确计划路径后，再打开对应一页。
 
-当前没有实施中的切片；新工作必须先由 [STATUS.md](../STATUS.md) 确认授权与精确计划入口。
+当前没有实施中的 Run 切片。G5/G6 已完成并归档；G7 仍未获得实施授权，准确状态与授权只查 [STATUS.md](../STATUS.md)。
 
 ## 最近完成
 
+- [G5/G6 Run 持有物与非战斗节点连续交付](2026-08-26-g5-g6-run-holdings-noncombat-nodes.md) — `archived / verified`；S0、G5-B～D 与 G6-A～E 的权威证据见 [对应记录](../06_testing/2026-08-27-g5-g6-run-holdings-noncombat-nodes.md)。
 - [G4 RunDeck、普通战斗奖励与多级升级](2026-08-25-g4-run-deck-rewards-upgrades.md) — `archived / verified`；A～D 的权威证据见 [对应记录](../06_testing/2026-08-25-g4-run-deck-rewards-upgrades.md)。
 - [LLM 项目知识工作流 V2 试点](2026-08-24-llm-project-knowledge-workflow-v2.md) — `archived / verified`；建立短 Status 路由与离线结构检查。
 - [G3 确定性尖塔式 Act 地图](2026-08-24-g3-deterministic-act-map.md) — `archived / verified`；当前验收证据见 [对应记录](../06_testing/2026-08-24-g3-deterministic-act-map.md)。

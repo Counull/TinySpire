@@ -5,6 +5,21 @@ using NUnit.Framework;
 /// </summary>
 public sealed class ConfigTableManifestValidatorTests
 {
+    /// <summary>运行时预加载清单必须显式包含两张 G5 Run 持有物表。</summary>
+    [Test]
+    public void RequiredRuntimeTables_ContainRunRelicAndPotionTables()
+    {
+        Assert.That(ConfigService.RequiredTableNames, Does.Contain("run_tbrelic"));
+        Assert.That(ConfigService.RequiredTableNames, Does.Contain("run_tbpotion"));
+    }
+
+    /// <summary>当前项目中的 battle 与 run client 表必须在定义、生成代码、JSON 和运行时清单间完全一致。</summary>
+    [Test]
+    public void ValidateCurrentProject_WithGeneratedRunItemTables_HasNoManifestDrift()
+    {
+        Assert.DoesNotThrow(ConfigTableManifestValidator.ValidateCurrentProject);
+    }
+
     /// <summary>验证缺少生成 JSON 时会给出包含遗漏表名的失败，而不是允许运行时清单漂移。</summary>
     [Test]
     public void ValidateSets_WhenGeneratedJsonMissesRuntimeTable_ThrowsDriftWithTableName()

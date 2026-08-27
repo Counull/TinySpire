@@ -198,6 +198,41 @@ namespace TinySpire.Run
         }
     }
 
+    /// <summary>S0 首次普通战斗奖励使用的固定附着掉落模板身份。</summary>
+    public static class RunCardRewardAttachedLootTemplateIds
+    {
+        public const int FirstOrdinaryBattleRelic = 8001;
+        public const int FirstOrdinaryBattlePotion = 9001;
+    }
+
+    /// <summary>普通战斗奖励可附着的零或一个遗物、零或一个药水模板事实。</summary>
+    public sealed class RunCardRewardAttachedLoot
+    {
+        /// <summary>显式表示没有任何附着掉落的不可变值。</summary>
+        public static RunCardRewardAttachedLoot Empty { get; } =
+            new RunCardRewardAttachedLoot(relicTemplateId: null, potionTemplateId: null);
+
+        /// <summary>可空遗物模板；非空时必须为正数。</summary>
+        public int? RelicTemplateId { get; }
+
+        /// <summary>可空药水模板；非空时必须为正数。</summary>
+        public int? PotionTemplateId { get; }
+
+        /// <summary>冻结两个可空且非空时为正数的附着模板。</summary>
+        public RunCardRewardAttachedLoot(
+            int? relicTemplateId,
+            int? potionTemplateId)
+        {
+            if (relicTemplateId.HasValue && relicTemplateId.Value <= 0)
+                throw new ArgumentOutOfRangeException(nameof(relicTemplateId));
+            if (potionTemplateId.HasValue && potionTemplateId.Value <= 0)
+                throw new ArgumentOutOfRangeException(nameof(potionTemplateId));
+
+            RelicTemplateId = relicTemplateId;
+            PotionTemplateId = potionTemplateId;
+        }
+    }
+
     /// <summary>跨刷新、场景重建与冷启动保持不变的普通战斗奖励事实。</summary>
     public sealed class PendingCardReward
     {
@@ -209,8 +244,14 @@ namespace TinySpire.Run
         /// <summary>按奖励页展示顺序冻结的三个不同模板。</summary>
         public IReadOnlyList<int> CandidateTemplateIds => _candidateTemplateIds;
 
-        /// <summary>冻结恰好三个正数且互不相同的奖励模板。</summary>
-        public PendingCardReward(RunCardRewardId id, IReadOnlyList<int> candidateTemplateIds)
+        /// <summary>永不为空的不可变附着遗物与药水模板事实。</summary>
+        public RunCardRewardAttachedLoot AttachedLoot { get; }
+
+        /// <summary>冻结三个候选与永不为空的附着掉落；省略时显式采用 Empty。</summary>
+        public PendingCardReward(
+            RunCardRewardId id,
+            IReadOnlyList<int> candidateTemplateIds,
+            RunCardRewardAttachedLoot attachedLoot = null)
         {
             if (id.BattleId.RunId.Value == Guid.Empty)
                 throw new ArgumentException("Pending card reward id cannot be empty.", nameof(id));
@@ -232,6 +273,10 @@ namespace TinySpire.Run
 
             Id = id;
             _candidateTemplateIds = Array.AsReadOnly(candidateTemplateIds.ToArray());
+            RunCardRewardAttachedLoot source = attachedLoot ?? RunCardRewardAttachedLoot.Empty;
+            AttachedLoot = new RunCardRewardAttachedLoot(
+                source.RelicTemplateId,
+                source.PotionTemplateId);
         }
     }
 

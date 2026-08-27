@@ -98,8 +98,32 @@ public sealed class RunEntryPresenterTests
         RunMapNodeViewModel[] bosses = projectedMap.Nodes
             .Where(node => node.Kind == MapNodeKind.Boss)
             .ToArray();
+        RunMapNodeViewModel[] nonCombat = projectedMap.Nodes
+            .Where(node => node.Kind == MapNodeKind.Rest ||
+                           node.Kind == MapNodeKind.Chest ||
+                           node.Kind == MapNodeKind.Shop ||
+                           node.Kind == MapNodeKind.Event)
+            .ToArray();
 
         Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Map));
+        Assert.That(frozenMap.ProfileId, Is.EqualTo(TinySpireActMapProfiles.NewRunG6V1ProfileId));
+        Assert.That(frozenMap.GeneratorVersion, Is.EqualTo(ActMapGenerator.NewRunG6Version));
+        Assert.That(
+            frozenMap.Nodes.OrderBy(node => node.Layer).ThenBy(node => node.Slot)
+                .Select(node => node.Kind),
+            Is.EqualTo(new[]
+            {
+                MapNodeKind.Start,
+                MapNodeKind.Combat,
+                MapNodeKind.Rest,
+                MapNodeKind.Chest,
+                MapNodeKind.Shop,
+                MapNodeKind.Event,
+                MapNodeKind.Combat,
+                MapNodeKind.Boss,
+                MapNodeKind.Boss,
+                MapNodeKind.Boss,
+            }));
         Assert.That(projectedMap.Fingerprint, Is.EqualTo(frozenMap.Fingerprint));
         Assert.That(projectedMap.Nodes.Count, Is.EqualTo(frozenMap.Nodes.Count));
         Assert.That(projectedMap.Edges.Count, Is.EqualTo(frozenMap.Edges.Count));
@@ -109,10 +133,20 @@ public sealed class RunEntryPresenterTests
         Assert.That(
             combats.All(node => node.VisualAnchorKind == RunMapVisualAnchorKind.EncounterSlimeSilhouette),
             Is.True);
-        Assert.That(bosses.Length, Is.EqualTo(TinySpireActMapProfiles.Current.BossEndpointCount));
+        Assert.That(nonCombat.Select(node => node.DisplayName),
+            Is.EqualTo(new[] { "REST", "CHEST", "SHOP", "EVENT" }));
+        Assert.That(nonCombat.Select(node => node.VisualAnchorKind),
+            Is.EqualTo(new[]
+            {
+                RunMapVisualAnchorKind.RestCampfire,
+                RunMapVisualAnchorKind.ChestCache,
+                RunMapVisualAnchorKind.ShopBag,
+                RunMapVisualAnchorKind.EventQuestionMark,
+            }));
+        Assert.That(bosses.Length, Is.EqualTo(TinySpireActMapProfiles.NewRunG6V1.BossEndpointCount));
         Assert.That(
             bosses.Select(node => node.ContentId).Distinct().Count(),
-            Is.EqualTo(TinySpireActMapProfiles.Current.BossCandidateCount));
+            Is.EqualTo(TinySpireActMapProfiles.NewRunG6V1.BossCandidateCount));
         Assert.That(
             bosses.GroupBy(node => node.ContentId).Any(group => group.Count() > 1),
             Is.True);
@@ -123,7 +157,7 @@ public sealed class RunEntryPresenterTests
         }
         Assert.That(
             bosses.Select(node => node.VisualAnchorKind).Distinct().Count(),
-            Is.EqualTo(TinySpireActMapProfiles.Current.BossCandidateCount));
+            Is.EqualTo(TinySpireActMapProfiles.NewRunG6V1.BossCandidateCount));
 
         foreach (RunMapNodeViewModel node in projectedMap.Nodes)
         {
@@ -165,6 +199,58 @@ public sealed class RunEntryPresenterTests
 
         Assert.That(descriptor.DisplayName, Is.EqualTo(expectedName));
         Assert.That(descriptor.VisualAnchorKind, Is.EqualTo(expectedAnchor));
+    }
+
+    /// <summary>G6 四类非战斗程序化内容必须各自解析唯一名称与锚点，并拒绝同 kind 的伪造内容 ID。</summary>
+    [TestCase(MapNodeKind.Rest, 7101, "REST", RunMapVisualAnchorKind.RestCampfire)]
+    [TestCase(MapNodeKind.Chest, 7201, "CHEST", RunMapVisualAnchorKind.ChestCache)]
+    [TestCase(MapNodeKind.Shop, 7301, "SHOP", RunMapVisualAnchorKind.ShopBag)]
+    [TestCase(MapNodeKind.Event, 7401, "EVENT", RunMapVisualAnchorKind.EventQuestionMark)]
+    public void IdentityCatalog_G6NonCombatAnchorsResolveExactProgrammaticIdentity(
+        MapNodeKind kind,
+        int contentId,
+        string expectedName,
+        RunMapVisualAnchorKind expectedAnchor)
+    {
+        var catalog = new RunMapIdentityCatalog(CreateTables, Localize);
+
+        RunMapIdentityDescriptor descriptor = catalog.Resolve(kind, contentId);
+
+        Assert.That(descriptor.DisplayName, Is.EqualTo(expectedName));
+        Assert.That(descriptor.VisualAnchorKind, Is.EqualTo(expectedAnchor));
+        Assert.Throws<InvalidOperationException>(() => catalog.Resolve(kind, contentId + 1));
+    }
+
+    /// <summary>八层 mixed 单路线与三 BossGate 必须全部留在宿主内，任意节点矩形不得重叠。</summary>
+    [Test]
+    public void MapLayout_G6MixedRouteFitsHostWithoutNodeOverlap()
+    {
+        RunMapNodeViewModel[] nodes = CreateMixedMapNodeViewModels();
+
+        IReadOnlyList<RunMapNodeLayout> layouts = RunMapLayout.Build(nodes);
+
+        Assert.That(layouts, Has.Count.EqualTo(nodes.Length));
+        foreach (RunMapNodeLayout layout in layouts)
+        {
+            Assert.That(layout.Left, Is.GreaterThanOrEqualTo(-410f), layout.NodeId);
+            Assert.That(layout.Right, Is.LessThanOrEqualTo(410f), layout.NodeId);
+            Assert.That(layout.Bottom, Is.GreaterThanOrEqualTo(-240f), layout.NodeId);
+            Assert.That(layout.Top, Is.LessThanOrEqualTo(240f), layout.NodeId);
+        }
+
+        for (int leftIndex = 0; leftIndex < layouts.Count; leftIndex++)
+        {
+            for (int rightIndex = leftIndex + 1; rightIndex < layouts.Count; rightIndex++)
+            {
+                RunMapNodeLayout left = layouts[leftIndex];
+                RunMapNodeLayout right = layouts[rightIndex];
+                bool separated = left.Right <= right.Left ||
+                                 right.Right <= left.Left ||
+                                 left.Top <= right.Bottom ||
+                                 right.Top <= left.Bottom;
+                Assert.That(separated, Is.True, $"{left.NodeId} overlaps {right.NodeId}");
+            }
+        }
     }
 
     /// <summary>可选 Combat 动作只进入一次 Battle；Store 迁到 InBattle 后重复动作立即失效。</summary>
@@ -319,6 +405,73 @@ public sealed class RunEntryPresenterTests
         Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Map));
     }
 
+    /// <summary>当前 Run 持有物必须按领域顺序投影配置名称、带精确参数的描述与当前语言金币文本。</summary>
+    [Test]
+    public void CurrentRun_ProjectsLocalizedHoldingsInStableDomainOrder()
+    {
+        using var store = new RunStateStore();
+        using var localeChanges = new Subject<Locale>();
+        var localizer = new MutableHoldingsLocalizer();
+        var holdings = new RunHoldings(
+            new[]
+            {
+                new RunRelic(new RunRelicInstanceId(7), 8002),
+                new RunRelic(new RunRelicInstanceId(3), 8001),
+            },
+            new[]
+            {
+                new RunPotion(new RunPotionInstanceId(9), 9002),
+                new RunPotion(new RunPotionInstanceId(4), 9001),
+                new RunPotion(new RunPotionInstanceId(12), 9002),
+            },
+            gold: 321);
+        CreateDirectRun(store, randomRootSeed: 414141u, holdings: holdings);
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            CreateFlow(store, new RecordingSceneFlow(), randomRootSeed: 414141u),
+            CreateTables,
+            localizer.Translate,
+            localeChanges);
+
+        presenter.Initialize();
+
+        Assert.That(view.LastModel.Holdings.GoldText, Is.EqualTo("EN:GOLD:321"));
+        Assert.That(view.LastModel.Holdings.RelicsTitle, Is.EqualTo("EN:RELICS"));
+        Assert.That(view.LastModel.Holdings.PotionsTitle, Is.EqualTo("EN:POTIONS"));
+        Assert.That(view.LastModel.Holdings.EmptyText, Is.EqualTo("EN:EMPTY"));
+        Assert.That(
+            view.LastModel.Holdings.Relics.Select(item => item.TemplateId),
+            Is.EqualTo(new[] { 8002, 8001 }));
+        Assert.That(
+            view.LastModel.Holdings.Relics.Select(item => item.Name),
+            Is.EqualTo(new[] { "EN:Relic Two", "EN:Relic One" }));
+        Assert.That(
+            view.LastModel.Holdings.Relics.Select(item => item.Description),
+            Is.EqualTo(new[] { "EN:Strength 3", "EN:Strength 1" }));
+        Assert.That(
+            view.LastModel.Holdings.Potions.Select(item => item.TemplateId),
+            Is.EqualTo(new[] { 9002, 9001, 9002 }));
+        Assert.That(
+            view.LastModel.Holdings.Potions.Select(item => item.Description),
+            Is.EqualTo(new[] { "EN:Heal 25", "EN:Heal 10", "EN:Heal 25" }));
+
+        localizer.Language = "ZH";
+        localeChanges.OnNext(null);
+
+        Assert.That(view.LastModel.Holdings.GoldText, Is.EqualTo("ZH:GOLD:321"));
+        Assert.That(
+            view.LastModel.Holdings.Relics.Select(item => item.TemplateId),
+            Is.EqualTo(new[] { 8002, 8001 }));
+        Assert.That(
+            view.LastModel.Holdings.Potions.Select(item => item.TemplateId),
+            Is.EqualTo(new[] { 9002, 9001, 9002 }));
+        Assert.That(
+            view.LastModel.Holdings.Potions.Select(item => item.Name),
+            Is.EqualTo(new[] { "ZH:Potion Two", "ZH:Potion One", "ZH:Potion Two" }));
+    }
+
     /// <summary>走完普通层后抵达 Boss 终点只保存 BossGateReached，并继续停留地图页。</summary>
     [Test]
     public async Task BossSelection_ReachesSavedBossGateWithoutStartingBossBattle()
@@ -328,7 +481,7 @@ public sealed class RunEntryPresenterTests
         var scenes = new RecordingSceneFlow();
         var saves = new ScriptedRunSaveStore();
         var flow = CreateFlow(store, scenes, randomRootSeed: 404u, saves);
-        flow.CreateNewRun(heroTemplateId: 1001);
+        CreateDirectRun(store, randomRootSeed: 404u);
         var view = new RecordingRunEntryView();
         using var presenter = new RunEntryPresenter(
             view,
@@ -495,7 +648,7 @@ public sealed class RunEntryPresenterTests
         }
     }
 
-    /// <summary>冻结奖励提交失败必须保留同一 Pending，只能重试且不能回退上一检查点。</summary>
+    /// <summary>冻结奖励提交失败保持 InBattle 来源，只能重试同一文档并在成功后发布 RewardPending。</summary>
     [Test]
     public async Task RewardPendingCommitFailure_DisablesRollbackAndPreservesFrozenReward()
     {
@@ -527,31 +680,817 @@ public sealed class RunEntryPresenterTests
             mapNodeId: combatNodeId));
 
         await CompleteActiveBattleAsync(flow, store, BattleResultKind.Victory, settledHealth: 61);
-        PendingCardReward pending = store.Current.PendingCardReward;
+        RunState failedSource = store.Current;
+        RunSaveDocument failedDocument = saves.CommitAttempts.Last();
 
         Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.SaveFailure));
         Assert.That(view.LastModel.CanRollbackFailedSave, Is.False);
-        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.RewardPending));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.InBattle));
+        Assert.That(store.Current.PendingCardReward, Is.Null);
         Assert.That(saves.Load().Document, Is.SameAs(previousCheckpoint));
 
         view.Emit(new RunEntryAction(RunEntryActionKind.RequestExitAfterSaveFailure));
         view.Emit(new RunEntryAction(RunEntryActionKind.ConfirmRollback));
 
-        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.RewardPending));
-        Assert.That(store.Current.PendingCardReward.Id, Is.EqualTo(pending.Id));
+        Assert.That(store.Current, Is.SameAs(failedSource));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.InBattle));
         Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.SaveFailure));
 
         view.Emit(new RunEntryAction(RunEntryActionKind.RetrySave));
 
+        Assert.That(saves.CommitAttempts.Last(), Is.SameAs(failedDocument));
+        Assert.That(store.Current, Is.Not.SameAs(failedSource));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.RewardPending));
         Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.CardReward));
-        Assert.That(view.LastModel.CardReward.RewardId, Is.EqualTo(pending.Id));
+        Assert.That(
+            view.LastModel.CardReward.RewardId.ToString(),
+            Is.EqualTo(failedDocument.PendingCardReward.RewardId));
         Assert.That(
             view.LastModel.CardReward.Candidates.Select(candidate => candidate.TemplateId),
-            Is.EqualTo(pending.CandidateTemplateIds));
+            Is.EqualTo(failedDocument.PendingCardReward.CandidateTemplateIds));
         Assert.That(saves.Load().Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.RewardPending));
     }
 
-    /// <summary>Terminal 提交失败只能重试保存，退出与确认回退动作都不得复活旧检查点。</summary>
+    /// <summary>非战斗进入存档失败必须隐藏 rollback，并保留同一节点进入文档直到 retry 成功。</summary>
+    [Test]
+    public async Task NodeVisitEntryCommitFailure_DisablesRollbackAndRetriesExactPending()
+    {
+        using var store = new RunStateStore();
+        using var localeChanges = new Subject<Locale>();
+        var saves = new ScriptedRunSaveStore();
+        var flow = CreateFlow(
+            store,
+            new RecordingSceneFlow(),
+            randomRootSeed: 818u,
+            saves);
+        flow.CreateNewRun(heroTemplateId: 1001);
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            flow,
+            CreateTables,
+            Localize,
+            localeChanges);
+        presenter.Initialize();
+        MapNodeId combatNodeId = GetFirstProjectedNodeId(
+            view.LastModel,
+            RunMapNodePresentationState.Selectable,
+            MapNodeKind.Combat);
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.EnterMapNode,
+            mapNodeId: combatNodeId));
+        await CompleteActiveBattleAsync(flow, store, BattleResultKind.Victory, settledHealth: 61);
+        SkipPendingReward(view, store);
+        MapNodeId restNodeId = GetFirstProjectedNodeId(
+            view.LastModel,
+            RunMapNodePresentationState.Selectable,
+            MapNodeKind.Rest);
+        RunState beforeEntry = store.Current;
+        saves.EnqueueCommitResult(RunSaveCommitResult.Failed(
+            RunSaveCommitStatus.IoFailure,
+            "Injected node-entry checkpoint failure."));
+
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.EnterMapNode,
+            mapNodeId: restNodeId));
+        RunSaveDocument failedDocument = saves.CommitAttempts.Last();
+
+        Assert.That(store.Current, Is.SameAs(beforeEntry));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.SaveFailure));
+        Assert.That(view.LastModel.CanRollbackFailedSave, Is.False);
+        Assert.That(failedDocument.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.NodeVisitPending));
+        view.Emit(new RunEntryAction(RunEntryActionKind.RequestExitAfterSaveFailure));
+        view.Emit(new RunEntryAction(RunEntryActionKind.ConfirmRollback));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.SaveFailure));
+        Assert.That(store.Current, Is.SameAs(beforeEntry));
+
+        view.Emit(new RunEntryAction(RunEntryActionKind.RetrySave));
+
+        Assert.That(saves.CommitAttempts.Last(), Is.SameAs(failedDocument));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.NodeVisitPending));
+        Assert.That(store.Current.PendingNodeVisit.NodeId, Is.EqualTo(restNodeId));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Rest));
+    }
+
+    /// <summary>Rest Pending 投影冻结治疗与有序升级动作，治疗成功后只响应式返回地图。</summary>
+    [Test]
+    public async Task RestPending_ProjectsTypedChoicesAndHealActionCompletesWithoutNavigation()
+    {
+        using var store = new RunStateStore();
+        using var localeChanges = new Subject<Locale>();
+        var scenes = new RecordingSceneFlow();
+        var saves = new ScriptedRunSaveStore();
+        var flow = CreateFlow(store, scenes, randomRootSeed: 828u, saves);
+        flow.CreateNewRun(heroTemplateId: 1001);
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            flow,
+            CreateTables,
+            Localize,
+            localeChanges);
+        presenter.Initialize();
+        MapNodeId combatNodeId = GetFirstProjectedNodeId(
+            view.LastModel,
+            RunMapNodePresentationState.Selectable,
+            MapNodeKind.Combat);
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.EnterMapNode,
+            mapNodeId: combatNodeId));
+        await CompleteActiveBattleAsync(flow, store, BattleResultKind.Victory, settledHealth: 61);
+        SkipPendingReward(view, store);
+        MapNodeId restNodeId = GetFirstProjectedNodeId(
+            view.LastModel,
+            RunMapNodePresentationState.Selectable,
+            MapNodeKind.Rest);
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.EnterMapNode,
+            mapNodeId: restNodeId));
+        PendingRunNodeVisit pending = store.Current.PendingNodeVisit;
+        int sceneCountBeforeRestChoice = scenes.LoadedAddresses.Count;
+
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Rest));
+        Assert.That(view.LastModel.Rest, Is.Not.Null);
+        Assert.That(view.LastModel.Rest.VisitId, Is.EqualTo(pending.Id));
+        Assert.That(view.LastModel.Rest.HealAmount, Is.EqualTo(24));
+        Assert.That(view.LastModel.Rest.HealEnabled, Is.True);
+        Assert.That(view.LastModel.Rest.HealText, Is.EqualTo("Heal 24 HP"));
+        Assert.That(
+            view.LastModel.Rest.UpgradeCandidates.Select(candidate => candidate.CardInstanceId),
+            Is.EqualTo(pending.RestPayload.UpgradeCandidateInstanceIds));
+        Assert.That(view.LastModel.Rest.UpgradeCandidates.Single().Text,
+            Is.EqualTo("Upgrade Test Strike to +1"));
+        Assert.That(view.LastModel.Rest.UpgradeCandidates.Single().Enabled, Is.True);
+
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.HealAtRest,
+            nodeVisitId: pending.Id));
+
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(store.Current.CurrentHealth, Is.EqualTo(80));
+        Assert.That(store.Current.PendingNodeVisit, Is.Null);
+        Assert.That(store.Current.PathNodeIds.Last(), Is.EqualTo(restNodeId));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Map));
+        Assert.That(view.LastModel.Rest, Is.Null);
+        Assert.That(scenes.LoadedAddresses.Count, Is.EqualTo(sceneCountBeforeRestChoice));
+    }
+
+    /// <summary>Rest 升级保存失败时页面锁定同一 Pending，Retry 复用文档后才升级并返回地图。</summary>
+    [Test]
+    public async Task RestUpgradeCommitFailure_DisablesChoicesAndRetriesExactDocumentBeforePublishing()
+    {
+        using var store = new RunStateStore();
+        using var localeChanges = new Subject<Locale>();
+        var scenes = new RecordingSceneFlow();
+        var saves = new ScriptedRunSaveStore();
+        var flow = CreateFlow(store, scenes, randomRootSeed: 838u, saves);
+        flow.CreateNewRun(heroTemplateId: 1001);
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            flow,
+            CreateTables,
+            Localize,
+            localeChanges);
+        presenter.Initialize();
+        MapNodeId combatNodeId = GetFirstProjectedNodeId(
+            view.LastModel,
+            RunMapNodePresentationState.Selectable,
+            MapNodeKind.Combat);
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.EnterMapNode,
+            mapNodeId: combatNodeId));
+        await CompleteActiveBattleAsync(flow, store, BattleResultKind.Victory, settledHealth: 61);
+        SkipPendingReward(view, store);
+        MapNodeId restNodeId = GetFirstProjectedNodeId(
+            view.LastModel,
+            RunMapNodePresentationState.Selectable,
+            MapNodeKind.Rest);
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.EnterMapNode,
+            mapNodeId: restNodeId));
+        RunState pendingState = store.Current;
+        RunRestUpgradeCandidateViewModel candidate = view.LastModel.Rest.UpgradeCandidates.Single();
+        int sceneCountBeforeChoice = scenes.LoadedAddresses.Count;
+        saves.EnqueueCommitResult(RunSaveCommitResult.Failed(
+            RunSaveCommitStatus.IoFailure,
+            "Injected Rest settlement checkpoint failure."));
+
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.UpgradeCardAtRest,
+            nodeVisitId: pendingState.PendingNodeVisit.Id,
+            cardInstanceId: candidate.CardInstanceId));
+        RunSaveDocument failedDocument = saves.CommitAttempts.Last();
+        int commitCountAfterFailure = saves.CommitAttempts.Count;
+
+        Assert.That(store.Current, Is.SameAs(pendingState));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.SaveFailure));
+        Assert.That(view.LastModel.CanRollbackFailedSave, Is.False);
+        Assert.That(view.LastModel.Rest.HealEnabled, Is.False);
+        Assert.That(view.LastModel.Rest.UpgradeCandidates.All(value => !value.Enabled), Is.True);
+        Assert.That(
+            failedDocument.RunCards.Single(card => card.InstanceId == candidate.CardInstanceId.Sequence)
+                .UpgradeLevel,
+            Is.EqualTo(1));
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.HealAtRest,
+            nodeVisitId: pendingState.PendingNodeVisit.Id));
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(commitCountAfterFailure));
+
+        view.Emit(new RunEntryAction(RunEntryActionKind.RetrySave));
+
+        Assert.That(saves.CommitAttempts.Last(), Is.SameAs(failedDocument));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(store.Current.CurrentHealth, Is.EqualTo(61));
+        Assert.That(
+            store.Current.RunDeck.Cards.Single(card => card.InstanceId == candidate.CardInstanceId)
+                .UpgradeLevel,
+            Is.EqualTo(1));
+        Assert.That(store.Current.PathNodeIds.Last(), Is.EqualTo(restNodeId));
+        Assert.That(store.Current.PendingNodeVisit, Is.Null);
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Map));
+        Assert.That(scenes.LoadedAddresses.Count, Is.EqualTo(sceneCountBeforeChoice));
+    }
+
+    /// <summary>Chest Pending 投影冻结药水与双动作，领取保存失败锁定选择并以同一文档重试后返回地图。</summary>
+    [Test]
+    public async Task ChestClaimCommitFailure_ProjectsFrozenPotionAndRetriesExactDocumentBeforePublishing()
+    {
+        using var store = new RunStateStore();
+        using var localeChanges = new Subject<Locale>();
+        var scenes = new RecordingSceneFlow();
+        var saves = new ScriptedRunSaveStore();
+        var flow = CreateFlow(store, scenes, randomRootSeed: 848u, saves);
+        flow.CreateNewRun(heroTemplateId: 1001);
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            flow,
+            CreateTables,
+            Localize,
+            localeChanges);
+        presenter.Initialize();
+        MapNodeId combatNodeId = GetFirstProjectedNodeId(
+            view.LastModel,
+            RunMapNodePresentationState.Selectable,
+            MapNodeKind.Combat);
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.EnterMapNode,
+            mapNodeId: combatNodeId));
+        await CompleteActiveBattleAsync(flow, store, BattleResultKind.Victory, settledHealth: 61);
+        SkipPendingReward(view, store);
+        MapNodeId restNodeId = GetFirstProjectedNodeId(
+            view.LastModel,
+            RunMapNodePresentationState.Selectable,
+            MapNodeKind.Rest);
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.EnterMapNode,
+            mapNodeId: restNodeId));
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.HealAtRest,
+            nodeVisitId: store.Current.PendingNodeVisit.Id));
+        MapNodeId chestNodeId = GetFirstProjectedNodeId(
+            view.LastModel,
+            RunMapNodePresentationState.Selectable,
+            MapNodeKind.Chest);
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.EnterMapNode,
+            mapNodeId: chestNodeId));
+        RunState pendingState = store.Current;
+        int potionCountBeforeChestClaim = pendingState.Holdings.Potions.Count;
+        int sceneCountBeforeChoice = scenes.LoadedAddresses.Count;
+
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Chest));
+        Assert.That(view.LastModel.Chest, Is.Not.Null);
+        Assert.That(view.LastModel.Chest.VisitId, Is.EqualTo(pendingState.PendingNodeVisit.Id));
+        Assert.That(view.LastModel.Chest.Potion.TemplateId,
+            Is.EqualTo(RunNodeVisitIdentityCatalog.SamplePotionTemplateId));
+        Assert.That(view.LastModel.Chest.Potion.Name, Is.EqualTo("Healing Potion"));
+        Assert.That(view.LastModel.Chest.Potion.Description, Is.EqualTo("Restore 10 HP"));
+        Assert.That(view.LastModel.Chest.ClaimText, Is.EqualTo("Claim"));
+        Assert.That(view.LastModel.Chest.SkipText, Is.EqualTo("Skip"));
+        Assert.That(view.LastModel.Chest.ClaimEnabled, Is.True);
+        Assert.That(view.LastModel.Chest.SkipEnabled, Is.True);
+        Assert.That(view.LastModel.Chest.IsCapacityFull, Is.False);
+        saves.EnqueueCommitResult(RunSaveCommitResult.Failed(
+            RunSaveCommitStatus.IoFailure,
+            "Injected Chest settlement checkpoint failure."));
+
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.ClaimChest,
+            nodeVisitId: pendingState.PendingNodeVisit.Id));
+        RunSaveDocument failedDocument = saves.CommitAttempts.Last();
+        int commitCountAfterFailure = saves.CommitAttempts.Count;
+
+        Assert.That(store.Current, Is.SameAs(pendingState));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.SaveFailure));
+        Assert.That(view.LastModel.CanRollbackFailedSave, Is.False);
+        Assert.That(view.LastModel.Chest.ClaimEnabled, Is.False);
+        Assert.That(view.LastModel.Chest.SkipEnabled, Is.False);
+        Assert.That(failedDocument.Potions.Last().TemplateId,
+            Is.EqualTo(RunNodeVisitIdentityCatalog.SamplePotionTemplateId));
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.SkipChest,
+            nodeVisitId: pendingState.PendingNodeVisit.Id));
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(commitCountAfterFailure));
+
+        view.Emit(new RunEntryAction(RunEntryActionKind.RetrySave));
+
+        Assert.That(saves.CommitAttempts.Last(), Is.SameAs(failedDocument));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(store.Current.PendingNodeVisit, Is.Null);
+        Assert.That(store.Current.Holdings.Potions, Has.Count.EqualTo(potionCountBeforeChestClaim + 1));
+        Assert.That(store.Current.Holdings.Potions.Last().TemplateId,
+            Is.EqualTo(RunNodeVisitIdentityCatalog.SamplePotionTemplateId));
+        Assert.That(store.Current.PathNodeIds.Last(), Is.EqualTo(chestNodeId));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Map));
+        Assert.That(view.LastModel.Chest, Is.Null);
+        Assert.That(scenes.LoadedAddresses.Count, Is.EqualTo(sceneCountBeforeChoice));
+    }
+
+    /// <summary>药水三槽已满时 Chest 只禁用领取并显示提示，跳过仍可完成节点且没有返回动作。</summary>
+    [Test]
+    public void ChestAtCapacity_DisablesClaimButKeepsSkipAvailable()
+    {
+        MapDefinition map = CreateSingleNonCombatMap(
+            MapNodeKind.Chest,
+            RunNodeVisitIdentityCatalog.ChestContentId);
+        var holdings = new RunHoldings(
+            Array.Empty<RunRelic>(),
+            new[]
+            {
+                new RunPotion(new RunPotionInstanceId(1), templateId: 9002),
+                new RunPotion(new RunPotionInstanceId(2), templateId: 9002),
+                new RunPotion(new RunPotionInstanceId(3), templateId: 9002),
+            },
+            gold: 100);
+        using var store = new RunStateStore();
+        store.CreateNewRun(new RunCreationOptions(
+            new RunId(Guid.Parse("30303030-5050-7272-9494-161616161616")),
+            heroTemplateId: 1001,
+            initialHealth: 80,
+            maxHealth: 80,
+            runDeck: RunDeck.CreateInitial(new[] { 3002 }),
+            randomRootSeed: map.MapSeed,
+            map: map,
+            holdings: holdings));
+        store.CommitNodeVisitEntry(store.PreviewNodeVisitEntry(
+            MapNodeId.FromPosition(layer: 1, slot: 0),
+            new TablesRunSaveConfigurationCatalog(CreateTables())));
+        using var localeChanges = new Subject<Locale>();
+        var flow = CreateFlow(
+            store,
+            new RecordingSceneFlow(),
+            randomRootSeed: 858u,
+            saveStore: new InMemoryRunSaveStore());
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            flow,
+            CreateTables,
+            Localize,
+            localeChanges);
+
+        presenter.Initialize();
+
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Chest));
+        Assert.That(view.LastModel.Chest.IsCapacityFull, Is.True);
+        Assert.That(view.LastModel.Chest.CapacityFullText, Is.EqualTo("Potion belt is full"));
+        Assert.That(view.LastModel.Chest.ClaimEnabled, Is.False);
+        Assert.That(view.LastModel.Chest.SkipEnabled, Is.True);
+        Assert.Throws<InvalidOperationException>(() => view.Emit(new RunEntryAction(
+            RunEntryActionKind.ClaimChest,
+            nodeVisitId: store.Current.PendingNodeVisit.Id)));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.NodeVisitPending));
+
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.SkipChest,
+            nodeVisitId: store.Current.PendingNodeVisit.Id));
+
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(store.Current.Holdings.Potions, Has.Count.EqualTo(3));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Map));
+    }
+
+    /// <summary>Shop 投影按冻结顺序展示三类库存，已持有遗物禁用，购买后留在 Shop 且 Leave 才完成路径。</summary>
+    [Test]
+    public void ShopPending_ProjectsOwnedRelicPurchasesPotionThenLeavesWithoutNavigation()
+    {
+        MapDefinition map = CreateSingleNonCombatMap(
+            MapNodeKind.Shop,
+            RunNodeVisitIdentityCatalog.ShopContentId);
+        var holdings = new RunHoldings(
+            new[]
+            {
+                new RunRelic(
+                    new RunRelicInstanceId(1),
+                    RunNodeVisitIdentityCatalog.SampleRelicTemplateId),
+            },
+            Array.Empty<RunPotion>(),
+            gold: 100);
+        using var store = new RunStateStore();
+        store.CreateNewRun(new RunCreationOptions(
+            new RunId(Guid.Parse("39393939-6161-7d7d-afaf-272727272727")),
+            heroTemplateId: 1001,
+            initialHealth: 80,
+            maxHealth: 80,
+            runDeck: RunDeck.CreateInitial(new[] { 3002 }),
+            randomRootSeed: map.MapSeed,
+            map: map,
+            holdings: holdings));
+        Tables tables = CreateTables();
+        RunState pending = store.CommitNodeVisitEntry(store.PreviewNodeVisitEntry(
+            MapNodeId.FromPosition(layer: 1, slot: 0),
+            new TablesRunSaveConfigurationCatalog(tables)));
+        using var localeChanges = new Subject<Locale>();
+        var scenes = new RecordingSceneFlow();
+        var flow = CreateFlow(
+            store,
+            scenes,
+            randomRootSeed: 868u,
+            saveStore: new InMemoryRunSaveStore());
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            flow,
+            () => tables,
+            Localize,
+            localeChanges);
+
+        presenter.Initialize();
+
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Shop));
+        Assert.That(view.LastModel.Shop.VisitId, Is.EqualTo(pending.PendingNodeVisit.Id));
+        Assert.That(view.LastModel.Shop.Entries.Select(entry => entry.Kind), Is.EqualTo(new[]
+        {
+            RunShopStockKind.Relic,
+            RunShopStockKind.Potion,
+            RunShopStockKind.Card,
+        }));
+        Assert.That(view.LastModel.Shop.Entries[0].ItemName, Is.EqualTo("Relic One"));
+        Assert.That(view.LastModel.Shop.Entries[0].PurchaseEnabled, Is.False);
+        Assert.That(view.LastModel.Shop.Entries[1].ItemName, Is.EqualTo("Healing Potion"));
+        Assert.That(view.LastModel.Shop.Entries[1].Text,
+            Is.EqualTo("Buy Healing Potion — 25 Gold"));
+        Assert.That(view.LastModel.Shop.Entries[1].PurchaseEnabled, Is.True);
+        Assert.That(view.LastModel.Shop.Entries[2].PurchaseEnabled, Is.True);
+        Assert.That(view.LastModel.Shop.LeaveText, Is.EqualTo("Leave"));
+        Assert.That(view.LastModel.Shop.LeaveEnabled, Is.True);
+        int sceneCountBeforeChoice = scenes.LoadedAddresses.Count;
+
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.PurchaseShopStock,
+            nodeVisitId: pending.PendingNodeVisit.Id,
+            shopStockEntryId: 2));
+
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.NodeVisitPending));
+        Assert.That(store.Current.Holdings.Gold, Is.EqualTo(75));
+        Assert.That(store.Current.Holdings.Potions.Single().TemplateId,
+            Is.EqualTo(RunNodeVisitIdentityCatalog.SamplePotionTemplateId));
+        Assert.That(store.Current.PathNodeIds, Is.EqualTo(pending.PathNodeIds));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Shop));
+        Assert.That(view.LastModel.Shop.Entries[1].Purchased, Is.True);
+        Assert.That(view.LastModel.Shop.Entries[1].PurchaseEnabled, Is.False);
+        Assert.That(view.LastModel.Shop.Entries[1].Text,
+            Is.EqualTo("Healing Potion — Purchased"));
+
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.LeaveShop,
+            nodeVisitId: store.Current.PendingNodeVisit.Id));
+
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(store.Current.PendingNodeVisit, Is.Null);
+        Assert.That(store.Current.PathNodeIds.Last(),
+            Is.EqualTo(MapNodeId.FromPosition(layer: 1, slot: 0)));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Map));
+        Assert.That(view.LastModel.Shop, Is.Null);
+        Assert.That(scenes.LoadedAddresses.Count, Is.EqualTo(sceneCountBeforeChoice));
+    }
+
+    /// <summary>Shop 购买保存失败时保留原 Pending 并锁死购买、Leave 与回退，Retry 后才发布同一已购后继。</summary>
+    [Test]
+    public void ShopPurchaseCommitFailure_DisablesAllActionsAndRetriesExactDocument()
+    {
+        MapDefinition map = CreateSingleNonCombatMap(
+            MapNodeKind.Shop,
+            RunNodeVisitIdentityCatalog.ShopContentId);
+        using var store = new RunStateStore();
+        store.CreateNewRun(new RunCreationOptions(
+            new RunId(Guid.Parse("40404040-6262-7e7e-b0b0-282828282828")),
+            heroTemplateId: 1001,
+            initialHealth: 80,
+            maxHealth: 80,
+            runDeck: RunDeck.CreateInitial(new[] { 3002 }),
+            randomRootSeed: map.MapSeed,
+            map: map,
+            holdings: RunHoldings.Empty(initialGold: 100)));
+        Tables tables = CreateTables();
+        RunState pending = store.CommitNodeVisitEntry(store.PreviewNodeVisitEntry(
+            MapNodeId.FromPosition(layer: 1, slot: 0),
+            new TablesRunSaveConfigurationCatalog(tables)));
+        using var localeChanges = new Subject<Locale>();
+        var scenes = new RecordingSceneFlow();
+        var saves = new ScriptedRunSaveStore();
+        var flow = CreateFlow(store, scenes, randomRootSeed: 878u, saves);
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            flow,
+            () => tables,
+            Localize,
+            localeChanges);
+        presenter.Initialize();
+        int originalDeckCount = pending.RunDeck.Cards.Count;
+        saves.EnqueueCommitResult(RunSaveCommitResult.Failed(
+            RunSaveCommitStatus.IoFailure,
+            "Injected Shop settlement checkpoint failure."));
+
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.PurchaseShopStock,
+            nodeVisitId: pending.PendingNodeVisit.Id,
+            shopStockEntryId: 3));
+        RunSaveDocument failedDocument = saves.CommitAttempts.Last();
+        int commitCountAfterFailure = saves.CommitAttempts.Count;
+
+        Assert.That(store.Current, Is.SameAs(pending));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.SaveFailure));
+        Assert.That(view.LastModel.CanRollbackFailedSave, Is.False);
+        Assert.That(view.LastModel.Shop.Entries.All(entry => !entry.PurchaseEnabled), Is.True);
+        Assert.That(view.LastModel.Shop.LeaveEnabled, Is.False);
+        Assert.That(failedDocument.RunCards, Has.Count.EqualTo(originalDeckCount + 1));
+        Assert.That(failedDocument.PendingNodeVisit.ShopPayload.Entries[2].Purchased, Is.True);
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.PurchaseShopStock,
+            nodeVisitId: pending.PendingNodeVisit.Id,
+            shopStockEntryId: 2));
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.LeaveShop,
+            nodeVisitId: pending.PendingNodeVisit.Id));
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(commitCountAfterFailure));
+
+        view.Emit(new RunEntryAction(RunEntryActionKind.RetrySave));
+
+        Assert.That(saves.CommitAttempts.Last(), Is.SameAs(failedDocument));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.NodeVisitPending));
+        Assert.That(store.Current.RunDeck.Cards, Has.Count.EqualTo(originalDeckCount + 1));
+        Assert.That(store.Current.PendingNodeVisit.ShopPayload.Entries[2].Purchased, Is.True);
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Shop));
+        Assert.That(view.LastModel.Shop.Entries[2].PurchaseEnabled, Is.False);
+        Assert.That(scenes.LoadedAddresses, Is.Empty);
+    }
+
+    /// <summary>冻结卡仍全局存在但移出 Hero 池或配置缺失时，Shop 只禁用卡项并保留身份占位。</summary>
+    [Test]
+    public void ShopCardConfigurationDrift_DisablesOnlyCardWithoutBreakingPage()
+    {
+        MapDefinition map = CreateSingleNonCombatMap(
+            MapNodeKind.Shop,
+            RunNodeVisitIdentityCatalog.ShopContentId);
+        using var store = new RunStateStore();
+        store.CreateNewRun(new RunCreationOptions(
+            new RunId(Guid.Parse("41414141-6363-7f7f-b1b1-292929292929")),
+            heroTemplateId: 1001,
+            initialHealth: 80,
+            maxHealth: 80,
+            runDeck: RunDeck.CreateInitial(new[] { 3002 }),
+            randomRootSeed: map.MapSeed,
+            map: map,
+            holdings: RunHoldings.Empty(initialGold: 100)));
+        Tables currentTables = CreateTables();
+        RunState pending = store.CommitNodeVisitEntry(store.PreviewNodeVisitEntry(
+            MapNodeId.FromPosition(layer: 1, slot: 0),
+            new TablesRunSaveConfigurationCatalog(currentTables)));
+        int frozenCardTemplateId = pending.PendingNodeVisit.ShopPayload.Entries[2].TemplateId;
+        using var localeChanges = new Subject<Locale>();
+        var flow = CreateFlow(
+            store,
+            new RecordingSceneFlow(),
+            randomRootSeed: 888u,
+            saveStore: new InMemoryRunSaveStore());
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            flow,
+            () => currentTables,
+            Localize,
+            localeChanges);
+        presenter.Initialize();
+        Assert.That(view.LastModel.Shop.Entries[2].PurchaseEnabled, Is.True);
+
+        currentTables = CreateTables(includeHero1001ShopCards: false);
+        localeChanges.OnNext(null);
+
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Shop));
+        Assert.That(view.LastModel.Shop.Entries[1].PurchaseEnabled, Is.True);
+        Assert.That(view.LastModel.Shop.Entries[2].TemplateId, Is.EqualTo(frozenCardTemplateId));
+        Assert.That(view.LastModel.Shop.Entries[2].PurchaseEnabled, Is.False);
+
+        currentTables = CreateTables(
+            includeHero1001ShopCards: true,
+            missingCardTemplateId: frozenCardTemplateId);
+        localeChanges.OnNext(null);
+
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Shop));
+        Assert.That(view.LastModel.Shop.Entries[2].ItemName,
+            Is.EqualTo($"#{frozenCardTemplateId}"));
+        Assert.That(view.LastModel.Shop.Entries[2].PurchaseEnabled, Is.False);
+    }
+
+    /// <summary>Event 页投影冻结双选择，并只通过类型化 choice 完成路径而不触发场景导航。</summary>
+    [Test]
+    public void EventPending_ProjectsFrozenChoicesAndSettlesPaidHealWithoutNavigation()
+    {
+        MapDefinition map = CreateSingleNonCombatMap(
+            MapNodeKind.Event,
+            RunNodeVisitIdentityCatalog.EventContentId);
+        using var store = new RunStateStore();
+        store.CreateNewRun(new RunCreationOptions(
+            new RunId(Guid.Parse("44444444-6666-8282-b4b4-323232323232")),
+            heroTemplateId: 1001,
+            initialHealth: 76,
+            maxHealth: 80,
+            runDeck: RunDeck.CreateInitial(new[] { 3002 }),
+            randomRootSeed: map.MapSeed,
+            map: map,
+            holdings: RunHoldings.Empty(initialGold: 25)));
+        Tables tables = CreateTables();
+        RunState pending = store.CommitNodeVisitEntry(store.PreviewNodeVisitEntry(
+            MapNodeId.FromPosition(layer: 1, slot: 0),
+            new TablesRunSaveConfigurationCatalog(tables)));
+        using var localeChanges = new Subject<Locale>();
+        var scenes = new RecordingSceneFlow();
+        var flow = CreateFlow(
+            store,
+            scenes,
+            randomRootSeed: 898u,
+            saveStore: new InMemoryRunSaveStore());
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            flow,
+            () => tables,
+            Localize,
+            localeChanges);
+
+        presenter.Initialize();
+
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Event));
+        Assert.That(view.LastModel.Event.VisitId, Is.EqualTo(pending.PendingNodeVisit.Id));
+        Assert.That(view.LastModel.Event.GainGoldAmount, Is.EqualTo(50));
+        Assert.That(view.LastModel.Event.PaidHealCost, Is.EqualTo(25));
+        Assert.That(view.LastModel.Event.PaidHealAmount, Is.EqualTo(15));
+        Assert.That(view.LastModel.Event.GainGoldText, Is.EqualTo("Gain 50 Gold"));
+        Assert.That(view.LastModel.Event.PaidHealText,
+            Is.EqualTo("Pay 25 Gold to heal up to 15 HP"));
+        Assert.That(view.LastModel.Event.GainGoldEnabled, Is.True);
+        Assert.That(view.LastModel.Event.PaidHealEnabled, Is.True);
+        int sceneCountBeforeChoice = scenes.LoadedAddresses.Count;
+
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.ChooseEvent,
+            nodeVisitId: pending.PendingNodeVisit.Id,
+            eventChoice: RunEventChoiceKind.PaidHeal));
+
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(store.Current.PendingNodeVisit, Is.Null);
+        Assert.That(store.Current.Holdings.Gold, Is.Zero);
+        Assert.That(store.Current.CurrentHealth, Is.EqualTo(80));
+        Assert.That(store.Current.PathNodeIds.Last(),
+            Is.EqualTo(MapNodeId.FromPosition(layer: 1, slot: 0)));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Map));
+        Assert.That(view.LastModel.Event, Is.Null);
+        Assert.That(scenes.LoadedAddresses.Count, Is.EqualTo(sceneCountBeforeChoice));
+    }
+
+    /// <summary>Event 表现按 checked 金币上界、余额与满血事实独立门禁两项选择。</summary>
+    [TestCase(24, 65, true, false)]
+    [TestCase(25, 80, true, false)]
+    [TestCase(int.MaxValue, 65, false, true)]
+    public void EventPending_ProjectsOverflowBalanceAndFullHealthGates(
+        int gold,
+        int currentHealth,
+        bool expectedGainEnabled,
+        bool expectedPaidHealEnabled)
+    {
+        MapDefinition map = CreateSingleNonCombatMap(
+            MapNodeKind.Event,
+            RunNodeVisitIdentityCatalog.EventContentId);
+        using var store = new RunStateStore();
+        store.CreateNewRun(new RunCreationOptions(
+            new RunId(Guid.Parse("45454545-6767-8383-b5b5-333333333333")),
+            heroTemplateId: 1001,
+            initialHealth: currentHealth,
+            maxHealth: 80,
+            runDeck: RunDeck.CreateInitial(new[] { 3002 }),
+            randomRootSeed: map.MapSeed,
+            map: map,
+            holdings: RunHoldings.Empty(initialGold: gold)));
+        Tables tables = CreateTables();
+        store.CommitNodeVisitEntry(store.PreviewNodeVisitEntry(
+            MapNodeId.FromPosition(layer: 1, slot: 0),
+            new TablesRunSaveConfigurationCatalog(tables)));
+        using var localeChanges = new Subject<Locale>();
+        var flow = CreateFlow(
+            store,
+            new RecordingSceneFlow(),
+            randomRootSeed: 899u,
+            saveStore: new InMemoryRunSaveStore());
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            flow,
+            () => tables,
+            Localize,
+            localeChanges);
+
+        presenter.Initialize();
+
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Event));
+        Assert.That(view.LastModel.Event.GainGoldEnabled, Is.EqualTo(expectedGainEnabled));
+        Assert.That(view.LastModel.Event.PaidHealEnabled,
+            Is.EqualTo(expectedPaidHealEnabled));
+    }
+
+    /// <summary>Event 保存失败时双选择与回退全部锁定，Retry 必须发布同一冻结完成文档。</summary>
+    [Test]
+    public void EventChoiceCommitFailure_DisablesBothChoicesAndRetriesExactDocument()
+    {
+        MapDefinition map = CreateSingleNonCombatMap(
+            MapNodeKind.Event,
+            RunNodeVisitIdentityCatalog.EventContentId);
+        using var store = new RunStateStore();
+        store.CreateNewRun(new RunCreationOptions(
+            new RunId(Guid.Parse("46464646-6868-8484-b6b6-343434343434")),
+            heroTemplateId: 1001,
+            initialHealth: 60,
+            maxHealth: 80,
+            runDeck: RunDeck.CreateInitial(new[] { 3002 }),
+            randomRootSeed: map.MapSeed,
+            map: map,
+            holdings: RunHoldings.Empty(initialGold: 100)));
+        Tables tables = CreateTables();
+        RunState pending = store.CommitNodeVisitEntry(store.PreviewNodeVisitEntry(
+            MapNodeId.FromPosition(layer: 1, slot: 0),
+            new TablesRunSaveConfigurationCatalog(tables)));
+        using var localeChanges = new Subject<Locale>();
+        var scenes = new RecordingSceneFlow();
+        var saves = new ScriptedRunSaveStore();
+        var flow = CreateFlow(store, scenes, randomRootSeed: 900u, saves);
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            flow,
+            () => tables,
+            Localize,
+            localeChanges);
+        presenter.Initialize();
+        saves.EnqueueCommitResult(RunSaveCommitResult.Failed(
+            RunSaveCommitStatus.IoFailure,
+            "Injected Event settlement checkpoint failure."));
+
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.ChooseEvent,
+            nodeVisitId: pending.PendingNodeVisit.Id,
+            eventChoice: RunEventChoiceKind.GainGold));
+        RunSaveDocument failedDocument = saves.CommitAttempts.Last();
+        int commitCountAfterFailure = saves.CommitAttempts.Count;
+
+        Assert.That(store.Current, Is.SameAs(pending));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.SaveFailure));
+        Assert.That(view.LastModel.CanRollbackFailedSave, Is.False);
+        Assert.That(view.LastModel.Event.GainGoldEnabled, Is.False);
+        Assert.That(view.LastModel.Event.PaidHealEnabled, Is.False);
+        Assert.That(failedDocument.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.MapReady));
+        Assert.That(failedDocument.Gold, Is.EqualTo(150));
+        Assert.That(failedDocument.PendingNodeVisit, Is.Null);
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.ChooseEvent,
+            nodeVisitId: pending.PendingNodeVisit.Id,
+            eventChoice: RunEventChoiceKind.PaidHeal));
+        Assert.That(saves.CommitAttempts, Has.Count.EqualTo(commitCountAfterFailure));
+
+        view.Emit(new RunEntryAction(RunEntryActionKind.RetrySave));
+
+        Assert.That(saves.CommitAttempts.Last(), Is.SameAs(failedDocument));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(store.Current.Holdings.Gold, Is.EqualTo(150));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Map));
+        Assert.That(view.LastModel.Event, Is.Null);
+        Assert.That(scenes.LoadedAddresses, Is.Empty);
+    }
+
+    /// <summary>Terminal 提交失败保持 InBattle 来源，退出动作无效且 retry 成功后才发布终局。</summary>
     [Test]
     public async Task TerminalCommitFailure_DisablesRollbackAndPreservesTerminalRun()
     {
@@ -583,21 +1522,30 @@ public sealed class RunEntryPresenterTests
             mapNodeId: combatNodeId));
 
         await CompleteActiveBattleAsync(flow, store, BattleResultKind.Defeat, settledHealth: 0);
-        RunState terminal = store.Current;
+        RunState failedSource = store.Current;
+        RunSaveDocument failedDocument = saves.CommitAttempts.Last();
 
         Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.SaveFailure));
         Assert.That(view.LastModel.CanRollbackFailedSave, Is.False);
-        Assert.That(terminal.ProgressPhase, Is.EqualTo(RunProgressPhase.Terminal));
+        Assert.That(failedSource.ProgressPhase, Is.EqualTo(RunProgressPhase.InBattle));
         Assert.That(saves.Load().Document, Is.SameAs(previousCheckpoint));
 
         view.Emit(new RunEntryAction(RunEntryActionKind.RequestExitAfterSaveFailure));
         view.Emit(new RunEntryAction(RunEntryActionKind.ConfirmRollback));
 
-        Assert.That(store.Current, Is.SameAs(terminal));
-        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.Terminal));
+        Assert.That(store.Current, Is.SameAs(failedSource));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.InBattle));
         Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.SaveFailure));
         Assert.That(view.LastModel.CanRollbackFailedSave, Is.False);
         Assert.That(saves.Load().Document, Is.SameAs(previousCheckpoint));
+
+        view.Emit(new RunEntryAction(RunEntryActionKind.RetrySave));
+
+        Assert.That(saves.CommitAttempts.Last(), Is.SameAs(failedDocument));
+        Assert.That(store.Current, Is.Not.SameAs(failedSource));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.Terminal));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Failure));
+        Assert.That(saves.Load().Document, Is.SameAs(failedDocument));
     }
 
     /// <summary>创建带确定 Run 身份、配置、地图 seed 与可替换存档 port 的测试编排。</summary>
@@ -620,14 +1568,19 @@ public sealed class RunEntryPresenterTests
     /// <summary>创建两名候选 Hero、两副起始牌组与 G3 profile 遭遇的最小 Luban 表。</summary>
     private static Tables CreateTables()
     {
-        var data = new Dictionary<string, JArray>
-        {
-            ["battle_tbhero"] = JArray.Parse(
-                "[{\"id\":1001,\"name_i18n_key\":\"battle.hero.test_warrior.name\",\"view_prefab_key\":\"pfb_char_player\",\"max_health\":80,\"base_strength\":1,\"initial_deck_id\":1001,\"initial_energy\":3,\"max_energy\":3,\"energy_gain_per_round\":3,\"initial_ammo\":0,\"max_ammo\":0,\"ammo_gain_per_round\":0,\"runtime_profile\":0,\"reward_card_template_ids\":[3105,3123,3157],\"reward_common_weight\":60,\"reward_uncommon_weight\":37,\"reward_rare_weight\":3}," +
-                "{\"id\":1002,\"name_i18n_key\":\"battle.hero.machine_gunner.name\",\"view_prefab_key\":\"pfb_char_player\",\"max_health\":90,\"base_strength\":2,\"initial_deck_id\":1002,\"initial_energy\":4,\"max_energy\":4,\"energy_gain_per_round\":4,\"initial_ammo\":3,\"max_ammo\":6,\"ammo_gain_per_round\":1,\"runtime_profile\":1,\"reward_card_template_ids\":[3206,3227,3264],\"reward_common_weight\":60,\"reward_uncommon_weight\":37,\"reward_rare_weight\":3}]"),
-            ["battle_tbdeck"] = JArray.Parse(
-                "[{\"id\":1001,\"card_template_ids\":[3002]},{\"id\":1002,\"card_template_ids\":[3003]}]"),
-            ["battle_tbcard"] = new JArray(
+        return CreateTables(includeHero1001ShopCards: true, missingCardTemplateId: null);
+    }
+
+    /// <summary>创建可模拟 Hero 奖励池漂移或指定卡配置缺失的 Presenter 测试表。</summary>
+    private static Tables CreateTables(
+        bool includeHero1001ShopCards,
+        int? missingCardTemplateId = null)
+    {
+        string warriorRewardCards = includeHero1001ShopCards
+            ? "[3105,3123,3157]"
+            : "[3206,3227,3264]";
+        JObject[] cardRows = new[]
+            {
                 CreateTestCardRow(3002, rarity: 0),
                 CreateTestCardRow(3003, rarity: 0),
                 CreateTestCardRow(3105, rarity: 1),
@@ -635,13 +1588,37 @@ public sealed class RunEntryPresenterTests
                 CreateTestCardRow(3157, rarity: 3),
                 CreateTestCardRow(3206, rarity: 1),
                 CreateTestCardRow(3227, rarity: 2),
-                CreateTestCardRow(3264, rarity: 3)),
+                CreateTestCardRow(3264, rarity: 3),
+            }
+            .Where(row => !missingCardTemplateId.HasValue ||
+                          row.Value<int>("id") != missingCardTemplateId.Value)
+            .ToArray();
+        var data = new Dictionary<string, JArray>
+        {
+            ["battle_tbhero"] = JArray.Parse(
+                $"[{{\"id\":1001,\"name_i18n_key\":\"battle.hero.test_warrior.name\",\"view_prefab_key\":\"pfb_char_player\",\"max_health\":80,\"base_strength\":1,\"initial_deck_id\":1001,\"initial_energy\":3,\"max_energy\":3,\"energy_gain_per_round\":3,\"initial_ammo\":0,\"max_ammo\":0,\"ammo_gain_per_round\":0,\"runtime_profile\":0,\"reward_card_template_ids\":{warriorRewardCards},\"reward_common_weight\":60,\"reward_uncommon_weight\":37,\"reward_rare_weight\":3}}," +
+                "{\"id\":1002,\"name_i18n_key\":\"battle.hero.machine_gunner.name\",\"view_prefab_key\":\"pfb_char_player\",\"max_health\":90,\"base_strength\":2,\"initial_deck_id\":1002,\"initial_energy\":4,\"max_energy\":4,\"energy_gain_per_round\":4,\"initial_ammo\":3,\"max_ammo\":6,\"ammo_gain_per_round\":1,\"runtime_profile\":1,\"reward_card_template_ids\":[3206,3227,3264],\"reward_common_weight\":60,\"reward_uncommon_weight\":37,\"reward_rare_weight\":3}]"),
+            ["battle_tbdeck"] = JArray.Parse(
+                "[{\"id\":1001,\"card_template_ids\":[3002]},{\"id\":1002,\"card_template_ids\":[3003]}]"),
+            ["battle_tbcard"] = new JArray(cardRows),
+            ["battle_tbcardeffect"] = JArray.Parse(
+                "[{\"id\":4002,\"effect_type\":1,\"attribute\":0,\"value\":6}]"),
+            ["battle_tbcardupgradelevel"] = JArray.Parse(
+                "[{\"card_id\":3002,\"next_upgrade_level\":1," +
+                "\"description_i18n_key\":\"battle.card.3002.upgrade_description\"," +
+                "\"cost\":1,\"play_destination\":0,\"rule_kind\":1,\"rule_value\":9}]"),
             ["battle_tbenemy"] = JArray.Parse(
                 "[{\"id\":2001,\"name_i18n_key\":\"battle.enemy.test_slime.name\",\"max_health\":20,\"base_strength\":0,\"view_prefab_key\":\"pfb_char_enemy\",\"behavior_group_id\":6001}," +
                 "{\"id\":2101,\"name_i18n_key\":\"battle.enemy.test_sentry.name\",\"max_health\":30,\"base_strength\":0,\"view_prefab_key\":\"pfb_char_enemy\",\"behavior_group_id\":6101}]"),
             ["battle_tbencounter"] = JArray.Parse(
                 "[{\"id\":5001,\"enemy_template_ids\":[2001]}," +
                 "{\"id\":5002,\"enemy_template_ids\":[2101]}]"),
+            ["run_tbrelic"] = JArray.Parse(
+                "[{\"id\":8001,\"name_i18n_key\":\"run.relic.one.name\",\"description_i18n_key\":\"run.relic.one.description\",\"battle_start_strength\":1}," +
+                "{\"id\":8002,\"name_i18n_key\":\"run.relic.two.name\",\"description_i18n_key\":\"run.relic.two.description\",\"battle_start_strength\":3}]"),
+            ["run_tbpotion"] = JArray.Parse(
+                "[{\"id\":9001,\"name_i18n_key\":\"run.potion.one.name\",\"description_i18n_key\":\"run.potion.one.description\",\"heal_amount\":10}," +
+                "{\"id\":9002,\"name_i18n_key\":\"run.potion.two.name\",\"description_i18n_key\":\"run.potion.two.description\",\"heal_amount\":25}]"),
         };
 
         return new Tables(tableName =>
@@ -668,13 +1645,19 @@ public sealed class RunEntryPresenterTests
             ["target_rule"] = 1,
             ["play_destination"] = 0,
             ["upgraded_play_destination"] = 0,
-            ["has_upgrade"] = false,
+            ["has_upgrade"] = templateId == 3002,
             ["implementation_status"] = 0,
-            ["effect_bindings"] = new JArray(),
+            ["effect_bindings"] = templateId == 3002
+                ? new JArray(new JObject
+                {
+                    ["argument_key"] = "damage",
+                    ["effect_id"] = 4002,
+                })
+                : new JArray(),
             ["illustration_key"] = string.Empty,
             ["program_id"] = 0,
             ["is_innate"] = false,
-            ["upgrade_track_kind"] = 0,
+            ["upgrade_track_kind"] = templateId == 3002 ? 1 : 0,
             ["infinite_upgrade_rule_kind"] = 0,
             ["infinite_upgrade_value_per_level"] = 0,
         };
@@ -697,6 +1680,40 @@ public sealed class RunEntryPresenterTests
                 return "Test Sentry";
             case "run.entry.map.health":
                 return $"HP {arguments["current"]}/{arguments["max"]}";
+            case "run.entry.rest.heal":
+                return $"Heal {arguments["amount"]} HP";
+            case "run.entry.rest.upgrade":
+                return $"Upgrade {arguments["card"]} to +{arguments["level"]}";
+            case "run.entry.chest.title":
+                return "Chest";
+            case "run.entry.chest.claim":
+                return "Claim";
+            case "run.entry.chest.skip":
+                return "Skip";
+            case "run.entry.chest.full":
+                return "Potion belt is full";
+            case "run.entry.shop.title":
+                return "Shop";
+            case "run.entry.shop.purchase":
+                return $"Buy {arguments["item"]} — {arguments["price"]} Gold";
+            case "run.entry.shop.purchased":
+                return $"{arguments["item"]} — Purchased";
+            case "run.entry.shop.leave":
+                return "Leave";
+            case "run.entry.event.title":
+                return "Event";
+            case "run.entry.event.gain_gold":
+                return $"Gain {arguments["gold"]} Gold";
+            case "run.entry.event.paid_heal":
+                return $"Pay {arguments["cost"]} Gold to heal up to {arguments["heal"]} HP";
+            case "run.relic.one.name":
+                return "Relic One";
+            case "run.potion.one.name":
+                return "Healing Potion";
+            case "run.potion.one.description":
+                return $"Restore {arguments["heal"]} HP";
+            case "battle.card.3002.name":
+                return "Test Strike";
             case "run.entry.save.issue.missing_configuration":
                 return $"Missing {arguments["kind"]} {arguments["id"]}";
             default:
@@ -732,7 +1749,10 @@ public sealed class RunEntryPresenterTests
     }
 
     /// <summary>绕过场景编排，仅以当前 G3 profile 创建合法初始 Run 事实供文档测试使用。</summary>
-    private static RunState CreateDirectRun(RunStateStore store, uint randomRootSeed)
+    private static RunState CreateDirectRun(
+        RunStateStore store,
+        uint randomRootSeed,
+        RunHoldings holdings = null)
     {
         MapDefinition map = ActMapGenerator.Generate(
             TinySpireActMapProfiles.Current,
@@ -744,7 +1764,30 @@ public sealed class RunEntryPresenterTests
             maxHealth: 80,
             runDeck: RunDeck.CreateInitial(new[] { 3002, 3003 }),
             randomRootSeed,
-            map: map));
+            map: map,
+            holdings: holdings));
+    }
+
+    /// <summary>建立只含 Start 与一个直接可达非战斗节点的最小 Presenter 测试地图。</summary>
+    private static MapDefinition CreateSingleNonCombatMap(
+        MapNodeKind kind,
+        int contentId)
+    {
+        MapNodeId startNodeId = MapNodeId.FromPosition(layer: 0, slot: 0);
+        MapNodeId destinationNodeId = MapNodeId.FromPosition(layer: 1, slot: 0);
+        return new MapDefinition(
+            profileId: "tinyspire.test.presenter.noncombat.v1",
+            generatorVersion: 1,
+            mapSeed: 42420003u,
+            nodes: new[]
+            {
+                new MapNode(startNodeId, layer: 0, slot: 0, MapNodeKind.Start, contentId: 0),
+                new MapNode(destinationNodeId, layer: 1, slot: 0, kind, contentId),
+            },
+            edges: new[]
+            {
+                new MapEdge(startNodeId, destinationNodeId),
+            });
     }
 
     /// <summary>从完整地图投影中读取第一个指定状态与种类的节点身份。</summary>
@@ -756,6 +1799,34 @@ public sealed class RunEntryPresenterTests
         RunMapNodeViewModel node = model.Map.Nodes.First(value =>
             value.State == state && value.Kind == kind);
         return new MapNodeId(node.NodeId);
+    }
+
+    /// <summary>从生产 mixed profile 建立只含布局必要字段的十个地图节点投影。</summary>
+    private static RunMapNodeViewModel[] CreateMixedMapNodeViewModels()
+    {
+        MapDefinition map = ActMapGenerator.Generate(
+            TinySpireActMapProfiles.NewRunG6V1,
+            mapSeed: 123456u);
+        var catalog = new RunMapIdentityCatalog(CreateTables, Localize);
+        return map.Nodes
+            .OrderBy(node => node.Layer)
+            .ThenBy(node => node.Slot)
+            .Select(node =>
+            {
+                RunMapIdentityDescriptor identity = catalog.Resolve(node.Kind, node.ContentId);
+                return new RunMapNodeViewModel(
+                    node.Id.Value,
+                    node.Layer,
+                    node.Slot,
+                    node.Kind,
+                    node.ContentId,
+                    identity.DisplayName,
+                    identity.VisualAnchorKind,
+                    RunMapNodePresentationState.Locked,
+                    Array.Empty<string>(),
+                    Array.Empty<string>());
+            })
+            .ToArray();
     }
 
     /// <summary>消费当前唯一 Battle attempt，并发布指定胜负与结算生命。</summary>
@@ -848,6 +1919,47 @@ public sealed class RunEntryPresenterTests
         }
     }
 
+    /// <summary>以可切换语言与显式 Smart 参数结果验证持有物本地化投影。</summary>
+    private sealed class MutableHoldingsLocalizer
+    {
+        /// <summary>当前测试语言前缀。</summary>
+        public string Language { get; set; } = "EN";
+
+        /// <summary>将固定入口键及 cfg.run 名称、描述投影为可独立断言的文本。</summary>
+        public string Translate(
+            string key,
+            IReadOnlyDictionary<string, object> arguments)
+        {
+            switch (key)
+            {
+                case "run.entry.holdings.gold":
+                    return $"{Language}:GOLD:{arguments["gold"]}";
+                case "run.entry.holdings.relics":
+                    return $"{Language}:RELICS";
+                case "run.entry.holdings.potions":
+                    return $"{Language}:POTIONS";
+                case "run.entry.holdings.empty":
+                    return $"{Language}:EMPTY";
+                case "run.relic.one.name":
+                    return $"{Language}:Relic One";
+                case "run.relic.two.name":
+                    return $"{Language}:Relic Two";
+                case "run.relic.one.description":
+                case "run.relic.two.description":
+                    return $"{Language}:Strength {arguments["strength"]}";
+                case "run.potion.one.name":
+                    return $"{Language}:Potion One";
+                case "run.potion.two.name":
+                    return $"{Language}:Potion Two";
+                case "run.potion.one.description":
+                case "run.potion.two.description":
+                    return $"{Language}:Heal {arguments["heal"]}";
+                default:
+                    return RunEntryPresenterTests.Localize(key, arguments);
+            }
+        }
+    }
+
     /// <summary>记录场景编排请求而不触发 Addressables。</summary>
     private sealed class RecordingSceneFlow : ISceneFlowService
     {
@@ -885,10 +1997,15 @@ public sealed class RunEntryPresenterTests
     {
         private readonly Queue<RunSaveCommitResult> _commitResults =
             new Queue<RunSaveCommitResult>();
+        private readonly List<RunSaveDocument> _commitAttempts =
+            new List<RunSaveDocument>();
         private RunSaveDocument _document;
 
         /// <summary>累计玩家确认后的删除次数。</summary>
         public int DeleteCount { get; private set; }
+
+        /// <summary>按调用顺序公开全部冻结提交对象，供 exact retry 身份断言。</summary>
+        public IReadOnlyList<RunSaveDocument> CommitAttempts => _commitAttempts;
 
         /// <summary>创建空单槽。</summary>
         public ScriptedRunSaveStore()
@@ -918,6 +2035,7 @@ public sealed class RunEntryPresenterTests
         /// <summary>按队列返回结果，并只在成功时替换最近检查点。</summary>
         public RunSaveCommitResult Commit(RunSaveDocument document)
         {
+            _commitAttempts.Add(document ?? throw new ArgumentNullException(nameof(document)));
             RunSaveCommitResult result = _commitResults.Count > 0
                 ? _commitResults.Dequeue()
                 : RunSaveCommitResult.Succeeded();

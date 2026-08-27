@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using cfg;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
@@ -64,6 +65,243 @@ public sealed class BattleCommandQueueTests
         Assert.That(presentation.Results[0].Succeeded, Is.True);
 
         queue.Dispose();
+        combatants.Dispose();
+    }
+
+    /// <summary>药水进入权威队列时不提前消费，到达队首并成功治疗后才按顺序结算一次。</summary>
+    [Test]
+    public void UsePotion_WhenPlayerActionAndInjured_HealsThenConsumesExactlyOnce()
+    {
+        var combatants = new BattleCombatantsData();
+        PlayerCombatantData player = combatants.AddPlayer(
+            templateId: 101,
+            currentHealth: 10,
+            maxHealth: 30,
+            strength: 0);
+        var potionId = new TinySpire.Run.RunPotionInstanceId(9);
+        var ledger = new BattlePotionLedger(new[]
+        {
+            new BattlePotionEntry(potionId, templateId: 9001, player.Id, healAmount: 13),
+        });
+        var presentation = new ControllableBattleCommandPresentation();
+        BattleCommandQueue queue = BattleCommandQueueTestFactory.Create(
+            combatants,
+            presentation,
+            potionLedger: ledger);
+        using BattleCommandLifecycleExecutionRecorder lifecycle = queue.RecordExecutionLifecycle();
+        queue.Submit(new StartBattleCommand());
+        BattleCommandSubmissionResult accepted = queue.Submit(new UsePotionCommand(potionId));
+
+        Assert.That(accepted.Accepted, Is.True);
+        Assert.That(player.CurrentHealth, Is.EqualTo(10));
+        Assert.That(ledger.ConsumedInstanceIds, Is.Empty);
+
+        presentation.CompleteNext();
+
+        Assert.That(player.CurrentHealth, Is.EqualTo(23));
+        Assert.That(ledger.ConsumedInstanceIds, Is.EqualTo(new[] { potionId }));
+        Assert.That(presentation.Results, Has.Count.EqualTo(2));
+        Assert.That(
+            presentation.Results[1].Settlements.Select(record => record.RecordType),
+            Is.EqualTo(new[]
+            {
+                BattleSettlementRecordType.HealthRestored,
+                BattleSettlementRecordType.PotionConsumed,
+            }));
+        var healed = (BattleHealthRestoredSettlement)presentation.Results[1].Settlements[0];
+        var consumed = (BattlePotionConsumedSettlement)presentation.Results[1].Settlements[1];
+        Assert.That(healed.EffectId, Is.Null);
+        Assert.That(healed.HealthBefore, Is.EqualTo(10));
+        Assert.That(healed.HealthAfter, Is.EqualTo(23));
+        Assert.That(healed.Amount, Is.EqualTo(13));
+        Assert.That(consumed.InstanceId, Is.EqualTo(potionId));
+        Assert.That(consumed.TemplateId, Is.EqualTo(9001));
+
+        presentation.CompleteNext();
+        BattleCommandSubmissionResult repeated = queue.Submit(new UsePotionCommand(potionId));
+        BattleCommandLifecycleEvent repeatedTerminal = lifecycle.RequireTerminal(repeated);
+        Assert.That(
+            repeatedTerminal.FailureReason,
+            Is.EqualTo(BattleCommandExecutionFailureReason.PotionAlreadyConsumed));
+        Assert.That(repeatedTerminal.Settlements, Is.Empty);
+        Assert.That(player.CurrentHealth, Is.EqualTo(23));
+
+        queue.Dispose();
+        combatants.Dispose();
+    }
+
+    /// <summary>新增药水命令必须追加在既有命令枚举末尾，保持全部旧 ordinal 不变。</summary>
+    [Test]
+    public void BattleCommandType_UsePotion_AppendsWithoutChangingExistingOrdinals()
+    {
+        Assert.That((int)BattleCommandType.StartBattle, Is.EqualTo(0));
+        Assert.That((int)BattleCommandType.PlayCard, Is.EqualTo(1));
+        Assert.That((int)BattleCommandType.EndPlayerAction, Is.EqualTo(2));
+        Assert.That((int)BattleCommandType.CompleteEnemyAction, Is.EqualTo(3));
+        Assert.That((int)BattleCommandType.ResolveSettlementTriggers, Is.EqualTo(4));
+        Assert.That((int)BattleCommandType.UsePotion, Is.EqualTo(5));
+    }
+
+    /// <summary>满血玩家的药水命令到达队首后明确失败，生命与账本保持零写入。</summary>
+    [Test]
+    public void UsePotion_WhenPlayerHealthIsFull_FailsWithoutConsumption()
+    {
+        var combatants = new BattleCombatantsData();
+        PlayerCombatantData player = combatants.AddPlayer(
+            templateId: 101,
+            maxHealth: 30,
+            strength: 0);
+        var potionId = new TinySpire.Run.RunPotionInstanceId(10);
+        var ledger = new BattlePotionLedger(new[]
+        {
+            new BattlePotionEntry(potionId, templateId: 9001, player.Id, healAmount: 13),
+        });
+        var presentation = new ControllableBattleCommandPresentation();
+        BattleCommandQueue queue = BattleCommandQueueTestFactory.Create(
+            combatants,
+            presentation,
+            potionLedger: ledger);
+        using BattleCommandLifecycleExecutionRecorder lifecycle = queue.RecordExecutionLifecycle();
+        queue.Submit(new StartBattleCommand());
+        presentation.CompleteNext();
+
+        BattleCommandSubmissionResult submission = queue.Submit(new UsePotionCommand(potionId));
+        BattleCommandLifecycleEvent terminal = lifecycle.RequireTerminal(submission);
+
+        Assert.That(
+            terminal.FailureReason,
+            Is.EqualTo(BattleCommandExecutionFailureReason.PlayerHealthFull));
+        Assert.That(terminal.Settlements, Is.Empty);
+        Assert.That(player.CurrentHealth, Is.EqualTo(30));
+        Assert.That(ledger.ConsumedInstanceIds, Is.Empty);
+
+        queue.Dispose();
+        combatants.Dispose();
+    }
+
+    /// <summary>死亡玩家的药水命令必须在 Queue 终审失败，不能借治疗复活或消费实例。</summary>
+    [Test]
+    public void UsePotion_WhenPlayerIsDead_FailsWithoutConsumption()
+    {
+        var combatants = new BattleCombatantsData();
+        PlayerCombatantData player = combatants.AddPlayer(
+            templateId: 101,
+            currentHealth: 10,
+            maxHealth: 30,
+            strength: 0);
+        var potionId = new TinySpire.Run.RunPotionInstanceId(11);
+        var ledger = new BattlePotionLedger(new[]
+        {
+            new BattlePotionEntry(potionId, templateId: 9001, player.Id, healAmount: 13),
+        });
+        var presentation = new ControllableBattleCommandPresentation();
+        BattleCommandQueue queue = BattleCommandQueueTestFactory.Create(
+            combatants,
+            presentation,
+            potionLedger: ledger);
+        using BattleCommandLifecycleExecutionRecorder lifecycle = queue.RecordExecutionLifecycle();
+        queue.Submit(new StartBattleCommand());
+        presentation.CompleteNext();
+        BattleEffectStateTestDriver.Kill(combatants, player.Id, player.Id);
+
+        BattleCommandSubmissionResult submission = queue.Submit(new UsePotionCommand(potionId));
+        BattleCommandLifecycleEvent terminal = lifecycle.RequireTerminal(submission);
+
+        Assert.That(
+            terminal.FailureReason,
+            Is.EqualTo(BattleCommandExecutionFailureReason.PlayerNotAlive));
+        Assert.That(terminal.Settlements, Is.Empty);
+        Assert.That(player.CurrentHealth, Is.Zero);
+        Assert.That(ledger.ConsumedInstanceIds, Is.Empty);
+
+        queue.Dispose();
+        combatants.Dispose();
+    }
+
+    /// <summary>不在本战账本中的实例身份必须明确失败，不能按模板或序号猜测药水。</summary>
+    [Test]
+    public void UsePotion_WithUnknownInstance_FailsClosed()
+    {
+        var combatants = new BattleCombatantsData();
+        PlayerCombatantData player = combatants.AddPlayer(
+            templateId: 101,
+            currentHealth: 10,
+            maxHealth: 30,
+            strength: 0);
+        var ledger = new BattlePotionLedger(Array.Empty<BattlePotionEntry>());
+        var presentation = new ControllableBattleCommandPresentation();
+        BattleCommandQueue queue = BattleCommandQueueTestFactory.Create(
+            combatants,
+            presentation,
+            potionLedger: ledger);
+        using BattleCommandLifecycleExecutionRecorder lifecycle = queue.RecordExecutionLifecycle();
+        queue.Submit(new StartBattleCommand());
+        presentation.CompleteNext();
+
+        BattleCommandSubmissionResult submission = queue.Submit(
+            new UsePotionCommand(new TinySpire.Run.RunPotionInstanceId(99)));
+        BattleCommandLifecycleEvent terminal = lifecycle.RequireTerminal(submission);
+
+        Assert.That(
+            terminal.FailureReason,
+            Is.EqualTo(BattleCommandExecutionFailureReason.PotionNotFound));
+        Assert.That(terminal.Settlements, Is.Empty);
+        Assert.That(player.CurrentHealth, Is.EqualTo(10));
+        Assert.That(ledger.ConsumedInstanceIds, Is.Empty);
+
+        queue.Dispose();
+        combatants.Dispose();
+    }
+
+    /// <summary>上一轮排队的药水即使下一轮仍受伤也必须过期，不能跨轮治疗或消费。</summary>
+    [Test]
+    public void UsePotion_QueuedBehindRoundTransition_ExpiresWithoutConsumption()
+    {
+        var combatants = new BattleCombatantsData();
+        PlayerCombatantData player = combatants.AddPlayer(
+            templateId: 101,
+            currentHealth: 10,
+            maxHealth: 30,
+            strength: 0);
+        EnemyCombatantData enemy = combatants.AddEnemy(
+            templateId: 201,
+            maxHealth: 1,
+            strength: 0);
+        var zones = new BattleCardZonesData(Array.Empty<int>(), shuffleSeed: 1);
+        var potionId = new TinySpire.Run.RunPotionInstanceId(12);
+        var ledger = new BattlePotionLedger(new[]
+        {
+            new BattlePotionEntry(potionId, templateId: 9001, player.Id, healAmount: 13),
+        });
+        var presentation = new ControllableBattleCommandPresentation();
+        BattleCommandQueue queue = BattleCommandQueueTestFactory.Create(
+            combatants,
+            presentation,
+            new Dictionary<CombatantId, BattleCardZonesData> { [player.Id] = zones },
+            enemyCombatantIdsInEncounterOrder: new[] { enemy.Id },
+            potionLedger: ledger);
+        using BattleCommandLifecycleExecutionRecorder lifecycle = queue.RecordExecutionLifecycle();
+        queue.Submit(new StartBattleCommand());
+        presentation.CompleteNext();
+        queue.Submit(new EndPlayerActionCommand(player.Id));
+        BattleCommandSubmissionResult stalePotion = queue.Submit(
+            new UsePotionCommand(potionId));
+
+        presentation.CompleteNext();
+        Assert.That(queue.Turn.CurrentValue.RoundNumber, Is.EqualTo(2));
+        int healthBeforeStaleExecution = player.CurrentHealth;
+        presentation.CompleteNext();
+
+        BattleCommandLifecycleEvent terminal = lifecycle.RequireTerminal(stalePotion);
+        Assert.That(
+            terminal.FailureReason,
+            Is.EqualTo(BattleCommandExecutionFailureReason.PlayerActionWindowExpired));
+        Assert.That(terminal.Settlements, Is.Empty);
+        Assert.That(player.CurrentHealth, Is.EqualTo(healthBeforeStaleExecution));
+        Assert.That(ledger.ConsumedInstanceIds, Is.Empty);
+
+        queue.Dispose();
+        zones.Dispose();
         combatants.Dispose();
     }
 
@@ -1211,7 +1449,9 @@ internal static class BattleCommandQueueTestFactory
         uint battleSeed = 1,
         IReadOnlyDictionary<int, cfg.battle.TargetRule> cardTargetRules = null,
         BattleCommandSubmissionCoordinator coordinator = null,
-        IReadOnlyDictionary<CombatantId, BattlePlayerResourceProfile> playerResourceProfiles = null)
+        IReadOnlyDictionary<CombatantId, BattlePlayerResourceProfile> playerResourceProfiles = null,
+        IReadOnlyList<BattleStartRelicEffect> battleStartRelicEffects = null,
+        BattlePotionLedger potionLedger = null)
     {
         IReadOnlyDictionary<CombatantId, BattleCardZonesData> resolvedCardZones =
             playerCardZones ?? new Dictionary<CombatantId, BattleCardZonesData>();
@@ -1235,7 +1475,9 @@ internal static class BattleCommandQueueTestFactory
 
         BattleCommandSubmissionCoordinator resolvedCoordinator =
             coordinator ?? new BattleCommandSubmissionCoordinator();
-        BattleCommandQueue queue = playerResourceProfiles == null
+        BattleCommandQueue queue = playerResourceProfiles == null &&
+                                         battleStartRelicEffects == null &&
+                                         potionLedger == null
             ? new BattleCommandQueue(
                 combatants,
                 resolvedCardZones,
@@ -1253,11 +1495,14 @@ internal static class BattleCommandQueueTestFactory
                 resolvedEnemyIds,
                 resolvedEnemyIntents,
                 resolvedTables,
-                playerResourceProfiles,
+                playerResourceProfiles ??
+                BattlePlayerResourceProfile.CreateLegacyProfiles(combatants, energyPerRound),
                 initialHandCount,
                 presentation,
                 resolvedCoordinator,
-                cardTargetRandomSeed: battleSeed);
+                cardTargetRandomSeed: battleSeed,
+                battleStartRelicEffects: battleStartRelicEffects,
+                potionLedger: potionLedger);
         return queue;
     }
 
@@ -1356,7 +1601,8 @@ internal static class BattleCommandQueueTestFactory
                 "[{\"id\":7001,\"intent_type\":0,\"target_rule\":1,\"effect_id\":4999,\"weight\":1,\"cooldown_selections\":0,\"max_consecutive\":0}]"),
             ["battle_tbcardupgradelevel"] = new JArray(),
         };
-        return new Tables(tableName => data[tableName]);
+        return new Tables(tableName =>
+            data.TryGetValue(tableName, out JArray rows) ? rows : new JArray());
     }
 }
 

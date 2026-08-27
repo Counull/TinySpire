@@ -66,4 +66,85 @@ public sealed class BattleTurnHudPresentationTests
                 participantPresentationReady: true),
             Is.True);
     }
+
+    /// <summary>药水投影只显示最多三个稳定槽位，并以冻结治疗量生成可读按钮文本。</summary>
+    [Test]
+    public void PotionProjection_FormatsHealingAndCapsVisibleSlotsAtThree()
+    {
+        Assert.That(BattleTurnHudPresentation.FormatPotion(13), Is.EqualTo("Potion +13 HP"));
+        Assert.That(BattleTurnHudPresentation.GetVisiblePotionSlotCount(0), Is.Zero);
+        Assert.That(BattleTurnHudPresentation.GetVisiblePotionSlotCount(2), Is.EqualTo(2));
+        Assert.That(BattleTurnHudPresentation.GetVisiblePotionSlotCount(4), Is.EqualTo(3));
+    }
+
+    /// <summary>药水入口仅在玩家行动、玩家存活受伤、未消费且没有同类待定命令时开放。</summary>
+    [Test]
+    public void PotionAvailability_RejectsInvalidPhaseHealthConsumedPendingAndReadiness()
+    {
+        Assert.That(
+            BattleTurnHudPresentation.CanSubmitPotion(
+                BattleTurnPhase.PlayerAction,
+                hasEndedAction: false,
+                currentHealth: 10,
+                maxHealth: 30,
+                isConsumed: false,
+                hasPendingPotion: false),
+            Is.True);
+        Assert.That(
+            BattleTurnHudPresentation.CanSubmitPotion(
+                BattleTurnPhase.EnemyAction,
+                hasEndedAction: false,
+                currentHealth: 10,
+                maxHealth: 30,
+                isConsumed: false,
+                hasPendingPotion: false),
+            Is.False);
+        Assert.That(
+            BattleTurnHudPresentation.CanSubmitPotion(
+                BattleTurnPhase.PlayerAction,
+                hasEndedAction: false,
+                currentHealth: 0,
+                maxHealth: 30,
+                isConsumed: false,
+                hasPendingPotion: false),
+            Is.False);
+        Assert.That(
+            BattleTurnHudPresentation.CanSubmitPotion(
+                BattleTurnPhase.PlayerAction,
+                hasEndedAction: false,
+                currentHealth: 30,
+                maxHealth: 30,
+                isConsumed: false,
+                hasPendingPotion: false),
+            Is.False);
+        Assert.That(
+            BattleTurnHudPresentation.CanSubmitPotion(
+                BattleTurnPhase.PlayerAction,
+                hasEndedAction: true,
+                currentHealth: 10,
+                maxHealth: 30,
+                isConsumed: false,
+                hasPendingPotion: false),
+            Is.False);
+        Assert.That(
+            BattleTurnHudPresentation.CanSubmitPotion(
+                BattleTurnPhase.PlayerAction,
+                hasEndedAction: false,
+                currentHealth: 10,
+                maxHealth: 30,
+                isConsumed: true,
+                hasPendingPotion: false),
+            Is.False);
+        Assert.That(
+            BattleTurnHudPresentation.CanSubmitPotion(
+                BattleTurnPhase.PlayerAction,
+                hasEndedAction: false,
+                currentHealth: 10,
+                maxHealth: 30,
+                isConsumed: false,
+                hasPendingPotion: true,
+                queueFaulted: false,
+                participantPresentationReady: false),
+            Is.False);
+    }
 }

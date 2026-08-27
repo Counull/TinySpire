@@ -9,6 +9,41 @@ using TinySpire.Run;
 /// <summary>验证 G4 普通战斗卡牌奖励的纯领域规则。</summary>
 public sealed class RunCardRewardG4Tests
 {
+    /// <summary>奖励附着掉落必须显式表达 Empty，并只接受固定样本域中的正数模板。</summary>
+    [Test]
+    public void AttachedLoot_EmptyAndPositiveTemplates_AreImmutableDomainFacts()
+    {
+        RunCardRewardAttachedLoot empty = RunCardRewardAttachedLoot.Empty;
+        var attached = new RunCardRewardAttachedLoot(
+            RunCardRewardAttachedLootTemplateIds.FirstOrdinaryBattleRelic,
+            RunCardRewardAttachedLootTemplateIds.FirstOrdinaryBattlePotion);
+        var rewardId = new RunCardRewardId(new RunBattleId(
+            new RunId(Guid.Parse("11000000-0000-0000-0000-000000000001")),
+            attemptSequence: 1,
+            nodeId: new TinySpire.Run.Map.MapNodeId("L01-S00")));
+        var pending = new PendingCardReward(
+            rewardId,
+            new[] { 3105, 3123, 3157 },
+            attached);
+
+        Assert.That(empty, Is.Not.Null);
+        Assert.That(empty.RelicTemplateId, Is.Null);
+        Assert.That(empty.PotionTemplateId, Is.Null);
+        Assert.That(
+            RunCardRewardAttachedLootTemplateIds.FirstOrdinaryBattleRelic,
+            Is.EqualTo(8001));
+        Assert.That(
+            RunCardRewardAttachedLootTemplateIds.FirstOrdinaryBattlePotion,
+            Is.EqualTo(9001));
+        Assert.That(pending.AttachedLoot, Is.Not.Null);
+        Assert.That(pending.AttachedLoot.RelicTemplateId, Is.EqualTo(8001));
+        Assert.That(pending.AttachedLoot.PotionTemplateId, Is.EqualTo(9001));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new RunCardRewardAttachedLoot(relicTemplateId: 0, potionTemplateId: null));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new RunCardRewardAttachedLoot(relicTemplateId: null, potionTemplateId: -1));
+    }
+
     /// <summary>同一 Hero 奖励池与 seed 必须冻结相同顺序的三个不同模板。</summary>
     [Test]
     public void Generate_WithLegalPool_FreezesThreeDistinctTemplatesDeterministically()
@@ -35,6 +70,9 @@ public sealed class RunCardRewardG4Tests
         Assert.That(first.CandidateTemplateIds.Count, Is.EqualTo(3));
         Assert.That(first.CandidateTemplateIds.Distinct().Count(), Is.EqualTo(3));
         Assert.That(second.CandidateTemplateIds, Is.EqualTo(first.CandidateTemplateIds));
+        Assert.That(first.AttachedLoot, Is.Not.Null);
+        Assert.That(first.AttachedLoot.RelicTemplateId, Is.Null);
+        Assert.That(first.AttachedLoot.PotionTemplateId, Is.Null);
     }
 
     /// <summary>Reward seed 派生必须稳定、按 attempt 分离且不复用 Map/Battle 域。</summary>

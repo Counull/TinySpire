@@ -3599,7 +3599,8 @@ public sealed class BattleEffectCommandQueueTests
                     ? new JArray()
                     : new JArray(upgradeLevels),
             };
-            return new cfg.Tables(tableName => data[tableName]);
+            return new cfg.Tables(tableName =>
+                data.TryGetValue(tableName, out JArray rows) ? rows : new JArray());
         }
     }
 }

@@ -1763,7 +1763,8 @@ public sealed class BattleParticipantFeedbackRoutingTests
                 "\"max_consecutive\":0}]"),
             ["battle_tbcardupgradelevel"] = new JArray(),
         };
-        return new cfg.Tables(tableName => data[tableName]);
+        return new cfg.Tables(tableName =>
+            data.TryGetValue(tableName, out JArray rows) ? rows : new JArray());
     }
 
     /// <summary>创建一个玩家和一个敌人的 Presenter readiness 最小 Session 配置。</summary>
@@ -1807,7 +1808,8 @@ public sealed class BattleParticipantFeedbackRoutingTests
                 "\"max_consecutive\":0}]"),
             ["battle_tbcardupgradelevel"] = new JArray(),
         };
-        return new cfg.Tables(tableName => data[tableName]);
+        return new cfg.Tables(tableName =>
+            data.TryGetValue(tableName, out JArray rows) ? rows : new JArray());
     }
 
     /// <summary>为 Presenter 资源边界测试创建只带显式 Luban 表的配置服务。</summary>

@@ -77,6 +77,10 @@ namespace TinySpire.Run.Map
         Start,
         Combat,
         Boss,
+        Rest,
+        Chest,
+        Shop,
+        Event,
     }
 
     /// <summary>冻结一个节点的位置、种类与开局明牌内容身份。</summary>

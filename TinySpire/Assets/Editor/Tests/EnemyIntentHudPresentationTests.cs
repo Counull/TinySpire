@@ -172,7 +172,8 @@ public sealed class EnemyIntentHudPresentationTests
             ["battle_tbenemybehavior"] = behaviors,
             ["battle_tbcardupgradelevel"] = new JArray(),
         };
-        return new Tables(tableName => data[tableName]);
+        return new Tables(tableName =>
+            data.TryGetValue(tableName, out JArray rows) ? rows : new JArray());
     }
 
     /// <summary>创建保留传入稳定顺序的行为组 JSON。</summary>

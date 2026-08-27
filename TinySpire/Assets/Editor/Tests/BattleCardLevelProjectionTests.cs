@@ -289,7 +289,8 @@ public sealed class BattleCardLevelProjectionTests
             ["battle_tbenemybehavior"] = new JArray(),
             ["battle_tbcardupgradelevel"] = new JArray(upgrades ?? Array.Empty<JObject>()),
         };
-        return new Tables(tableName => data[tableName]);
+        return new Tables(tableName =>
+            data.TryGetValue(tableName, out JArray rows) ? rows : new JArray());
     }
 
     /// <summary>创建包含 G4 升级字段的最小测试卡牌行。</summary>

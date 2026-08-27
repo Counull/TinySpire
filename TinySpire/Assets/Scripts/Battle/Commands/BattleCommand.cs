@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using TinySpire.Run;
 
 namespace TinySpire.Battle
 {
@@ -97,6 +98,33 @@ namespace TinySpire.Battle
         EndPlayerAction,
         CompleteEnemyAction,
         ResolveSettlementTriggers,
+        UsePotion,
+    }
+
+    /// <summary>表达玩家尝试消费一个 Run 药水稳定实例的意图。</summary>
+    public sealed class UsePotionCommand : BattleCommand
+    {
+        /// <summary>唯一允许调用方携带的 Run 药水实例身份。</summary>
+        public RunPotionInstanceId PotionInstanceId { get; }
+
+        /// <summary>返回使用药水命令类型。</summary>
+        public override BattleCommandType Type => BattleCommandType.UsePotion;
+
+        /// <summary>药水归属由 Battle ledger 终审，命令本身不携带参与者。</summary>
+        public override CombatantId? SubmitterId => null;
+
+        /// <summary>创建只含稳定药水实例身份的玩家意图。</summary>
+        public UsePotionCommand(RunPotionInstanceId potionInstanceId)
+        {
+            if (potionInstanceId.Sequence <= 0)
+            {
+                throw new ArgumentException(
+                    "Run potion instance id cannot be empty.",
+                    nameof(potionInstanceId));
+            }
+
+            PotionInstanceId = potionInstanceId;
+        }
     }
 
     /// <summary>

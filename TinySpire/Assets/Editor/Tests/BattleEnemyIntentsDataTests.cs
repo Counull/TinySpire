@@ -569,7 +569,8 @@ public sealed class BattleEnemyIntentsDataTests
             ["battle_tbenemybehavior"] = behaviors,
             ["battle_tbcardupgradelevel"] = new JArray(),
         };
-        return new Tables(tableName => data[tableName]);
+        return new Tables(tableName =>
+            data.TryGetValue(tableName, out JArray rows) ? rows : new JArray());
     }
 
     /// <summary>创建一个引用指定行为组的敌人模板 JSON。</summary>

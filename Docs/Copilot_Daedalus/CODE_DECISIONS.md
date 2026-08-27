@@ -3,7 +3,7 @@ title: Daedalus · 代码决策记录
 page_type: decision
 lifecycle: active
 created: 2026-07-06
-updated: 2026-08-26
+updated: 2026-08-27
 status_source: STATUS.md
 ---
 
@@ -1340,3 +1340,23 @@ Run 规划采用递归切片门禁：每个可执行切片先处于 `needs-grill
 **Supersede 与边界**：本决定仅 supersede CD-117 中“schema v3 是当前写入版本”和“UpgradeLevel 尚不解释”的当前口径；CD-117 的 ordered identity、v2 fallback、Battle origin 与唯一 Store/Flow 所有权继续有效。Scene、Prefab、asmdef、ProjectSettings、HybridCLR、DI 架构以及 G5 遗物/药水、金币、商店、事件、宝箱、真实 Boss、RunOutcome、云/多槽/战中存档、多人和商业化均不在本决定内。
 
 **实施状态与验收门**：G4-A～D 已完成并 `verified`。legacy fallback 已按 RED→GREEN 补强为 Continue 在发布 active Run 前先耐久改写 canonical；G4 定向结果为 120/120、30/30、35/35、258/258，生产双 Hero 自动化为 1/1，完整 Unity EditMode job `7cad4b02d38248f298227ea06804c949` 为 1093/1093，Rider build 0 errors。`Sync and Build All`、Local Addressables/BuildLayout、Packed Play 双 Hero 选择/跳过、冷启动冻结 Pending、下一战 origin 实例投影与最终 Console 0 均通过；完整证据记录于 `06_testing/2026-08-25-g4-run-deck-rewards-upgrades.md`。G4 授权在此结束，不进入 G5。
+
+## CD-119：G5 以唯一 RunHoldings、schema v5 与 BattleResult 消费回写建立跨战持有物
+
+**问题**：G4 只有 RunDeck 和冻结卡牌奖励；Gold、遗物、药水若分别由 UI、Battle 或新服务持有，会产生跨场景第二份状态。药水若在点击时直接删 Run 库存，则 BattleResult 前退出、稳定结果失败重试和 Defeat 结算会互相冲突；遗物若以订阅式全局事件接入，也会让 Scope 重建后重复触发。
+
+**持有物与存档选择**：`RunStateStore` 持有唯一不可变 `RunHoldings`。新 Run 固定 Gold=100；遗物按获得顺序唯一保存；药水带最多三瓶，以稳定 InstanceId + TemplateId 有序保存并允许同模板多实例。所有算术 checked，非法、重复、余额不足、满容量或实例 ID 溢出均零写入。当前 canonical 提升为 schema v5，同时保存 holdings、G5 attached loot 与 G6 类型化 `PendingNodeVisit`；v4/v3/v2 经显式迁移，v1 继续 fail-fast，Atomic durable equality 深比较每项有序事实。
+
+**首个遗物、药水与获得来源**：Relic 8001 由 Battle setup 只读投影，在每场 BattleStart、玩家可提交普通行动前按 holdings 顺序精确一次增加 1 Strength，不建立全局事件总线。Potion 9001 只接受无目标 InstanceId 命令，合法时恢复最多 10 HP并在 Battle 内记录 accepted consumption；稳定 `BattleResult` 携带去重实例 ID，由唯一 Run result bridge 在 victory 或 defeat 后继中 exactly-once 移除。结果前退出仍恢复战前检查点；稳定结果提交失败可 exact retry。第一次普通战斗的冻结卡牌奖励同时冻结尚可获得的样本遗物/药水 attached loot，选择或 Skip 在同一原子后继中领取，Scene 重建、读档和重试都不重算。冷恢复必须从已完成普通 Combat 路径与当前 holdings 重建权威 attached loot 并逐字段比较，后续奖励夹带合法模板或首战删除应有 loot 都 fail-closed。
+
+**边界与状态**：本决定不新增 Relic/Potion/Gold store、目标型药水、持久充能、装备、通用事件总线、战中存档或 Battle Queue 重构。先前 Unity license code 198 阻塞已经解除；G5 已取得 `Sync and Build All`、完整 EditMode 1348/1348、BuildLayout 真实 bundle 与 Packed Play schema v5 产品链证据，当前为 `completed / verified`。完整事实见 `06_testing/2026-08-27-g5-g6-run-holdings-noncombat-nodes.md`。
+
+## CD-120：G6 以统一类型化 NodeVisit、Source/Successor 结算与 mixed map v2 闭合非战斗节点
+
+**问题**：Rest、Chest、Shop 与 Event 都需要冻结候选并跨 Scene/进程恢复；若每类节点各建状态机，或让 Presenter 保留价格/选项，重进就可能刷新并重复获利。购买与节点完成若先发布内存后写盘，也会在提交失败时出现扣款、入库、售罄和路径彼此分裂。
+
+**统一访问与持久化选择**：schema v5 的 `PendingNodeVisit` 是唯一 lifecycle envelope，每种 kind 只使用严格类型化 payload。进入和动作都由 Store 先 preview 出精确 `Source`/`Successor`，Flow save-before-publish；提交失败保留旧状态，exact retry 只能复用同一后继。完成动作在同一后继中清除 Pending、追加一次 Path 并回到 MapReady。Shop 的每笔 purchase 也原子保存 Gold、入库/加卡和 Purchased 标记，但保持同一 Pending；显式 Leave 才完成路径。Atomic adapter 允许合法的 Purchased 动态变化，同时严格比较静态库存身份、顺序、类型、模板和价格。
+
+**地图与四个样本**：旧 G3 profile/generator v1 与 fingerprint 保持；新 mixed profile/generator v2 固定路线为 `Combat → Rest → Chest → Shop → Event → Combat → BossGate`，Boss 仍只是既有 gate。Shop/Event 使用独立随机域。Rest 冻结 `ceil(MaxHP×30%)` 治疗值和合法升级实例；Chest 冻结 Potion 9001 并提供 Claim/Skip；Shop 冻结 Relic 8001/75、Potion 9001/25 与 Hero 奖励池 Card/50，可多次购买后 Leave；Event A checked 增加 50 Gold，B 支付 25 Gold 并恢复最多 15 HP。所有 disabled 条件仍由 Store 终审，重复、过期、伪造输入和保存失败均零发布。
+
+**边界与状态**：本决定不引入事件 DSL、动态经济、出售/回购/刷新、第二节点状态机、真实 Boss、Boss 阶段、RunOutcome、G7、云/多槽或架构重构。G6-A～E 已实现；attached loot 恢复 P2 经 RED→GREEN 修复，独立复审未发现其他 P1/P2。最终完整 EditMode 1348/1348、BuildLayout、Packed Play mixed profile 实际路线与 Console 0 均通过，故 G6 为 `completed / verified`；先前许可证 code 198 仅保留为已解除的历史阻塞。完整事实见 `06_testing/2026-08-27-g5-g6-run-holdings-noncombat-nodes.md`。

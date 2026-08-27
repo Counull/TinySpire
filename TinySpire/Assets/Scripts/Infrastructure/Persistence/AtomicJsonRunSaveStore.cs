@@ -106,6 +106,14 @@ namespace TinySpire.Infrastructure.Persistence
     /// <summary>在一个目录内以临时文件校验加原子替换实现 versioned JSON 单槽存档。</summary>
     public sealed class AtomicJsonRunSaveStore : IRunSaveStore
     {
+        /// <summary>原子后继校验可开放的三种封闭持有物迁移语义。</summary>
+        private enum HoldingsTransitionMode
+        {
+            Exact,
+            BattlePotionRemoval,
+            RewardAttachedLoot,
+        }
+
         internal const string LiveFileName = "run-save.json";
         internal const string TemporaryFileName = "run-save.json.tmp";
         internal const string TerminalIntentFileName = "run-save.terminal-intent.json";
@@ -437,6 +445,13 @@ namespace TinySpire.Infrastructure.Persistence
                 FinalizePublishedRewardIntent();
                 if (document.ProgressPhase == RunSaveProgressPhase.Terminal)
                 {
+                    if (!TryValidateTerminalSuccessor(document, out string terminalDetail))
+                    {
+                        return RunSaveCommitResult.Failed(
+                            RunSaveCommitStatus.InvalidDocument,
+                            terminalDetail);
+                    }
+
                     bool requiresIntentWrite = true;
                     if (_fileSystem.FileExists(_terminalIntentFilePath))
                     {
@@ -748,7 +763,10 @@ namespace TinySpire.Infrastructure.Persistence
                    pending != null &&
                    live.ProgressPhase == RunSaveProgressPhase.MapReady &&
                    pending.ProgressPhase == RunSaveProgressPhase.RewardPending &&
-                   HasSameStableRunIdentity(live, pending) &&
+                   HasSameStableRunIdentity(
+                       live,
+                       pending,
+                       HoldingsTransitionMode.BattlePotionRemoval) &&
                    pending.CurrentHealth > 0 &&
                    pending.CurrentHealth <= pending.MaxHealth &&
                    live.PathNodeIds.SequenceEqual(pending.PathNodeIds) &&
@@ -760,6 +778,57 @@ namespace TinySpire.Infrastructure.Persistence
                    RunCardsEqual(live.RunCards, pending.RunCards);
         }
 
+        /// <summary>若存在正式前驱，确认终局只写入失败生命、承诺节点与允许的药水删除。</summary>
+        private bool TryValidateTerminalSuccessor(
+            RunSaveDocument terminal,
+            out string detail)
+        {
+            detail = string.Empty;
+            if (!_fileSystem.FileExists(_saveFilePath))
+                return true;
+
+            RunSaveDocumentReadResult liveRead = RunSaveDocumentCodec.Read(
+                _fileSystem.ReadAllText(_saveFilePath));
+            if (liveRead.Status != RunSaveDocumentReadStatus.Success)
+            {
+                detail = "The live Run save cannot validate the terminal successor.";
+                return false;
+            }
+
+            if (DocumentsEqual(liveRead.Document, terminal) ||
+                IsTerminalSuccessor(liveRead.Document, terminal))
+            {
+                return true;
+            }
+
+            detail = "The requested terminal checkpoint is not the legal successor of the live Run.";
+            return false;
+        }
+
+        /// <summary>严格判断 MapReady 前驱到 Terminal(Defeat) 只允许本战生命与药水消费事实变化。</summary>
+        private static bool IsTerminalSuccessor(
+            RunSaveDocument live,
+            RunSaveDocument terminal)
+        {
+            return live != null &&
+                   terminal != null &&
+                   live.ProgressPhase == RunSaveProgressPhase.MapReady &&
+                   terminal.ProgressPhase == RunSaveProgressPhase.Terminal &&
+                   terminal.TerminalReason == RunSaveTerminalReason.Defeat &&
+                   terminal.CurrentHealth == 0 &&
+                   HasSameStableRunIdentity(
+                       live,
+                       terminal,
+                       HoldingsTransitionMode.BattlePotionRemoval) &&
+                   live.PathNodeIds.SequenceEqual(terminal.PathNodeIds) &&
+                   live.CommittedNodeId == null &&
+                   terminal.CommittedNodeId != null &&
+                   live.PendingCardReward == null &&
+                   terminal.PendingCardReward == null &&
+                   live.LegacyDeckTemplateId == terminal.LegacyDeckTemplateId &&
+                   RunCardsEqual(live.RunCards, terminal.RunCards);
+        }
+
         /// <summary>严格判断目标是否为源 Pending 的一次选择或跳过结算后继。</summary>
         private static bool IsRewardSettlementSuccessor(
             RunSaveDocument source,
@@ -769,7 +838,10 @@ namespace TinySpire.Infrastructure.Persistence
                 target == null ||
                 source.ProgressPhase != RunSaveProgressPhase.RewardPending ||
                 target.ProgressPhase != RunSaveProgressPhase.MapReady ||
-                !HasSameStableRunIdentity(source, target) ||
+                !HasSameStableRunIdentity(
+                    source,
+                    target,
+                    HoldingsTransitionMode.RewardAttachedLoot) ||
                 source.CurrentHealth != target.CurrentHealth ||
                 source.CommittedNodeId == null ||
                 source.PendingCardReward == null ||
@@ -830,10 +902,11 @@ namespace TinySpire.Infrastructure.Persistence
                        appended.TemplateId);
         }
 
-        /// <summary>比较奖励事务前后绝不允许变化的 Run 身份、Hero 与地图配方事实。</summary>
+        /// <summary>比较稳定 Run 身份，并只开放调用方明确指定的一种持有物迁移模式。</summary>
         private static bool HasSameStableRunIdentity(
             RunSaveDocument left,
-            RunSaveDocument right)
+            RunSaveDocument right,
+            HoldingsTransitionMode holdingsTransitionMode = HoldingsTransitionMode.Exact)
         {
             return left.SchemaVersion == right.SchemaVersion &&
                    left.RunId == right.RunId &&
@@ -843,7 +916,203 @@ namespace TinySpire.Infrastructure.Persistence
                    left.MapProfileId == right.MapProfileId &&
                    left.MapGeneratorVersion == right.MapGeneratorVersion &&
                    left.MapSeed == right.MapSeed &&
-                   left.MapFingerprint == right.MapFingerprint;
+                   left.MapFingerprint == right.MapFingerprint &&
+                   HoldingsMatchTransition(left, right, holdingsTransitionMode) &&
+                   PendingNodeVisitsEqual(left.PendingNodeVisit, right.PendingNodeVisit);
+        }
+
+        /// <summary>按封闭枚举选择唯一合法的持有物比较规则，未知模式直接拒绝。</summary>
+        private static bool HoldingsMatchTransition(
+            RunSaveDocument source,
+            RunSaveDocument target,
+            HoldingsTransitionMode mode)
+        {
+            switch (mode)
+            {
+                case HoldingsTransitionMode.Exact:
+                    return HoldingsEqual(source, target);
+                case HoldingsTransitionMode.BattlePotionRemoval:
+                    return HoldingsMatchBattleResultSuccessor(source, target);
+                case HoldingsTransitionMode.RewardAttachedLoot:
+                    return HoldingsMatchRewardAttachedLootSuccessor(source, target);
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>战斗结果只允许金币和遗物不变，药水则保持实例与模板的稳定相对顺序子序列。</summary>
+        private static bool HoldingsMatchBattleResultSuccessor(
+            RunSaveDocument source,
+            RunSaveDocument target)
+        {
+            return source != null &&
+                   target != null &&
+                   source.Gold == target.Gold &&
+                   RelicsEqual(source.Relics, target.Relics) &&
+                   PotionsAreStableSubsequence(source.Potions, target.Potions);
+        }
+
+        /// <summary>奖励结算只允许按冻结模板分别在遗物与药水末尾精确追加零或一个实例。</summary>
+        private static bool HoldingsMatchRewardAttachedLootSuccessor(
+            RunSaveDocument source,
+            RunSaveDocument target)
+        {
+            if (source == null ||
+                target == null ||
+                source.PendingCardReward == null ||
+                source.PendingCardReward.AttachedLoot == null ||
+                source.Gold != target.Gold)
+            {
+                return false;
+            }
+
+            RunSaveCardRewardAttachedLootDocument attached =
+                source.PendingCardReward.AttachedLoot;
+            return RelicsMatchAttachedTail(
+                       source.Relics,
+                       target.Relics,
+                       attached.RelicTemplateId) &&
+                   PotionsMatchAttachedTail(
+                       source.Potions,
+                       target.Potions,
+                       attached.PotionTemplateId);
+        }
+
+        /// <summary>遗物无冻结模板时要求全等；有模板时要求源前缀与最大身份加一的唯一尾项。</summary>
+        private static bool RelicsMatchAttachedTail(
+            IReadOnlyList<RunSaveRelicDocument> source,
+            IReadOnlyList<RunSaveRelicDocument> target,
+            int? attachedTemplateId)
+        {
+            if (!attachedTemplateId.HasValue)
+                return RelicsEqual(source, target);
+            if (source == null ||
+                target == null ||
+                target.Count != source.Count + 1 ||
+                source.Any(relic => relic.TemplateId == attachedTemplateId.Value))
+            {
+                return false;
+            }
+
+            for (int index = 0; index < source.Count; index++)
+            {
+                if (source[index].InstanceId != target[index].InstanceId ||
+                    source[index].TemplateId != target[index].TemplateId)
+                {
+                    return false;
+                }
+            }
+
+            if (!TryGetNextRelicInstanceId(source, out int expectedInstanceId))
+                return false;
+            RunSaveRelicDocument appended = target[target.Count - 1];
+            return appended.InstanceId == expectedInstanceId &&
+                   appended.TemplateId == attachedTemplateId.Value;
+        }
+
+        /// <summary>药水无冻结模板时要求全等；有模板时还要求源未满槽并精确追加最大身份加一。</summary>
+        private static bool PotionsMatchAttachedTail(
+            IReadOnlyList<RunSavePotionDocument> source,
+            IReadOnlyList<RunSavePotionDocument> target,
+            int? attachedTemplateId)
+        {
+            if (!attachedTemplateId.HasValue)
+                return PotionsEqual(source, target);
+            if (source == null ||
+                target == null ||
+                source.Count >= 3 ||
+                target.Count != source.Count + 1)
+            {
+                return false;
+            }
+
+            for (int index = 0; index < source.Count; index++)
+            {
+                if (source[index].InstanceId != target[index].InstanceId ||
+                    source[index].TemplateId != target[index].TemplateId)
+                {
+                    return false;
+                }
+            }
+
+            if (!TryGetNextPotionInstanceId(source, out int expectedInstanceId))
+                return false;
+            RunSavePotionDocument appended = target[target.Count - 1];
+            return appended.InstanceId == expectedInstanceId &&
+                   appended.TemplateId == attachedTemplateId.Value;
+        }
+
+        /// <summary>以 checked 最大序号加一计算遗物尾项身份，空集合从一开始且溢出返回失败。</summary>
+        private static bool TryGetNextRelicInstanceId(
+            IReadOnlyList<RunSaveRelicDocument> source,
+            out int nextInstanceId)
+        {
+            try
+            {
+                int maximum = source.Count == 0
+                    ? 0
+                    : source.Max(relic => relic.InstanceId);
+                nextInstanceId = checked(maximum + 1);
+                return true;
+            }
+            catch (OverflowException)
+            {
+                nextInstanceId = 0;
+                return false;
+            }
+        }
+
+        /// <summary>以 checked 最大序号加一计算药水尾项身份，空集合从一开始且溢出返回失败。</summary>
+        private static bool TryGetNextPotionInstanceId(
+            IReadOnlyList<RunSavePotionDocument> source,
+            out int nextInstanceId)
+        {
+            try
+            {
+                int maximum = source.Count == 0
+                    ? 0
+                    : source.Max(potion => potion.InstanceId);
+                nextInstanceId = checked(maximum + 1);
+                return true;
+            }
+            catch (OverflowException)
+            {
+                nextInstanceId = 0;
+                return false;
+            }
+        }
+
+        /// <summary>确认目标药水只能从来源删除若干项，不能增加、替换或改变剩余槽位相对顺序。</summary>
+        private static bool PotionsAreStableSubsequence(
+            IReadOnlyList<RunSavePotionDocument> source,
+            IReadOnlyList<RunSavePotionDocument> target)
+        {
+            if (source == null || target == null || target.Count > source.Count)
+                return false;
+
+            int sourceIndex = 0;
+            for (int targetIndex = 0; targetIndex < target.Count; targetIndex++)
+            {
+                RunSavePotionDocument targetPotion = target[targetIndex];
+                bool matched = false;
+                while (sourceIndex < source.Count)
+                {
+                    RunSavePotionDocument sourcePotion = source[sourceIndex++];
+                    if (sourcePotion.InstanceId != targetPotion.InstanceId ||
+                        sourcePotion.TemplateId != targetPotion.TemplateId)
+                    {
+                        continue;
+                    }
+
+                    matched = true;
+                    break;
+                }
+
+                if (!matched)
+                    return false;
+            }
+
+            return true;
         }
 
         /// <summary>逐字段确认回读临时档就是本次完整 checkpoint，而非仅可解析的其他文档。</summary>
@@ -858,6 +1127,7 @@ namespace TinySpire.Infrastructure.Persistence
                    left.MaxHealth == right.MaxHealth &&
                    left.LegacyDeckTemplateId == right.LegacyDeckTemplateId &&
                    RunCardsEqual(left.RunCards, right.RunCards) &&
+                   HoldingsEqual(left, right) &&
                    left.RandomRootSeed == right.RandomRootSeed &&
                    left.MapProfileId == right.MapProfileId &&
                    left.MapGeneratorVersion == right.MapGeneratorVersion &&
@@ -867,7 +1137,66 @@ namespace TinySpire.Infrastructure.Persistence
                    left.ProgressPhase == right.ProgressPhase &&
                    left.CommittedNodeId == right.CommittedNodeId &&
                    left.TerminalReason == right.TerminalReason &&
-                   PendingCardRewardsEqual(left.PendingCardReward, right.PendingCardReward);
+                   PendingCardRewardsEqual(left.PendingCardReward, right.PendingCardReward) &&
+                   PendingNodeVisitsEqual(left.PendingNodeVisit, right.PendingNodeVisit);
+        }
+
+        /// <summary>逐字段比较金币、遗物顺序与药水槽顺序的完整持有物事实。</summary>
+        private static bool HoldingsEqual(RunSaveDocument left, RunSaveDocument right)
+        {
+            return left != null &&
+                   right != null &&
+                   left.Gold == right.Gold &&
+                   RelicsEqual(left.Relics, right.Relics) &&
+                   PotionsEqual(left.Potions, right.Potions);
+        }
+
+        /// <summary>逐项比较遗物获得顺序、实例身份与模板引用。</summary>
+        private static bool RelicsEqual(
+            IReadOnlyList<RunSaveRelicDocument> left,
+            IReadOnlyList<RunSaveRelicDocument> right)
+        {
+            if (ReferenceEquals(left, right))
+                return true;
+            if (left == null || right == null || left.Count != right.Count)
+                return false;
+
+            for (int index = 0; index < left.Count; index++)
+            {
+                RunSaveRelicDocument leftRelic = left[index];
+                RunSaveRelicDocument rightRelic = right[index];
+                if (leftRelic.InstanceId != rightRelic.InstanceId ||
+                    leftRelic.TemplateId != rightRelic.TemplateId)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>逐槽比较药水顺序、实例身份与模板引用。</summary>
+        private static bool PotionsEqual(
+            IReadOnlyList<RunSavePotionDocument> left,
+            IReadOnlyList<RunSavePotionDocument> right)
+        {
+            if (ReferenceEquals(left, right))
+                return true;
+            if (left == null || right == null || left.Count != right.Count)
+                return false;
+
+            for (int index = 0; index < left.Count; index++)
+            {
+                RunSavePotionDocument leftPotion = left[index];
+                RunSavePotionDocument rightPotion = right[index];
+                if (leftPotion.InstanceId != rightPotion.InstanceId ||
+                    leftPotion.TemplateId != rightPotion.TemplateId)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         /// <summary>逐字段比较冻结奖励身份与三个有序候选模板。</summary>
@@ -880,7 +1209,107 @@ namespace TinySpire.Infrastructure.Persistence
             return left != null &&
                    right != null &&
                    left.RewardId == right.RewardId &&
-                   left.CandidateTemplateIds.SequenceEqual(right.CandidateTemplateIds);
+                   left.CandidateTemplateIds.SequenceEqual(right.CandidateTemplateIds) &&
+                   AttachedLootEqual(left.AttachedLoot, right.AttachedLoot);
+        }
+
+        /// <summary>逐字段比较奖励附着的可空遗物与药水模板。</summary>
+        private static bool AttachedLootEqual(
+            RunSaveCardRewardAttachedLootDocument left,
+            RunSaveCardRewardAttachedLootDocument right)
+        {
+            if (ReferenceEquals(left, right))
+                return true;
+            return left != null &&
+                   right != null &&
+                   left.RelicTemplateId == right.RelicTemplateId &&
+                   left.PotionTemplateId == right.PotionTemplateId;
+        }
+
+        /// <summary>逐字段比较节点访问身份、类型、内容与唯一匹配 payload。</summary>
+        private static bool PendingNodeVisitsEqual(
+            RunSavePendingNodeVisitDocument left,
+            RunSavePendingNodeVisitDocument right)
+        {
+            if (ReferenceEquals(left, right))
+                return true;
+            return left != null &&
+                   right != null &&
+                   left.VisitId == right.VisitId &&
+                   left.NodeId == right.NodeId &&
+                   left.ContentId == right.ContentId &&
+                   left.Kind == right.Kind &&
+                   RestNodeVisitPayloadsEqual(left.RestPayload, right.RestPayload) &&
+                   ChestNodeVisitPayloadsEqual(left.ChestPayload, right.ChestPayload) &&
+                   ShopNodeVisitPayloadsEqual(left.ShopPayload, right.ShopPayload) &&
+                   EventNodeVisitPayloadsEqual(left.EventPayload, right.EventPayload);
+        }
+
+        /// <summary>逐字段比较休息点治疗量与有序升级候选。</summary>
+        private static bool RestNodeVisitPayloadsEqual(
+            RunSaveRestNodeVisitPayloadDocument left,
+            RunSaveRestNodeVisitPayloadDocument right)
+        {
+            if (ReferenceEquals(left, right))
+                return true;
+            return left != null &&
+                   right != null &&
+                   left.HealAmount == right.HealAmount &&
+                   left.UpgradeCandidateInstanceIds.SequenceEqual(
+                       right.UpgradeCandidateInstanceIds);
+        }
+
+        /// <summary>逐字段比较宝箱冻结的药水模板。</summary>
+        private static bool ChestNodeVisitPayloadsEqual(
+            RunSaveChestNodeVisitPayloadDocument left,
+            RunSaveChestNodeVisitPayloadDocument right)
+        {
+            if (ReferenceEquals(left, right))
+                return true;
+            return left != null &&
+                   right != null &&
+                   left.PotionTemplateId == right.PotionTemplateId;
+        }
+
+        /// <summary>逐项比较商店库存顺序、身份、内容域、价格与购买状态。</summary>
+        private static bool ShopNodeVisitPayloadsEqual(
+            RunSaveShopNodeVisitPayloadDocument left,
+            RunSaveShopNodeVisitPayloadDocument right)
+        {
+            if (ReferenceEquals(left, right))
+                return true;
+            if (left == null || right == null || left.Entries.Count != right.Entries.Count)
+                return false;
+
+            for (int index = 0; index < left.Entries.Count; index++)
+            {
+                RunSaveShopStockEntryDocument leftEntry = left.Entries[index];
+                RunSaveShopStockEntryDocument rightEntry = right.Entries[index];
+                if (leftEntry.EntryId != rightEntry.EntryId ||
+                    leftEntry.Kind != rightEntry.Kind ||
+                    leftEntry.TemplateId != rightEntry.TemplateId ||
+                    leftEntry.Price != rightEntry.Price ||
+                    leftEntry.Purchased != rightEntry.Purchased)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>逐字段比较事件的获得金币与付费治疗两项冻结结果。</summary>
+        private static bool EventNodeVisitPayloadsEqual(
+            RunSaveEventNodeVisitPayloadDocument left,
+            RunSaveEventNodeVisitPayloadDocument right)
+        {
+            if (ReferenceEquals(left, right))
+                return true;
+            return left != null &&
+                   right != null &&
+                   left.GainGoldAmount == right.GainGoldAmount &&
+                   left.PaidHealCost == right.PaidHealCost &&
+                   left.PaidHealAmount == right.PaidHealAmount;
         }
 
         /// <summary>逐卡比较 canonical RunDeck 的稳定顺序、实例身份、模板与升级事实。</summary>

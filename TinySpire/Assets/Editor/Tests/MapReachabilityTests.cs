@@ -76,7 +76,7 @@ public sealed class MapReachabilityTests
 
         return new MapDefinition(
             "test.reachability.v1",
-            ActMapGenerator.CurrentVersion,
+            ActMapGenerator.LegacyG3Version,
             mapSeed: 77u,
             nodes,
             edges);

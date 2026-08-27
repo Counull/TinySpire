@@ -6,6 +6,7 @@ using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using TinySpire.Infrastructure.Persistence;
 using TinySpire.Run;
+using TinySpire.Run.Map;
 
 public sealed class AtomicJsonRunSaveStoreTests
 {
@@ -107,6 +108,70 @@ public sealed class AtomicJsonRunSaveStoreTests
             Is.EqualTo(pending.PendingCardReward.CandidateTemplateIds));
     }
 
+    /// <summary>源 MapReady 与 durable Pending 的持有物若漂移，冷启动必须拒绝猜测哪份可恢复。</summary>
+    [Test]
+    public void Load_RewardPendingIntentWithHoldingsDrift_ReturnsInterruptedCommit()
+    {
+        var initialStore = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument oldLive = CreateDocument(
+            "19191919-cccc-dddd-eeee-292929292929",
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 80);
+        Assert.That(initialStore.Commit(oldLive).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument pending = CreateDocumentWithHoldingsDrift(
+            CreateDocument(
+                oldLive.RunId,
+                RunSaveProgressPhase.RewardPending,
+                currentHealth: 43),
+            HoldingsDrift.Gold);
+        var failingStore = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new TemporaryWriteFailingFileSystem(GetTemporaryPath()));
+
+        RunSaveCommitResult commit = failingStore.Commit(pending);
+        RunSaveLoadResult coldLoad = new AtomicJsonRunSaveStore(_testDirectory).Load();
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
+        Assert.That(File.Exists(GetRewardIntentPath()), Is.True);
+        Assert.That(coldLoad.Status, Is.EqualTo(RunSaveLoadStatus.InterruptedCommit));
+        Assert.That(coldLoad.Document, Is.Null);
+        Assert.That(coldLoad.Detail, Does.Contain("conflict").IgnoreCase);
+    }
+
+    /// <summary>首次奖励意图可只移除已消费药水，并在替换失败后按原相对顺序冷恢复。</summary>
+    [Test]
+    public void Load_RewardPendingIntentWithPotionSubsequence_RecoversFrozenPending()
+    {
+        var initialStore = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument oldLive = CreateDocument(
+            "19191919-dddd-eeee-ffff-292929292929",
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 80);
+        Assert.That(initialStore.Commit(oldLive).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument pending = CreateDocumentWithRemovedPotion(
+            CreateDocument(
+                oldLive.RunId,
+                RunSaveProgressPhase.RewardPending,
+                currentHealth: 43),
+            removedInstanceId: 1);
+        var failingStore = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new TemporaryWriteFailingFileSystem(GetTemporaryPath()));
+
+        RunSaveCommitResult commit = failingStore.Commit(pending);
+        RunSaveLoadResult coldLoad = new AtomicJsonRunSaveStore(_testDirectory).Load();
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
+        Assert.That(coldLoad.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(coldLoad.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.RewardPending));
+        Assert.That(
+            coldLoad.Document.Potions.Select(potion => potion.InstanceId),
+            Is.EqualTo(new[] { 2 }));
+        Assert.That(coldLoad.Document.Gold, Is.EqualTo(oldLive.Gold));
+        Assert.That(coldLoad.Document.Relics.Select(relic => relic.InstanceId),
+            Is.EqualTo(oldLive.Relics.Select(relic => relic.InstanceId)));
+    }
+
     /// <summary>战斗内回血后即使临时档写入失败，冷启动也必须以 durable intent 恢复同一奖励。</summary>
     [Test]
     public void Commit_HealedRewardPendingTemporaryWriteFails_ColdLoadReturnsFrozenIntent()
@@ -188,6 +253,181 @@ public sealed class AtomicJsonRunSaveStoreTests
         Assert.That(coldLoad.Document.PendingCardReward.RewardId,
             Is.EqualTo(pending.PendingCardReward.RewardId));
         Assert.That(File.Exists(GetRewardIntentPath()), Is.True);
+    }
+
+    /// <summary>奖励附着掉落只允许按冻结模板与最大实例号加一精确追加到两个持有物末尾。</summary>
+    [Test]
+    public void Commit_RewardSettlementWithAttachedLoot_AppendsExactTailsAndLoadsSettledLive()
+    {
+        var store = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument pending = CreateDocument(
+            "1a2a1a2a-aaaa-bbbb-cccc-2a3a2a3a2a3a",
+            RunSaveProgressPhase.RewardPending,
+            currentHealth: 41,
+            attachedRelicTemplateId: 8001,
+            attachedPotionTemplateId: 9001);
+        Assert.That(store.Commit(pending).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument settled = CreateSettledRewardDocument(pending, selectedTemplateId: null);
+
+        RunSaveCommitResult commit = store.Commit(settled);
+        RunSaveLoadResult load = store.Load();
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(load.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(load.Document.Relics.Select(relic =>
+                (relic.InstanceId, relic.TemplateId)),
+            Is.EqualTo(new[] { (1, 4101), (2, 4102), (3, 8001) }));
+        Assert.That(load.Document.Potions.Select(potion =>
+                (potion.InstanceId, potion.TemplateId)),
+            Is.EqualTo(new[] { (1, 5101), (2, 5102), (3, 9001) }));
+    }
+
+    /// <summary>附着掉落的少发、多发、错模板、错身份或插入前缀都必须保留源 Pending。</summary>
+    [TestCase(AttachedLootSettlementDrift.MissingRelicTail)]
+    [TestCase(AttachedLootSettlementDrift.ExtraRelicTail)]
+    [TestCase(AttachedLootSettlementDrift.WrongRelicInstanceId)]
+    [TestCase(AttachedLootSettlementDrift.WrongRelicTemplateId)]
+    [TestCase(AttachedLootSettlementDrift.RelicInsertedBeforePrefix)]
+    [TestCase(AttachedLootSettlementDrift.MissingPotionTail)]
+    [TestCase(AttachedLootSettlementDrift.WrongPotionInstanceId)]
+    [TestCase(AttachedLootSettlementDrift.WrongPotionTemplateId)]
+    [TestCase(AttachedLootSettlementDrift.PotionInsertedBeforePrefix)]
+    public void Commit_RewardSettlementWithAttachedLootDrift_ReturnsInvalidDocument(
+        AttachedLootSettlementDrift drift)
+    {
+        var store = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument pending = CreateDocument(
+            "1a3a1a3a-aaaa-bbbb-cccc-2a4a2a4a2a4a",
+            RunSaveProgressPhase.RewardPending,
+            currentHealth: 42,
+            attachedRelicTemplateId: 8001,
+            attachedPotionTemplateId: 9001);
+        Assert.That(store.Commit(pending).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument drifted = CreateAttachedLootSettlementDrift(
+            CreateSettledRewardDocument(pending, selectedTemplateId: null),
+            drift);
+
+        RunSaveCommitResult commit = store.Commit(drifted);
+        RunSaveLoadResult load = store.Load();
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.InvalidDocument));
+        Assert.That(load.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(load.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.RewardPending));
+        Assert.That(load.Document.PendingCardReward.RewardId,
+            Is.EqualTo(pending.PendingCardReward.RewardId));
+    }
+
+    /// <summary>某一掉落模板未冻结时，对应持有物必须全等，不能借另一类合法追加夹带实例。</summary>
+    [Test]
+    public void Commit_RewardSettlementWithUnattachedPotionAppend_ReturnsInvalidDocument()
+    {
+        var store = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument pending = CreateDocument(
+            "1a4a1a4a-aaaa-bbbb-cccc-2a5a2a5a2a5a",
+            RunSaveProgressPhase.RewardPending,
+            currentHealth: 43,
+            attachedRelicTemplateId: 8001,
+            attachedPotionTemplateId: null);
+        Assert.That(store.Commit(pending).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument settled = CreateSettledRewardDocument(pending, selectedTemplateId: null);
+        JObject raw = JObject.Parse(RunSaveDocumentCodec.Serialize(settled));
+        ((JArray)raw["potions"]).Add(new JObject
+        {
+            ["instanceId"] = 3,
+            ["templateId"] = 9001,
+        });
+        RunSaveDocument drifted = RequireParseableDocument(raw, "unattached potion append");
+
+        RunSaveCommitResult commit = store.Commit(drifted);
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.InvalidDocument));
+    }
+
+    /// <summary>伪造满三槽却仍冻结药水的 Pending 时，结算不得少发或越过容量追加。</summary>
+    [Test]
+    public void Commit_RewardSettlementWithAttachedPotionAtFullCapacity_ReturnsInvalidDocument()
+    {
+        var store = new AtomicJsonRunSaveStore(_testDirectory);
+        JObject pendingRaw = JObject.Parse(RunSaveDocumentCodec.Serialize(CreateDocument(
+            "1a5a1a5a-aaaa-bbbb-cccc-2a6a2a6a2a6a",
+            RunSaveProgressPhase.RewardPending,
+            currentHealth: 44,
+            attachedRelicTemplateId: null,
+            attachedPotionTemplateId: 9001)));
+        ((JArray)pendingRaw["potions"]).Add(new JObject
+        {
+            ["instanceId"] = 3,
+            ["templateId"] = 5103,
+        });
+        RunSaveDocument pending = RequireParseableDocument(pendingRaw, "full potion pending");
+        Assert.That(store.Commit(pending).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument missingTail = CreateRewardSettlementWithoutAttachedLoot(pending);
+
+        RunSaveCommitResult commit = store.Commit(missingTail);
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.InvalidDocument));
+    }
+
+    /// <summary>来源最大遗物实例号为 int.MaxValue 时不存在合法尾项，任何可解析替代号都必须拒绝。</summary>
+    [Test]
+    public void Commit_RewardSettlementWithRelicInstanceOverflow_ReturnsInvalidDocument()
+    {
+        var store = new AtomicJsonRunSaveStore(_testDirectory);
+        JObject pendingRaw = JObject.Parse(RunSaveDocumentCodec.Serialize(CreateDocument(
+            "1a6a1a6a-aaaa-bbbb-cccc-2a7a2a7a2a7a",
+            RunSaveProgressPhase.RewardPending,
+            currentHealth: 45,
+            attachedRelicTemplateId: 8001,
+            attachedPotionTemplateId: null)));
+        pendingRaw["relics"][1]["instanceId"] = int.MaxValue;
+        RunSaveDocument pending = RequireParseableDocument(pendingRaw, "overflow relic pending");
+        Assert.That(store.Commit(pending).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        JObject targetRaw = JObject.Parse(RunSaveDocumentCodec.Serialize(
+            CreateRewardSettlementWithoutAttachedLoot(pending)));
+        ((JArray)targetRaw["relics"]).Add(new JObject
+        {
+            ["instanceId"] = 2,
+            ["templateId"] = 8001,
+        });
+        RunSaveDocument target = RequireParseableDocument(targetRaw, "overflow relic settlement");
+
+        RunSaveCommitResult commit = store.Commit(target);
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.InvalidDocument));
+    }
+
+    /// <summary>卡牌奖励结算前后任何持有物字段都不得变化，否则必须保留源 Pending。</summary>
+    [TestCase(HoldingsDrift.Gold)]
+    [TestCase(HoldingsDrift.RelicOrder)]
+    [TestCase(HoldingsDrift.RelicInstanceId)]
+    [TestCase(HoldingsDrift.RelicTemplateId)]
+    [TestCase(HoldingsDrift.PotionOrder)]
+    [TestCase(HoldingsDrift.PotionInstanceId)]
+    [TestCase(HoldingsDrift.PotionTemplateId)]
+    public void Commit_RewardSettlementWithHoldingsDrift_ReturnsInvalidDocument(
+        HoldingsDrift drift)
+    {
+        var store = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument pending = CreateDocument(
+            "1b1b1b1b-aaaa-bbbb-cccc-2b2b2b2b2b2b",
+            RunSaveProgressPhase.RewardPending,
+            currentHealth: 47);
+        Assert.That(store.Commit(pending).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument driftedSettlement = CreateDocumentWithHoldingsDrift(
+            CreateSettledRewardDocument(pending, selectedTemplateId: null),
+            drift);
+
+        RunSaveCommitResult commit = store.Commit(driftedSettlement);
+        RunSaveLoadResult load = store.Load();
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.InvalidDocument));
+        Assert.That(load.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(load.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.RewardPending));
+        Assert.That(load.Document.Relics.Select(relic => relic.InstanceId),
+            Is.EqualTo(pending.Relics.Select(relic => relic.InstanceId)));
+        Assert.That(load.Document.Potions.Select(potion => potion.InstanceId),
+            Is.EqualTo(pending.Potions.Select(potion => potion.InstanceId)));
+        Assert.That(load.Document.Gold, Is.EqualTo(pending.Gold));
     }
 
     /// <summary>奖励结算正式发布成功后必须清除源 intent，并只保留选择后的 MapReady 正式档。</summary>
@@ -402,6 +642,213 @@ public sealed class AtomicJsonRunSaveStoreTests
         Assert.That(load.HasPendingTemporaryFile, Is.True);
     }
 
+    /// <summary>Rest 结算替换失败后冷启动仍恢复同一 Pending，重试同一后继才发布治疗与单次路径追加。</summary>
+    [Test]
+    public void Commit_RestSettlementReplacementFailsThenExactRetry_PublishesSameSuccessor()
+    {
+        var initialStore = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument pending = CreateNodeVisitDocument(
+            "34343434-aaaa-bbbb-cccc-565656565656",
+            MapNodeKind.Rest);
+        Assert.That(initialStore.Commit(pending).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument successor = CreateRestHealSettlementDocument(pending);
+        var failingStore = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new ReplaceFailingFileSystem());
+
+        RunSaveCommitResult failed = failingStore.Commit(successor);
+        RunSaveLoadResult coldPending = new AtomicJsonRunSaveStore(_testDirectory).Load();
+
+        Assert.That(failed.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
+        Assert.That(coldPending.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(coldPending.HasPendingTemporaryFile, Is.True);
+        Assert.That(coldPending.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.NodeVisitPending));
+        Assert.That(coldPending.Document.CurrentHealth, Is.EqualTo(68));
+        Assert.That(coldPending.Document.PathNodeIds, Is.EqualTo(pending.PathNodeIds));
+        Assert.That(coldPending.Document.PendingNodeVisit.VisitId,
+            Is.EqualTo(pending.PendingNodeVisit.VisitId));
+        Assert.That(coldPending.Document.PendingNodeVisit.RestPayload.HealAmount, Is.EqualTo(24));
+
+        var retryStore = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveCommitResult retry = retryStore.Commit(successor);
+        RunSaveLoadResult coldSuccessor = retryStore.Load();
+
+        Assert.That(retry.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(coldSuccessor.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(coldSuccessor.HasPendingTemporaryFile, Is.False);
+        Assert.That(coldSuccessor.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.MapReady));
+        Assert.That(coldSuccessor.Document.CurrentHealth, Is.EqualTo(80));
+        Assert.That(coldSuccessor.Document.PendingNodeVisit, Is.Null);
+        Assert.That(
+            coldSuccessor.Document.PathNodeIds,
+            Is.EqualTo(pending.PathNodeIds.Concat(new[] { pending.PendingNodeVisit.NodeId })));
+        Assert.That(coldSuccessor.Document.RunCards.Select(card => card.UpgradeLevel),
+            Is.EqualTo(pending.RunCards.Select(card => card.UpgradeLevel)));
+    }
+
+    /// <summary>Chest 领取或跳过替换失败都保留源 Pending，重试同一后继才发布持有物与单次路径完成。</summary>
+    [TestCase(true)]
+    [TestCase(false)]
+    public void Commit_ChestSettlementReplacementFailsThenExactRetry_PublishesSameSuccessor(
+        bool claim)
+    {
+        var initialStore = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument pending = CreateNodeVisitDocument(
+            claim
+                ? "35353535-aaaa-bbbb-cccc-575757575751"
+                : "35353535-aaaa-bbbb-cccc-575757575752",
+            MapNodeKind.Chest);
+        Assert.That(initialStore.Commit(pending).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument successor = CreateChestSettlementDocument(pending, claim);
+        var failingStore = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new ReplaceFailingFileSystem());
+
+        RunSaveCommitResult failed = failingStore.Commit(successor);
+        RunSaveLoadResult coldPending = new AtomicJsonRunSaveStore(_testDirectory).Load();
+
+        Assert.That(failed.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
+        Assert.That(coldPending.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(coldPending.HasPendingTemporaryFile, Is.True);
+        Assert.That(coldPending.Document.ProgressPhase,
+            Is.EqualTo(RunSaveProgressPhase.NodeVisitPending));
+        Assert.That(coldPending.Document.PendingNodeVisit.VisitId,
+            Is.EqualTo(pending.PendingNodeVisit.VisitId));
+        Assert.That(coldPending.Document.Potions.Select(potion => potion.InstanceId),
+            Is.EqualTo(new[] { 1, 2 }));
+
+        var retryStore = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveCommitResult retry = retryStore.Commit(successor);
+        RunSaveLoadResult coldSuccessor = retryStore.Load();
+
+        Assert.That(retry.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(coldSuccessor.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(coldSuccessor.HasPendingTemporaryFile, Is.False);
+        Assert.That(coldSuccessor.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.MapReady));
+        Assert.That(coldSuccessor.Document.PendingNodeVisit, Is.Null);
+        Assert.That(coldSuccessor.Document.PathNodeIds,
+            Is.EqualTo(pending.PathNodeIds.Concat(new[] { pending.PendingNodeVisit.NodeId })));
+        Assert.That(coldSuccessor.Document.Potions.Select(potion => potion.InstanceId),
+            Is.EqualTo(claim ? new[] { 1, 2, 3 } : new[] { 1, 2 }));
+        Assert.That(coldSuccessor.Document.Potions.Last().TemplateId,
+            Is.EqualTo(claim ? pending.PendingNodeVisit.ChestPayload.PotionTemplateId : 5102));
+    }
+
+    /// <summary>Shop 购买与 Leave 的原子替换失败都保留精确 live，重试后才依次发布已购 Pending 与单次路径完成。</summary>
+    [Test]
+    public void Commit_ShopPurchaseAndLeaveReplacementFailThenExactRetry_PublishEachSuccessor()
+    {
+        var initialStore = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument pending = CreateNodeVisitDocument(
+            "36363636-aaaa-bbbb-cccc-585858585858",
+            MapNodeKind.Shop);
+        Assert.That(initialStore.Commit(pending).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument purchased = CreateShopCardPurchaseDocument(pending);
+
+        RunSaveCommitResult purchaseFailed = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new ReplaceFailingFileSystem()).Commit(purchased);
+        RunSaveLoadResult coldOriginal = new AtomicJsonRunSaveStore(_testDirectory).Load();
+
+        Assert.That(purchaseFailed.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
+        Assert.That(coldOriginal.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(coldOriginal.HasPendingTemporaryFile, Is.True);
+        Assert.That(coldOriginal.Document.Gold, Is.EqualTo(pending.Gold));
+        Assert.That(coldOriginal.Document.RunCards, Has.Count.EqualTo(pending.RunCards.Count));
+        Assert.That(coldOriginal.Document.PendingNodeVisit.ShopPayload.Entries
+                .Select(entry => entry.Purchased),
+            Is.EqualTo(new[] { false, true, false }));
+
+        var purchaseRetryStore = new AtomicJsonRunSaveStore(_testDirectory);
+        Assert.That(purchaseRetryStore.Commit(purchased).Status,
+            Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveLoadResult coldPurchased = purchaseRetryStore.Load();
+        Assert.That(coldPurchased.HasPendingTemporaryFile, Is.False);
+        Assert.That(coldPurchased.Document.ProgressPhase,
+            Is.EqualTo(RunSaveProgressPhase.NodeVisitPending));
+        Assert.That(coldPurchased.Document.PathNodeIds, Is.EqualTo(pending.PathNodeIds));
+        Assert.That(coldPurchased.Document.Gold, Is.EqualTo(pending.Gold - 75));
+        Assert.That(coldPurchased.Document.RunCards, Has.Count.EqualTo(pending.RunCards.Count + 1));
+        Assert.That(coldPurchased.Document.PendingNodeVisit.ShopPayload.Entries
+                .Select(entry => entry.Purchased),
+            Is.EqualTo(new[] { false, true, true }));
+
+        RunSaveDocument left = CreateShopLeaveSettlementDocument(purchased);
+        RunSaveCommitResult leaveFailed = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new ReplaceFailingFileSystem()).Commit(left);
+        RunSaveLoadResult coldStillPurchased = new AtomicJsonRunSaveStore(_testDirectory).Load();
+
+        Assert.That(leaveFailed.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
+        Assert.That(coldStillPurchased.Document.ProgressPhase,
+            Is.EqualTo(RunSaveProgressPhase.NodeVisitPending));
+        Assert.That(coldStillPurchased.Document.PendingNodeVisit.ShopPayload.Entries
+                .Select(entry => entry.Purchased),
+            Is.EqualTo(new[] { false, true, true }));
+        Assert.That(coldStillPurchased.Document.Gold, Is.EqualTo(purchased.Gold));
+
+        var leaveRetryStore = new AtomicJsonRunSaveStore(_testDirectory);
+        Assert.That(leaveRetryStore.Commit(left).Status,
+            Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveLoadResult coldLeft = leaveRetryStore.Load();
+        Assert.That(coldLeft.HasPendingTemporaryFile, Is.False);
+        Assert.That(coldLeft.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.MapReady));
+        Assert.That(coldLeft.Document.PendingNodeVisit, Is.Null);
+        Assert.That(coldLeft.Document.PathNodeIds,
+            Is.EqualTo(pending.PathNodeIds.Concat(new[] { pending.PendingNodeVisit.NodeId })));
+        Assert.That(coldLeft.Document.Gold, Is.EqualTo(purchased.Gold));
+        Assert.That(coldLeft.Document.RunCards, Has.Count.EqualTo(purchased.RunCards.Count));
+    }
+
+    /// <summary>Event 两种选择替换失败都保留精确 Pending，重试同一后继才发布金币或治疗与单次路径完成。</summary>
+    [TestCase(RunEventChoiceKind.GainGold)]
+    [TestCase(RunEventChoiceKind.PaidHeal)]
+    public void Commit_EventChoiceReplacementFailsThenExactRetry_PublishesSameSuccessor(
+        RunEventChoiceKind choice)
+    {
+        var initialStore = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument pending = CreateNodeVisitDocument(
+            choice == RunEventChoiceKind.GainGold
+                ? "37373737-aaaa-bbbb-cccc-595959595951"
+                : "37373737-aaaa-bbbb-cccc-595959595952",
+            MapNodeKind.Event);
+        Assert.That(initialStore.Commit(pending).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument successor = CreateEventChoiceSettlementDocument(pending, choice);
+
+        RunSaveCommitResult failed = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new ReplaceFailingFileSystem()).Commit(successor);
+        RunSaveLoadResult coldPending = new AtomicJsonRunSaveStore(_testDirectory).Load();
+
+        Assert.That(failed.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
+        Assert.That(coldPending.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(coldPending.HasPendingTemporaryFile, Is.True);
+        Assert.That(coldPending.Document.ProgressPhase,
+            Is.EqualTo(RunSaveProgressPhase.NodeVisitPending));
+        Assert.That(coldPending.Document.CurrentHealth, Is.EqualTo(pending.CurrentHealth));
+        Assert.That(coldPending.Document.Gold, Is.EqualTo(pending.Gold));
+        Assert.That(coldPending.Document.PathNodeIds, Is.EqualTo(pending.PathNodeIds));
+        Assert.That(coldPending.Document.PendingNodeVisit.EventPayload.GainGoldAmount,
+            Is.EqualTo(45));
+        Assert.That(coldPending.Document.PendingNodeVisit.EventPayload.PaidHealCost,
+            Is.EqualTo(30));
+        Assert.That(coldPending.Document.PendingNodeVisit.EventPayload.PaidHealAmount,
+            Is.EqualTo(18));
+
+        var retryStore = new AtomicJsonRunSaveStore(_testDirectory);
+        Assert.That(retryStore.Commit(successor).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveLoadResult coldSuccessor = retryStore.Load();
+
+        Assert.That(coldSuccessor.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(coldSuccessor.HasPendingTemporaryFile, Is.False);
+        Assert.That(coldSuccessor.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.MapReady));
+        Assert.That(coldSuccessor.Document.PendingNodeVisit, Is.Null);
+        Assert.That(coldSuccessor.Document.PathNodeIds,
+            Is.EqualTo(pending.PathNodeIds.Concat(new[] { pending.PendingNodeVisit.NodeId })));
+        Assert.That(coldSuccessor.Document.CurrentHealth, Is.EqualTo(successor.CurrentHealth));
+        Assert.That(coldSuccessor.Document.Gold, Is.EqualTo(successor.Gold));
+    }
+
     /// <summary>终局替换失败后冷启动必须恢复已校验临时终局，不能回退到旧可继续档。</summary>
     [Test]
     public void Commit_TerminalReplacementFails_ColdLoadReturnsTerminalTemporary()
@@ -435,6 +882,68 @@ public sealed class AtomicJsonRunSaveStoreTests
         Assert.That(coldLoad.Document.TerminalReason, Is.EqualTo(RunSaveTerminalReason.Defeat));
         Assert.That(coldLoad.Document.CurrentHealth, Is.Zero);
         Assert.That(coldLoad.HasPendingTemporaryFile, Is.True);
+    }
+
+    /// <summary>Terminal 后继不得借战斗结果重排药水槽，非法文档必须在写 intent 前拒绝。</summary>
+    [Test]
+    public void Commit_TerminalWithPotionReorder_IsRejectedBeforeIntentWrite()
+    {
+        var store = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument live = CreateDocument(
+            "12121212-bbbb-cccc-dddd-343434343434",
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 46);
+        Assert.That(store.Commit(live).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument reorderedTerminal = CreateDocumentWithHoldingsDrift(
+            CreateDocument(
+                live.RunId,
+                RunSaveProgressPhase.Terminal,
+                currentHealth: 0),
+            HoldingsDrift.PotionOrder);
+
+        RunSaveCommitResult commit = store.Commit(reorderedTerminal);
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.InvalidDocument));
+        Assert.That(File.Exists(GetTerminalIntentPath()), Is.False);
+        Assert.That(File.Exists(GetTemporaryPath()), Is.False);
+        RunSaveLoadResult load = store.Load();
+        Assert.That(load.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(load.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.MapReady));
+        Assert.That(
+            load.Document.Potions.Select(potion => potion.InstanceId),
+            Is.EqualTo(new[] { 1, 2 }));
+    }
+
+    /// <summary>Terminal 后继允许移除已消费药水，并在替换失败后从 durable intent 恢复剩余子序列。</summary>
+    [Test]
+    public void Commit_TerminalWithPotionSubsequence_ReplacementFailureRecoversTerminal()
+    {
+        var initialStore = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument live = CreateDocument(
+            "12121212-cccc-dddd-eeee-343434343434",
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 46);
+        Assert.That(initialStore.Commit(live).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument terminal = CreateDocumentWithRemovedPotion(
+            CreateDocument(
+                live.RunId,
+                RunSaveProgressPhase.Terminal,
+                currentHealth: 0),
+            removedInstanceId: 1);
+        var failingStore = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new ReplaceFailingFileSystem());
+
+        RunSaveCommitResult commit = failingStore.Commit(terminal);
+        RunSaveLoadResult coldLoad = new AtomicJsonRunSaveStore(_testDirectory).Load();
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
+        Assert.That(coldLoad.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(coldLoad.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.Terminal));
+        Assert.That(
+            coldLoad.Document.Potions.Select(potion => potion.InstanceId),
+            Is.EqualTo(new[] { 2 }));
+        Assert.That(coldLoad.Document.Gold, Is.EqualTo(live.Gold));
     }
 
     /// <summary>终局意图必须先耐久写入并严格回读；意图损坏时不能开始通用临时档或覆盖旧正式档。</summary>
@@ -635,6 +1144,71 @@ public sealed class AtomicJsonRunSaveStoreTests
             Is.EqualTo(RunSaveDocumentReadStatus.Success));
     }
 
+    /// <summary>临时档任一持有物字段即使仍合法可解析，只要漂移就必须拒绝发布。</summary>
+    [TestCase(HoldingsDrift.Gold)]
+    [TestCase(HoldingsDrift.RelicOrder)]
+    [TestCase(HoldingsDrift.RelicInstanceId)]
+    [TestCase(HoldingsDrift.RelicTemplateId)]
+    [TestCase(HoldingsDrift.PotionOrder)]
+    [TestCase(HoldingsDrift.PotionInstanceId)]
+    [TestCase(HoldingsDrift.PotionTemplateId)]
+    public void Commit_ParseableHoldingsDrift_RejectsBeforeLivePublication(
+        HoldingsDrift drift)
+    {
+        var store = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new DriftingHoldingsTemporaryWriteFileSystem(drift));
+        RunSaveDocument document = CreateDocument(
+            "9b9b9b9b-aaaa-bbbb-cccc-acacacacacac",
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 68);
+
+        RunSaveCommitResult commit = store.Commit(document);
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.InvalidDocument));
+        Assert.That(File.Exists(GetLivePath()), Is.False);
+        Assert.That(File.Exists(GetTemporaryPath()), Is.True);
+        Assert.That(
+            RunSaveDocumentCodec.Read(File.ReadAllText(GetTemporaryPath())).Status,
+            Is.EqualTo(RunSaveDocumentReadStatus.Success));
+    }
+
+    /// <summary>临时档任一 NodeVisit envelope 或 payload 字段漂移都必须拒绝正式发布。</summary>
+    [TestCase(NodeVisitDrift.NodeIdAndVisitId)]
+    [TestCase(NodeVisitDrift.ContentId)]
+    [TestCase(NodeVisitDrift.EnvelopeKind)]
+    [TestCase(NodeVisitDrift.RestHealAmount)]
+    [TestCase(NodeVisitDrift.RestCandidateOrder)]
+    [TestCase(NodeVisitDrift.ChestPotionTemplateId)]
+    [TestCase(NodeVisitDrift.ShopEntryOrder)]
+    [TestCase(NodeVisitDrift.ShopEntryId)]
+    [TestCase(NodeVisitDrift.ShopKind)]
+    [TestCase(NodeVisitDrift.ShopTemplateId)]
+    [TestCase(NodeVisitDrift.ShopPrice)]
+    [TestCase(NodeVisitDrift.ShopPurchased)]
+    [TestCase(NodeVisitDrift.EventGainGold)]
+    [TestCase(NodeVisitDrift.EventPaidHealCost)]
+    [TestCase(NodeVisitDrift.EventPaidHealAmount)]
+    public void Commit_ParseableNodeVisitDrift_RejectsBeforeLivePublication(
+        NodeVisitDrift drift)
+    {
+        var store = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new DriftingNodeVisitTemporaryWriteFileSystem(drift));
+        RunSaveDocument document = CreateNodeVisitDocument(
+            "9c9c9c9c-aaaa-bbbb-cccc-adadadadadad",
+            GetNodeVisitKind(drift));
+
+        RunSaveCommitResult commit = store.Commit(document);
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.InvalidDocument));
+        Assert.That(File.Exists(GetLivePath()), Is.False);
+        Assert.That(File.Exists(GetTemporaryPath()), Is.True);
+        Assert.That(
+            RunSaveDocumentCodec.Read(File.ReadAllText(GetTemporaryPath())).Status,
+            Is.EqualTo(RunSaveDocumentReadStatus.Success));
+    }
+
     /// <summary>临时档候选顺序即使仍合法可解析，只要偏离冻结奖励就必须拒绝发布。</summary>
     [Test]
     public void Commit_ParseablePendingRewardDrift_RejectsBeforeLivePublication()
@@ -646,6 +1220,28 @@ public sealed class AtomicJsonRunSaveStoreTests
             "29292929-aaaa-bbbb-cccc-393939393939",
             RunSaveProgressPhase.RewardPending,
             currentHealth: 52);
+
+        RunSaveCommitResult commit = store.Commit(document);
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.InvalidDocument));
+        Assert.That(File.Exists(GetLivePath()), Is.False);
+        Assert.That(File.Exists(GetTemporaryPath()), Is.True);
+        Assert.That(
+            RunSaveDocumentCodec.Read(File.ReadAllText(GetTemporaryPath())).Status,
+            Is.EqualTo(RunSaveDocumentReadStatus.Success));
+    }
+
+    /// <summary>临时档奖励附着掉落即使仍可解析，只要偏离冻结事实就必须拒绝发布。</summary>
+    [Test]
+    public void Commit_ParseablePendingRewardAttachedLootDrift_RejectsBeforeLivePublication()
+    {
+        var store = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new DriftingPendingRewardAttachedLootWriteFileSystem(GetTemporaryPath()));
+        RunSaveDocument document = CreateDocument(
+            "30303030-aaaa-bbbb-cccc-404040404040",
+            RunSaveProgressPhase.RewardPending,
+            currentHealth: 53);
 
         RunSaveCommitResult commit = store.Commit(document);
 
@@ -833,7 +1429,9 @@ public sealed class AtomicJsonRunSaveStoreTests
     private static RunSaveDocument CreateDocument(
         string runId,
         RunSaveProgressPhase progressPhase,
-        int currentHealth)
+        int currentHealth,
+        int? attachedRelicTemplateId = null,
+        int? attachedPotionTemplateId = null)
     {
         bool isTerminal = progressPhase == RunSaveProgressPhase.Terminal;
         bool isRewardPending = progressPhase == RunSaveProgressPhase.RewardPending;
@@ -841,7 +1439,10 @@ public sealed class AtomicJsonRunSaveStoreTests
         RunSavePendingCardRewardDocument pendingCardReward = isRewardPending
             ? new RunSavePendingCardRewardDocument(
                 $"{Guid.ParseExact(runId, "D"):N}:1:{committedNodeId}",
-                new[] { 3105, 3123, 3157 })
+                new[] { 3105, 3123, 3157 },
+                new RunSaveCardRewardAttachedLootDocument(
+                    attachedRelicTemplateId,
+                    attachedPotionTemplateId))
             : null;
         return new RunSaveDocument(
             RunSaveDocument.CurrentSchemaVersion,
@@ -865,7 +1466,383 @@ public sealed class AtomicJsonRunSaveStoreTests
             progressPhase,
             committedNodeId,
             terminalReason: isTerminal ? RunSaveTerminalReason.Defeat : (RunSaveTerminalReason?)null,
-            pendingCardReward);
+            pendingCardReward,
+            relics: new[]
+            {
+                new RunSaveRelicDocument(instanceId: 1, templateId: 4101),
+                new RunSaveRelicDocument(instanceId: 2, templateId: 4102),
+            },
+            potions: new[]
+            {
+                new RunSavePotionDocument(instanceId: 1, templateId: 5101),
+                new RunSavePotionDocument(instanceId: 2, templateId: 5102),
+            },
+            gold: 321,
+            pendingNodeVisit: null);
+    }
+
+    /// <summary>建立携带指定四类 payload 之一的完整 NodeVisitPending 原子提交文档。</summary>
+    private static RunSaveDocument CreateNodeVisitDocument(
+        string runId,
+        MapNodeKind kind)
+    {
+        RunSaveDocument source = CreateDocument(
+            runId,
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 68);
+        const string nodeId = "node-visit-1";
+        RunSaveRestNodeVisitPayloadDocument restPayload = null;
+        RunSaveChestNodeVisitPayloadDocument chestPayload = null;
+        RunSaveShopNodeVisitPayloadDocument shopPayload = null;
+        RunSaveEventNodeVisitPayloadDocument eventPayload = null;
+        switch (kind)
+        {
+            case MapNodeKind.Rest:
+                restPayload = new RunSaveRestNodeVisitPayloadDocument(
+                    healAmount: 24,
+                    upgradeCandidateInstanceIds: new[] { 1, 2 });
+                break;
+            case MapNodeKind.Chest:
+                chestPayload = new RunSaveChestNodeVisitPayloadDocument(
+                    potionTemplateId: 5101);
+                break;
+            case MapNodeKind.Shop:
+                shopPayload = new RunSaveShopNodeVisitPayloadDocument(new[]
+                {
+                    new RunSaveShopStockEntryDocument(
+                        1,
+                        RunShopStockKind.Relic,
+                        4101,
+                        150,
+                        purchased: false),
+                    new RunSaveShopStockEntryDocument(
+                        2,
+                        RunShopStockKind.Potion,
+                        5101,
+                        60,
+                        purchased: true),
+                    new RunSaveShopStockEntryDocument(
+                        3,
+                        RunShopStockKind.Card,
+                        3105,
+                        75,
+                        purchased: false),
+                });
+                break;
+            case MapNodeKind.Event:
+                eventPayload = new RunSaveEventNodeVisitPayloadDocument(
+                    gainGoldAmount: 45,
+                    paidHealCost: 30,
+                    paidHealAmount: 18);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(kind));
+        }
+
+        int contentId;
+        switch (kind)
+        {
+            case MapNodeKind.Rest:
+                contentId = 7101;
+                break;
+            case MapNodeKind.Chest:
+                contentId = 7201;
+                break;
+            case MapNodeKind.Shop:
+                contentId = 7301;
+                break;
+            case MapNodeKind.Event:
+                contentId = 7401;
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(kind));
+        }
+        var pendingNodeVisit = new RunSavePendingNodeVisitDocument(
+            $"{source.RunId}/{nodeId}",
+            nodeId,
+            contentId,
+            kind,
+            restPayload,
+            chestPayload,
+            shopPayload,
+            eventPayload);
+        return new RunSaveDocument(
+            source.SchemaVersion,
+            source.RunId,
+            source.HeroTemplateId,
+            source.CurrentHealth,
+            source.MaxHealth,
+            source.RunCards,
+            source.LegacyDeckTemplateId,
+            source.RandomRootSeed,
+            source.MapProfileId,
+            source.MapGeneratorVersion,
+            source.MapSeed,
+            source.MapFingerprint,
+            source.PathNodeIds,
+            RunSaveProgressPhase.NodeVisitPending,
+            committedNodeId: null,
+            terminalReason: null,
+            pendingCardReward: null,
+            source.Relics,
+            source.Potions,
+            source.Gold,
+            pendingNodeVisit);
+    }
+
+    /// <summary>从冻结 Rest Pending 建立只应用治疗、清 Pending 并追加一次精确节点的 MapReady 后继。</summary>
+    private static RunSaveDocument CreateRestHealSettlementDocument(RunSaveDocument pending)
+    {
+        if (pending == null ||
+            pending.ProgressPhase != RunSaveProgressPhase.NodeVisitPending ||
+            pending.PendingNodeVisit?.Kind != MapNodeKind.Rest)
+        {
+            throw new ArgumentException("A Rest NodeVisitPending source document is required.", nameof(pending));
+        }
+
+        int settledHealth = Math.Min(
+            pending.MaxHealth,
+            checked(pending.CurrentHealth + pending.PendingNodeVisit.RestPayload.HealAmount));
+        return new RunSaveDocument(
+            pending.SchemaVersion,
+            pending.RunId,
+            pending.HeroTemplateId,
+            settledHealth,
+            pending.MaxHealth,
+            pending.RunCards,
+            pending.LegacyDeckTemplateId,
+            pending.RandomRootSeed,
+            pending.MapProfileId,
+            pending.MapGeneratorVersion,
+            pending.MapSeed,
+            pending.MapFingerprint,
+            pending.PathNodeIds.Concat(new[] { pending.PendingNodeVisit.NodeId }).ToArray(),
+            RunSaveProgressPhase.MapReady,
+            committedNodeId: null,
+            terminalReason: null,
+            pendingCardReward: null,
+            pending.Relics,
+            pending.Potions,
+            pending.Gold,
+            pendingNodeVisit: null);
+    }
+
+    /// <summary>从冻结 Chest Pending 建立领取或跳过后清 Pending、追加一次路径的 MapReady 后继。</summary>
+    private static RunSaveDocument CreateChestSettlementDocument(
+        RunSaveDocument pending,
+        bool claim)
+    {
+        if (pending == null ||
+            pending.ProgressPhase != RunSaveProgressPhase.NodeVisitPending ||
+            pending.PendingNodeVisit?.Kind != MapNodeKind.Chest)
+        {
+            throw new ArgumentException("A Chest NodeVisitPending source document is required.", nameof(pending));
+        }
+
+        RunSavePotionDocument[] potions = claim
+            ? pending.Potions.Concat(new[]
+            {
+                new RunSavePotionDocument(
+                    checked(pending.Potions.Max(potion => potion.InstanceId) + 1),
+                    pending.PendingNodeVisit.ChestPayload.PotionTemplateId),
+            }).ToArray()
+            : pending.Potions.ToArray();
+        return new RunSaveDocument(
+            pending.SchemaVersion,
+            pending.RunId,
+            pending.HeroTemplateId,
+            pending.CurrentHealth,
+            pending.MaxHealth,
+            pending.RunCards,
+            pending.LegacyDeckTemplateId,
+            pending.RandomRootSeed,
+            pending.MapProfileId,
+            pending.MapGeneratorVersion,
+            pending.MapSeed,
+            pending.MapFingerprint,
+            pending.PathNodeIds.Concat(new[] { pending.PendingNodeVisit.NodeId }).ToArray(),
+            RunSaveProgressPhase.MapReady,
+            committedNodeId: null,
+            terminalReason: null,
+            pendingCardReward: null,
+            pending.Relics,
+            potions,
+            pending.Gold,
+            pendingNodeVisit: null);
+    }
+
+    /// <summary>从冻结 Shop Pending 建立扣除卡价、追加卡实例且只翻转目标库存的仍 Pending 后继。</summary>
+    private static RunSaveDocument CreateShopCardPurchaseDocument(RunSaveDocument pending)
+    {
+        if (pending == null ||
+            pending.ProgressPhase != RunSaveProgressPhase.NodeVisitPending ||
+            pending.PendingNodeVisit?.Kind != MapNodeKind.Shop)
+        {
+            throw new ArgumentException("A Shop NodeVisitPending source document is required.", nameof(pending));
+        }
+
+        RunSaveShopStockEntryDocument target = pending.PendingNodeVisit.ShopPayload.Entries
+            .Single(entry => entry.EntryId == 3 && entry.Kind == RunShopStockKind.Card);
+        RunSaveShopStockEntryDocument[] entries = pending.PendingNodeVisit.ShopPayload.Entries
+            .Select(entry => new RunSaveShopStockEntryDocument(
+                entry.EntryId,
+                entry.Kind,
+                entry.TemplateId,
+                entry.Price,
+                purchased: entry.EntryId == target.EntryId || entry.Purchased))
+            .ToArray();
+        RunSaveCardDocument[] cards = pending.RunCards.Concat(new[]
+        {
+            new RunSaveCardDocument(
+                checked(pending.RunCards.Max(card => card.InstanceId) + 1),
+                target.TemplateId,
+                upgradeLevel: 0),
+        }).ToArray();
+        var visit = new RunSavePendingNodeVisitDocument(
+            pending.PendingNodeVisit.VisitId,
+            pending.PendingNodeVisit.NodeId,
+            pending.PendingNodeVisit.ContentId,
+            pending.PendingNodeVisit.Kind,
+            restPayload: null,
+            chestPayload: null,
+            new RunSaveShopNodeVisitPayloadDocument(entries),
+            eventPayload: null);
+        return new RunSaveDocument(
+            pending.SchemaVersion,
+            pending.RunId,
+            pending.HeroTemplateId,
+            pending.CurrentHealth,
+            pending.MaxHealth,
+            cards,
+            pending.LegacyDeckTemplateId,
+            pending.RandomRootSeed,
+            pending.MapProfileId,
+            pending.MapGeneratorVersion,
+            pending.MapSeed,
+            pending.MapFingerprint,
+            pending.PathNodeIds,
+            RunSaveProgressPhase.NodeVisitPending,
+            committedNodeId: null,
+            terminalReason: null,
+            pendingCardReward: null,
+            pending.Relics,
+            pending.Potions,
+            checked(pending.Gold - target.Price),
+            visit);
+    }
+
+    /// <summary>从已购 Shop Pending 建立保留余额与内容、清 Pending 并追加一次路径的 MapReady 后继。</summary>
+    private static RunSaveDocument CreateShopLeaveSettlementDocument(RunSaveDocument purchased)
+    {
+        if (purchased == null ||
+            purchased.ProgressPhase != RunSaveProgressPhase.NodeVisitPending ||
+            purchased.PendingNodeVisit?.Kind != MapNodeKind.Shop)
+        {
+            throw new ArgumentException(
+                "A purchased Shop NodeVisitPending source document is required.",
+                nameof(purchased));
+        }
+
+        return new RunSaveDocument(
+            purchased.SchemaVersion,
+            purchased.RunId,
+            purchased.HeroTemplateId,
+            purchased.CurrentHealth,
+            purchased.MaxHealth,
+            purchased.RunCards,
+            purchased.LegacyDeckTemplateId,
+            purchased.RandomRootSeed,
+            purchased.MapProfileId,
+            purchased.MapGeneratorVersion,
+            purchased.MapSeed,
+            purchased.MapFingerprint,
+            purchased.PathNodeIds.Concat(new[] { purchased.PendingNodeVisit.NodeId }).ToArray(),
+            RunSaveProgressPhase.MapReady,
+            committedNodeId: null,
+            terminalReason: null,
+            pendingCardReward: null,
+            purchased.Relics,
+            purchased.Potions,
+            purchased.Gold,
+            pendingNodeVisit: null);
+    }
+
+    /// <summary>从冻结 Event Pending 建立指定闭合选择完成后的 MapReady 文档。</summary>
+    private static RunSaveDocument CreateEventChoiceSettlementDocument(
+        RunSaveDocument pending,
+        RunEventChoiceKind choice)
+    {
+        if (pending == null ||
+            pending.ProgressPhase != RunSaveProgressPhase.NodeVisitPending ||
+            pending.PendingNodeVisit?.Kind != MapNodeKind.Event)
+        {
+            throw new ArgumentException(
+                "An Event NodeVisitPending source document is required.",
+                nameof(pending));
+        }
+
+        int settledHealth = pending.CurrentHealth;
+        int settledGold = pending.Gold;
+        switch (choice)
+        {
+            case RunEventChoiceKind.GainGold:
+                settledGold = checked(
+                    pending.Gold + pending.PendingNodeVisit.EventPayload.GainGoldAmount);
+                break;
+            case RunEventChoiceKind.PaidHeal:
+                settledGold = checked(
+                    pending.Gold - pending.PendingNodeVisit.EventPayload.PaidHealCost);
+                settledHealth = Math.Min(
+                    pending.MaxHealth,
+                    checked(
+                        pending.CurrentHealth +
+                        pending.PendingNodeVisit.EventPayload.PaidHealAmount));
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(choice));
+        }
+
+        return new RunSaveDocument(
+            pending.SchemaVersion,
+            pending.RunId,
+            pending.HeroTemplateId,
+            settledHealth,
+            pending.MaxHealth,
+            pending.RunCards,
+            pending.LegacyDeckTemplateId,
+            pending.RandomRootSeed,
+            pending.MapProfileId,
+            pending.MapGeneratorVersion,
+            pending.MapSeed,
+            pending.MapFingerprint,
+            pending.PathNodeIds.Concat(new[] { pending.PendingNodeVisit.NodeId }).ToArray(),
+            RunSaveProgressPhase.MapReady,
+            committedNodeId: null,
+            terminalReason: null,
+            pendingCardReward: null,
+            pending.Relics,
+            pending.Potions,
+            settledGold,
+            pendingNodeVisit: null);
+    }
+
+    /// <summary>按漂移字段选择能承载该字段的合法 NodeVisit 类型。</summary>
+    private static MapNodeKind GetNodeVisitKind(NodeVisitDrift drift)
+    {
+        switch (drift)
+        {
+            case NodeVisitDrift.RestHealAmount:
+            case NodeVisitDrift.RestCandidateOrder:
+                return MapNodeKind.Rest;
+            case NodeVisitDrift.ChestPotionTemplateId:
+                return MapNodeKind.Chest;
+            case NodeVisitDrift.EventGainGold:
+            case NodeVisitDrift.EventPaidHealCost:
+            case NodeVisitDrift.EventPaidHealAmount:
+                return MapNodeKind.Event;
+            default:
+                return MapNodeKind.Shop;
+        }
     }
 
     /// <summary>从源 Pending 构造选择或跳过后的唯一合法 MapReady 后继文档。</summary>
@@ -883,6 +1860,20 @@ public sealed class AtomicJsonRunSaveStoreTests
                 pending.RunCards.Max(card => card.InstanceId) + 1,
                 selectedTemplateId.Value,
                 upgradeLevel: 0));
+        }
+        var relics = new List<RunSaveRelicDocument>(pending.Relics);
+        if (pending.PendingCardReward.AttachedLoot.RelicTemplateId.HasValue)
+        {
+            relics.Add(new RunSaveRelicDocument(
+                checked(pending.Relics.Max(relic => relic.InstanceId) + 1),
+                pending.PendingCardReward.AttachedLoot.RelicTemplateId.Value));
+        }
+        var potions = new List<RunSavePotionDocument>(pending.Potions);
+        if (pending.PendingCardReward.AttachedLoot.PotionTemplateId.HasValue)
+        {
+            potions.Add(new RunSavePotionDocument(
+                checked(pending.Potions.Max(potion => potion.InstanceId) + 1),
+                pending.PendingCardReward.AttachedLoot.PotionTemplateId.Value));
         }
 
         return new RunSaveDocument(
@@ -902,7 +1893,42 @@ public sealed class AtomicJsonRunSaveStoreTests
             RunSaveProgressPhase.MapReady,
             committedNodeId: null,
             terminalReason: null,
-            pendingCardReward: null);
+            pendingCardReward: null,
+            relics,
+            potions,
+            gold: pending.Gold,
+            pendingNodeVisit: null);
+    }
+
+    /// <summary>只完成 RewardPending 信封与路径，不应用附着掉落，供非法后继 fixture 精确造形。</summary>
+    private static RunSaveDocument CreateRewardSettlementWithoutAttachedLoot(
+        RunSaveDocument pending)
+    {
+        if (pending == null || pending.ProgressPhase != RunSaveProgressPhase.RewardPending)
+            throw new ArgumentException("A RewardPending source document is required.", nameof(pending));
+
+        return new RunSaveDocument(
+            RunSaveDocument.CurrentSchemaVersion,
+            pending.RunId,
+            pending.HeroTemplateId,
+            pending.CurrentHealth,
+            pending.MaxHealth,
+            pending.RunCards,
+            legacyDeckTemplateId: null,
+            pending.RandomRootSeed,
+            pending.MapProfileId,
+            pending.MapGeneratorVersion,
+            pending.MapSeed,
+            pending.MapFingerprint,
+            pending.PathNodeIds.Concat(new[] { pending.CommittedNodeId }).ToArray(),
+            RunSaveProgressPhase.MapReady,
+            committedNodeId: null,
+            terminalReason: null,
+            pendingCardReward: null,
+            pending.Relics,
+            pending.Potions,
+            pending.Gold,
+            pendingNodeVisit: null);
     }
 
     /// <summary>从已结算 MapReady 构造下一场普通战斗的冻结奖励检查点。</summary>
@@ -932,7 +1958,244 @@ public sealed class AtomicJsonRunSaveStoreTests
             RunSaveProgressPhase.RewardPending,
             committedNodeId,
             terminalReason: null,
-            pendingReward);
+            pendingReward,
+            settled.Relics,
+            settled.Potions,
+            settled.Gold,
+            pendingNodeVisit: null);
+    }
+
+    /// <summary>复制完整文档并只漂移一种仍可解析的持有物事实。</summary>
+    private static RunSaveDocument CreateDocumentWithHoldingsDrift(
+        RunSaveDocument source,
+        HoldingsDrift drift)
+    {
+        if (source == null)
+            throw new ArgumentNullException(nameof(source));
+
+        JObject raw = JObject.Parse(RunSaveDocumentCodec.Serialize(source));
+        ApplyHoldingsDrift(raw, drift);
+        RunSaveDocumentReadResult read = RunSaveDocumentCodec.Read(raw.ToString());
+        if (read.Status != RunSaveDocumentReadStatus.Success)
+        {
+            throw new InvalidOperationException(
+                $"The requested holdings drift must remain parseable: {read.Detail}");
+        }
+
+        return read.Document;
+    }
+
+    /// <summary>从合法附着结算复制并制造一种仍可解析的尾项或前缀漂移。</summary>
+    private static RunSaveDocument CreateAttachedLootSettlementDrift(
+        RunSaveDocument source,
+        AttachedLootSettlementDrift drift)
+    {
+        if (source == null)
+            throw new ArgumentNullException(nameof(source));
+
+        JObject raw = JObject.Parse(RunSaveDocumentCodec.Serialize(source));
+        var relics = (JArray)raw["relics"];
+        var potions = (JArray)raw["potions"];
+        switch (drift)
+        {
+            case AttachedLootSettlementDrift.MissingRelicTail:
+                relics.Last.Remove();
+                break;
+            case AttachedLootSettlementDrift.ExtraRelicTail:
+                relics.Add(new JObject
+                {
+                    ["instanceId"] = 4,
+                    ["templateId"] = 8002,
+                });
+                break;
+            case AttachedLootSettlementDrift.WrongRelicInstanceId:
+                relics.Last["instanceId"] = 4;
+                break;
+            case AttachedLootSettlementDrift.WrongRelicTemplateId:
+                relics.Last["templateId"] = 8002;
+                break;
+            case AttachedLootSettlementDrift.RelicInsertedBeforePrefix:
+                JToken relicTail = relics.Last;
+                relicTail.Remove();
+                relics.Insert(0, relicTail);
+                break;
+            case AttachedLootSettlementDrift.MissingPotionTail:
+                potions.Last.Remove();
+                break;
+            case AttachedLootSettlementDrift.WrongPotionInstanceId:
+                potions.Last["instanceId"] = 4;
+                break;
+            case AttachedLootSettlementDrift.WrongPotionTemplateId:
+                potions.Last["templateId"] = 9002;
+                break;
+            case AttachedLootSettlementDrift.PotionInsertedBeforePrefix:
+                JToken potionTail = potions.Last;
+                potionTail.Remove();
+                potions.Insert(0, potionTail);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(drift), drift, null);
+        }
+
+        return RequireParseableDocument(raw, $"attached loot drift {drift}");
+    }
+
+    /// <summary>把 JSON fixture 重新读成合法文档，否则让测试准备阶段立即暴露错误。</summary>
+    private static RunSaveDocument RequireParseableDocument(JObject raw, string fixtureName)
+    {
+        RunSaveDocumentReadResult read = RunSaveDocumentCodec.Read(raw.ToString());
+        if (read.Status != RunSaveDocumentReadStatus.Success)
+        {
+            throw new InvalidOperationException(
+                $"The {fixtureName} fixture must remain parseable: {read.Detail}");
+        }
+
+        return read.Document;
+    }
+
+    /// <summary>复制完整文档并只移除一个已存在药水实例，保持其余槽位稳定相对顺序。</summary>
+    private static RunSaveDocument CreateDocumentWithRemovedPotion(
+        RunSaveDocument source,
+        int removedInstanceId)
+    {
+        if (source == null)
+            throw new ArgumentNullException(nameof(source));
+
+        JObject raw = JObject.Parse(RunSaveDocumentCodec.Serialize(source));
+        var potions = (JArray)raw["potions"];
+        JToken removed = potions.SingleOrDefault(
+            token => token.Value<int>("instanceId") == removedInstanceId);
+        if (removed == null)
+            throw new ArgumentOutOfRangeException(nameof(removedInstanceId));
+
+        removed.Remove();
+        RunSaveDocumentReadResult read = RunSaveDocumentCodec.Read(raw.ToString());
+        if (read.Status != RunSaveDocumentReadStatus.Success)
+        {
+            throw new InvalidOperationException(
+                $"The potion removal fixture must remain parseable: {read.Detail}");
+        }
+
+        return read.Document;
+    }
+
+    /// <summary>在 JSON 测试边界逐字段制造一种合法但不等值的持有物漂移。</summary>
+    private static void ApplyHoldingsDrift(JObject document, HoldingsDrift drift)
+    {
+        if (document == null)
+            throw new ArgumentNullException(nameof(document));
+
+        var relics = (JArray)document["relics"];
+        var potions = (JArray)document["potions"];
+        switch (drift)
+        {
+            case HoldingsDrift.Gold:
+                document["gold"] = document.Value<int>("gold") + 1;
+                break;
+            case HoldingsDrift.RelicOrder:
+                JToken firstRelic = relics[0].DeepClone();
+                JToken secondRelic = relics[1].DeepClone();
+                relics[0] = secondRelic;
+                relics[1] = firstRelic;
+                break;
+            case HoldingsDrift.RelicInstanceId:
+                relics[0]["instanceId"] = 71;
+                break;
+            case HoldingsDrift.RelicTemplateId:
+                relics[0]["templateId"] = 4199;
+                break;
+            case HoldingsDrift.PotionOrder:
+                JToken firstPotion = potions[0].DeepClone();
+                JToken secondPotion = potions[1].DeepClone();
+                potions[0] = secondPotion;
+                potions[1] = firstPotion;
+                break;
+            case HoldingsDrift.PotionInstanceId:
+                potions[0]["instanceId"] = 81;
+                break;
+            case HoldingsDrift.PotionTemplateId:
+                potions[0]["templateId"] = 5199;
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(drift), drift, null);
+        }
+    }
+
+    /// <summary>在 JSON 写入边界制造一种仍合法可解析的 NodeVisit 字段漂移。</summary>
+    private static void ApplyNodeVisitDrift(JObject document, NodeVisitDrift drift)
+    {
+        if (document == null)
+            throw new ArgumentNullException(nameof(document));
+
+        var pending = (JObject)document["pendingNodeVisit"];
+        switch (drift)
+        {
+            case NodeVisitDrift.NodeIdAndVisitId:
+                pending["nodeId"] = "node-visit-2";
+                pending["visitId"] = $"{document.Value<string>("runId")}/node-visit-2";
+                break;
+            case NodeVisitDrift.ContentId:
+                pending["contentId"] = pending.Value<int>("contentId") + 1;
+                break;
+            case NodeVisitDrift.EnvelopeKind:
+                pending["kind"] = nameof(MapNodeKind.Rest);
+                pending["restPayload"] = new JObject
+                {
+                    ["healAmount"] = 24,
+                    ["upgradeCandidateInstanceIds"] = new JArray(1, 2),
+                };
+                pending["shopPayload"] = JValue.CreateNull();
+                break;
+            case NodeVisitDrift.RestHealAmount:
+                pending["restPayload"]["healAmount"] = 25;
+                break;
+            case NodeVisitDrift.RestCandidateOrder:
+            {
+                var candidates = (JArray)pending["restPayload"]["upgradeCandidateInstanceIds"];
+                JToken first = candidates[0].DeepClone();
+                candidates[0] = candidates[1].DeepClone();
+                candidates[1] = first;
+                break;
+            }
+            case NodeVisitDrift.ChestPotionTemplateId:
+                pending["chestPayload"]["potionTemplateId"] = 5199;
+                break;
+            case NodeVisitDrift.ShopEntryOrder:
+            {
+                var entries = (JArray)pending["shopPayload"]["entries"];
+                JToken first = entries[0].DeepClone();
+                entries[0] = entries[1].DeepClone();
+                entries[1] = first;
+                break;
+            }
+            case NodeVisitDrift.ShopEntryId:
+                pending["shopPayload"]["entries"][0]["entryId"] = 71;
+                break;
+            case NodeVisitDrift.ShopKind:
+                pending["shopPayload"]["entries"][0]["kind"] =
+                    nameof(RunShopStockKind.Card);
+                break;
+            case NodeVisitDrift.ShopTemplateId:
+                pending["shopPayload"]["entries"][0]["templateId"] = 4199;
+                break;
+            case NodeVisitDrift.ShopPrice:
+                pending["shopPayload"]["entries"][0]["price"] = 151;
+                break;
+            case NodeVisitDrift.ShopPurchased:
+                pending["shopPayload"]["entries"][0]["purchased"] = true;
+                break;
+            case NodeVisitDrift.EventGainGold:
+                pending["eventPayload"]["gainGoldAmount"] = 46;
+                break;
+            case NodeVisitDrift.EventPaidHealCost:
+                pending["eventPayload"]["paidHealCost"] = 31;
+                break;
+            case NodeVisitDrift.EventPaidHealAmount:
+                pending["eventPayload"]["paidHealAmount"] = 19;
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(drift), drift, null);
+        }
     }
 
     private class TestRunSaveFileSystem : IRunSaveFileSystem
@@ -1071,6 +2334,49 @@ public sealed class AtomicJsonRunSaveStoreTests
         UpgradeLevel,
     }
 
+    public enum HoldingsDrift
+    {
+        Gold,
+        RelicOrder,
+        RelicInstanceId,
+        RelicTemplateId,
+        PotionOrder,
+        PotionInstanceId,
+        PotionTemplateId,
+    }
+
+    public enum AttachedLootSettlementDrift
+    {
+        MissingRelicTail,
+        ExtraRelicTail,
+        WrongRelicInstanceId,
+        WrongRelicTemplateId,
+        RelicInsertedBeforePrefix,
+        MissingPotionTail,
+        WrongPotionInstanceId,
+        WrongPotionTemplateId,
+        PotionInsertedBeforePrefix,
+    }
+
+    public enum NodeVisitDrift
+    {
+        NodeIdAndVisitId,
+        ContentId,
+        EnvelopeKind,
+        RestHealAmount,
+        RestCandidateOrder,
+        ChestPotionTemplateId,
+        ShopEntryOrder,
+        ShopEntryId,
+        ShopKind,
+        ShopTemplateId,
+        ShopPrice,
+        ShopPurchased,
+        EventGainGold,
+        EventPaidHealCost,
+        EventPaidHealAmount,
+    }
+
     private sealed class DriftingRunCardTemporaryWriteFileSystem : TestRunSaveFileSystem
     {
         private readonly RunCardDrift _drift;
@@ -1108,6 +2414,44 @@ public sealed class AtomicJsonRunSaveStoreTests
         }
     }
 
+    private sealed class DriftingHoldingsTemporaryWriteFileSystem : TestRunSaveFileSystem
+    {
+        private readonly HoldingsDrift _drift;
+
+        /// <summary>建立只改写一种 durable holdings 等值事实的可解析临时档 fake。</summary>
+        public DriftingHoldingsTemporaryWriteFileSystem(HoldingsDrift drift)
+        {
+            _drift = drift;
+        }
+
+        /// <summary>写入合法 JSON，但按测试要求漂移一个持有物字段。</summary>
+        public override void WriteAllTextDurably(string path, string contents)
+        {
+            JObject document = JObject.Parse(contents);
+            ApplyHoldingsDrift(document, _drift);
+            File.WriteAllText(path, document.ToString());
+        }
+    }
+
+    private sealed class DriftingNodeVisitTemporaryWriteFileSystem : TestRunSaveFileSystem
+    {
+        private readonly NodeVisitDrift _drift;
+
+        /// <summary>建立只改写一种 durable NodeVisit 等值事实的可解析临时档 fake。</summary>
+        public DriftingNodeVisitTemporaryWriteFileSystem(NodeVisitDrift drift)
+        {
+            _drift = drift;
+        }
+
+        /// <summary>写入合法 JSON，但按测试要求漂移一个 NodeVisit envelope 或 payload 字段。</summary>
+        public override void WriteAllTextDurably(string path, string contents)
+        {
+            JObject document = JObject.Parse(contents);
+            ApplyNodeVisitDrift(document, _drift);
+            File.WriteAllText(path, document.ToString());
+        }
+    }
+
     private sealed class DriftingPendingRewardWriteFileSystem : TestRunSaveFileSystem
     {
         private readonly string _targetPath;
@@ -1134,6 +2478,32 @@ public sealed class AtomicJsonRunSaveStoreTests
             JToken second = candidateTemplateIds[1].DeepClone();
             candidateTemplateIds[0] = second;
             candidateTemplateIds[1] = first;
+            File.WriteAllText(path, document.ToString());
+        }
+    }
+
+    private sealed class DriftingPendingRewardAttachedLootWriteFileSystem :
+        TestRunSaveFileSystem
+    {
+        private readonly string _targetPath;
+
+        /// <summary>建立只在指定 durable 文件路径改写奖励附着遗物的故障 fake。</summary>
+        public DriftingPendingRewardAttachedLootWriteFileSystem(string targetPath)
+        {
+            _targetPath = targetPath;
+        }
+
+        /// <summary>写入合法 JSON，但把 Empty 附着掉落改成一个遗物模板。</summary>
+        public override void WriteAllTextDurably(string path, string contents)
+        {
+            if (path != _targetPath)
+            {
+                base.WriteAllTextDurably(path, contents);
+                return;
+            }
+
+            JObject document = JObject.Parse(contents);
+            document["pendingCardReward"]["attachedLoot"]["relicTemplateId"] = 8001;
             File.WriteAllText(path, document.ToString());
         }
     }

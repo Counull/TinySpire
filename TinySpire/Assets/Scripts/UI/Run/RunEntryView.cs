@@ -25,7 +25,7 @@ namespace TinySpire.UI.Run
         };
 
         internal const string RequiredEntryGlyphs =
-            "开始游戏继续设置图鉴统计返回取消开发中布局占位选择角色确认并未来队伍槽地图节点遭遇已清除后续内容未接入生命战斗奖励一张牌跳过费用失败离开战士机枪兵放弃当前存档前会删除不可用有效无法版本未知迁移检测写入读取引用配置缺失保存重试退出不回退上一份成功检查点若尚无将恢复永久撤销？。“”，；";
+            "开始游戏继续设置图鉴统计返回取消开发中布局占位选择角色确认并未来队伍槽地图节点遭遇已清除后续内容未接入生命战斗奖励一张牌跳过费用失败离开战士机枪兵放弃当前存档前会删除不可用有效无法版本未知迁移检测写入读取引用配置缺失保存重试退出不回退上一份成功检查点若尚无将恢复永久撤销金币遗物药水力量护符治疗获得休息升级至宝箱领取带满商店购买事件支付最多点？。“”，；：—";
 
         private static readonly Color32 BackgroundColor = new Color32(18, 24, 36, 255);
         private static readonly Color32 SurfaceColor = new Color32(28, 38, 55, 248);
@@ -118,6 +118,47 @@ namespace TinySpire.UI.Run
         private TMP_Text _skipCardRewardText;
         private Button _skipCardRewardButton;
         private RunEntryAction? _skipCardRewardAction;
+
+        private RectTransform _restPage;
+        private TMP_Text _restTitle;
+        private TMP_Text _restHealText;
+        private Button _restHealButton;
+        private RunEntryAction? _restHealAction;
+        private readonly List<Button> _restUpgradeButtons = new List<Button>();
+        private readonly List<TMP_Text> _restUpgradeTexts = new List<TMP_Text>();
+        private readonly List<RunEntryAction?> _restUpgradeActions =
+            new List<RunEntryAction?>();
+
+        private TMP_Text _chestTitle;
+        private TMP_Text _chestPotionText;
+        private TMP_Text _chestCapacityText;
+        private TMP_Text _chestClaimText;
+        private TMP_Text _chestSkipText;
+        private Button _chestClaimButton;
+        private Button _chestSkipButton;
+        private RunEntryAction? _chestClaimAction;
+        private RunEntryAction? _chestSkipAction;
+
+        private TMP_Text _shopTitle;
+        private readonly Button[] _shopStockButtons = new Button[3];
+        private readonly TMP_Text[] _shopStockTexts = new TMP_Text[3];
+        private readonly RunEntryAction?[] _shopStockActions = new RunEntryAction?[3];
+        private TMP_Text _shopLeaveText;
+        private Button _shopLeaveButton;
+        private RunEntryAction? _shopLeaveAction;
+
+        private TMP_Text _eventTitle;
+        private TMP_Text _eventGainGoldText;
+        private TMP_Text _eventPaidHealText;
+        private Button _eventGainGoldButton;
+        private Button _eventPaidHealButton;
+        private RunEntryAction? _eventGainGoldAction;
+        private RunEntryAction? _eventPaidHealAction;
+
+        private RectTransform _holdingsPanel;
+        private TMP_Text _holdingsGoldText;
+        private TMP_Text _holdingsRelicsText;
+        private TMP_Text _holdingsPotionsText;
 
         private TMP_Text _failureTitle;
         private TMP_Text _failureHealth;
@@ -223,6 +264,15 @@ namespace TinySpire.UI.Run
             _cardRewardTitle.text = model.GetText(RunEntryTextSlot.CardRewardTitle);
             _skipCardRewardText.text = model.GetText(RunEntryTextSlot.SkipCardReward);
             RenderCardReward(model.CardReward);
+            _restTitle.text = model.GetText(RunEntryTextSlot.RestTitle);
+            RenderRest(model.Rest);
+            _chestTitle.text = model.GetText(RunEntryTextSlot.ChestTitle);
+            RenderChest(model.Chest);
+            _shopTitle.text = model.GetText(RunEntryTextSlot.ShopTitle);
+            RenderShop(model.Shop);
+            _eventTitle.text = model.GetText(RunEntryTextSlot.EventTitle);
+            RenderEvent(model.Event);
+            RenderHoldings(model.Holdings);
 
             _failureTitle.text = model.GetText(RunEntryTextSlot.FailureTitle);
             string failureIssue = model.GetText(RunEntryTextSlot.SaveIssue);
@@ -334,10 +384,15 @@ namespace TinySpire.UI.Run
             BuildComingSoonPage(surface, RunEntryPage.Statistics);
             BuildMapPage(surface);
             BuildCardRewardPage(surface);
+            BuildRestPage(surface);
+            BuildChestPage(surface);
+            BuildShopPage(surface);
+            BuildEventPage(surface);
             BuildFailurePage(surface);
             BuildAbandonConfirmationPage(surface);
             BuildSaveFailurePage(surface);
             BuildRollbackConfirmationPage(surface);
+            BuildHoldingsPanel(surface);
 
             foreach (GameObject page in _pages.Values)
                 page.SetActive(false);
@@ -685,6 +740,220 @@ namespace TinySpire.UI.Run
                 width: 260f);
         }
 
+        /// <summary>建立只有治疗与冻结卡牌升级选择的 Rest 页，不创建返回或跳过入口。</summary>
+        private void BuildRestPage(RectTransform parent)
+        {
+            _restPage = CreatePage(RunEntryPage.Rest, parent);
+            _restTitle = CreateText(
+                "RestTitle",
+                _restPage,
+                42f,
+                FontStyles.Bold,
+                PrimaryTextColor,
+                300f,
+                700f,
+                64f);
+            (_restHealButton, _restHealText) = CreateButton(
+                "RestHealButton",
+                _restPage,
+                () => _restHealAction,
+                205f,
+                width: 620f,
+                height: 72f);
+        }
+
+        /// <summary>建立只有领取与跳过两个动作的 Chest 页，不创建返回入口。</summary>
+        private void BuildChestPage(RectTransform parent)
+        {
+            RectTransform page = CreatePage(RunEntryPage.Chest, parent);
+            _chestTitle = CreateText(
+                "ChestTitle",
+                page,
+                42f,
+                FontStyles.Bold,
+                PrimaryTextColor,
+                300f,
+                700f,
+                64f);
+            _chestPotionText = CreateText(
+                "ChestPotionText",
+                page,
+                28f,
+                FontStyles.Normal,
+                PrimaryTextColor,
+                145f,
+                620f,
+                150f);
+            _chestCapacityText = CreateText(
+                "ChestCapacityText",
+                page,
+                22f,
+                FontStyles.Normal,
+                SecondaryTextColor,
+                25f,
+                620f,
+                54f);
+            (_chestClaimButton, _chestClaimText) = CreateButton(
+                "ChestClaimButton",
+                page,
+                () => _chestClaimAction,
+                -90f,
+                width: 420f);
+            (_chestSkipButton, _chestSkipText) = CreateButton(
+                "ChestSkipButton",
+                page,
+                () => _chestSkipAction,
+                -185f,
+                width: 300f);
+        }
+
+        /// <summary>建立固定三项购买与一个 Leave 的 Shop 页，不创建返回、出售或刷新入口。</summary>
+        private void BuildShopPage(RectTransform parent)
+        {
+            RectTransform page = CreatePage(RunEntryPage.Shop, parent);
+            _shopTitle = CreateText(
+                "ShopTitle",
+                page,
+                42f,
+                FontStyles.Bold,
+                PrimaryTextColor,
+                300f,
+                700f,
+                64f);
+            for (int index = 0; index < _shopStockButtons.Length; index++)
+            {
+                int stockIndex = index;
+                (_shopStockButtons[index], _shopStockTexts[index]) = CreateButton(
+                    $"ShopStock{index + 1}Button",
+                    page,
+                    () => _shopStockActions[stockIndex],
+                    165f - index * 92f,
+                    width: 620f,
+                    height: 72f);
+            }
+
+            (_shopLeaveButton, _shopLeaveText) = CreateButton(
+                "ShopLeaveButton",
+                page,
+                () => _shopLeaveAction,
+                -185f,
+                width: 300f);
+        }
+
+        /// <summary>建立只有免费金币与付费治疗两个类型化选择的 Event 页，不创建返回或通用执行入口。</summary>
+        private void BuildEventPage(RectTransform parent)
+        {
+            RectTransform page = CreatePage(RunEntryPage.Event, parent);
+            _eventTitle = CreateText(
+                "EventTitle",
+                page,
+                42f,
+                FontStyles.Bold,
+                PrimaryTextColor,
+                300f,
+                700f,
+                64f);
+            (_eventGainGoldButton, _eventGainGoldText) = CreateButton(
+                "EventGainGoldButton",
+                page,
+                () => _eventGainGoldAction,
+                95f,
+                width: 620f,
+                height: 82f);
+            (_eventPaidHealButton, _eventPaidHealText) = CreateButton(
+                "EventPaidHealButton",
+                page,
+                () => _eventPaidHealAction,
+                -35f,
+                width: 620f,
+                height: 82f);
+        }
+
+        /// <summary>在所有 Run 页面之上建立一次无射线与无按钮的持有物 TMP 面板。</summary>
+        private void BuildHoldingsPanel(RectTransform parent)
+        {
+            _holdingsPanel = CreateContainer("RunHoldingsPanel", parent, stretch: true);
+            _holdingsGoldText = CreateText(
+                "RunHoldingsGoldText",
+                _holdingsPanel,
+                22f,
+                FontStyles.Bold,
+                PrimaryTextColor,
+                300f,
+                360f,
+                54f);
+            _holdingsRelicsText = CreateText(
+                "RunHoldingsRelicsText",
+                _holdingsPanel,
+                17f,
+                FontStyles.Normal,
+                SecondaryTextColor,
+                150f,
+                360f,
+                210f);
+            _holdingsPotionsText = CreateText(
+                "RunHoldingsPotionsText",
+                _holdingsPanel,
+                17f,
+                FontStyles.Normal,
+                SecondaryTextColor,
+                -100f,
+                360f,
+                230f);
+            SetCenteredRect(
+                _holdingsGoldText.rectTransform,
+                new Vector2(660f, 300f),
+                new Vector2(360f, 54f));
+            SetCenteredRect(
+                _holdingsRelicsText.rectTransform,
+                new Vector2(660f, 150f),
+                new Vector2(360f, 210f));
+            SetCenteredRect(
+                _holdingsPotionsText.rectTransform,
+                new Vector2(660f, -100f),
+                new Vector2(360f, 230f));
+            _holdingsGoldText.alignment = TextAlignmentOptions.Left;
+            _holdingsRelicsText.alignment = TextAlignmentOptions.TopLeft;
+            _holdingsPotionsText.alignment = TextAlignmentOptions.TopLeft;
+            _holdingsPanel.gameObject.SetActive(false);
+        }
+
+        /// <summary>以最新不可变投影替换持有物文本；尚未创建 Run 时隐藏整个被动面板。</summary>
+        private void RenderHoldings(RunHoldingsViewModel model)
+        {
+            bool visible = model != null;
+            _holdingsPanel.gameObject.SetActive(visible);
+            if (!visible)
+            {
+                _holdingsGoldText.text = string.Empty;
+                _holdingsRelicsText.text = string.Empty;
+                _holdingsPotionsText.text = string.Empty;
+                return;
+            }
+
+            _holdingsGoldText.text = model.GoldText;
+            _holdingsRelicsText.text = BuildHoldingSection(
+                model.RelicsTitle,
+                model.Relics,
+                model.EmptyText);
+            _holdingsPotionsText.text = BuildHoldingSection(
+                model.PotionsTitle,
+                model.Potions,
+                model.EmptyText);
+        }
+
+        /// <summary>按 ViewModel 顺序将一个只读持有物分区格式化为单个 TMP 文本。</summary>
+        private static string BuildHoldingSection(
+            string title,
+            IReadOnlyList<RunHoldingItemViewModel> items,
+            string emptyText)
+        {
+            if (items.Count == 0)
+                return $"{title}\n{emptyText}";
+
+            return $"{title}\n{string.Join("\n", items.Select(item => $"{item.Name} — {item.Description}"))}";
+        }
+
         /// <summary>以最新投影替换三个动态动作与文本，不在重复 Render 时新增监听。</summary>
         private void RenderCardReward(RunCardRewardViewModel model)
         {
@@ -714,6 +983,163 @@ namespace TinySpire.UI.Run
                     RunEntryActionKind.SkipCardReward,
                     cardRewardId: model.RewardId);
             _skipCardRewardButton.interactable = model != null && model.ActionsEnabled;
+        }
+
+        /// <summary>以最新 Rest 投影替换治疗与全部冻结实例动作，重复渲染不新增旧监听。</summary>
+        private void RenderRest(RunRestViewModel model)
+        {
+            _restHealAction = model == null
+                ? default
+                : new RunEntryAction(
+                    RunEntryActionKind.HealAtRest,
+                    nodeVisitId: model.VisitId);
+            _restHealText.text = model?.HealText ?? string.Empty;
+            _restHealButton.interactable = model != null && model.HealEnabled;
+
+            int candidateCount = model?.UpgradeCandidates.Count ?? 0;
+            for (int index = _restUpgradeButtons.Count; index < candidateCount; index++)
+                CreateRestUpgradeButton(index);
+
+            for (int index = 0; index < _restUpgradeButtons.Count; index++)
+            {
+                bool visible = index < candidateCount;
+                Button button = _restUpgradeButtons[index];
+                button.gameObject.SetActive(visible);
+                if (!visible)
+                {
+                    _restUpgradeActions[index] = null;
+                    _restUpgradeTexts[index].text = string.Empty;
+                    button.interactable = false;
+                    continue;
+                }
+
+                RunRestUpgradeCandidateViewModel candidate = model.UpgradeCandidates[index];
+                _restUpgradeActions[index] = new RunEntryAction(
+                    RunEntryActionKind.UpgradeCardAtRest,
+                    nodeVisitId: model.VisitId,
+                    cardInstanceId: candidate.CardInstanceId);
+                _restUpgradeTexts[index].text = candidate.Text;
+                button.interactable = candidate.Enabled;
+                LayoutRestUpgradeButton(
+                    button,
+                    _restUpgradeTexts[index],
+                    index,
+                    candidateCount);
+            }
+        }
+
+        /// <summary>以最新 Chest 投影替换两条访问动作与文本，重复渲染不新增旧身份监听。</summary>
+        private void RenderChest(RunChestViewModel model)
+        {
+            _chestClaimAction = model == null
+                ? default
+                : new RunEntryAction(
+                    RunEntryActionKind.ClaimChest,
+                    nodeVisitId: model.VisitId);
+            _chestSkipAction = model == null
+                ? default
+                : new RunEntryAction(
+                    RunEntryActionKind.SkipChest,
+                    nodeVisitId: model.VisitId);
+            _chestPotionText.text = model == null
+                ? string.Empty
+                : $"{model.Potion.Name}\n{model.Potion.Description}";
+            _chestCapacityText.text = model != null && model.IsCapacityFull
+                ? model.CapacityFullText
+                : string.Empty;
+            _chestClaimText.text = model?.ClaimText ?? string.Empty;
+            _chestSkipText.text = model?.SkipText ?? string.Empty;
+            _chestClaimButton.interactable = model != null && model.ClaimEnabled;
+            _chestSkipButton.interactable = model != null && model.SkipEnabled;
+        }
+
+        /// <summary>以最新 Shop 投影替换固定三项库存与 Leave 动作，重复渲染不叠加旧身份监听。</summary>
+        private void RenderShop(RunShopViewModel model)
+        {
+            for (int index = 0; index < _shopStockButtons.Length; index++)
+            {
+                RunShopStockEntryViewModel entry = model?.Entries[index];
+                _shopStockActions[index] = entry == null
+                    ? default
+                    : new RunEntryAction(
+                        RunEntryActionKind.PurchaseShopStock,
+                        nodeVisitId: model.VisitId,
+                        shopStockEntryId: entry.EntryId);
+                _shopStockTexts[index].text = entry?.Text ?? string.Empty;
+                _shopStockButtons[index].interactable = entry != null && entry.PurchaseEnabled;
+            }
+
+            _shopLeaveAction = model == null
+                ? default
+                : new RunEntryAction(
+                    RunEntryActionKind.LeaveShop,
+                    nodeVisitId: model.VisitId);
+            _shopLeaveText.text = model?.LeaveText ?? string.Empty;
+            _shopLeaveButton.interactable = model != null && model.LeaveEnabled;
+        }
+
+        /// <summary>以最新 Event 投影替换固定双选择动作，重复渲染不叠加旧访问身份监听。</summary>
+        private void RenderEvent(RunEventViewModel model)
+        {
+            _eventGainGoldAction = model == null
+                ? default
+                : new RunEntryAction(
+                    RunEntryActionKind.ChooseEvent,
+                    nodeVisitId: model.VisitId,
+                    eventChoice: RunEventChoiceKind.GainGold);
+            _eventPaidHealAction = model == null
+                ? default
+                : new RunEntryAction(
+                    RunEntryActionKind.ChooseEvent,
+                    nodeVisitId: model.VisitId,
+                    eventChoice: RunEventChoiceKind.PaidHeal);
+            _eventGainGoldText.text = model?.GainGoldText ?? string.Empty;
+            _eventPaidHealText.text = model?.PaidHealText ?? string.Empty;
+            _eventGainGoldButton.interactable = model != null && model.GainGoldEnabled;
+            _eventPaidHealButton.interactable = model != null && model.PaidHealEnabled;
+        }
+
+        /// <summary>按候选索引创建一次可复用按钮，并永久绑定到该索引的最新动作槽。</summary>
+        private void CreateRestUpgradeButton(int index)
+        {
+            int candidateIndex = index;
+            (Button button, TMP_Text text) = CreateButton(
+                $"RestUpgradeCandidate{index}Button",
+                _restPage,
+                () => _restUpgradeActions[candidateIndex],
+                0f,
+                width: 620f,
+                height: 64f);
+            button.gameObject.SetActive(false);
+            _restUpgradeButtons.Add(button);
+            _restUpgradeTexts.Add(text);
+            _restUpgradeActions.Add(null);
+        }
+
+        /// <summary>在内容面内以至多两列紧凑排列当前全部冻结升级候选。</summary>
+        private static void LayoutRestUpgradeButton(
+            Button button,
+            TMP_Text text,
+            int index,
+            int candidateCount)
+        {
+            int columnCount = candidateCount > 5 ? 2 : 1;
+            int rowCount = (candidateCount + columnCount - 1) / columnCount;
+            int row = index / columnCount;
+            int column = index % columnCount;
+            const float gap = 10f;
+            float height = Mathf.Min(68f, (400f - (rowCount - 1) * gap) / rowCount);
+            float width = columnCount == 1 ? 620f : 300f;
+            float x = columnCount == 1 ? 0f : (column == 0 ? -160f : 160f);
+            float y = 115f - height * 0.5f - row * (height + gap);
+            SetCenteredRect(
+                button.GetComponent<RectTransform>(),
+                new Vector2(x, y),
+                new Vector2(width, height));
+            SetCenteredRect(
+                text.rectTransform,
+                Vector2.zero,
+                new Vector2(width - 30f, height - 12f));
         }
 
         /// <summary>按地图指纹复用拓扑几何，并在每次投影时刷新节点/边的功能状态。</summary>
@@ -756,39 +1182,26 @@ namespace TinySpire.UI.Run
             _renderedMapFingerprint = model.Fingerprint;
             _mapGraphRoot = CreateContainer("FrozenActMap", _mapGraphHost, stretch: true);
 
-            int maxLayer = model.Nodes.Count == 0
-                ? 0
-                : model.Nodes.Max(node => node.Layer);
-            var positions = new Dictionary<string, Vector2>(StringComparer.Ordinal);
-            foreach (IGrouping<int, RunMapNodeViewModel> layer in model.Nodes.GroupBy(node => node.Layer))
-            {
-                RunMapNodeViewModel[] layerNodes = layer.OrderBy(node => node.Slot).ToArray();
-                int maxSlot = layerNodes.Length == 0 ? 0 : layerNodes.Max(node => node.Slot);
-                foreach (RunMapNodeViewModel node in layerNodes)
-                {
-                    float x = maxSlot == 0
-                        ? 0f
-                        : Mathf.Lerp(-315f, 315f, node.Slot / (float)maxSlot);
-                    float y = maxLayer == 0
-                        ? 0f
-                        : Mathf.Lerp(-185f, 185f, node.Layer / (float)maxLayer);
-                    positions.Add(node.NodeId, new Vector2(x, y));
-                }
-            }
+            IReadOnlyList<RunMapNodeLayout> layouts = RunMapLayout.Build(model.Nodes);
+            Dictionary<string, RunMapNodeLayout> layoutByNodeId = layouts.ToDictionary(
+                layout => layout.NodeId,
+                StringComparer.Ordinal);
 
             foreach (RunMapEdgeViewModel edge in model.Edges)
             {
-                if (!positions.TryGetValue(edge.FromNodeId, out Vector2 from) ||
-                    !positions.TryGetValue(edge.ToNodeId, out Vector2 to))
+                if (!layoutByNodeId.TryGetValue(edge.FromNodeId, out RunMapNodeLayout fromLayout) ||
+                    !layoutByNodeId.TryGetValue(edge.ToNodeId, out RunMapNodeLayout toLayout))
                 {
                     throw new InvalidOperationException($"Map edge '{edge.Key}' references a missing view node.");
                 }
 
+                var from = new Vector2(fromLayout.CenterX, fromLayout.CenterY);
+                var to = new Vector2(toLayout.CenterX, toLayout.CenterY);
                 CreateMapEdge(edge, from, to);
             }
 
             foreach (RunMapNodeViewModel node in model.Nodes)
-                CreateMapNode(node, positions[node.NodeId]);
+                CreateMapNode(node, layoutByNodeId[node.NodeId]);
         }
 
         /// <summary>建立一条位于节点之后的纯表现连线。</summary>
@@ -810,41 +1223,44 @@ namespace TinySpire.UI.Run
         }
 
         /// <summary>建立一个按 NodeId 提交命令、仅由投影控制可交互性的地图节点。</summary>
-        private void CreateMapNode(RunMapNodeViewModel node, Vector2 position)
+        private void CreateMapNode(RunMapNodeViewModel node, RunMapNodeLayout layout)
         {
             string objectName = GetMapNodeObjectName(node.NodeId);
-            float width = node.Kind == TinySpire.Run.Map.MapNodeKind.Boss ? 196f : 176f;
-            float height = node.Kind == TinySpire.Run.Map.MapNodeKind.Boss ? 98f : 88f;
+            float width = layout.Width;
+            float height = layout.Height;
+            bool compact = height < 60f;
             (Button button, TMP_Text label) = CreateButton(
                 objectName,
                 _mapGraphRoot,
                 new RunEntryAction(
                     RunEntryActionKind.EnterMapNode,
                     mapNodeId: new TinySpire.Run.Map.MapNodeId(node.NodeId)),
-                position.y,
+                layout.CenterY,
                 width,
                 height,
-                x: position.x);
+                x: layout.CenterX);
             SetCenteredRect(
                 (RectTransform)label.transform,
-                new Vector2(20f, 12f),
-                new Vector2(width - 68f, 42f));
-            label.fontSize = node.Kind == TinySpire.Run.Map.MapNodeKind.Boss ? 18f : 20f;
+                compact ? new Vector2(18f, 7f) : new Vector2(20f, 12f),
+                compact ? new Vector2(width - 58f, 22f) : new Vector2(width - 68f, 42f));
+            label.fontSize = compact
+                ? 14f
+                : node.Kind == TinySpire.Run.Map.MapNodeKind.Boss ? 18f : 20f;
             label.textWrappingMode = TextWrappingModes.Normal;
 
             TMP_Text identityId = CreateText(
                 $"MapNode_{node.NodeId}_IdentityId",
                 (RectTransform)button.transform,
-                14f,
+                compact ? 10f : 14f,
                 FontStyles.Normal,
                 SecondaryTextColor,
-                -22f,
-                width - 68f,
-                20f);
+                compact ? -12f : -22f,
+                compact ? width - 58f : width - 68f,
+                compact ? 14f : 20f);
             SetCenteredRect(
                 (RectTransform)identityId.transform,
-                new Vector2(20f, -23f),
-                new Vector2(width - 68f, 20f));
+                compact ? new Vector2(18f, -13f) : new Vector2(20f, -23f),
+                compact ? new Vector2(width - 58f, 14f) : new Vector2(width - 68f, 20f));
             IReadOnlyList<Image> anchorImages = CreateMapVisualAnchor(
                 node,
                 (RectTransform)button.transform,
@@ -897,6 +1313,26 @@ namespace TinySpire.UI.Run
                     AddMapAnchorShape(images, anchorRoot, "SentryBody", new Vector2(0f, -5f), new Vector2(23f, 21f), 0f, color);
                     AddMapAnchorShape(images, anchorRoot, "SentryHead", new Vector2(0f, 8f), new Vector2(16f, 10f), 0f, color);
                     AddMapAnchorShape(images, anchorRoot, "SentryAntenna", new Vector2(0f, 16f), new Vector2(3f, 10f), 0f, color);
+                    break;
+                case RunMapVisualAnchorKind.RestCampfire:
+                    AddMapAnchorShape(images, anchorRoot, "FireLogLeft", new Vector2(-6f, -10f), new Vector2(5f, 24f), 55f, color);
+                    AddMapAnchorShape(images, anchorRoot, "FireLogRight", new Vector2(6f, -10f), new Vector2(5f, 24f), -55f, color);
+                    AddMapAnchorShape(images, anchorRoot, "FireFlame", new Vector2(0f, 5f), new Vector2(17f, 24f), 45f, color);
+                    break;
+                case RunMapVisualAnchorKind.ChestCache:
+                    AddMapAnchorShape(images, anchorRoot, "ChestBody", new Vector2(0f, -6f), new Vector2(30f, 18f), 0f, color);
+                    AddMapAnchorShape(images, anchorRoot, "ChestLid", new Vector2(0f, 7f), new Vector2(30f, 8f), 0f, color);
+                    AddMapAnchorShape(images, anchorRoot, "ChestLatch", new Vector2(0f, -1f), new Vector2(6f, 12f), 0f, color);
+                    break;
+                case RunMapVisualAnchorKind.ShopBag:
+                    AddMapAnchorShape(images, anchorRoot, "BagBody", new Vector2(0f, -5f), new Vector2(27f, 25f), 0f, color);
+                    AddMapAnchorShape(images, anchorRoot, "BagTie", new Vector2(0f, 10f), new Vector2(16f, 5f), 0f, color);
+                    AddMapAnchorShape(images, anchorRoot, "BagCoin", new Vector2(0f, -4f), new Vector2(7f, 7f), 45f, color);
+                    break;
+                case RunMapVisualAnchorKind.EventQuestionMark:
+                    AddMapAnchorShape(images, anchorRoot, "QuestionTop", new Vector2(2f, 9f), new Vector2(18f, 5f), -15f, color);
+                    AddMapAnchorShape(images, anchorRoot, "QuestionStem", new Vector2(0f, 0f), new Vector2(5f, 18f), 12f, color);
+                    AddMapAnchorShape(images, anchorRoot, "QuestionDot", new Vector2(0f, -14f), new Vector2(6f, 6f), 0f, color);
                     break;
                 case RunMapVisualAnchorKind.BossAlphaCrown:
                     AddMapAnchorShape(images, anchorRoot, "CrownBase", new Vector2(0f, -10f), new Vector2(30f, 6f), 0f, color);
@@ -955,6 +1391,14 @@ namespace TinySpire.UI.Run
                     return new Color32(244, 195, 105, 255);
                 case RunMapVisualAnchorKind.EncounterSentrySilhouette:
                     return new Color32(135, 193, 224, 255);
+                case RunMapVisualAnchorKind.RestCampfire:
+                    return new Color32(239, 144, 75, 255);
+                case RunMapVisualAnchorKind.ChestCache:
+                    return new Color32(224, 184, 84, 255);
+                case RunMapVisualAnchorKind.ShopBag:
+                    return new Color32(111, 207, 159, 255);
+                case RunMapVisualAnchorKind.EventQuestionMark:
+                    return new Color32(189, 142, 230, 255);
                 case RunMapVisualAnchorKind.BossAlphaCrown:
                     return new Color32(243, 115, 128, 255);
                 case RunMapVisualAnchorKind.BossBetaHorns:

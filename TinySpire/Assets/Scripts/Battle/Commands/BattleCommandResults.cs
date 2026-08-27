@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using TinySpire.Run;
 
 namespace TinySpire.Battle
 {
@@ -67,12 +68,16 @@ namespace TinySpire.Battle
         /// <summary>按 CombatantId 稳定排序的全部玩家结算后生命事实。</summary>
         public IReadOnlyList<BattleResultPlayerSnapshot> Players { get; }
 
+        /// <summary>按实例序号稳定排序并防御性冻结的本战成功消费药水身份。</summary>
+        public IReadOnlyList<RunPotionInstanceId> ConsumedPotionInstanceIds { get; }
+
         /// <summary>冻结一次与终局命令和回合对应的公开结果。</summary>
         internal BattleResult(
             BattleResultKind kind,
             long authoritySequence,
             int roundNumber,
-            IReadOnlyList<BattleResultPlayerSnapshot> players)
+            IReadOnlyList<BattleResultPlayerSnapshot> players,
+            IEnumerable<RunPotionInstanceId> consumedPotionInstanceIds = null)
         {
             if (!Enum.IsDefined(typeof(BattleResultKind), kind))
                 throw new ArgumentOutOfRangeException(nameof(kind));
@@ -98,10 +103,27 @@ namespace TinySpire.Battle
                 playerCopies.Add(player);
             }
 
+            var consumedCopies = consumedPotionInstanceIds == null
+                ? new List<RunPotionInstanceId>()
+                : new List<RunPotionInstanceId>(consumedPotionInstanceIds);
+            var consumedIds = new HashSet<RunPotionInstanceId>();
+            foreach (RunPotionInstanceId instanceId in consumedCopies)
+            {
+                if (instanceId.Sequence <= 0 || !consumedIds.Add(instanceId))
+                {
+                    throw new ArgumentException(
+                        "消费药水身份不得为空或重复。",
+                        nameof(consumedPotionInstanceIds));
+                }
+            }
+            consumedCopies.Sort((left, right) => left.Sequence.CompareTo(right.Sequence));
+
             Kind = kind;
             AuthoritySequence = authoritySequence;
             RoundNumber = roundNumber;
             Players = new ReadOnlyCollection<BattleResultPlayerSnapshot>(playerCopies);
+            ConsumedPotionInstanceIds =
+                new ReadOnlyCollection<RunPotionInstanceId>(consumedCopies);
         }
     }
 
@@ -198,6 +220,9 @@ namespace TinySpire.Battle
         InvalidCardSelectionCount,
         SelectedCardNotEligible,
         SelectedCardNotInHand,
+        PlayerHealthFull,
+        PotionNotFound,
+        PotionAlreadyConsumed,
     }
 
     /// <summary>

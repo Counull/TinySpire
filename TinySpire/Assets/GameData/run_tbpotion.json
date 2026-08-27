@@ -1,0 +1,8 @@
+{
+  "9001": {
+    "id": 9001,
+    "name_i18n_key": "run.potion.healing.name",
+    "description_i18n_key": "run.potion.healing.description",
+    "heal_amount": 10
+  }
+}

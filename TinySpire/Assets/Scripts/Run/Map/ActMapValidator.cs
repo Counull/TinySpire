@@ -24,6 +24,8 @@ namespace TinySpire.Run.Map
         BossHasOutgoingEdge,
         CombatUnreachableFromStart,
         CombatCannotReachBoss,
+        PlayableNodeUnreachableFromStart,
+        PlayableNodeCannotReachBoss,
         BossUnreachableFromStart,
     }
 
@@ -84,7 +86,7 @@ namespace TinySpire.Run.Map
                 nodeById,
                 errors,
                 out Dictionary<MapNodeId, List<MapNodeId>> incoming);
-            ValidateReachability(nodeById, outgoing, incoming, errors);
+            ValidateReachability(profile, nodeById, outgoing, incoming, errors);
             return new MapValidationResult(errors);
         }
 
@@ -102,12 +104,13 @@ namespace TinySpire.Run.Map
                     $"Map profile '{map.ProfileId}' does not match '{profile.ProfileId}'.");
             }
 
-            if (map.GeneratorVersion != ActMapGenerator.CurrentVersion)
+            if (map.GeneratorVersion != profile.GeneratorVersion)
             {
                 AddError(
                     errors,
                     MapValidationErrorCode.GeneratorVersionMismatch,
-                    $"Map generator version '{map.GeneratorVersion}' is unsupported.");
+                    $"Map generator version '{map.GeneratorVersion}' does not match " +
+                    $"profile version '{profile.GeneratorVersion}'.");
             }
         }
 
@@ -148,9 +151,58 @@ namespace TinySpire.Run.Map
             }
 
             ValidateStartNode(map, errors);
-            ValidateNormalLayers(map, profile, errors);
+            if (profile.GeneratorVersion == ActMapGenerator.LegacyG3Version)
+                ValidateNormalLayers(map, profile, errors);
+            else
+                ValidatePlayableLayers(map, profile, errors);
             ValidateBossLayer(map, profile, errors);
             return nodeById;
+        }
+
+        /// <summary>验证 v2 每个单 Slot mixed 层的种类与内容身份完全匹配 profile。</summary>
+        private static void ValidatePlayableLayers(
+            MapDefinition map,
+            ActMapProfile profile,
+            ICollection<MapValidationError> errors)
+        {
+            for (int index = 0; index < profile.PlayableLayers.Count; index++)
+            {
+                int layer = index + 1;
+                ActMapPlayableLayer expected = profile.PlayableLayers[index];
+                MapNode[] layerNodes = map.Nodes.Where(node => node.Layer == layer).ToArray();
+                bool shapeMatches = layerNodes.Length == 1 &&
+                                    layerNodes[0].Slot == 0 &&
+                                    layerNodes[0].Kind == expected.Kind;
+                if (!shapeMatches)
+                {
+                    AddError(
+                        errors,
+                        MapValidationErrorCode.NormalLayerContractViolation,
+                        $"Playable layer {layer} does not match its fixed kind and Slot.");
+                    continue;
+                }
+
+                if (layerNodes[0].ContentId != expected.ContentId)
+                {
+                    AddError(
+                        errors,
+                        MapValidationErrorCode.ContentReferenceViolation,
+                        $"Playable node '{layerNodes[0].Id}' content {layerNodes[0].ContentId} " +
+                        $"does not match frozen content {expected.ContentId}.");
+                }
+            }
+
+            foreach (MapNode node in map.Nodes.Where(node =>
+                node.Layer > 0 && node.Layer < profile.BossLayer))
+            {
+                if (node.Layer > profile.PlayableLayers.Count)
+                {
+                    AddError(
+                        errors,
+                        MapValidationErrorCode.NormalLayerContractViolation,
+                        $"Node '{node.Id}' is outside the fixed playable layers.");
+                }
+            }
         }
 
         /// <summary>验证唯一 Start 固定在第零层第零 Slot 且不携带内容。</summary>
@@ -329,6 +381,7 @@ namespace TinySpire.Run.Map
 
         /// <summary>验证全部普通节点与 Boss 终点均从 Start 可达，且普通节点没有 Boss 死路。</summary>
         private static void ValidateReachability(
+            ActMapProfile profile,
             IReadOnlyDictionary<MapNodeId, MapNode> nodeById,
             IReadOnlyDictionary<MapNodeId, List<MapNodeId>> outgoing,
             IReadOnlyDictionary<MapNodeId, List<MapNodeId>> incoming,
@@ -347,22 +400,32 @@ namespace TinySpire.Run.Map
                 .ToArray();
             HashSet<MapNodeId> canReachBoss = Traverse(bossNodeIds, incoming);
 
-            foreach (MapNode node in nodeById.Values.Where(node => node.Kind == MapNodeKind.Combat))
+            bool validatesAllPlayableNodes =
+                profile.GeneratorVersion == ActMapGenerator.NewRunG6Version;
+            IEnumerable<MapNode> playableNodes = validatesAllPlayableNodes
+                ? nodeById.Values.Where(node =>
+                    node.Kind != MapNodeKind.Start && node.Kind != MapNodeKind.Boss)
+                : nodeById.Values.Where(node => node.Kind == MapNodeKind.Combat);
+            foreach (MapNode node in playableNodes)
             {
                 if (!reachableFromStart.Contains(node.Id))
                 {
                     AddError(
                         errors,
-                        MapValidationErrorCode.CombatUnreachableFromStart,
-                        $"Combat node '{node.Id}' is unreachable from Start.");
+                        validatesAllPlayableNodes
+                            ? MapValidationErrorCode.PlayableNodeUnreachableFromStart
+                            : MapValidationErrorCode.CombatUnreachableFromStart,
+                        $"Playable node '{node.Id}' is unreachable from Start.");
                 }
 
                 if (!canReachBoss.Contains(node.Id))
                 {
                     AddError(
                         errors,
-                        MapValidationErrorCode.CombatCannotReachBoss,
-                        $"Combat node '{node.Id}' cannot reach any Boss endpoint.");
+                        validatesAllPlayableNodes
+                            ? MapValidationErrorCode.PlayableNodeCannotReachBoss
+                            : MapValidationErrorCode.CombatCannotReachBoss,
+                        $"Playable node '{node.Id}' cannot reach any Boss endpoint.");
                 }
             }
 

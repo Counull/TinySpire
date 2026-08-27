@@ -28,6 +28,10 @@ internal static class ConfigTableManifestValidator
         @"loader\(\""(?<table>[^\"" ]+)\""\)",
         RegexOptions.CultureInvariant);
 
+    private static readonly Regex GeneratedJsonTableNamePattern = new(
+        @"^[a-z][a-z0-9_]*_tb[a-z0-9_]+$",
+        RegexOptions.CultureInvariant);
+
     /// <summary>使用当前 Unity 项目中的真实生成物与表定义执行完整清单校验。</summary>
     internal static void ValidateCurrentProject()
     {
@@ -100,7 +104,7 @@ internal static class ConfigTableManifestValidator
             .ToArray();
     }
 
-    /// <summary>读取 GameData 中由 Luban 输出的 battle 表 JSON 文件名。</summary>
+    /// <summary>读取 GameData 中由 Luban 输出的全部客户端表 JSON 文件名。</summary>
     private static IEnumerable<string> ReadGeneratedJsonTableNames(string gameDataDirectory)
     {
         if (!Directory.Exists(gameDataDirectory))
@@ -108,11 +112,11 @@ internal static class ConfigTableManifestValidator
 
         return Directory.EnumerateFiles(gameDataDirectory, "*.json", SearchOption.TopDirectoryOnly)
             .Select(Path.GetFileNameWithoutExtension)
-            .Where(name => name.StartsWith("battle_tb", StringComparison.Ordinal))
+            .Where(name => GeneratedJsonTableNamePattern.IsMatch(name))
             .ToArray();
     }
 
-    /// <summary>从 Luban 的 __tables__.xlsx 读取参与客户端生成的 battle 表定义。</summary>
+    /// <summary>从 Luban 的 __tables__.xlsx 读取参与客户端生成的全部表定义。</summary>
     private static IEnumerable<string> ReadLubanTableNames(string tableDefinitionsPath)
     {
         if (!File.Exists(tableDefinitionsPath))
@@ -132,7 +136,7 @@ internal static class ConfigTableManifestValidator
         {
             IReadOnlyDictionary<string, string> cells = ReadCells(row, spreadsheet, sharedStrings);
             if (!cells.TryGetValue("B", out string fullName) ||
-                !fullName.StartsWith("battle.", StringComparison.Ordinal) ||
+                fullName.IndexOf('.') <= 0 ||
                 !IsClientTable(cells))
             {
                 continue;
@@ -239,7 +243,7 @@ internal static class ConfigTableManifestValidator
 
         var normalized = new HashSet<string>(values, StringComparer.Ordinal);
         if (normalized.Count == 0)
-            throw new ConfigTableManifestDriftException($"{sourceName} contains no battle table names.");
+            throw new ConfigTableManifestDriftException($"{sourceName} contains no client table names.");
 
         return normalized;
     }

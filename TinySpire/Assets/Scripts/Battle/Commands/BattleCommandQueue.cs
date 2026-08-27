@@ -20,6 +20,8 @@ namespace TinySpire.Battle
         private readonly BattleTerminalRules _terminalRules;
         private readonly MachineGunnerBattleRuntime _machineGunnerRuntime;
         private readonly BattleSettlementTriggerEngine _settlementTriggerEngine;
+        private readonly BattlePotionLedger _potionLedger;
+        private readonly BattleCombatantEffectOperations _combatantEffectOperations;
         private readonly ReactiveProperty<BattleCommandQueueData> _queue;
         private readonly ReactiveProperty<BattleResult> _result;
 
@@ -80,7 +82,9 @@ namespace TinySpire.Battle
             IBattleCommandPresentation presentation,
             BattleCommandSubmissionCoordinator coordinator,
             MachineGunnerBattleRuntime machineGunnerRuntime = null,
-            uint cardTargetRandomSeed = 1u)
+            uint cardTargetRandomSeed = 1u,
+            IReadOnlyList<BattleStartRelicEffect> battleStartRelicEffects = null,
+            BattlePotionLedger potionLedger = null)
         {
             _presentation = presentation ?? throw new ArgumentNullException(nameof(presentation));
             _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
@@ -91,6 +95,9 @@ namespace TinySpire.Battle
                 throw new ArgumentNullException(nameof(enemyIntents));
 
             _combatants = combatants;
+            _potionLedger = potionLedger ??
+                new BattlePotionLedger(Array.Empty<BattlePotionEntry>());
+            _combatantEffectOperations = new BattleCombatantEffectOperations(combatants);
             _machineGunnerRuntime = machineGunnerRuntime;
             _settlementTriggerEngine = new BattleSettlementTriggerEngine(
                 combatants,
@@ -113,7 +120,8 @@ namespace TinySpire.Battle
                 initialHandCount,
                 machineGunnerRuntime,
                 cardTargetRandomSeed,
-                _settlementTriggerEngine);
+                _settlementTriggerEngine,
+                battleStartRelicEffects);
             _queue = new ReactiveProperty<BattleCommandQueueData>(_scheduling.CreateQueueSnapshot());
             Queue = _queue.ToReadOnlyReactiveProperty();
             _result = new ReactiveProperty<BattleResult>(null);
@@ -316,6 +324,7 @@ namespace TinySpire.Battle
             }
             else if (!entry.RequiresSystemToken &&
                       (entry.Command is PlayCardCommand ||
+                       entry.Command is UsePotionCommand ||
                        entry.Command is EndPlayerActionCommand) &&
                       entry.SubmittedRoundNumber != turnBefore.RoundNumber)
             {
@@ -327,6 +336,10 @@ namespace TinySpire.Battle
                 operationResult = _turnController.TryPlayCard(
                     playCardCommand,
                     entry.RequiresSystemToken);
+            }
+            else if (entry.Command is UsePotionCommand usePotionCommand)
+            {
+                operationResult = TryUsePotion(usePotionCommand, turnBefore);
             }
             else if (entry.Command is EndPlayerActionCommand endPlayerActionCommand)
             {
@@ -518,6 +531,91 @@ namespace TinySpire.Battle
                 continuation);
         }
 
+        /// <summary>在队首按玩家行动、存活、生命与 Battle ledger 终审药水，并只在治疗写入后消费。</summary>
+        private BattleTurnOperationResult TryUsePotion(
+            UsePotionCommand command,
+            BattleTurnData turn)
+        {
+            if (command == null)
+                throw new ArgumentNullException(nameof(command));
+            if (turn == null)
+                throw new ArgumentNullException(nameof(turn));
+            if (turn.Phase != BattleTurnPhase.PlayerAction)
+            {
+                return BattleTurnOperationResult.Failed(
+                    BattleCommandExecutionFailureReason.InvalidTurnPhase);
+            }
+            if (!_potionLedger.TryGet(command.PotionInstanceId, out BattlePotionEntry potion))
+            {
+                return BattleTurnOperationResult.Failed(
+                    BattleCommandExecutionFailureReason.PotionNotFound);
+            }
+            if (_potionLedger.IsConsumed(command.PotionInstanceId))
+            {
+                return BattleTurnOperationResult.Failed(
+                    BattleCommandExecutionFailureReason.PotionAlreadyConsumed);
+            }
+            if (!_combatants.TryGet(potion.OwnerId, out CombatantData combatant) ||
+                !(combatant is PlayerCombatantData player) ||
+                !turn.Players.TryGetValue(potion.OwnerId, out PlayerTurnData playerTurn))
+            {
+                return BattleTurnOperationResult.Failed(
+                    BattleCommandExecutionFailureReason.InvalidPlayer);
+            }
+            if (!player.IsAlive)
+            {
+                return BattleTurnOperationResult.Failed(
+                    BattleCommandExecutionFailureReason.PlayerNotAlive);
+            }
+            if (playerTurn.HasEndedAction)
+            {
+                return BattleTurnOperationResult.Failed(
+                    BattleCommandExecutionFailureReason.PlayerActionAlreadyEnded);
+            }
+            if (player.CurrentHealth >= player.MaxHealth)
+            {
+                return BattleTurnOperationResult.Failed(
+                    BattleCommandExecutionFailureReason.PlayerHealthFull);
+            }
+
+            BattleHealthRestorationOutcome healing =
+                BattleHealthRestorationOutcomeResolver.Resolve(
+                    potion.HealAmount,
+                    player.CurrentHealth,
+                    player.MaxHealth);
+            BattleCombatantEffectOperationResult applied =
+                _combatantEffectOperations.ApplyPreparedHealthRestoration(
+                    player.Id,
+                    healing);
+            if (applied.Status != BattleCombatantEffectOperationStatus.Applied)
+            {
+                throw new InvalidOperationException(
+                    "Potion healing target changed after queue validation.");
+            }
+            if (!_potionLedger.TryMarkConsumed(potion.InstanceId))
+            {
+                throw new InvalidOperationException(
+                    "Potion ledger changed after successful healing.");
+            }
+
+            return new BattleTurnOperationResult(
+                BattleCommandExecutionFailureReason.None,
+                new BattleSettlementRecord[]
+                {
+                    new BattleHealthRestoredSettlement(
+                        order: 0,
+                        effectId: null,
+                        sourceId: player.Id,
+                        targetId: player.Id,
+                        outcome: healing),
+                    new BattlePotionConsumedSettlement(
+                        order: 1,
+                        instanceId: potion.InstanceId,
+                        templateId: potion.TemplateId,
+                        ownerId: player.Id),
+                });
+        }
+
         /// <summary>非敌人命令成功写入后若进入敌人行动，则冻结恰好一条 Queue 内部 continuation。</summary>
         private BattleCommand CreateTurnContinuation(BattleCommandExecutionResult executionResult)
         {
@@ -639,7 +737,8 @@ namespace TinySpire.Battle
                 kind,
                 authoritySequence,
                 turnAfter.RoundNumber,
-                playerSnapshots);
+                playerSnapshots,
+                _potionLedger.ConsumedInstanceIds);
         }
 
         /// <summary>精确 completion 只解除所属屏障，随后尝试由新的外层 drain 继续。</summary>

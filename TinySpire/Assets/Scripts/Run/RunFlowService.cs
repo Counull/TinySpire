@@ -29,6 +29,12 @@ namespace TinySpire.Run
         private bool _hasPendingRewardSettlement;
         private RunCardRewardId _pendingRewardId;
         private int? _pendingRewardCardTemplateId;
+        private RunNodeVisitEntrySettlement _pendingNodeVisitEntrySettlement;
+        private RunRestSettlement _pendingRestSettlement;
+        private RunChestSettlement _pendingChestSettlement;
+        private RunShopSettlement _pendingShopSettlement;
+        private RunEventChoiceSettlement _pendingEventChoiceSettlement;
+        private RunBattleResultSettlement _pendingBattleResultSettlement;
 
         /// <summary>存档发现、校验与提交状态变化时通知当前入口 Presenter。</summary>
         public event Action PersistenceChanged;
@@ -45,6 +51,27 @@ namespace TinySpire.Run
                 return state != null &&
                        state.ProgressPhase == RunProgressPhase.InBattle &&
                        state.ActiveBattle != null;
+            }
+        }
+
+        /// <summary>只有没有冻结业务后继的失败检查点才允许显式放弃并回到上一成功档。</summary>
+        internal bool CanRollbackFailedCheckpoint
+        {
+            get
+            {
+                RunState state = _store.Current;
+                return Persistence.Status == RunPersistenceStatus.CommitFailed &&
+                       state != null &&
+                       state.ProgressPhase != RunProgressPhase.Terminal &&
+                       state.ProgressPhase != RunProgressPhase.RewardPending &&
+                       state.ProgressPhase != RunProgressPhase.NodeVisitPending &&
+                       !_hasPendingRewardSettlement &&
+                        _pendingNodeVisitEntrySettlement == null &&
+                         _pendingRestSettlement == null &&
+                         _pendingChestSettlement == null &&
+                         _pendingShopSettlement == null &&
+                         _pendingEventChoiceSettlement == null &&
+                         _pendingBattleResultSettlement == null;
             }
         }
 
@@ -94,7 +121,7 @@ namespace TinySpire.Run
                 ?? throw new InvalidOperationException($"Hero template {heroTemplateId} does not exist.");
             cfg.battle.Deck initialDeck = tables.TbDeck.GetOrDefault(hero.InitialDeckId)
                 ?? throw new InvalidOperationException($"Deck template {hero.InitialDeckId} does not exist.");
-            ActMapProfile profile = TinySpireActMapProfiles.Current;
+            ActMapProfile profile = TinySpireActMapProfiles.NewRunG6V1;
             foreach (int encounterId in profile.EncounterIds)
             {
                 if (tables.TbEncounter.GetOrDefault(encounterId) == null)
@@ -115,7 +142,8 @@ namespace TinySpire.Run
                 hero.MaxHealth,
                 RunDeck.CreateInitial(initialDeck.CardTemplateIds),
                 entropy.RandomRootSeed,
-                map));
+                map,
+                RunHoldings.Empty(initialGold: 100)));
             BeginCheckpointCommit(RunSaveDocumentMapper.Create(created));
             CommitPendingCheckpoint();
             return created;
@@ -129,6 +157,15 @@ namespace TinySpire.Run
             {
                 throw new InvalidOperationException(
                     "The current stable checkpoint must be saved before entering battle.");
+            }
+
+            RunState state = _store.Current
+                ?? throw new InvalidOperationException("No active Run exists.");
+            MapNode requestedNode = state.MapDefinition.GetNode(nodeId);
+            if (IsNonCombatNodeKind(requestedNode.Kind))
+            {
+                EnterNodeVisit(nodeId);
+                return;
             }
 
             RunState committed = _store.CommitNode(nodeId);
@@ -153,7 +190,8 @@ namespace TinySpire.Run
                 checked((int)input.RandomSeed),
                 input.InitialHealth,
                 deckTemplateId: null,
-                runCards: input.RunCards);
+                runCards: input.RunCards,
+                holdings: input.Holdings);
         }
 
         /// <summary>确认 BattleScope 冻结参数仍精确对应当前 attempt，并返回关联身份。</summary>
@@ -167,7 +205,8 @@ namespace TinySpire.Run
                 setup.EncounterTemplateId != input.EncounterTemplateId ||
                 setup.RandomSeed != input.RandomSeed ||
                 setup.PlayerInitialHealth != input.InitialHealth ||
-                !RunCardsMatch(setup.RunCards, input.RunCards))
+                !RunCardsMatch(setup.RunCards, input.RunCards) ||
+                !RunHoldingsMatch(setup.Holdings, input.Holdings))
             {
                 throw new InvalidOperationException("Battle setup does not match the active Run attempt.");
             }
@@ -198,7 +237,45 @@ namespace TinySpire.Run
             return true;
         }
 
-        /// <summary>消费当前 attempt 的单玩家稳定结果，先写回 Run 再返回入口场景。</summary>
+        /// <summary>逐项比较 setup 与当前 attempt 的金币、遗物顺序和药水槽位，不接受任何投影漂移。</summary>
+        private static bool RunHoldingsMatch(
+            RunHoldings setupHoldings,
+            RunHoldings activeHoldings)
+        {
+            if (setupHoldings == null || activeHoldings == null ||
+                setupHoldings.Gold != activeHoldings.Gold ||
+                setupHoldings.Relics.Count != activeHoldings.Relics.Count ||
+                setupHoldings.Potions.Count != activeHoldings.Potions.Count)
+            {
+                return false;
+            }
+
+            for (int index = 0; index < setupHoldings.Relics.Count; index++)
+            {
+                RunRelic setupRelic = setupHoldings.Relics[index];
+                RunRelic activeRelic = activeHoldings.Relics[index];
+                if (setupRelic.InstanceId != activeRelic.InstanceId ||
+                    setupRelic.TemplateId != activeRelic.TemplateId)
+                {
+                    return false;
+                }
+            }
+
+            for (int index = 0; index < setupHoldings.Potions.Count; index++)
+            {
+                RunPotion setupPotion = setupHoldings.Potions[index];
+                RunPotion activePotion = activeHoldings.Potions[index];
+                if (setupPotion.InstanceId != activePotion.InstanceId ||
+                    setupPotion.TemplateId != activePotion.TemplateId)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>消费当前 attempt 的单玩家稳定结果，先预览并存档，成功后才发布 Store 后继。</summary>
         internal async UniTask HandleBattleResultAsync(
             RunBattleId battleId,
             BattleResult result)
@@ -207,16 +284,19 @@ namespace TinySpire.Run
                 throw new ArgumentNullException(nameof(result));
             if (result.Players.Count != 1)
                 throw new InvalidOperationException("G1-A requires exactly one player BattleResult snapshot.");
+            EnsureNoPendingSettlement();
 
             BattleResultPlayerSnapshot player = result.Players[0];
             switch (result.Kind)
             {
                 case BattleResultKind.Victory:
-                    RunState pending = _store.RecordVictoryAndFreezeReward(
+                    _pendingBattleResultSettlement = _store.PreviewBattleResultSettlement(
                         battleId,
+                        result.Kind,
                         player.TemplateId,
                         player.Health,
                         player.MaxHealth,
+                        result.ConsumedPotionInstanceIds,
                         battleInput =>
                         {
                             HeroCardRewardPool pool = TablesHeroCardRewardPoolCatalog.Create(
@@ -230,24 +310,33 @@ namespace TinySpire.Run
                                 pool,
                                 rewardSeed);
                         });
-                    BeginCheckpointCommit(RunSaveDocumentMapper.Create(pending));
-                    CommitPendingCheckpoint();
-                    await _scenes.LoadSceneWithLoadingAsync(RunSceneAddresses.RunEntry);
+                    BeginCheckpointCommit(RunSaveDocumentMapper.Create(
+                        _pendingBattleResultSettlement.Successor));
+                    RunSaveCommitResult victoryCommit = CommitPendingCheckpoint();
+                    if (victoryCommit.Status == RunSaveCommitStatus.Success)
+                    {
+                        await _scenes.LoadSceneWithLoadingAsync(RunSceneAddresses.RunEntry);
+                    }
                     return;
                 case BattleResultKind.Defeat:
-                    RunState terminal = _store.RecordDefeat(
+                    _pendingBattleResultSettlement = _store.PreviewBattleResultSettlement(
                         battleId,
+                        result.Kind,
                         player.TemplateId,
                         player.Health,
-                        player.MaxHealth);
-                    BeginCheckpointCommit(RunSaveDocumentMapper.Create(terminal));
-                    CommitPendingCheckpoint();
-                    break;
+                        player.MaxHealth,
+                        result.ConsumedPotionInstanceIds);
+                    BeginCheckpointCommit(RunSaveDocumentMapper.Create(
+                        _pendingBattleResultSettlement.Successor));
+                    RunSaveCommitResult defeatCommit = CommitPendingCheckpoint();
+                    if (defeatCommit.Status == RunSaveCommitStatus.Success)
+                    {
+                        await _scenes.LoadSceneWithLoadingAsync(RunSceneAddresses.RunEntry);
+                    }
+                    return;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(result));
             }
-
-            await _scenes.LoadSceneWithLoadingAsync(RunSceneAddresses.RunEntry);
         }
 
         /// <summary>校验选择或跳过命令，先提交其完整后继文档，成功后才让 Store 发布结算。</summary>
@@ -257,7 +346,13 @@ namespace TinySpire.Run
         {
             if (Persistence.Status == RunPersistenceStatus.CommitPending ||
                 Persistence.Status == RunPersistenceStatus.CommitFailed ||
-                _hasPendingRewardSettlement)
+                 _hasPendingRewardSettlement ||
+                  _pendingNodeVisitEntrySettlement != null ||
+                  _pendingRestSettlement != null ||
+                  _pendingChestSettlement != null ||
+                  _pendingShopSettlement != null ||
+                  _pendingEventChoiceSettlement != null ||
+                  _pendingBattleResultSettlement != null)
             {
                 throw new InvalidOperationException(
                     "A Run checkpoint is already pending and must be resolved first.");
@@ -271,6 +366,129 @@ namespace TinySpire.Run
             _pendingRewardId = rewardId;
             _pendingRewardCardTemplateId = selectedCardTemplateId;
             BeginCheckpointCommit(document);
+            return CommitPendingCheckpoint();
+        }
+
+        /// <summary>提交当前 Rest 的治疗语义命令，先保存冻结后继再发布 Store。</summary>
+        public RunSaveCommitResult SettleRestHeal(RunNodeVisitId visitId)
+        {
+            EnsureNoPendingSettlement();
+            RunRestSettlement settlement = _store.PreviewRestHealSettlement(visitId);
+            return BeginRestSettlement(settlement);
+        }
+
+        /// <summary>提交当前 Rest 的指定实例升级命令，并以当前表配置终审下一等级。</summary>
+        public RunSaveCommitResult SettleRestUpgrade(
+            RunNodeVisitId visitId,
+            RunCardInstanceId cardInstanceId)
+        {
+            EnsureNoPendingSettlement();
+            var catalog = new TablesRunSaveConfigurationCatalog(RequireTables());
+            RunRestSettlement settlement = _store.PreviewRestUpgradeSettlement(
+                visitId,
+                cardInstanceId,
+                catalog);
+            return BeginRestSettlement(settlement);
+        }
+
+        /// <summary>缓存同一 Rest settlement 与其唯一文档，并立即尝试 hard commit。</summary>
+        private RunSaveCommitResult BeginRestSettlement(RunRestSettlement settlement)
+        {
+            _pendingRestSettlement = settlement
+                ?? throw new ArgumentNullException(nameof(settlement));
+            BeginCheckpointCommit(RunSaveDocumentMapper.Create(settlement.Successor));
+            return CommitPendingCheckpoint();
+        }
+
+        /// <summary>提交当前 Chest 的领取语义命令，先保存冻结药水后继再发布 Store。</summary>
+        public RunSaveCommitResult SettleChestClaim(RunNodeVisitId visitId)
+        {
+            EnsureNoPendingSettlement();
+            RunChestSettlement settlement = _store.PreviewChestClaimSettlement(visitId);
+            return BeginChestSettlement(settlement);
+        }
+
+        /// <summary>提交当前 Chest 的跳过语义命令，先保存保持持有物的完成后继再发布 Store。</summary>
+        public RunSaveCommitResult SettleChestSkip(RunNodeVisitId visitId)
+        {
+            EnsureNoPendingSettlement();
+            RunChestSettlement settlement = _store.PreviewChestSkipSettlement(visitId);
+            return BeginChestSettlement(settlement);
+        }
+
+        /// <summary>缓存同一 Chest settlement 与其唯一文档，并立即尝试 hard commit。</summary>
+        private RunSaveCommitResult BeginChestSettlement(RunChestSettlement settlement)
+        {
+            _pendingChestSettlement = settlement
+                ?? throw new ArgumentNullException(nameof(settlement));
+            BeginCheckpointCommit(RunSaveDocumentMapper.Create(settlement.Successor));
+            return CommitPendingCheckpoint();
+        }
+
+        /// <summary>提交当前 Shop 的指定库存购买命令，并以当前 Hero 与物品配置终审冻结内容。</summary>
+        public RunSaveCommitResult SettleShopPurchase(
+            RunNodeVisitId visitId,
+            int stockEntryId)
+        {
+            EnsureNoPendingSettlement();
+            var catalog = new TablesRunSaveConfigurationCatalog(RequireTables());
+            RunShopSettlement settlement = _store.PreviewShopPurchaseSettlement(
+                visitId,
+                stockEntryId,
+                catalog);
+            return BeginShopSettlement(settlement);
+        }
+
+        /// <summary>提交当前 Shop 的离开命令，保留全部既有购买并只在该后继完成节点路径。</summary>
+        public RunSaveCommitResult SettleShopLeave(RunNodeVisitId visitId)
+        {
+            EnsureNoPendingSettlement();
+            RunShopSettlement settlement = _store.PreviewShopLeaveSettlement(visitId);
+            return BeginShopSettlement(settlement);
+        }
+
+        /// <summary>缓存同一 Shop settlement 与其唯一文档，并立即尝试 hard commit。</summary>
+        private RunSaveCommitResult BeginShopSettlement(RunShopSettlement settlement)
+        {
+            _pendingShopSettlement = settlement
+                ?? throw new ArgumentNullException(nameof(settlement));
+            BeginCheckpointCommit(RunSaveDocumentMapper.Create(settlement.Successor));
+            return CommitPendingCheckpoint();
+        }
+
+        /// <summary>提交当前 Event 的类型化选择，先保存冻结后继再以来源引用发布 Store。</summary>
+        public RunSaveCommitResult SettleEventChoice(
+            RunNodeVisitId visitId,
+            RunEventChoiceKind choice)
+        {
+            EnsureNoPendingSettlement();
+            RunEventChoiceSettlement settlement = _store.PreviewEventChoiceSettlement(
+                visitId,
+                choice);
+            return BeginEventChoiceSettlement(settlement);
+        }
+
+        /// <summary>缓存同一 Event settlement 与其唯一文档，并立即尝试 hard commit。</summary>
+        private RunSaveCommitResult BeginEventChoiceSettlement(
+            RunEventChoiceSettlement settlement)
+        {
+            _pendingEventChoiceSettlement = settlement
+                ?? throw new ArgumentNullException(nameof(settlement));
+            BeginCheckpointCommit(RunSaveDocumentMapper.Create(settlement.Successor));
+            return CommitPendingCheckpoint();
+        }
+
+        /// <summary>冻结一次非战斗访问，先保存完整 Pending 文档，成功后才发布到 Store。</summary>
+        private RunSaveCommitResult EnterNodeVisit(MapNodeId nodeId)
+        {
+            EnsureNoPendingSettlement();
+
+            var catalog = new TablesRunSaveConfigurationCatalog(RequireTables());
+            RunNodeVisitEntrySettlement settlement = _store.PreviewNodeVisitEntry(
+                nodeId,
+                catalog);
+            _pendingNodeVisitEntrySettlement = settlement;
+            BeginCheckpointCommit(RunSaveDocumentMapper.Create(settlement.Successor));
             return CommitPendingCheckpoint();
         }
 
@@ -353,7 +571,8 @@ namespace TinySpire.Run
                 throw new InvalidOperationException(restore.Detail);
             }
 
-            if (_continuableDocument.LegacyDeckTemplateId.HasValue)
+            if (_continuableDocument.RequiresCanonicalRewrite ||
+                _continuableDocument.LegacyDeckTemplateId.HasValue)
             {
                 RunSaveDocument canonicalDocument = RunSaveDocumentMapper.Create(restore.Options);
                 BeginCheckpointCommit(canonicalDocument);
@@ -361,7 +580,7 @@ namespace TinySpire.Run
                 if (commit.Status != RunSaveCommitStatus.Success)
                 {
                     throw new InvalidOperationException(
-                        $"Legacy Run deck canonical commit failed: {commit.Detail}");
+                        $"Migrated Run canonical commit failed: {commit.Detail}");
                 }
             }
 
@@ -397,7 +616,7 @@ namespace TinySpire.Run
             return result;
         }
 
-        /// <summary>重试已缓存的同一 S0/S1 文档，不重放结果、不重取 entropy。</summary>
+        /// <summary>重试同一冻结文档；战斗结果成功落盘后才从当前 Battle 场景进入 RunEntry。</summary>
         public RunSaveCommitResult RetryPendingCommit()
         {
             if (Persistence.Status != RunPersistenceStatus.CommitFailed ||
@@ -406,25 +625,29 @@ namespace TinySpire.Run
                 throw new InvalidOperationException("No failed Run checkpoint is available to retry.");
             }
 
+            bool retriesBattleResult = _pendingBattleResultSettlement != null;
             SetPersistence(RunPersistenceState.CommitPending(Persistence.HasStoredData));
-            return CommitPendingCheckpoint();
+            RunSaveCommitResult result = CommitPendingCheckpoint();
+            if (retriesBattleResult && result.Status == RunSaveCommitStatus.Success)
+            {
+                _scenes.LoadSceneWithLoadingAsync(RunSceneAddresses.RunEntry).Forget();
+            }
+
+            return result;
         }
 
         /// <summary>仅在玩家确认回退警告后丢弃内存未保存进度，并重新发现上一成功档。</summary>
         public void ExitPendingRunToMenu()
         {
-            if (Persistence.Status != RunPersistenceStatus.CommitFailed)
-                throw new InvalidOperationException("The current Run does not have a failed checkpoint commit.");
-            if (_store.Current?.ProgressPhase == RunProgressPhase.Terminal ||
-                _store.Current?.ProgressPhase == RunProgressPhase.RewardPending ||
-                _hasPendingRewardSettlement)
+            if (!CanRollbackFailedCheckpoint)
             {
                 throw new InvalidOperationException(
-                    "A terminal or reward-pending Run cannot roll back to a previous checkpoint.");
+                    "A durable Run successor or node-entry command cannot roll back to a previous checkpoint.");
             }
 
             _pendingCommitDocument = null;
             _continuableDocument = null;
+            ClearPendingNodeVisitCommit();
             _store.ClearStableRun();
             SetPersistence(RunPersistenceState.Unchecked());
             RefreshSaveAvailability();
@@ -526,12 +749,48 @@ namespace TinySpire.Run
             RunSaveCommitResult result = _saveStore.Commit(document);
             if (result.Status == RunSaveCommitStatus.Success)
             {
+                if (_pendingBattleResultSettlement != null)
+                {
+                    _store.CommitBattleResultSettlement(_pendingBattleResultSettlement);
+                    ClearPendingBattleResultSettlement();
+                }
+
                 if (_hasPendingRewardSettlement)
                 {
                     _store.CommitCardRewardSettlement(
                         _pendingRewardId,
                         _pendingRewardCardTemplateId);
                     ClearPendingRewardSettlement();
+                }
+
+                if (_pendingNodeVisitEntrySettlement != null)
+                {
+                    _store.CommitNodeVisitEntry(_pendingNodeVisitEntrySettlement);
+                    ClearPendingNodeVisitCommit();
+                }
+
+                if (_pendingRestSettlement != null)
+                {
+                    _store.CommitRestSettlement(_pendingRestSettlement);
+                    ClearPendingRestSettlement();
+                }
+
+                if (_pendingChestSettlement != null)
+                {
+                    _store.CommitChestSettlement(_pendingChestSettlement);
+                    ClearPendingChestSettlement();
+                }
+
+                if (_pendingShopSettlement != null)
+                {
+                    _store.CommitShopSettlement(_pendingShopSettlement);
+                    ClearPendingShopSettlement();
+                }
+
+                if (_pendingEventChoiceSettlement != null)
+                {
+                    _store.CommitEventChoiceSettlement(_pendingEventChoiceSettlement);
+                    ClearPendingEventChoiceSettlement();
                 }
 
                 _pendingCommitDocument = null;
@@ -564,6 +823,69 @@ namespace TinySpire.Run
             _hasPendingRewardSettlement = false;
             _pendingRewardId = default;
             _pendingRewardCardTemplateId = null;
+        }
+
+        /// <summary>仅在同一战斗结果后继已经成功落盘并发布后清除 retry 命令。</summary>
+        private void ClearPendingBattleResultSettlement()
+        {
+            _pendingBattleResultSettlement = null;
+        }
+
+        /// <summary>确认当前没有需要重试的奖励或非战斗节点结算。</summary>
+        private void EnsureNoPendingSettlement()
+        {
+            if (Persistence.Status == RunPersistenceStatus.CommitPending ||
+                Persistence.Status == RunPersistenceStatus.CommitFailed ||
+                _hasPendingRewardSettlement ||
+                _pendingNodeVisitEntrySettlement != null ||
+                _pendingRestSettlement != null ||
+                _pendingChestSettlement != null ||
+                _pendingShopSettlement != null ||
+                _pendingEventChoiceSettlement != null ||
+                _pendingBattleResultSettlement != null)
+            {
+                throw new InvalidOperationException(
+                    "A Run checkpoint is already pending and must be resolved first.");
+            }
+        }
+
+        /// <summary>仅在同一节点边界已经成功落盘或明确放弃未发布进入时清除 retry 命令。</summary>
+        private void ClearPendingNodeVisitCommit()
+        {
+            _pendingNodeVisitEntrySettlement = null;
+        }
+
+        /// <summary>仅在同一 Rest 后继已经成功落盘并发布后清除 retry settlement。</summary>
+        private void ClearPendingRestSettlement()
+        {
+            _pendingRestSettlement = null;
+        }
+
+        /// <summary>仅在同一 Chest 后继已经成功落盘并发布后清除 retry settlement。</summary>
+        private void ClearPendingChestSettlement()
+        {
+            _pendingChestSettlement = null;
+        }
+
+        /// <summary>仅在同一 Shop 后继已经成功落盘并发布后清除 retry settlement。</summary>
+        private void ClearPendingShopSettlement()
+        {
+            _pendingShopSettlement = null;
+        }
+
+        /// <summary>仅在同一 Event 后继已经成功落盘并发布后清除 retry settlement。</summary>
+        private void ClearPendingEventChoiceSettlement()
+        {
+            _pendingEventChoiceSettlement = null;
+        }
+
+        /// <summary>判断节点是否由本片统一进入为 durable Pending 的明确非战斗类型。</summary>
+        private static bool IsNonCombatNodeKind(MapNodeKind kind)
+        {
+            return kind == MapNodeKind.Rest ||
+                   kind == MapNodeKind.Chest ||
+                   kind == MapNodeKind.Shop ||
+                   kind == MapNodeKind.Event;
         }
 
         /// <summary>替换存档状态并同步通知当前场景 Presenter。</summary>
@@ -607,7 +929,8 @@ namespace TinySpire.Run
     /// <summary>以当前 Luban 表实现读档所需的稳定配置 ID 存在性目录。</summary>
     internal sealed class TablesRunSaveConfigurationCatalog :
         IRunSaveConfigurationCatalog,
-        IRunCardUpgradeConfigurationCatalog
+        IRunCardUpgradeConfigurationCatalog,
+        IRunNodeVisitEntryCatalog
     {
         private readonly Tables _tables;
 
@@ -649,6 +972,24 @@ namespace TinySpire.Run
         public bool CardExists(int templateId)
         {
             return _tables.TbCard.GetOrDefault(templateId) != null;
+        }
+
+        /// <summary>判断 Relic 模板是否仍存在。</summary>
+        public bool RelicExists(int templateId)
+        {
+            return _tables.TbRelic.GetOrDefault(templateId) != null;
+        }
+
+        /// <summary>判断 Potion 模板是否仍存在。</summary>
+        public bool PotionExists(int templateId)
+        {
+            return _tables.TbPotion.GetOrDefault(templateId) != null;
+        }
+
+        /// <summary>从当前 Luban Hero 显式配置创建经过既有门禁的有序奖励卡池。</summary>
+        public HeroCardRewardPool CreateHeroCardRewardPool(int heroTemplateId)
+        {
+            return TablesHeroCardRewardPoolCatalog.Create(_tables, heroTemplateId);
         }
 
         /// <summary>用统一 Battle 等级投影确认存档或实例命令中的完整升级等级可执行。</summary>

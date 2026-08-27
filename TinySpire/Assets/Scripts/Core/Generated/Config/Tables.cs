@@ -49,6 +49,14 @@ public partial class Tables
     /// Explicit finite card upgrade levels; runtime keys card_id + next_upgrade_level
     /// </summary>
     public battle.TbCardUpgradeLevel TbCardUpgradeLevel {get; }
+    /// <summary>
+    /// Run relic static template
+    /// </summary>
+    public run.TbRelic TbRelic {get; }
+    /// <summary>
+    /// Run potion static template
+    /// </summary>
+    public run.TbPotion TbPotion {get; }
 
 
       public Tables(System.Func<string, JArray> loader)
@@ -62,6 +70,8 @@ public partial class Tables
         TbEnemyBehaviorGroup = new battle.TbEnemyBehaviorGroup(loader("battle_tbenemybehaviorgroup"));
         TbEnemyBehavior = new battle.TbEnemyBehavior(loader("battle_tbenemybehavior"));
         TbCardUpgradeLevel = new battle.TbCardUpgradeLevel(loader("battle_tbcardupgradelevel"));
+        TbRelic = new run.TbRelic(loader("run_tbrelic"));
+        TbPotion = new run.TbPotion(loader("run_tbpotion"));
         ResolveRef();
     }
     
@@ -76,6 +86,8 @@ public partial class Tables
         TbEnemyBehaviorGroup.ResolveRef(this);
         TbEnemyBehavior.ResolveRef(this);
         TbCardUpgradeLevel.ResolveRef(this);
+        TbRelic.ResolveRef(this);
+        TbPotion.ResolveRef(this);
     }
 }
 

@@ -789,7 +789,8 @@ public sealed class BattleEnemyActionExecutorTests
             ["battle_tbenemybehavior"] = behaviors,
             ["battle_tbcardupgradelevel"] = new JArray(),
         };
-        return new Tables(tableName => data[tableName]);
+        return new Tables(tableName =>
+            data.TryGetValue(tableName, out JArray rows) ? rows : new JArray());
     }
 
     /// <summary>创建一条单 Effect 敌人行为配置。</summary>

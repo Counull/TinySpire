@@ -346,7 +346,8 @@ public sealed class BattleEnemyActionJointSnapshotTests
             ["battle_tbenemybehavior"] = behaviors,
             ["battle_tbcardupgradelevel"] = new JArray(),
         };
-        return new Tables(tableName => data[tableName]);
+        return new Tables(tableName =>
+            data.TryGetValue(tableName, out JArray rows) ? rows : new JArray());
     }
 
     /// <summary>创建一个带真实选择约束的敌人行为配置。</summary>

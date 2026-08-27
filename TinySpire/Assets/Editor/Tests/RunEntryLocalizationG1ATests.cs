@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Reflection;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
@@ -12,6 +14,8 @@ public sealed class RunEntryLocalizationG1ATests
     private const string ChineseTablePath = "Assets/Localization/Battle Cards_zh-CN.asset";
     private const string CardDataPath = "Assets/GameData/battle_tbcard.json";
     private const string HeroDataPath = "Assets/GameData/battle_tbhero.json";
+    private const string RelicDataPath = "Assets/GameData/run_tbrelic.json";
+    private const string PotionDataPath = "Assets/GameData/run_tbpotion.json";
 
     private static readonly string[] ExpectedRunEntryKeys =
     {
@@ -33,6 +37,24 @@ public sealed class RunEntryLocalizationG1ATests
         "run.entry.map.health",
         "run.entry.reward.title",
         "run.entry.reward.skip",
+        "run.entry.rest.title",
+        "run.entry.rest.heal",
+        "run.entry.rest.upgrade",
+        "run.entry.chest.title",
+        "run.entry.chest.claim",
+        "run.entry.chest.skip",
+        "run.entry.chest.full",
+        "run.entry.shop.title",
+        "run.entry.shop.purchase",
+        "run.entry.shop.purchased",
+        "run.entry.shop.leave",
+        "run.entry.event.title",
+        "run.entry.event.gain_gold",
+        "run.entry.event.paid_heal",
+        "run.entry.holdings.gold",
+        "run.entry.holdings.relics",
+        "run.entry.holdings.potions",
+        "run.entry.holdings.empty",
         "run.entry.failure.title",
         "run.entry.failure.restart",
         "run.entry.menu.continue",
@@ -79,6 +101,24 @@ public sealed class RunEntryLocalizationG1ATests
         new object[] { "run.entry.map.health", "HP {current}/{max}", "生命 {current}/{max}", true },
         new object[] { "run.entry.reward.title", "Card Reward", "卡牌奖励", false },
         new object[] { "run.entry.reward.skip", "Skip", "跳过", false },
+        new object[] { "run.entry.rest.title", "Rest", "休息点", false },
+        new object[] { "run.entry.rest.heal", "Heal {amount} HP", "恢复 {amount} 点生命", true },
+        new object[] { "run.entry.rest.upgrade", "Upgrade {card} to +{level}", "升级 {card} 至 +{level}", true },
+        new object[] { "run.entry.chest.title", "Chest", "宝箱", false },
+        new object[] { "run.entry.chest.claim", "Claim", "领取", false },
+        new object[] { "run.entry.chest.skip", "Skip", "跳过", false },
+        new object[] { "run.entry.chest.full", "Potion belt is full", "药水带已满", false },
+        new object[] { "run.entry.shop.title", "Shop", "商店", false },
+        new object[] { "run.entry.shop.purchase", "Buy {item} — {price} Gold", "购买 {item} — {price} 金币", true },
+        new object[] { "run.entry.shop.purchased", "{item} — Purchased", "{item} — 已购买", true },
+        new object[] { "run.entry.shop.leave", "Leave", "离开", false },
+        new object[] { "run.entry.event.title", "Event", "事件", false },
+        new object[] { "run.entry.event.gain_gold", "Gain {gold} Gold", "获得 {gold} 金币", true },
+        new object[] { "run.entry.event.paid_heal", "Pay {cost} Gold to heal up to {heal} HP", "支付 {cost} 金币，最多恢复 {heal} 点生命", true },
+        new object[] { "run.entry.holdings.gold", "Gold: {gold}", "金币：{gold}", true },
+        new object[] { "run.entry.holdings.relics", "Relics", "遗物", false },
+        new object[] { "run.entry.holdings.potions", "Potions", "药水", false },
+        new object[] { "run.entry.holdings.empty", "None", "无", false },
         new object[] { "run.entry.failure.title", "Battle Failed", "战斗失败", false },
         new object[] { "run.entry.failure.restart", "Restart Battle", "重开本关", false },
         new object[] { "run.entry.menu.continue", "Continue", "继续游戏", false },
@@ -106,7 +146,7 @@ public sealed class RunEntryLocalizationG1ATests
         new object[] { "battle.hero.test_warrior.name", "Warrior", "战士", false },
     };
 
-    /// <summary>构建门禁必须显式冻结入口运行时会读取的全部 42 个键。</summary>
+    /// <summary>构建门禁必须显式冻结入口运行时会读取的全部 60 个键。</summary>
     [Test]
     public void LocalizationBuildGate_RequiresAllRuntimeRunEntryKeys()
     {
@@ -116,8 +156,61 @@ public sealed class RunEntryLocalizationG1ATests
 
         Assert.That(field, Is.Not.Null);
         var actual = (string[])field.GetValue(null);
-        Assert.That(actual, Has.Length.EqualTo(42));
+        Assert.That(actual, Has.Length.EqualTo(60));
         Assert.That(actual, Is.EquivalentTo(ExpectedRunEntryKeys));
+    }
+
+    /// <summary>G5 两张 Run 持有物表必须由生成数值推导唯一 Smart 参数，并由 i18n 作者源声明对应模板。</summary>
+    [TestCase(
+        RelicDataPath,
+        "run_tbrelic",
+        "8001",
+        "battle_start_strength",
+        1,
+        "strength",
+        "run.relic.strength_charm.name",
+        "run.relic.strength_charm.description")]
+    [TestCase(
+        PotionDataPath,
+        "run_tbpotion",
+        "9001",
+        "heal_amount",
+        10,
+        "heal",
+        "run.potion.healing.name",
+        "run.potion.healing.description")]
+    public void LocalizationBuildGate_RunItemUsesExactConfiguredSmartArgument(
+        string dataPath,
+        string tableName,
+        string itemId,
+        string amountField,
+        int expectedAmount,
+        string expectedArgument,
+        string expectedNameKey,
+        string expectedDescriptionKey)
+    {
+        TextAsset asset = AssetDatabase.LoadAssetAtPath<TextAsset>(dataPath);
+        Assert.That(asset, Is.Not.Null, $"Generated Run item table is missing: {dataPath}");
+        JObject item = JObject.Parse(asset.text)[itemId] as JObject;
+        Assert.That(item, Is.Not.Null, $"Generated Run item {itemId} is missing from {tableName}.");
+        Assert.That(item.Value<int>(amountField), Is.EqualTo(expectedAmount));
+        Assert.That(item.Value<string>("name_i18n_key"), Is.EqualTo(expectedNameKey));
+        Assert.That(item.Value<string>("description_i18n_key"), Is.EqualTo(expectedDescriptionKey));
+        Assert.That(
+            LocalizationBuildTools.ResolveExpectedRunItemArguments(tableName, itemId, item),
+            Is.EquivalentTo(new[] { expectedArgument }));
+
+        IReadOnlyList<I18nExcelEntry> sourceEntries = I18nExcelReader.Read(
+            GetI18nWorkbookPath(),
+            "i18n",
+            new[] { "en", "zh-CN" });
+        I18nExcelEntry name = sourceEntries.Single(entry => entry.Key == expectedNameKey);
+        I18nExcelEntry description = sourceEntries.Single(
+            entry => entry.Key == expectedDescriptionKey);
+        Assert.That(name.IsSmart, Is.False);
+        Assert.That(description.IsSmart, Is.True);
+        Assert.That(description.Translations["en"], Does.Contain($"{{{expectedArgument}}}"));
+        Assert.That(description.Translations["zh-CN"], Does.Contain($"{{{expectedArgument}}}"));
     }
 
     /// <summary>Shoot 的生产程序伤害投影必须让本地化门禁接受无 Effect 绑定的 damage 参数。</summary>
@@ -178,5 +271,15 @@ public sealed class RunEntryLocalizationG1ATests
         Assert.That(
             hero.Value<string>("name_i18n_key"),
             Is.EqualTo("battle.hero.test_warrior.name"));
+    }
+
+    /// <summary>从 Unity 项目目录稳定定位工作区内的 i18n 作者源。</summary>
+    private static string GetI18nWorkbookPath()
+    {
+        string unityProjectDirectory = Directory.GetParent(Application.dataPath)?.FullName
+            ?? throw new DirectoryNotFoundException("Unable to determine Unity project directory.");
+        string workspaceDirectory = Directory.GetParent(unityProjectDirectory)?.FullName
+            ?? throw new DirectoryNotFoundException("Unable to determine TinySpire workspace directory.");
+        return Path.Combine(workspaceDirectory, "DataTables", "Datas", "i18n.xlsx");
     }
 }
