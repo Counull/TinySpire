@@ -30,6 +30,9 @@ Thumbs.db
 *.tmp
 *.log
 
+# Obsidian local vault metadata
+.obsidian/
+
 # Excel lock/temp files
 ~$*.xlsx
 

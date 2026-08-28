@@ -12,14 +12,15 @@
 
 ## 工作方式
 
-- 优先使用 Unity MCP 进行 Meta 生成和最终验证。
+- 工作时优先检查 Unity MCP 和 Rider MCP 的连接状态并优先使用这两项工具进行相关操作。
 - 大任务必须拆成可独立验证的小步骤；每完成一步再继续下一步。
 - 修改前先检查当前工作区状态，保留用户已有改动，不覆盖、不清理无关文件。
+- 工作前必须了解`Docs/_external/llm-workflow/LLM_WORKFLOW.md`的工作方式。
 - 代码改动完成后，如果产生了新的口径、实现决策、流程约定或验证结论，必须依据 `Docs/_external/llm-workflow/LLM_WORKFLOW.md` 的分层与读取规则维护 `Docs/Copilot_Daedalus/`：更新 `SESSION_LOG.md` 记录本次变化与后续动作；代码决策写入 `CODE_DECISIONS.md`，实现方案写入 `plans/`，测试与验收结果写入 `06_testing/`。不得只把新口径留在聊天记录或代码注释中。
 - `Docs/Copilot_Daedalus/` 的维护必须使用项目相对路径，并遵守该目录现有的 index、status source、decision source 约定；不得把 TinySpire 私有语义回写到 `Docs/_external/llm-workflow/`。
 - 用户说“暂停、停止、先别做”时，立即停止所有写入和外部操作，只汇报当前状态。
 - 遇到不确定的架构选择时，优先询问，不自行替用户作重大决策。
-  每个函数至少有中文注释说明。
+- 每个函数至少有中文注释说明。
 
 ## Unity 项目规则
 
