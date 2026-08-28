@@ -35,6 +35,7 @@ namespace TinySpire.Run
         private RunShopSettlement _pendingShopSettlement;
         private RunEventChoiceSettlement _pendingEventChoiceSettlement;
         private RunBattleResultSettlement _pendingBattleResultSettlement;
+        private RunAbandonmentSettlement _pendingAbandonmentSettlement;
 
         /// <summary>存档发现、校验与提交状态变化时通知当前入口 Presenter。</summary>
         public event Action PersistenceChanged;
@@ -71,7 +72,8 @@ namespace TinySpire.Run
                          _pendingChestSettlement == null &&
                          _pendingShopSettlement == null &&
                          _pendingEventChoiceSettlement == null &&
-                         _pendingBattleResultSettlement == null;
+                         _pendingBattleResultSettlement == null &&
+                         _pendingAbandonmentSettlement == null;
             }
         }
 
@@ -121,8 +123,13 @@ namespace TinySpire.Run
                 ?? throw new InvalidOperationException($"Hero template {heroTemplateId} does not exist.");
             cfg.battle.Deck initialDeck = tables.TbDeck.GetOrDefault(hero.InitialDeckId)
                 ?? throw new InvalidOperationException($"Deck template {hero.InitialDeckId} does not exist.");
-            ActMapProfile profile = TinySpireActMapProfiles.NewRunG6V1;
-            foreach (int encounterId in profile.EncounterIds)
+            ActContentManifest manifest = TinySpireActContentCatalog.NewRunG7V1;
+            ActMapProfile profile = manifest.Profile;
+            IEnumerable<int> encounterIds = manifest.OrdinaryEncounterIds
+                .Concat(manifest.EliteEncounterIds)
+                .Concat(manifest.BossEncounterIds.Values)
+                .Distinct();
+            foreach (int encounterId in encounterIds)
             {
                 if (tables.TbEncounter.GetOrDefault(encounterId) == null)
                     throw new InvalidOperationException($"Encounter template {encounterId} does not exist.");
@@ -177,6 +184,31 @@ namespace TinySpire.Run
             }
 
             _store.BeginCommittedBattle();
+            await _scenes.LoadSceneWithLoadingAsync(RunSceneAddresses.Battle);
+        }
+
+        /// <summary>从已耐久抵达的 Boss 门解析 Act 清单遭遇，并签发唯一真实 Boss Battle。</summary>
+        public async UniTask BeginBossBattleAsync()
+        {
+            EnsureNoPendingSettlement();
+            RunState state = _store.Current
+                ?? throw new InvalidOperationException("No active Run exists.");
+            if (state.ProgressPhase != RunProgressPhase.BossGateReached)
+                throw new InvalidOperationException("The active Run has not reached a stable Boss gate.");
+
+            ActContentManifest manifest = TinySpireActContentCatalog.GetByProfileId(
+                state.MapDefinition.ProfileId)
+                ?? throw new InvalidOperationException(
+                    $"Act profile '{state.MapDefinition.ProfileId}' has no real Boss manifest.");
+            MapNode bossNode = state.MapDefinition.GetNode(state.CurrentNodeId);
+            int encounterTemplateId = manifest.GetBossEncounterId(bossNode.ContentId);
+            if (RequireTables().TbEncounter.GetOrDefault(encounterTemplateId) == null)
+            {
+                throw new InvalidOperationException(
+                    $"Boss encounter template {encounterTemplateId} does not exist.");
+            }
+
+            _store.BeginBossBattle();
             await _scenes.LoadSceneWithLoadingAsync(RunSceneAddresses.Battle);
         }
 
@@ -287,9 +319,26 @@ namespace TinySpire.Run
             EnsureNoPendingSettlement();
 
             BattleResultPlayerSnapshot player = result.Players[0];
+            RunBattleInput activeBattle = RequireActiveBattle();
             switch (result.Kind)
             {
                 case BattleResultKind.Victory:
+                    Func<RunBattleInput, PendingCardReward> rewardFactory =
+                        activeBattle.NodeKind == MapNodeKind.Boss
+                            ? null
+                            : battleInput =>
+                            {
+                                HeroCardRewardPool pool = TablesHeroCardRewardPoolCatalog.Create(
+                                    RequireTables(),
+                                    battleInput.HeroTemplateId);
+                                uint rewardSeed = RunRandomDomains.DeriveRewardSeed(
+                                    _store.Current.RandomRootSeed,
+                                    battleInput.BattleId.AttemptSequence);
+                                return RunCardRewardGenerator.Generate(
+                                    new RunCardRewardId(battleInput.BattleId),
+                                    pool,
+                                    rewardSeed);
+                            };
                     _pendingBattleResultSettlement = _store.PreviewBattleResultSettlement(
                         battleId,
                         result.Kind,
@@ -297,19 +346,7 @@ namespace TinySpire.Run
                         player.Health,
                         player.MaxHealth,
                         result.ConsumedPotionInstanceIds,
-                        battleInput =>
-                        {
-                            HeroCardRewardPool pool = TablesHeroCardRewardPoolCatalog.Create(
-                                RequireTables(),
-                                battleInput.HeroTemplateId);
-                            uint rewardSeed = RunRandomDomains.DeriveRewardSeed(
-                                _store.Current.RandomRootSeed,
-                                battleInput.BattleId.AttemptSequence);
-                            return RunCardRewardGenerator.Generate(
-                                new RunCardRewardId(battleInput.BattleId),
-                                pool,
-                                rewardSeed);
-                        });
+                        rewardFactory);
                     BeginCheckpointCommit(RunSaveDocumentMapper.Create(
                         _pendingBattleResultSettlement.Successor));
                     RunSaveCommitResult victoryCommit = CommitPendingCheckpoint();
@@ -337,6 +374,16 @@ namespace TinySpire.Run
                 default:
                     throw new ArgumentOutOfRangeException(nameof(result));
             }
+        }
+
+        /// <summary>把稳定地图或 Boss 门 Run 先写为完整 Abandoned 文档，成功后才发布唯一终局。</summary>
+        public RunSaveCommitResult AbandonActiveRun()
+        {
+            EnsureNoPendingSettlement();
+            _pendingAbandonmentSettlement = _store.PreviewAbandonment();
+            BeginCheckpointCommit(RunSaveDocumentMapper.Create(
+                _pendingAbandonmentSettlement.Successor));
+            return CommitPendingCheckpoint();
         }
 
         /// <summary>校验选择或跳过命令，先提交其完整后继文档，成功后才让 Store 发布结算。</summary>
@@ -672,7 +719,8 @@ namespace TinySpire.Run
             {
                 _continuableDocument = null;
                 _store.RestoreRun(restore.Options);
-                SetPersistence(RunPersistenceState.TerminalDefeat(
+                SetPersistence(RunPersistenceState.TerminalOutcome(
+                    restore.Options.OutcomeKind.Value,
                     load.HasPendingTemporaryFile,
                     load.Detail));
             }
@@ -755,6 +803,12 @@ namespace TinySpire.Run
                     ClearPendingBattleResultSettlement();
                 }
 
+                if (_pendingAbandonmentSettlement != null)
+                {
+                    _store.CommitAbandonment(_pendingAbandonmentSettlement);
+                    ClearPendingAbandonmentSettlement();
+                }
+
                 if (_hasPendingRewardSettlement)
                 {
                     _store.CommitCardRewardSettlement(
@@ -797,7 +851,8 @@ namespace TinySpire.Run
                 if (document.ProgressPhase == RunSaveProgressPhase.Terminal)
                 {
                     _continuableDocument = null;
-                    SetPersistence(RunPersistenceState.TerminalDefeat(
+                    SetPersistence(RunPersistenceState.TerminalOutcome(
+                        ToDomainOutcomeKind(document.OutcomeKind.Value),
                         hasPendingTemporaryFile: false));
                 }
                 else
@@ -831,6 +886,12 @@ namespace TinySpire.Run
             _pendingBattleResultSettlement = null;
         }
 
+        /// <summary>仅在同一主动放弃后继成功落盘并发布后清除 retry settlement。</summary>
+        private void ClearPendingAbandonmentSettlement()
+        {
+            _pendingAbandonmentSettlement = null;
+        }
+
         /// <summary>确认当前没有需要重试的奖励或非战斗节点结算。</summary>
         private void EnsureNoPendingSettlement()
         {
@@ -842,7 +903,8 @@ namespace TinySpire.Run
                 _pendingChestSettlement != null ||
                 _pendingShopSettlement != null ||
                 _pendingEventChoiceSettlement != null ||
-                _pendingBattleResultSettlement != null)
+                _pendingBattleResultSettlement != null ||
+                _pendingAbandonmentSettlement != null)
             {
                 throw new InvalidOperationException(
                     "A Run checkpoint is already pending and must be resolved first.");
@@ -886,6 +948,22 @@ namespace TinySpire.Run
                    kind == MapNodeKind.Chest ||
                    kind == MapNodeKind.Shop ||
                    kind == MapNodeKind.Event;
+        }
+
+        /// <summary>把 canonical 存档 outcome 分类映射回 Run 领域分类。</summary>
+        private static RunOutcomeKind ToDomainOutcomeKind(RunSaveOutcomeKind outcomeKind)
+        {
+            switch (outcomeKind)
+            {
+                case RunSaveOutcomeKind.Victory:
+                    return RunOutcomeKind.Victory;
+                case RunSaveOutcomeKind.Defeat:
+                    return RunOutcomeKind.Defeat;
+                case RunSaveOutcomeKind.Abandoned:
+                    return RunOutcomeKind.Abandoned;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(outcomeKind), outcomeKind, null);
+            }
         }
 
         /// <summary>替换存档状态并同步通知当前场景 Presenter。</summary>

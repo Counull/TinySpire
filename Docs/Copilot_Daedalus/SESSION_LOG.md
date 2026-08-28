@@ -3,11 +3,30 @@ title: Daedalus · 会话变更日志
 page_type: changelog
 lifecycle: active
 created: 2026-07-06
-updated: 2026-08-27
+updated: 2026-08-28
 status_source: STATUS.md
 ---
 
 > 当前可变状态只查 [STATUS.md](STATUS.md)。本页保留按日期排列的审计与恢复线索；其中旧状态快照不构成当前事实。
+
+## 2026-08-28 G7 单 Act、精英、Boss 与 Run 终局（completed / verified）
+
+- G7-A～E 已按窄计划完成：`tinyspire.act1.g7.v1` 复用 mixed generator v2，路线冻结为 `Combat→Rest→Chest→Shop→Event→Combat→Elite→Boss`；ActContentManifest 统一解析普通/Elite/Boss 内容，Elite 5101 与唯一真实 Boss Encounter 5201 均继续走既有 Battle setup/result bridge，未建立第二地图或结果通道。
+- `battle.encounter` 新增 nullable `int? phase_two_behavior_group_id`，无阶段为 null/0，Boss 5201 的二阶段组为 6202。Phase I 首个已明示行动完整提交时，由 Battle-owned prepared completion 恰好一次切到 Phase II；Packed 实际 Boss 意图为 `5→8→8`，Run/save/UI 不拥有 phase，也没有通用 Boss DSL。
+- `RunStateStore` 已以 schema v6 闭合唯一 `RunOutcome(Victory/Defeat/Abandoned)`；Combat/Elite 胜利保留 G4 reward，Boss 胜利直达无普通奖励的 Victory，任意战败进入 Defeat，稳定地图主动放弃先耐久形成 Abandoned。Store 自身按 G7 profile 与 Boss identity 独立解析 manifest，legacy/未知 profile 不能绕过 Flow 启动真实 Boss；三类终局均 save-before-publish、冷启动不可 Continue、确认后清理回主菜单，普通战斗失败没有恢复同节点 retry。
+- 首次 G7 定向聚合为 425/428，暴露三个旧 fixture/兼容断言仍停在 pre-G7 口径；没有放宽生产 validator，只修复 Boss 候选、v4 未来字段与 schema 版本期望，阶段性回归为 428/428。终审随后发现 Atomic 普通奖励/Defeat 后继尚未证明 committed node 是 live recipe 当前路径的直达 Combat/Elite，以及 Store public Boss 入口需独立 profile/manifest 门禁。Unity RED job `e81cc15a7483467291b7b9d72094fc1f` 为 **510 total / 505 passed / 5 failed**（四项 Atomic 旧 fixture/新来源门禁、一项 Boss round-trip catalog profile）；保持生产门禁并修正 fixture 后，GREEN job `60ec69d046b5442cb593a8bef123c0f1` 为 **510/510 passed、0 failed、0 skipped，8.0937884s**。
+- Rider 最终 build session `e750f929-d9bf-4cfd-bbf6-d715c237be51` 为 `Completed / success / problems 0`；完整 Unity EditMode job `9758c02e718540aa97e5e26f832794e3` 为 **1410/1410 passed、0 failed、0 skipped，23.0963649s**。生产形状测试同时覆盖 Elite Victory→RewardPending 与 Boss Defeat→Terminal/no reward，Atomic 对 RewardPending 和 terminal 都重建并核对 live recipe、fingerprint、路径与直达 Combat/Elite 前驱。
+- Spreadsheet artifact 流程维护五份 workbook，Luban 与 `TinySpire/Build/Sync and Build All` 成功。最新 BuildLayout `buildlayout_2026.08.28.02.59.50.json` SHA-256 为 `BAF93C72F09D968197A9B54DF56803E8EE16160FF8E67EDD00B0BBAEE424B015`，BuildError 为空；四份 G7 GameData JSON、`pfb_char_enemy.prefab`、RunEntryScene 与 BattleScene 均位于 `AssetBundleProvider / BuildStatus=0` 的现存物理 bundle。
+- UnityMCP Packed Play 真实 UGUI 分别走通：完整 Act→Boss 的 Victory、MapReady 确认 Abandoned、首战连续三次 EndAction 令 HP `30→18→6→0` 的 Defeat。三条分支都形成 schema v6 terminal、展示对应结果、确认返回 MainMenu 且不可 Continue；Console Error、InvalidKey 与 ConfigInitializationException 均为 0。
+- 验收后用户原 302-byte `run-save.json` 已按 SHA-256 `419058435D82A48EA08DBF3121F6127417EAC700D302388BFFFA4586DFEE54B9` 恢复，Addressables builder 1→0，Settings hash 比较不变，BootstrapScene `dirty=false`。Scene、Prefab、asmdef、ProjectSettings、HybridCLR、DI 与 G8 均未改；用户 `.gitignore`、`AGENTS.md` WIP 继续排除。用户已授权精确 commit/push，但本节形成时尚未执行，最终回复必须分别报告本地 commit 与远端 push。完整证据见 `06_testing/2026-08-28-g7-single-act-elite-boss-outcome.md`，决定见 CD-121。
+
+## 2026-08-28 G7 单 Act、精英、Boss 与 Run 终局（implementing checkpoint；已由上方完成记录取代）
+
+- 用户明确授权实现 `RUN_ROADMAP.md` G7、控制当前 Unity Editor，并允许在确认完成后 commit/push；当前授权不延伸到 G8。开始时工作区已有用户 `.gitignore` 与 `AGENTS.md` 修改，本轮保持不覆盖、不清理、不纳入 G7 暂存。
+- Unity MCP 已确认只有一个 `TinySpire@8edf130c865b3957` Editor，Unity 6000.5.5f1、BootstrapScene、Edit Mode、idle、未编译；Rider MCP 以正确 solution root `E:/Project/TinySpire` 连通且初始 Error problems=0。
+- seam audit 冻结：继续使用唯一 MapDefinition、BossGate、Battle setup/result bridge 和 RunStateStore；新增 G7 profile/Act manifest、Elite 节点、单一真实 Boss Encounter、Battle-owned 一次性 phase，以及 Store-owned `RunOutcome(Victory/Defeat/Abandoned)`，不创建第二地图、第二 result bridge 或 Outcome store。
+- Boss phase 最小口径为：Phase I 已明示的首个敌人行动完整执行后，在同一 prepared completion 中恰好一次切到 Phase II 并冻结下一意图；不使用血量/回合 DSL，不把 phase 写入 Run/save/UI。实现正按地图/内容、Battle phase、Run outcome/persistence 三个独立 RED→GREEN 切片推进。
+- 当前计划见 `plans/2026-08-28-g7-single-act-elite-boss-outcome.md`。尚未形成 Unity 测试、Luban、Addressables、Packed、commit 或 push 完成证据；这些不能由旧 G5/G6 结果替代。
 
 ## 2026-08-27 G5/G6 持有物与非战斗节点（completed / verified）
 

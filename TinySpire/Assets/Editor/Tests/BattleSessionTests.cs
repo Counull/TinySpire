@@ -160,8 +160,43 @@ public sealed class BattleSessionTests
             "普通职业只能预声明初始牌组的去重模板。");
         Assert.That(session.EnemyIntents.Layout.CurrentValue.TryGetBehaviorId(enemy.Id, out int behaviorId), Is.True);
         Assert.That(behaviorId, Is.EqualTo(7001));
+        Assert.That(session.EnemyIntents.Layout.CurrentValue.TryGetBossPhase(enemy.Id, out _), Is.False);
 
         session.Dispose();
+    }
+
+    /// <summary>验证 Encounter 二阶段行为组只装配进 Battle 意图聚合，并由其发布只读初始阶段投影。</summary>
+    [Test]
+    public void FromConfig_WithPhaseTwoBehaviorGroup_WiresBattleOwnedBossPhase()
+    {
+        Tables tables = CreateTables(phaseTwoBehaviorGroupId: 6002);
+        var options = new BattleSetupOptions(
+            heroTemplateId: 1001,
+            encounterTemplateId: 5001,
+            randomSeed: 2468);
+
+        using BattleSession session = BattleSession.FromConfig(tables, options);
+        CombatantId enemyId = session.EnemyCombatantIdsInEncounterOrder[0];
+
+        Assert.That(
+            session.EnemyIntents.Layout.CurrentValue.TryGetBossPhase(
+                enemyId,
+                out BattleBossPhase phaseOne),
+            Is.True);
+        Assert.That(phaseOne, Is.EqualTo(BattleBossPhase.PhaseOne));
+        Assert.That(GetCurrentBehaviorId(session.EnemyIntents, enemyId), Is.EqualTo(7001));
+
+        session.EnemyIntents.CompleteAndSelectNext(enemyId);
+
+        Assert.That(
+            session.EnemyIntents.Layout.CurrentValue.TryGetBossPhase(
+                enemyId,
+                out BattleBossPhase phaseTwo),
+            Is.True);
+        Assert.That(phaseTwo, Is.EqualTo(BattleBossPhase.PhaseTwo));
+        Assert.That(
+            GetCurrentBehaviorId(session.EnemyIntents, enemyId),
+            Is.EqualTo(7002).Or.EqualTo(7003));
     }
 
     /// <summary>验证 Run 显式输入会覆盖 Hero 默认生命与牌组，并把同一本战 seed 交给 Session。</summary>
@@ -756,7 +791,8 @@ public sealed class BattleSessionTests
     private static Tables CreateTables(
         string encounterEnemyTemplateIds = "[2001]",
         JArray relicRows = null,
-        JArray potionRows = null)
+        JArray potionRows = null,
+        int phaseTwoBehaviorGroupId = 0)
     {
         var data = new Dictionary<string, JArray>
         {
@@ -778,8 +814,8 @@ public sealed class BattleSessionTests
                 "\"id\":4004,\"effect_type\":1,\"attribute\":0,\"value\":8},{" +
                 "\"id\":4005,\"effect_type\":3,\"attribute\":0,\"value\":2}]"),
             ["battle_tbencounter"] = JArray.Parse(
-                $"[{{\"id\":5001,\"enemy_template_ids\":{encounterEnemyTemplateIds}}}," +
-                "{\"id\":5999,\"enemy_template_ids\":[2002,2001]}]"),
+                $"[{{\"id\":5001,\"enemy_template_ids\":{encounterEnemyTemplateIds},\"phase_two_behavior_group_id\":{phaseTwoBehaviorGroupId}}}," +
+                "{\"id\":5999,\"enemy_template_ids\":[2002,2001],\"phase_two_behavior_group_id\":0}]"),
             ["battle_tbenemybehaviorgroup"] = JArray.Parse(
                 "[{\"id\":6001,\"behavior_ids\":[7001]},{\"id\":6002,\"behavior_ids\":[7002,7003]}]"),
             ["battle_tbenemybehavior"] = JArray.Parse(

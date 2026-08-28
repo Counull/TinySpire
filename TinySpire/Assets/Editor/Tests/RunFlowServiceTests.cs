@@ -216,7 +216,7 @@ public sealed class RunFlowServiceTests
             Is.EqualTo(canonicalDocument.RunCards.Select(card => card.TemplateId)));
     }
 
-    /// <summary>已有 canonical RunCards 的 v4 旧档也必须先耐久改写 v5，而不能只依赖 legacy deck 信号。</summary>
+    /// <summary>已有 canonical RunCards 的 v4 旧档也必须先耐久改写当前 v6，而不能只依赖 legacy deck 信号。</summary>
     [Test]
     public void ContinueMigratedV4Checkpoint_CommitsCanonicalHoldingsBeforePublishingRun()
     {
@@ -235,6 +235,8 @@ public sealed class RunFlowServiceTests
         legacyJson.Remove("potions");
         legacyJson.Remove("gold");
         legacyJson.Remove("pendingNodeVisit");
+        legacyJson.Remove("outcomeKind");
+        legacyJson["terminalReason"] = JValue.CreateNull();
         RunSaveDocumentReadResult read = RunSaveDocumentCodec.Read(legacyJson.ToString());
         Assert.That(read.Status, Is.EqualTo(RunSaveDocumentReadStatus.Success));
         Assert.That(read.Document.RequiresCanonicalRewrite, Is.True);
@@ -252,7 +254,9 @@ public sealed class RunFlowServiceTests
         Assert.That(restored.Holdings.Potions, Is.Empty);
         Assert.That(saves.CommitAttempts, Has.Count.EqualTo(1));
         Assert.That(saves.CommitAttempts[0].RequiresCanonicalRewrite, Is.False);
-        Assert.That(saves.CommitAttempts[0].SchemaVersion, Is.EqualTo(5));
+        Assert.That(
+            saves.CommitAttempts[0].SchemaVersion,
+            Is.EqualTo(RunSaveDocument.CurrentSchemaVersion));
     }
 
     /// <summary>有效 RewardPending 文档只在 Continue 后恢复，且不重新生成奖励或漂移牌组实例。</summary>
@@ -1666,7 +1670,7 @@ public sealed class RunFlowServiceTests
 
         Assert.That(created.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
         Assert.That(created.MapDefinition.ProfileId,
-            Is.EqualTo(TinySpireActMapProfiles.NewRunG6V1ProfileId));
+            Is.EqualTo(TinySpireActMapProfiles.NewRunG7V1ProfileId));
         Assert.That(created.MapDefinition.GeneratorVersion,
             Is.EqualTo(ActMapGenerator.NewRunG6Version));
         Assert.That(
@@ -1682,6 +1686,7 @@ public sealed class RunFlowServiceTests
                 MapNodeKind.Shop,
                 MapNodeKind.Event,
                 MapNodeKind.Combat,
+                MapNodeKind.Elite,
             }));
         Assert.That(created.MapDefinition.Nodes.Any(node => node.Kind == MapNodeKind.Boss), Is.True);
         Assert.That(saves.SuccessfulDocument.MapSeed, Is.EqualTo(created.MapDefinition.MapSeed));
@@ -1696,6 +1701,51 @@ public sealed class RunFlowServiceTests
         Assert.That(setup.RunCards, Is.EqualTo(input.RunCards));
         Assert.That(setup.RandomSeed, Is.EqualTo(input.RandomSeed));
         Assert.That(scenes.LoadedAddresses, Is.EqualTo(new[] { RunSceneAddresses.Battle }));
+    }
+
+    /// <summary>真实 G7 Elite 必须复用普通 Battle setup，并在胜利后冻结同一节点的 RewardPending。</summary>
+    [Test]
+    public async Task Elite_VictoryUsesProductionEncounterAndFreezesOrdinaryReward()
+    {
+        using var store = new RunStateStore();
+        var scenes = new RecordingSceneFlow();
+        var saves = new RecordingRunSaveStore();
+        RunState beforeElite = CreateG7RunBeforeElite(store, randomRootSeed: 878787u);
+        saves.Commit(RunSaveDocumentMapper.Create(beforeElite));
+        var flow = CreateFlow(store, scenes, saves, randomRootSeed: 878787u);
+        MapNodeId eliteNodeId = MapReachability.GetSelectableNodeIds(
+                beforeElite.MapDefinition,
+                beforeElite.CurrentNodeId,
+                MapTraversalMode.Ordinary)
+            .Single(nodeId => beforeElite.MapDefinition.GetNode(nodeId).Kind == MapNodeKind.Elite);
+
+        await flow.EnterMapNodeAsync(eliteNodeId);
+
+        RunBattleInput input = store.Current.ActiveBattle;
+        BattleSetupOptions setup = flow.CreateBattleSetupOptions();
+        Assert.That(input.NodeKind, Is.EqualTo(MapNodeKind.Elite));
+        Assert.That(input.MapNodeContentId, Is.EqualTo(5101));
+        Assert.That(input.EncounterTemplateId, Is.EqualTo(5101));
+        Assert.That(input.BattleId.AttemptSequence, Is.EqualTo(3));
+        Assert.That(setup.EncounterTemplateId, Is.EqualTo(5101));
+        Assert.That(scenes.LoadedAddresses, Is.EqualTo(new[] { RunSceneAddresses.Battle }));
+        RunBattleId battleId = flow.BindBattleAttempt(setup);
+
+        await flow.HandleBattleResultAsync(
+            battleId,
+            CreateBattleResult(
+                BattleResultKind.Victory,
+                beforeElite.HeroTemplateId,
+                health: 39,
+                maxHealth: beforeElite.MaxHealth));
+
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.RewardPending));
+        Assert.That(store.Current.CommittedNodeId, Is.EqualTo(eliteNodeId));
+        Assert.That(store.Current.PendingCardReward, Is.Not.Null);
+        Assert.That(store.Current.PendingCardReward.Id.BattleId, Is.EqualTo(battleId));
+        Assert.That(store.Current.Outcome, Is.Null);
+        Assert.That(saves.SuccessfulDocument.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.RewardPending));
+        Assert.That(scenes.LoadedAddresses.Last(), Is.EqualTo(RunSceneAddresses.RunEntry));
     }
 
     /// <summary>沿普通路线完成多个 Combat 后可保存抵达 Boss 门，且不会启动真实 Boss Battle。</summary>
@@ -1739,6 +1789,149 @@ public sealed class RunFlowServiceTests
             RunSceneAddresses.RunEntry,
         }));
         Assert.That(() => flow.CreateBattleSetupOptions(), Throws.TypeOf<InvalidOperationException>());
+    }
+
+    /// <summary>抵达 G7 Boss 门后只解析清单登记的真实遭遇，胜利直接冻结唯一 Victory 终局且不生成普通奖励。</summary>
+    [Test]
+    public async Task BossGate_VictoryUsesManifestEncounterAndCommitsTerminalWithoutReward()
+    {
+        using var store = new RunStateStore();
+        var scenes = new RecordingSceneFlow();
+        var saves = new RecordingRunSaveStore();
+        RunState bossGate = CreateG7BossGateRun(store, randomRootSeed: 919293u);
+        saves.Commit(RunSaveDocumentMapper.Create(bossGate));
+        var flow = CreateFlow(store, scenes, saves, randomRootSeed: 919293u);
+
+        await flow.BeginBossBattleAsync();
+
+        RunBattleInput input = store.Current.ActiveBattle;
+        Assert.That(input.NodeKind, Is.EqualTo(MapNodeKind.Boss));
+        Assert.That(input.MapNodeContentId,
+            Is.EqualTo(store.Current.MapDefinition.GetNode(store.Current.CurrentNodeId).ContentId));
+        Assert.That(input.EncounterTemplateId, Is.EqualTo(5201));
+        RunBattleId battleId = flow.BindBattleAttempt(flow.CreateBattleSetupOptions());
+
+        await flow.HandleBattleResultAsync(
+            battleId,
+            CreateBattleResult(
+                BattleResultKind.Victory,
+                store.Current.HeroTemplateId,
+                health: 17,
+                maxHealth: store.Current.MaxHealth));
+
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.Terminal));
+        Assert.That(store.Current.Outcome.Kind, Is.EqualTo(RunOutcomeKind.Victory));
+        Assert.That(store.Current.Outcome.BattleId, Is.EqualTo(battleId));
+        Assert.That(store.Current.PendingCardReward, Is.Null);
+        Assert.That(saves.SuccessfulDocument.OutcomeKind, Is.EqualTo(RunSaveOutcomeKind.Victory));
+        Assert.That(flow.Persistence.Status, Is.EqualTo(RunPersistenceStatus.TerminalOutcome));
+        Assert.That(flow.Persistence.OutcomeKind, Is.EqualTo(RunOutcomeKind.Victory));
+        Assert.That(flow.Persistence.CanContinue, Is.False);
+        Assert.That(scenes.LoadedAddresses, Is.EqualTo(new[]
+        {
+            RunSceneAddresses.Battle,
+            RunSceneAddresses.RunEntry,
+        }));
+    }
+
+    /// <summary>真实 G7 Boss 战败必须直接冻结唯一 Defeat outcome，不得落入 Elite/Combat 普通奖励分支。</summary>
+    [Test]
+    public async Task BossGate_DefeatCommitsTerminalWithoutOrdinaryReward()
+    {
+        using var store = new RunStateStore();
+        var scenes = new RecordingSceneFlow();
+        var saves = new RecordingRunSaveStore();
+        RunState bossGate = CreateG7BossGateRun(store, randomRootSeed: 929394u);
+        saves.Commit(RunSaveDocumentMapper.Create(bossGate));
+        var flow = CreateFlow(store, scenes, saves, randomRootSeed: 929394u);
+
+        await flow.BeginBossBattleAsync();
+        RunBattleInput input = store.Current.ActiveBattle;
+        RunBattleId battleId = flow.BindBattleAttempt(flow.CreateBattleSetupOptions());
+
+        await flow.HandleBattleResultAsync(
+            battleId,
+            CreateBattleResult(
+                BattleResultKind.Defeat,
+                bossGate.HeroTemplateId,
+                health: 0,
+                maxHealth: bossGate.MaxHealth));
+
+        Assert.That(input.NodeKind, Is.EqualTo(MapNodeKind.Boss));
+        Assert.That(input.EncounterTemplateId, Is.EqualTo(5201));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.Terminal));
+        Assert.That(store.Current.Outcome.Kind, Is.EqualTo(RunOutcomeKind.Defeat));
+        Assert.That(store.Current.Outcome.BattleId, Is.EqualTo(battleId));
+        Assert.That(store.Current.PendingCardReward, Is.Null);
+        Assert.That(saves.SuccessfulDocument.OutcomeKind, Is.EqualTo(RunSaveOutcomeKind.Defeat));
+        Assert.That(flow.Persistence.Status, Is.EqualTo(RunPersistenceStatus.TerminalDefeat));
+        Assert.That(flow.Persistence.CanContinue, Is.False);
+        Assert.That(scenes.LoadedAddresses, Is.EqualTo(new[]
+        {
+            RunSceneAddresses.Battle,
+            RunSceneAddresses.RunEntry,
+        }));
+    }
+
+    /// <summary>稳定地图态主动放弃先保存完整 Abandoned 后继，再恰好一次发布终局并永久禁止 Continue。</summary>
+    [Test]
+    public void ActiveMapRun_AbandonCommitsTypedTerminalBeforePublishing()
+    {
+        using var store = new RunStateStore();
+        var scenes = new RecordingSceneFlow();
+        var saves = new RecordingRunSaveStore();
+        var flow = CreateFlow(store, scenes, saves, randomRootSeed: 565758u);
+        RunState active = flow.CreateNewRun(heroTemplateId: 1001);
+
+        RunSaveCommitResult result = flow.AbandonActiveRun();
+
+        Assert.That(result.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(store.Current, Is.Not.SameAs(active));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.Terminal));
+        Assert.That(store.Current.Outcome.Kind, Is.EqualTo(RunOutcomeKind.Abandoned));
+        Assert.That(store.Current.Outcome.BattleId, Is.Null);
+        Assert.That(saves.SuccessfulDocument.OutcomeKind, Is.EqualTo(RunSaveOutcomeKind.Abandoned));
+        Assert.That(flow.Persistence.Status, Is.EqualTo(RunPersistenceStatus.TerminalOutcome));
+        Assert.That(flow.Persistence.OutcomeKind, Is.EqualTo(RunOutcomeKind.Abandoned));
+        Assert.That(flow.Persistence.CanContinue, Is.False);
+        Assert.That(scenes.LoadedAddresses, Is.Empty);
+    }
+
+    /// <summary>主动放弃写档失败时保持原稳定 Run，重试同一冻结文档成功后才恰好一次发布 Abandoned。</summary>
+    [Test]
+    public void ActiveMapRun_AbandonCommitFailureRetriesSameDocumentBeforePublishing()
+    {
+        using var store = new RunStateStore();
+        var saves = new RecordingRunSaveStore();
+        saves.EnqueueCommitResult(RunSaveCommitResult.Succeeded());
+        saves.EnqueueCommitResult(RunSaveCommitResult.Failed(
+            RunSaveCommitStatus.IoFailure,
+            "abandon checkpoint failed"));
+        saves.EnqueueCommitResult(RunSaveCommitResult.Succeeded());
+        var flow = CreateFlow(
+            store,
+            new RecordingSceneFlow(),
+            saves,
+            randomRootSeed: 596061u);
+        RunState active = flow.CreateNewRun(heroTemplateId: 1002);
+
+        RunSaveCommitResult failed = flow.AbandonActiveRun();
+
+        Assert.That(failed.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
+        Assert.That(store.Current, Is.SameAs(active));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+        Assert.That(flow.Persistence.Status, Is.EqualTo(RunPersistenceStatus.CommitFailed));
+        Assert.That(flow.CanRollbackFailedCheckpoint, Is.False);
+        RunSaveDocument frozen = saves.CommitAttempts[1];
+        Assert.That(frozen.OutcomeKind, Is.EqualTo(RunSaveOutcomeKind.Abandoned));
+
+        RunSaveCommitResult retried = flow.RetryPendingCommit();
+
+        Assert.That(retried.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(saves.CommitAttempts[2], Is.SameAs(frozen));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.Terminal));
+        Assert.That(store.Current.Outcome.Kind, Is.EqualTo(RunOutcomeKind.Abandoned));
+        Assert.That(flow.Persistence.OutcomeKind, Is.EqualTo(RunOutcomeKind.Abandoned));
     }
 
     /// <summary>普通失败立即提交 Terminal(Defeat)；冷启动恢复失败态、禁止 Continue，确认删除后才清档。</summary>
@@ -2033,6 +2226,87 @@ public sealed class RunFlowServiceTests
             RunHoldings.Empty(initialGold: 100)));
     }
 
+    /// <summary>沿 G7 冻结普通边构造已完成精英且刚抵达 Boss 的稳定门状态。</summary>
+    private static RunState CreateG7BossGateRun(
+        RunStateStore store,
+        uint randomRootSeed)
+    {
+        if (store == null)
+            throw new ArgumentNullException(nameof(store));
+
+        MapDefinition map = ActMapGenerator.Generate(
+            TinySpireActMapProfiles.NewRunG7V1,
+            RunRandomDomains.DeriveMapSeed(randomRootSeed));
+        var path = new List<MapNodeId>
+        {
+            MapNodeId.FromPosition(layer: 0, slot: 0),
+        };
+        MapNodeId cursor = path[0];
+        int safetyLimit = map.Nodes.Count;
+        while (path.Count <= safetyLimit)
+        {
+            MapNodeId next = MapReachability.GetSelectableNodeIds(
+                    map,
+                    cursor,
+                    MapTraversalMode.Ordinary)
+                .First();
+            path.Add(next);
+            cursor = next;
+            if (map.GetNode(next).Kind == MapNodeKind.Boss)
+                break;
+        }
+
+        Assert.That(map.GetNode(path[path.Count - 1]).Kind, Is.EqualTo(MapNodeKind.Boss));
+        Assert.That(path.Select(nodeId => map.GetNode(nodeId).Kind), Does.Contain(MapNodeKind.Elite));
+        return store.RestoreRun(new RunRestoreOptions(
+            new RunId(Guid.Parse("45454545-6767-8989-abab-cdcdcdcdcdcd")),
+            heroTemplateId: 1001,
+            currentHealth: 47,
+            maxHealth: 80,
+            runDeck: RunDeck.CreateInitial(new[] { 3002, 3123 }),
+            randomRootSeed,
+            map,
+            path,
+            RunProgressPhase.BossGateReached,
+            committedNodeId: null,
+            outcomeKind: null,
+            holdings: RunHoldings.Empty(initialGold: 100)));
+    }
+
+    /// <summary>沿真实 G7 单路线恢复到 Elite 前一层，并保留已完成两场普通战斗推导出的 attempt 序号。</summary>
+    private static RunState CreateG7RunBeforeElite(
+        RunStateStore store,
+        uint randomRootSeed)
+    {
+        if (store == null)
+            throw new ArgumentNullException(nameof(store));
+
+        MapDefinition map = ActMapGenerator.Generate(
+            TinySpireActMapProfiles.NewRunG7V1,
+            RunRandomDomains.DeriveMapSeed(randomRootSeed));
+        MapNode elite = map.Nodes.Single(node => node.Kind == MapNodeKind.Elite);
+        MapNodeId[] path = map.Nodes
+            .Where(node => node.Layer < elite.Layer)
+            .OrderBy(node => node.Layer)
+            .ThenBy(node => node.Slot)
+            .Select(node => node.Id)
+            .ToArray();
+        Assert.That(map.GetNode(path[path.Length - 1]).Kind, Is.EqualTo(MapNodeKind.Combat));
+        return store.RestoreRun(new RunRestoreOptions(
+            new RunId(Guid.Parse("56565656-7878-9090-abab-cdcdcdcdcdcd")),
+            heroTemplateId: 1001,
+            currentHealth: 47,
+            maxHealth: 80,
+            runDeck: RunDeck.CreateInitial(new[] { 3002, 3123 }),
+            randomRootSeed,
+            map,
+            path,
+            RunProgressPhase.MapReady,
+            committedNodeId: null,
+            outcomeKind: null,
+            holdings: RunHoldings.Empty(initialGold: 100)));
+    }
+
     /// <summary>沿 G6 mixed 路径恢复到目标前一层，并由生产 entry 工厂建立冷启动测试文档。</summary>
     private static RunSaveDocument CreateAuthoritativeNodeVisitPendingDocument(
         MapNodeKind kind)
@@ -2276,14 +2550,25 @@ public sealed class RunFlowServiceTests
                     "\"cost\":1,\"play_destination\":0,\"rule_kind\":1,\"rule_value\":9}]")
                 : new JArray(),
             ["battle_tbenemy"] = JArray.Parse(
-                "[{\"id\":2001,\"name_i18n_key\":\"battle.enemy.test.name\",\"view_prefab_key\":\"pfb_char_enemy\",\"max_health\":20,\"base_strength\":0,\"behavior_group_id\":6001}]"),
+                "[{\"id\":2001,\"name_i18n_key\":\"battle.enemy.test.name\",\"view_prefab_key\":\"pfb_char_enemy\",\"max_health\":20,\"base_strength\":0,\"behavior_group_id\":6001}," +
+                "{\"id\":2101,\"name_i18n_key\":\"battle.enemy.elite.name\",\"view_prefab_key\":\"pfb_char_enemy\",\"max_health\":45,\"base_strength\":0,\"behavior_group_id\":6101}," +
+                "{\"id\":2201,\"name_i18n_key\":\"battle.enemy.boss.name\",\"view_prefab_key\":\"pfb_char_enemy\",\"max_health\":60,\"base_strength\":0,\"behavior_group_id\":6201}]"),
             ["battle_tbencounter"] = includeEncounter
-                ? JArray.Parse("[{\"id\":5001,\"enemy_template_ids\":[2001]}]")
+                ? JArray.Parse(
+                    "[{\"id\":5001,\"enemy_template_ids\":[2001],\"phase_two_behavior_group_id\":0}," +
+                    "{\"id\":5101,\"enemy_template_ids\":[2101],\"phase_two_behavior_group_id\":0}," +
+                    "{\"id\":5201,\"enemy_template_ids\":[2201],\"phase_two_behavior_group_id\":6202}]")
                 : new JArray(),
             ["battle_tbenemybehaviorgroup"] = JArray.Parse(
-                "[{\"id\":6001,\"behavior_ids\":[7001]}]"),
+                "[{\"id\":6001,\"behavior_ids\":[7001]}," +
+                "{\"id\":6101,\"behavior_ids\":[7101]}," +
+                "{\"id\":6201,\"behavior_ids\":[7201]}," +
+                "{\"id\":6202,\"behavior_ids\":[7202]}]"),
             ["battle_tbenemybehavior"] = JArray.Parse(
-                "[{\"id\":7001,\"intent_type\":0,\"target_rule\":1,\"effect_id\":4002,\"weight\":1,\"cooldown_selections\":0,\"max_consecutive\":0}]"),
+                "[{\"id\":7001,\"intent_type\":0,\"target_rule\":1,\"effect_id\":4002,\"weight\":1,\"cooldown_selections\":0,\"max_consecutive\":0}," +
+                "{\"id\":7101,\"intent_type\":2,\"target_rule\":0,\"effect_id\":4002,\"weight\":1,\"cooldown_selections\":0,\"max_consecutive\":1}," +
+                "{\"id\":7201,\"intent_type\":1,\"target_rule\":0,\"effect_id\":4002,\"weight\":1,\"cooldown_selections\":0,\"max_consecutive\":1}," +
+                "{\"id\":7202,\"intent_type\":0,\"target_rule\":1,\"effect_id\":4002,\"weight\":1,\"cooldown_selections\":0,\"max_consecutive\":1}]"),
             ["run_tbrelic"] = JArray.Parse(
                 "[{\"id\":8001,\"name_i18n_key\":\"run.relic.test_8001.name\",\"description_i18n_key\":\"run.relic.test_8001.description\",\"battle_start_strength\":1}," +
                 "{\"id\":8002,\"name_i18n_key\":\"run.relic.test_8002.name\",\"description_i18n_key\":\"run.relic.test_8002.description\",\"battle_start_strength\":2}]"),

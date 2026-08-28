@@ -14,5 +14,21 @@
     "base_strength": 0,
     "view_prefab_key": "pfb_char_enemy",
     "behavior_group_id": 6002
+  },
+  "2101": {
+    "id": 2101,
+    "name_i18n_key": "battle.enemy.elite_guardian.name",
+    "max_health": 45,
+    "base_strength": 0,
+    "view_prefab_key": "pfb_char_enemy",
+    "behavior_group_id": 6101
+  },
+  "2201": {
+    "id": 2201,
+    "name_i18n_key": "battle.enemy.chrono_warden.name",
+    "max_health": 60,
+    "base_strength": 0,
+    "view_prefab_key": "pfb_char_enemy",
+    "behavior_group_id": 6201
   }
 }

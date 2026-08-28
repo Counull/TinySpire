@@ -51,7 +51,7 @@ namespace TinySpire.Run
         }
     }
 
-    /// <summary>所有旧 schema 进入当前 v5 文档前必须经过的唯一迁移入口。</summary>
+    /// <summary>所有旧 schema 进入当前 v6 文档前必须经过的唯一迁移入口。</summary>
     public static class RunSaveDocumentMigrator
     {
         /// <summary>读取明确版本并只迁移可证明无歧义的文档。</summary>
@@ -90,11 +90,13 @@ namespace TinySpire.Run
             switch (schemaVersion)
             {
                 case 2:
-                    return MigrateV2ToV5(source);
+                    return MigrateV2ToV6(source);
                 case 3:
-                    return MigrateV3ToV5(source);
+                    return MigrateV3ToV6(source);
                 case 4:
-                    return MigrateV4ToV5(source);
+                    return MigrateV4ToV6(source);
+                case 5:
+                    return MigrateV5ToV6(source);
                 case RunSaveDocument.CurrentSchemaVersion:
                     return RunSaveDocumentMigrationResult.Succeeded((JObject)source.DeepClone());
                 default:
@@ -103,6 +105,33 @@ namespace TinySpire.Run
                         $"Run save schemaVersion {schemaVersion} cannot be migrated to " +
                         $"{RunSaveDocument.CurrentSchemaVersion}.");
             }
+        }
+
+        /// <summary>按显式 v2→v3→v4→v5→v6 链迁移，不跨级猜测旧字段。</summary>
+        private static RunSaveDocumentMigrationResult MigrateV2ToV6(JObject source)
+        {
+            RunSaveDocumentMigrationResult v5 = MigrateV2ToV5(source);
+            return v5.Status == RunSaveDocumentMigrationStatus.Success
+                ? MigrateV5ToV6(v5.CurrentDocument)
+                : v5;
+        }
+
+        /// <summary>按显式 v3→v4→v5→v6 链迁移并保留每一级字段所有权检查。</summary>
+        private static RunSaveDocumentMigrationResult MigrateV3ToV6(JObject source)
+        {
+            RunSaveDocumentMigrationResult v5 = MigrateV3ToV5(source);
+            return v5.Status == RunSaveDocumentMigrationStatus.Success
+                ? MigrateV5ToV6(v5.CurrentDocument)
+                : v5;
+        }
+
+        /// <summary>按显式 v4→v5→v6 链补齐持有物后再迁移唯一 outcome。</summary>
+        private static RunSaveDocumentMigrationResult MigrateV4ToV6(JObject source)
+        {
+            RunSaveDocumentMigrationResult v5 = MigrateV4ToV5(source);
+            return v5.Status == RunSaveDocumentMigrationStatus.Success
+                ? MigrateV5ToV6(v5.CurrentDocument)
+                : v5;
         }
 
         /// <summary>按显式 v2→v3→v4→v5 链迁移，不跨级猜测旧字段。</summary>
@@ -199,7 +228,8 @@ namespace TinySpire.Run
             JProperty newerProperty = source.Property("relics") ??
                                         source.Property("potions") ??
                                         source.Property("gold") ??
-                                        source.Property("pendingNodeVisit");
+                                        source.Property("pendingNodeVisit") ??
+                                        source.Property("outcomeKind");
             if (newerProperty != null)
             {
                 return RunSaveDocumentMigrationResult.Failed(
@@ -215,7 +245,7 @@ namespace TinySpire.Run
             }
 
             var current = (JObject)source.DeepClone();
-            current["schemaVersion"] = RunSaveDocument.CurrentSchemaVersion;
+            current["schemaVersion"] = 5;
             current["relics"] = new JArray();
             current["potions"] = new JArray();
             current["gold"] = 100;
@@ -237,6 +267,49 @@ namespace TinySpire.Run
                         : JValue.CreateNull(),
                 };
             }
+            return RunSaveDocumentMigrationResult.Succeeded(current);
+        }
+
+        /// <summary>把 v5 Terminal(Defeat) 显式迁移为 v6 Defeat outcome，其余稳定态保持空 outcome。</summary>
+        private static RunSaveDocumentMigrationResult MigrateV5ToV6(JObject source)
+        {
+            if (source.Property("outcomeKind") != null)
+            {
+                return RunSaveDocumentMigrationResult.Failed(
+                    RunSaveDocumentMigrationStatus.InvalidDocument,
+                    "Schema v5 cannot contain outcomeKind.");
+            }
+
+            JProperty terminalReasonProperty = source.Property("terminalReason");
+            if (terminalReasonProperty == null)
+            {
+                return RunSaveDocumentMigrationResult.Failed(
+                    RunSaveDocumentMigrationStatus.InvalidDocument,
+                    "Schema v5 terminalReason is missing.");
+            }
+
+            string progressPhase = source["progressPhase"]?.Type == JTokenType.String
+                ? source.Value<string>("progressPhase")
+                : null;
+            JToken terminalReason = terminalReasonProperty.Value;
+            bool isTerminal = progressPhase == nameof(RunSaveProgressPhase.Terminal);
+            bool reasonMatches = isTerminal
+                ? terminalReason.Type == JTokenType.String &&
+                  terminalReason.Value<string>() == nameof(RunSaveTerminalReason.Defeat)
+                : terminalReason.Type == JTokenType.Null;
+            if (!reasonMatches)
+            {
+                return RunSaveDocumentMigrationResult.Failed(
+                    RunSaveDocumentMigrationStatus.InvalidDocument,
+                    "Schema v5 terminalReason does not match progressPhase.");
+            }
+
+            var current = (JObject)source.DeepClone();
+            current["schemaVersion"] = RunSaveDocument.CurrentSchemaVersion;
+            current.Remove("terminalReason");
+            current["outcomeKind"] = isTerminal
+                ? new JValue(nameof(RunSaveOutcomeKind.Defeat))
+                : JValue.CreateNull();
             return RunSaveDocumentMigrationResult.Succeeded(current);
         }
 
@@ -397,16 +470,28 @@ namespace TinySpire.Run
                     "Run save progressPhase must be an exact supported string value.");
             }
 
-            JToken terminalReasonToken = migration.CurrentDocument["terminalReason"];
-            bool terminalReasonIsValid = progressPhase == nameof(RunSaveProgressPhase.Terminal)
-                ? terminalReasonToken?.Type == JTokenType.String &&
-                  terminalReasonToken.Value<string>() == nameof(RunSaveTerminalReason.Defeat)
-                : terminalReasonToken?.Type == JTokenType.Null;
-            if (!terminalReasonIsValid)
+            if (migration.CurrentDocument.Property("terminalReason") != null)
             {
                 return RunSaveDocumentReadResult.Failed(
                     RunSaveDocumentReadStatus.InvalidDocument,
-                    "Run save terminalReason does not match progressPhase.");
+                    "Canonical schema v6 cannot contain terminalReason.");
+            }
+
+            JToken outcomeKindToken = migration.CurrentDocument["outcomeKind"];
+            string outcomeKind = outcomeKindToken?.Type == JTokenType.String
+                ? outcomeKindToken.Value<string>()
+                : null;
+            bool isSupportedOutcome = outcomeKind == nameof(RunSaveOutcomeKind.Victory) ||
+                                      outcomeKind == nameof(RunSaveOutcomeKind.Defeat) ||
+                                      outcomeKind == nameof(RunSaveOutcomeKind.Abandoned);
+            bool outcomeMatches = progressPhase == nameof(RunSaveProgressPhase.Terminal)
+                ? isSupportedOutcome
+                : outcomeKindToken?.Type == JTokenType.Null;
+            if (!outcomeMatches)
+            {
+                return RunSaveDocumentReadResult.Failed(
+                    RunSaveDocumentReadStatus.InvalidDocument,
+                    "Run save outcomeKind does not match progressPhase.");
             }
 
             if (!ValidateNodeVisitEnumStrings(migration.CurrentDocument, out string enumDetail))

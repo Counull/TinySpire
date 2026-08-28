@@ -959,6 +959,63 @@ public sealed class RunEntryViewTests
         Assert.That(left, Is.GreaterThan(contentRight), textRect.name);
     }
 
+    /// <summary>地图页只在 Presenter 授权时开放主动放弃，BossGate 当前节点也可提交真实 Boss 入战动作。</summary>
+    [Test]
+    public void RenderMap_EnablesAbandonAndBossGateActions()
+    {
+        var root = new GameObject("RunEntryViewRoot");
+        try
+        {
+            var view = root.AddComponent<RunEntryView>();
+            view.BuildForTesting();
+            var actions = new List<RunEntryAction>();
+            view.ActionRequested += actions.Add;
+            var map = new RunMapViewModel(
+                "boss-gate-map",
+                new[]
+                {
+                    Node(
+                        "L00-S00", 0, 0, MapNodeKind.Start, 0, "START",
+                        RunMapVisualAnchorKind.StartFlag,
+                        RunMapNodePresentationState.Completed),
+                    Node(
+                        "L01-S00", 1, 0, MapNodeKind.Boss, 9001, "BOSS ALPHA",
+                        RunMapVisualAnchorKind.BossAlphaCrown,
+                        RunMapNodePresentationState.BossGateReached),
+                },
+                new[]
+                {
+                    new RunMapEdgeViewModel("L00-S00", "L01-S00", isCompletedPath: true),
+                });
+
+            view.Render(CreateModel(
+                RunEntryPage.Map,
+                selectedHeroTemplateId: 1001,
+                confirmEnabled: false,
+                map: map,
+                canAbandonActiveRun: true));
+
+            Button abandon = view.GetButtonForTesting("MapAbandonRunButton");
+            Button boss = view.GetButtonForTesting("MapNode_L01-S00_Button");
+            Assert.That(abandon.interactable, Is.True);
+            Assert.That(boss.interactable, Is.True);
+
+            abandon.onClick.Invoke();
+            boss.onClick.Invoke();
+
+            Assert.That(actions.Select(action => action.Kind), Is.EqualTo(new[]
+            {
+                RunEntryActionKind.RequestAbandon,
+                RunEntryActionKind.EnterMapNode,
+            }));
+            Assert.That(actions[1].MapNodeId, Is.EqualTo(new MapNodeId("L01-S00")));
+        }
+        finally
+        {
+            UnityEngine.Object.DestroyImmediate(root);
+        }
+    }
+
     /// <summary>整图名称、稳定内容 ID 与视觉锚点均可见，只有可选节点提交稳定 NodeId。</summary>
     [Test]
     public void RenderMap_DrawsWholeFrozenGraphWithNamesIdsAndVisualAnchors()
@@ -1162,6 +1219,7 @@ public sealed class RunEntryViewTests
         RunMapViewModel map = null,
         bool continueEnabled = false,
         bool canRollbackFailedSave = false,
+        bool canAbandonActiveRun = false,
         RunCardRewardViewModel cardReward = null,
         RunHoldingsViewModel holdings = null,
         RunRestViewModel rest = null,
@@ -1181,6 +1239,7 @@ public sealed class RunEntryViewTests
             map,
             continueEnabled,
             canRollbackFailedSave,
+            canAbandonActiveRun,
             cardReward,
             holdings,
             rest,

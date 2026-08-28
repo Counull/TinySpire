@@ -70,10 +70,53 @@ namespace TinySpire.Run
         NodeVisitPending,
     }
 
-    /// <summary>Run 进入不可继续终局的类型化原因。</summary>
+    /// <summary>旧调用方读取普通失败原因的兼容投影；终局权威事实由 RunOutcome 持有。</summary>
     public enum RunTerminalReason
     {
         Defeat,
+    }
+
+    /// <summary>Run 唯一终局事实的封闭业务分类。</summary>
+    public enum RunOutcomeKind
+    {
+        Victory,
+        Defeat,
+        Abandoned,
+    }
+
+    /// <summary>由 RunStateStore 一次冻结的不可变终局事实。</summary>
+    public sealed class RunOutcome
+    {
+        /// <summary>所属 Run 的稳定身份。</summary>
+        public RunId RunId { get; }
+
+        /// <summary>本次终局的封闭业务分类。</summary>
+        public RunOutcomeKind Kind { get; }
+
+        /// <summary>胜败所绑定的唯一 Battle；主动放弃没有 Battle。</summary>
+        public RunBattleId? BattleId { get; }
+
+        /// <summary>冻结并验证一次胜败或主动放弃终局。</summary>
+        internal RunOutcome(
+            RunId runId,
+            RunOutcomeKind kind,
+            RunBattleId? battleId)
+        {
+            bool requiresBattle = kind == RunOutcomeKind.Victory ||
+                                  kind == RunOutcomeKind.Defeat;
+            if (requiresBattle != battleId.HasValue)
+            {
+                throw new ArgumentException(
+                    "Victory and Defeat require one battle, while Abandoned cannot carry one.",
+                    nameof(battleId));
+            }
+            if (battleId.HasValue && battleId.Value.RunId != runId)
+                throw new ArgumentException("Run outcome battle belongs to another Run.", nameof(battleId));
+
+            RunId = runId;
+            Kind = kind;
+            BattleId = battleId;
+        }
     }
 
     /// <summary>创建新 Run 所需的已验证静态事实与根随机输入。</summary>
@@ -154,7 +197,12 @@ namespace TinySpire.Run
         public IReadOnlyList<MapNodeId> PathNodeIds { get; }
         public RunProgressPhase ProgressPhase { get; }
         public MapNodeId? CommittedNodeId { get; }
-        public RunTerminalReason? TerminalReason { get; }
+        public RunOutcomeKind? OutcomeKind { get; }
+
+        /// <summary>旧失败终局读取口径的派生兼容投影，不保存第二份业务事实。</summary>
+        public RunTerminalReason? TerminalReason => OutcomeKind == RunOutcomeKind.Defeat
+            ? RunTerminalReason.Defeat
+            : (RunTerminalReason?)null;
         public int BattleAttemptSequence { get; }
         public PendingCardReward PendingCardReward { get; }
         public PendingRunNodeVisit PendingNodeVisit { get; }
@@ -171,7 +219,7 @@ namespace TinySpire.Run
             IReadOnlyList<MapNodeId> pathNodeIds,
             RunProgressPhase progressPhase,
             MapNodeId? committedNodeId,
-            RunTerminalReason? terminalReason,
+            RunOutcomeKind? outcomeKind,
             RunHoldings holdings,
             PendingCardReward pendingCardReward = null,
             PendingRunNodeVisit pendingNodeVisit = null)
@@ -202,10 +250,22 @@ namespace TinySpire.Run
             {
                 throw new ArgumentOutOfRangeException(nameof(progressPhase));
             }
-            if (progressPhase == RunProgressPhase.Terminal && terminalReason == null)
-                throw new ArgumentException("A terminal Run requires a reason.", nameof(terminalReason));
-            if (progressPhase != RunProgressPhase.Terminal && terminalReason != null)
-                throw new ArgumentException("Only a terminal Run can carry a reason.", nameof(terminalReason));
+            if (progressPhase == RunProgressPhase.Terminal && outcomeKind == null)
+                throw new ArgumentException("A terminal Run requires an outcome.", nameof(outcomeKind));
+            if (progressPhase != RunProgressPhase.Terminal && outcomeKind != null)
+                throw new ArgumentException("Only a terminal Run can carry an outcome.", nameof(outcomeKind));
+            if (outcomeKind == RunOutcomeKind.Victory && currentHealth <= 0)
+                throw new ArgumentException("Victory requires positive remaining health.", nameof(currentHealth));
+            if (outcomeKind == RunOutcomeKind.Defeat && currentHealth != 0)
+                throw new ArgumentException("Defeat requires zero remaining health.", nameof(currentHealth));
+            if (outcomeKind == RunOutcomeKind.Abandoned && currentHealth <= 0)
+                throw new ArgumentException("Abandoned requires an active hero.", nameof(currentHealth));
+            bool isBattleOutcome = outcomeKind == RunOutcomeKind.Victory ||
+                                   outcomeKind == RunOutcomeKind.Defeat;
+            if (isBattleOutcome && committedNodeId == null)
+                throw new ArgumentException("A battle outcome requires its committed node.", nameof(committedNodeId));
+            if (outcomeKind == RunOutcomeKind.Abandoned && committedNodeId != null)
+                throw new ArgumentException("Abandoned cannot carry a committed node.", nameof(committedNodeId));
             if (currentHealth == 0 && progressPhase != RunProgressPhase.Terminal)
                 throw new ArgumentException("Only a terminal Run can have zero health.", nameof(currentHealth));
             if ((progressPhase == RunProgressPhase.RewardPending) != (pendingCardReward != null))
@@ -232,32 +292,73 @@ namespace TinySpire.Run
             PathNodeIds = Array.AsReadOnly(pathNodeIds.ToArray());
             ProgressPhase = progressPhase;
             CommittedNodeId = committedNodeId;
-            TerminalReason = terminalReason;
+            OutcomeKind = outcomeKind;
             BattleAttemptSequence = DeriveBattleAttemptSequence(
                 map,
                 pathNodeIds,
-                progressPhase);
+                progressPhase,
+                outcomeKind);
             PendingCardReward = pendingCardReward;
             PendingNodeVisit = pendingNodeVisit;
         }
 
-        /// <summary>无重试语义下，从完成 Combat 路径与失败中的当前 Combat 唯一推导 attempt 序号。</summary>
+        /// <summary>把旧 Terminal(Defeat) 恢复入口无损投影到唯一 Defeat outcome。</summary>
+        internal RunRestoreOptions(
+            RunId runId,
+            int heroTemplateId,
+            int currentHealth,
+            int maxHealth,
+            RunDeck runDeck,
+            uint randomRootSeed,
+            MapDefinition map,
+            IReadOnlyList<MapNodeId> pathNodeIds,
+            RunProgressPhase progressPhase,
+            MapNodeId? committedNodeId,
+            RunTerminalReason? terminalReason,
+            RunHoldings holdings,
+            PendingCardReward pendingCardReward = null,
+            PendingRunNodeVisit pendingNodeVisit = null)
+            : this(
+                runId,
+                heroTemplateId,
+                currentHealth,
+                maxHealth,
+                runDeck,
+                randomRootSeed,
+                map,
+                pathNodeIds,
+                progressPhase,
+                committedNodeId,
+                terminalReason.HasValue
+                    ? RunOutcomeKind.Defeat
+                    : (RunOutcomeKind?)null,
+                holdings,
+                pendingCardReward,
+                pendingNodeVisit)
+        {
+        }
+
+        /// <summary>无重试语义下，从已完成 Combat/Elite 与可选当前 Battle 唯一推导 attempt 序号。</summary>
         internal static int DeriveBattleAttemptSequence(
             MapDefinition map,
             IReadOnlyList<MapNodeId> pathNodeIds,
-            RunProgressPhase progressPhase)
+            RunProgressPhase progressPhase,
+            RunOutcomeKind? outcomeKind = null)
         {
-            int completedCombatCount = 0;
+            int completedRewardBattleCount = 0;
             foreach (MapNodeId nodeId in pathNodeIds)
             {
-                if (map.GetNode(nodeId).Kind == MapNodeKind.Combat)
-                    completedCombatCount = checked(completedCombatCount + 1);
+                MapNodeKind kind = map.GetNode(nodeId).Kind;
+                if (kind == MapNodeKind.Combat || kind == MapNodeKind.Elite)
+                    completedRewardBattleCount = checked(completedRewardBattleCount + 1);
             }
 
-            return progressPhase == RunProgressPhase.Terminal ||
-                   progressPhase == RunProgressPhase.RewardPending
-                ? checked(completedCombatCount + 1)
-                : completedCombatCount;
+            bool hasUncompletedBattle = progressPhase == RunProgressPhase.RewardPending ||
+                                        (progressPhase == RunProgressPhase.Terminal &&
+                                         outcomeKind != RunOutcomeKind.Abandoned);
+            return hasUncompletedBattle
+                ? checked(completedRewardBattleCount + 1)
+                : completedRewardBattleCount;
         }
     }
 
@@ -344,6 +445,12 @@ namespace TinySpire.Run
         /// <summary>按 Run 快照签发的不可变遗物、药水与金币投影。</summary>
         public RunHoldings Holdings { get; }
 
+        /// <summary>本战在唯一 MapDefinition 中冻结的节点类型。</summary>
+        public MapNodeKind NodeKind { get; }
+
+        /// <summary>地图节点冻结的内容身份；Boss 时是已明牌 Boss identity。</summary>
+        public int MapNodeContentId { get; }
+
         /// <summary>本战遭遇模板标识。</summary>
         public int EncounterTemplateId { get; }
 
@@ -351,29 +458,41 @@ namespace TinySpire.Run
         public uint RandomSeed { get; }
 
         /// <summary>冻结一次由 Run 唯一签发的 Battle setup 输入。</summary>
-        internal RunBattleInput(RunState state, int attemptSequence, uint randomSeed)
+        internal RunBattleInput(
+            RunState state,
+            MapNode battleNode,
+            int encounterTemplateId,
+            int attemptSequence,
+            uint randomSeed)
         {
             if (state == null)
                 throw new ArgumentNullException(nameof(state));
+            if (battleNode == null)
+                throw new ArgumentNullException(nameof(battleNode));
+            if (encounterTemplateId <= 0)
+                throw new ArgumentOutOfRangeException(nameof(encounterTemplateId));
             if (attemptSequence <= 0)
                 throw new ArgumentOutOfRangeException(nameof(attemptSequence));
             if (randomSeed == 0)
                 throw new ArgumentOutOfRangeException(nameof(randomSeed));
 
-            if (state.CommittedNodeId == null)
-                throw new InvalidOperationException("A Run battle requires a committed map node.");
+            if (battleNode.Kind != MapNodeKind.Combat &&
+                battleNode.Kind != MapNodeKind.Elite &&
+                battleNode.Kind != MapNodeKind.Boss)
+            {
+                throw new InvalidOperationException(
+                    "Only Combat, Elite or Boss nodes can create Run battle input.");
+            }
 
-            MapNode committedNode = state.MapDefinition.GetNode(state.CommittedNodeId.Value);
-            if (committedNode.Kind != MapNodeKind.Combat)
-                throw new InvalidOperationException("Only a Combat node can create Run battle input.");
-
-            BattleId = new RunBattleId(state.RunId, attemptSequence, committedNode.Id);
+            BattleId = new RunBattleId(state.RunId, attemptSequence, battleNode.Id);
             HeroTemplateId = state.HeroTemplateId;
             InitialHealth = state.CurrentHealth;
             MaxHealth = state.MaxHealth;
             RunCards = Array.AsReadOnly(state.RunDeck.Cards.ToArray());
             Holdings = state.Holdings;
-            EncounterTemplateId = committedNode.ContentId;
+            NodeKind = battleNode.Kind;
+            MapNodeContentId = battleNode.ContentId;
+            EncounterTemplateId = encounterTemplateId;
             RandomSeed = randomSeed;
         }
     }
@@ -407,20 +526,25 @@ namespace TinySpire.Run
         /// <summary>本 Run 开局一次生成后冻结的完整 Act 地图。</summary>
         public MapDefinition MapDefinition { get; }
 
-        /// <summary>从 Start 到最后完成节点的稳定路径；不包含尚未完成的战斗节点。</summary>
+        /// <summary>从 Start 到已完成普通节点的稳定路径；抵达 Boss 门后末项就是尚待结算的 Boss。</summary>
         public IReadOnlyList<MapNodeId> PathNodeIds => _pathNodeIds;
 
         /// <summary>最后一个已完成或已抵达节点。</summary>
         public MapNodeId CurrentNodeId => _pathNodeIds[_pathNodeIds.Count - 1];
 
-        /// <summary>已选择但尚未胜利完成的普通战斗节点。</summary>
+        /// <summary>已选择且正在结算的 Combat、Elite 或 Boss 节点。</summary>
         public MapNodeId? CommittedNodeId { get; }
 
         /// <summary>当前互斥地图/战斗/终局阶段。</summary>
         public RunProgressPhase ProgressPhase { get; }
 
-        /// <summary>Terminal 阶段的类型化终局原因，非终局为空。</summary>
-        public RunTerminalReason? TerminalReason { get; }
+        /// <summary>Terminal 阶段唯一不可变终局事实，非终局为空。</summary>
+        public RunOutcome Outcome { get; }
+
+        /// <summary>旧失败终局读取口径的派生兼容投影，不保存第二份业务事实。</summary>
+        public RunTerminalReason? TerminalReason => Outcome?.Kind == RunOutcomeKind.Defeat
+            ? RunTerminalReason.Defeat
+            : (RunTerminalReason?)null;
 
         /// <summary>已经签发过的本战随机输入序号。</summary>
         public int BattleAttemptSequence { get; }
@@ -428,7 +552,7 @@ namespace TinySpire.Run
         /// <summary>当前有效的本战输入；尚未入战时为空。</summary>
         public RunBattleInput ActiveBattle { get; }
 
-        /// <summary>胜利后已冻结且尚未选择或跳过的普通战斗卡牌奖励。</summary>
+        /// <summary>Combat/Elite 胜利后已冻结且尚未选择或跳过的卡牌奖励。</summary>
         public PendingCardReward PendingCardReward { get; }
 
         /// <summary>已耐久进入且尚未完成的一次非战斗节点访问。</summary>
@@ -454,7 +578,7 @@ namespace TinySpire.Run
             });
             CommittedNodeId = null;
             ProgressPhase = RunProgressPhase.MapReady;
-            TerminalReason = null;
+            Outcome = null;
             BattleAttemptSequence = 0;
             ActiveBattle = null;
             PendingCardReward = null;
@@ -479,8 +603,18 @@ namespace TinySpire.Run
             _pathNodeIds = Array.AsReadOnly(options.PathNodeIds.ToArray());
             CommittedNodeId = options.CommittedNodeId;
             ProgressPhase = options.ProgressPhase;
-            TerminalReason = options.TerminalReason;
             BattleAttemptSequence = options.BattleAttemptSequence;
+            Outcome = options.OutcomeKind.HasValue
+                ? new RunOutcome(
+                    RunId,
+                    options.OutcomeKind.Value,
+                    options.OutcomeKind == RunOutcomeKind.Abandoned
+                        ? (RunBattleId?)null
+                        : new RunBattleId(
+                            RunId,
+                            BattleAttemptSequence,
+                            options.CommittedNodeId.Value))
+                : null;
             ActiveBattle = null;
             PendingCardReward = options.PendingCardReward;
             PendingNodeVisit = options.PendingNodeVisit;
@@ -496,7 +630,7 @@ namespace TinySpire.Run
             MapNodeId? committedNodeId,
             int battleAttemptSequence,
             RunBattleInput activeBattle,
-            RunTerminalReason? terminalReason,
+            RunOutcome outcome,
             PendingCardReward pendingCardReward = null,
             RunDeck runDeck = null,
             RunHoldings holdings = null,
@@ -522,7 +656,7 @@ namespace TinySpire.Run
             _pathNodeIds = Array.AsReadOnly(pathNodeIds.ToArray());
             CommittedNodeId = committedNodeId;
             ProgressPhase = progressPhase;
-            TerminalReason = terminalReason;
+            Outcome = outcome;
             BattleAttemptSequence = battleAttemptSequence;
             ActiveBattle = activeBattle;
             PendingCardReward = pendingCardReward;
@@ -541,7 +675,9 @@ namespace TinySpire.Run
             bool activeBattleMatches = ProgressPhase == RunProgressPhase.InBattle
                 ? ActiveBattle != null &&
                   CommittedNodeId != null &&
-                  ActiveBattle.BattleId.NodeId == CommittedNodeId.Value
+                  ActiveBattle.BattleId.NodeId == CommittedNodeId.Value &&
+                  ActiveBattle.BattleId.RunId == RunId &&
+                  ActiveBattle.BattleId.AttemptSequence == BattleAttemptSequence
                 : ActiveBattle == null;
             if (!activeBattleMatches)
                 throw new InvalidOperationException("Run battle transient does not match its progress phase.");
@@ -572,18 +708,18 @@ namespace TinySpire.Run
             switch (ProgressPhase)
             {
                 case RunProgressPhase.MapReady:
-                    if (CommittedNodeId != null || TerminalReason != null || CurrentHealth <= 0)
+                    if (CommittedNodeId != null || Outcome != null || CurrentHealth <= 0)
                         throw new InvalidOperationException("MapReady Run facts are inconsistent.");
                     break;
                 case RunProgressPhase.EncounterCommitted:
                 case RunProgressPhase.InBattle:
-                    ValidateCommittedCombat();
-                    if (TerminalReason != null || CurrentHealth <= 0)
+                    ValidateCommittedBattleNode(allowBossAtCurrentNode: ProgressPhase == RunProgressPhase.InBattle);
+                    if (Outcome != null || CurrentHealth <= 0)
                         throw new InvalidOperationException("Active encounter Run facts are inconsistent.");
                     break;
                 case RunProgressPhase.BossGateReached:
                     if (CommittedNodeId != null ||
-                        TerminalReason != null ||
+                        Outcome != null ||
                         MapDefinition.GetNode(CurrentNodeId).Kind != MapNodeKind.Boss ||
                         CurrentHealth <= 0)
                     {
@@ -591,21 +727,15 @@ namespace TinySpire.Run
                     }
                     break;
                 case RunProgressPhase.RewardPending:
-                    ValidateCommittedCombat();
-                    if (TerminalReason != null || CurrentHealth <= 0)
+                    ValidateCommittedBattleNode(allowBossAtCurrentNode: false);
+                    if (Outcome != null || CurrentHealth <= 0)
                         throw new InvalidOperationException("RewardPending Run facts are inconsistent.");
                     break;
                 case RunProgressPhase.Terminal:
-                    if (TerminalReason != RunTerminalReason.Defeat ||
-                        CurrentHealth != 0 ||
-                        CommittedNodeId == null)
-                    {
-                        throw new InvalidOperationException("Terminal Run facts are inconsistent.");
-                    }
-                    ValidateCommittedCombat();
+                    ValidateTerminalOutcome();
                     break;
                 case RunProgressPhase.NodeVisitPending:
-                    if (CommittedNodeId != null || TerminalReason != null || CurrentHealth <= 0)
+                    if (CommittedNodeId != null || Outcome != null || CurrentHealth <= 0)
                         throw new InvalidOperationException("NodeVisitPending Run facts are inconsistent.");
                     ValidatePendingNodeVisit();
                     break;
@@ -614,7 +744,7 @@ namespace TinySpire.Run
             }
         }
 
-        /// <summary>确认已完成路径从 Start 起逐层沿冻结普通边前进且没有重复节点。</summary>
+        /// <summary>确认唯一路径从 Start 沿冻结普通边前进，且只在末尾保留已抵达 Boss。</summary>
         private void ValidateCompletedPath()
         {
             if (_pathNodeIds.Count == 0 ||
@@ -634,10 +764,10 @@ namespace TinySpire.Run
                 if (index == 0)
                     continue;
 
-                bool isFinalBossGate = index == _pathNodeIds.Count - 1 &&
-                                       ProgressPhase == RunProgressPhase.BossGateReached &&
-                                       node.Kind == MapNodeKind.Boss;
-                if (!IsCompletableOrdinaryNodeKind(node.Kind) && !isFinalBossGate)
+                bool isFinalBossPathNode = index == _pathNodeIds.Count - 1 &&
+                                           node.Kind == MapNodeKind.Boss &&
+                                           IsBossPathPhase();
+                if (!IsCompletableOrdinaryNodeKind(node.Kind) && !isFinalBossPathNode)
                 {
                     throw new InvalidOperationException(
                         "Run path contains a node kind that cannot be completed ordinarily.");
@@ -651,17 +781,107 @@ namespace TinySpire.Run
             }
         }
 
-        /// <summary>确认已承诺节点是当前位置的普通直接出边 Combat。</summary>
-        private void ValidateCommittedCombat()
+        /// <summary>确认已承诺节点是当前位置的普通直接出边 Combat/Elite，或已经抵达的 Boss。</summary>
+        private void ValidateCommittedBattleNode(bool allowBossAtCurrentNode)
         {
             if (CommittedNodeId == null)
                 throw new InvalidOperationException("The Run phase requires a committed node.");
 
             MapNode committed = MapDefinition.GetNode(CommittedNodeId.Value);
+            bool isBossAtCurrentNode = allowBossAtCurrentNode &&
+                                       committed.Kind == MapNodeKind.Boss &&
+                                       committed.Id == CurrentNodeId;
             bool hasOrdinaryEdge = MapDefinition.Edges.Any(edge =>
                 edge.FromNodeId == CurrentNodeId && edge.ToNodeId == committed.Id);
-            if (committed.Kind != MapNodeKind.Combat || !hasOrdinaryEdge)
-                throw new InvalidOperationException("Committed node is not an ordinary reachable Combat.");
+            bool isRewardBattle = committed.Kind == MapNodeKind.Combat ||
+                                  committed.Kind == MapNodeKind.Elite;
+            if (!isBossAtCurrentNode && (!isRewardBattle || !hasOrdinaryEdge))
+            {
+                throw new InvalidOperationException(
+                    "Committed node is not a reachable Combat, Elite or arrived Boss.");
+            }
+
+            if (ActiveBattle != null &&
+                (ActiveBattle.NodeKind != committed.Kind ||
+                 ActiveBattle.MapNodeContentId != committed.ContentId ||
+                 (committed.Kind != MapNodeKind.Boss &&
+                  ActiveBattle.EncounterTemplateId != committed.ContentId)))
+            {
+                throw new InvalidOperationException(
+                    "Active battle projection does not match its committed map node.");
+            }
+        }
+
+        /// <summary>按 outcome 分类封闭验证终局生命、Battle 身份与节点语义。</summary>
+        private void ValidateTerminalOutcome()
+        {
+            if (Outcome == null || Outcome.RunId != RunId)
+                throw new InvalidOperationException("Terminal Run requires its unique outcome.");
+
+            switch (Outcome.Kind)
+            {
+                case RunOutcomeKind.Victory:
+                    ValidateBattleOutcomeShape(requireBoss: true, requireZeroHealth: false);
+                    break;
+                case RunOutcomeKind.Defeat:
+                    ValidateBattleOutcomeShape(requireBoss: false, requireZeroHealth: true);
+                    break;
+                case RunOutcomeKind.Abandoned:
+                    if (CurrentHealth <= 0 ||
+                        CommittedNodeId != null ||
+                        Outcome.BattleId != null)
+                    {
+                        throw new InvalidOperationException(
+                            "Abandoned outcome must preserve an active stable Run without Battle facts.");
+                    }
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(Outcome.Kind));
+            }
+        }
+
+        /// <summary>验证胜败终局严格绑定最后签发的 Battle，并按需要限定 Boss 与零生命。</summary>
+        private void ValidateBattleOutcomeShape(bool requireBoss, bool requireZeroHealth)
+        {
+            if (CommittedNodeId == null || !Outcome.BattleId.HasValue)
+                throw new InvalidOperationException("Battle outcome requires a committed Battle node.");
+
+            RunBattleId battleId = Outcome.BattleId.Value;
+            if (battleId.RunId != RunId ||
+                battleId.AttemptSequence != BattleAttemptSequence ||
+                battleId.NodeId != CommittedNodeId.Value)
+            {
+                throw new InvalidOperationException(
+                    "Battle outcome does not match the last signed Run battle.");
+            }
+
+            MapNode committed = MapDefinition.GetNode(CommittedNodeId.Value);
+            bool isBoss = committed.Kind == MapNodeKind.Boss && committed.Id == CurrentNodeId;
+            bool isRewardBattle = committed.Kind == MapNodeKind.Combat ||
+                                  committed.Kind == MapNodeKind.Elite;
+            bool hasOrdinaryEdge = MapDefinition.Edges.Any(edge =>
+                edge.FromNodeId == CurrentNodeId && edge.ToNodeId == committed.Id);
+            if ((requireBoss && !isBoss) ||
+                (!requireBoss && !isBoss && (!isRewardBattle || !hasOrdinaryEdge)) ||
+                (requireZeroHealth ? CurrentHealth != 0 : CurrentHealth <= 0))
+            {
+                throw new InvalidOperationException("Terminal battle outcome shape is inconsistent.");
+            }
+        }
+
+        /// <summary>判断最终 Boss 是否只作为已抵达门、Boss 战或其终局保留在唯一完成路径中。</summary>
+        private bool IsBossPathPhase()
+        {
+            if (ProgressPhase == RunProgressPhase.BossGateReached)
+                return true;
+            if (ProgressPhase == RunProgressPhase.InBattle)
+                return CommittedNodeId == CurrentNodeId;
+            if (ProgressPhase != RunProgressPhase.Terminal || Outcome == null)
+                return false;
+
+            return Outcome.Kind == RunOutcomeKind.Abandoned ||
+                   (Outcome.BattleId.HasValue &&
+                    Outcome.BattleId.Value.NodeId == CurrentNodeId);
         }
 
         /// <summary>确认 Pending 访问严格绑定当前位置的普通直接出边及冻结内容。</summary>
@@ -686,7 +906,9 @@ namespace TinySpire.Run
         /// <summary>判断节点是否可在成功结算后进入已完成路径。</summary>
         private static bool IsCompletableOrdinaryNodeKind(MapNodeKind kind)
         {
-            return kind == MapNodeKind.Combat || IsNonCombatNodeKind(kind);
+            return kind == MapNodeKind.Combat ||
+                   kind == MapNodeKind.Elite ||
+                   IsNonCombatNodeKind(kind);
         }
 
         /// <summary>判断节点是否属于本轮支持的四种非战斗访问。</summary>

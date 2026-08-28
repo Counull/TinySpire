@@ -5,6 +5,7 @@ using System.Linq;
 using System.Security;
 using System.Text;
 using TinySpire.Run;
+using TinySpire.Run.Map;
 
 namespace TinySpire.Infrastructure.Persistence
 {
@@ -167,10 +168,18 @@ namespace TinySpire.Infrastructure.Persistence
                             out RunSaveDocument intentDocument,
                             out string intentDetail))
                     {
-                        return RunSaveLoadResult.Succeeded(
-                            intentDocument,
-                            hasPendingTemporaryFile: true,
-                            "Recovered a validated Terminal(Defeat) checkpoint from the terminal intent journal.");
+                        if (TryValidateRecoveredTerminal(
+                                intentDocument,
+                                "terminal intent",
+                                out string successorDetail))
+                        {
+                            return RunSaveLoadResult.Succeeded(
+                                intentDocument,
+                                hasPendingTemporaryFile: true,
+                                "Recovered a validated Run outcome checkpoint from the terminal intent journal.");
+                        }
+
+                        intentDetail = successorDetail;
                     }
 
                     return RunSaveLoadResult.Failed(
@@ -211,10 +220,18 @@ namespace TinySpire.Infrastructure.Persistence
                         out RunSaveDocument terminalDocument,
                         out temporaryDetail))
                 {
-                    return RunSaveLoadResult.Succeeded(
-                        terminalDocument,
-                        hasPendingTemporaryFile: true,
-                        "Recovered a validated Terminal(Defeat) checkpoint from an interrupted commit.");
+                    if (TryValidateRecoveredTerminal(
+                            terminalDocument,
+                            "pending temporary Run save",
+                            out string successorDetail))
+                    {
+                        return RunSaveLoadResult.Succeeded(
+                            terminalDocument,
+                            hasPendingTemporaryFile: true,
+                            "Recovered a validated Run outcome checkpoint from an interrupted commit.");
+                    }
+
+                    temporaryDetail = successorDetail;
                 }
 
                 if (!_fileSystem.FileExists(_saveFilePath))
@@ -270,7 +287,7 @@ namespace TinySpire.Infrastructure.Persistence
             }
         }
 
-        /// <summary>只把完整可解析的 Terminal(Defeat) 文档作为更安全事实返回，并为拒绝原因保留诊断。</summary>
+        /// <summary>只把完整可解析且携带唯一 outcome 的 Terminal 文档作为更安全事实返回。</summary>
         private bool TryReadTerminalCheckpoint(
             string path,
             string artifactName,
@@ -285,14 +302,14 @@ namespace TinySpire.Infrastructure.Persistence
                     _fileSystem.ReadAllText(path));
                 if (read.Status == RunSaveDocumentReadStatus.Success &&
                     read.Document.ProgressPhase == RunSaveProgressPhase.Terminal &&
-                    read.Document.TerminalReason == RunSaveTerminalReason.Defeat)
+                    read.Document.OutcomeKind.HasValue)
                 {
                     terminalDocument = read.Document;
                     return true;
                 }
 
                 detail = read.Status == RunSaveDocumentReadStatus.Success
-                    ? $"The {artifactName} is not a Terminal(Defeat) document."
+                    ? $"The {artifactName} is not a Terminal Run outcome document."
                     : $"The {artifactName} is unusable: {read.Detail}";
                 return false;
             }
@@ -306,6 +323,33 @@ namespace TinySpire.Infrastructure.Persistence
                 detail = $"The {artifactName} could not be read: {exception.Message}";
                 return false;
             }
+        }
+
+        /// <summary>若正式档仍存在，确认恢复物就是同一终局或其封闭合法后继；无正式档时保留清理恢复能力。</summary>
+        private bool TryValidateRecoveredTerminal(
+            RunSaveDocument terminal,
+            string artifactName,
+            out string detail)
+        {
+            detail = string.Empty;
+            if (!_fileSystem.FileExists(_saveFilePath))
+                return true;
+
+            RunSaveDocumentReadResult liveRead = RunSaveDocumentCodec.Read(
+                _fileSystem.ReadAllText(_saveFilePath));
+            if (liveRead.Status != RunSaveDocumentReadStatus.Success)
+            {
+                detail = $"The live Run save cannot validate the {artifactName}: {liveRead.Detail}";
+                return false;
+            }
+            if (DocumentsEqual(liveRead.Document, terminal) ||
+                IsTerminalSuccessor(liveRead.Document, terminal))
+            {
+                return true;
+            }
+
+            detail = $"The {artifactName} is not the legal terminal successor of the live Run.";
+            return false;
         }
 
         /// <summary>用源 RewardPending intent 与正式档唯一判定冻结奖励或已发布结算后继。</summary>
@@ -459,7 +503,7 @@ namespace TinySpire.Infrastructure.Persistence
                             _fileSystem.ReadAllText(_terminalIntentFilePath));
                         if (existingIntentRead.Status == RunSaveDocumentReadStatus.Success &&
                             existingIntentRead.Document.ProgressPhase == RunSaveProgressPhase.Terminal &&
-                            existingIntentRead.Document.TerminalReason == RunSaveTerminalReason.Defeat)
+                            existingIntentRead.Document.OutcomeKind.HasValue)
                         {
                             if (!DocumentsEqual(document, existingIntentRead.Document))
                             {
@@ -479,7 +523,7 @@ namespace TinySpire.Infrastructure.Persistence
                             _fileSystem.ReadAllText(_terminalIntentFilePath));
                         if (intentRead.Status != RunSaveDocumentReadStatus.Success ||
                             intentRead.Document.ProgressPhase != RunSaveProgressPhase.Terminal ||
-                            intentRead.Document.TerminalReason != RunSaveTerminalReason.Defeat ||
+                            !intentRead.Document.OutcomeKind.HasValue ||
                             !DocumentsEqual(document, intentRead.Document))
                         {
                             return RunSaveCommitResult.Failed(
@@ -610,11 +654,17 @@ namespace TinySpire.Infrastructure.Persistence
 
                 if (source == null)
                 {
+                    if (!TryValidateRewardPendingSource(document, out detail))
+                        return false;
+
                     return WriteAndValidateRewardIntent(
                         document,
                         serialized,
                         out detail);
                 }
+
+                if (!TryValidateRewardPendingSource(source, out detail))
+                    return false;
 
                 return true;
             }
@@ -655,6 +705,8 @@ namespace TinySpire.Infrastructure.Persistence
             source = null;
             if (document.ProgressPhase == RunSaveProgressPhase.RewardPending)
             {
+                if (!TryValidateRewardPendingSource(document, out detail))
+                    return false;
                 if (!WriteAndValidateRewardIntent(document, serialized, out detail))
                     return false;
                 source = document;
@@ -672,6 +724,36 @@ namespace TinySpire.Infrastructure.Persistence
             }
 
             detail = "The existing reward intent is unusable and cannot be safely reconstructed.";
+            return false;
+        }
+
+        /// <summary>只允许同一 live Pending 或 live MapReady 的封闭直达战斗奖励后继创建或修复奖励 intent。</summary>
+        private bool TryValidateRewardPendingSource(
+            RunSaveDocument pending,
+            out string detail)
+        {
+            detail = string.Empty;
+            if (!_fileSystem.FileExists(_saveFilePath))
+            {
+                detail = "A new reward checkpoint requires its validated live predecessor.";
+                return false;
+            }
+
+            RunSaveDocumentReadResult liveRead = RunSaveDocumentCodec.Read(
+                _fileSystem.ReadAllText(_saveFilePath));
+            if (liveRead.Status != RunSaveDocumentReadStatus.Success)
+            {
+                detail = "The live Run save cannot validate the reward checkpoint.";
+                return false;
+            }
+
+            if (DocumentsEqual(liveRead.Document, pending) ||
+                IsRewardPendingSuccessor(liveRead.Document, pending))
+            {
+                return true;
+            }
+
+            detail = "The requested reward checkpoint is not the legal successor of the live Run.";
             return false;
         }
 
@@ -773,19 +855,34 @@ namespace TinySpire.Infrastructure.Persistence
                    live.CommittedNodeId == null &&
                    live.PendingCardReward == null &&
                    pending.CommittedNodeId != null &&
-                   pending.PendingCardReward != null &&
-                   live.LegacyDeckTemplateId == pending.LegacyDeckTemplateId &&
-                   RunCardsEqual(live.RunCards, pending.RunCards);
+                    pending.PendingCardReward != null &&
+                    HasDirectOrdinaryBattleCommittedNode(live, pending) &&
+                    live.LegacyDeckTemplateId == pending.LegacyDeckTemplateId &&
+                    RunCardsEqual(live.RunCards, pending.RunCards);
         }
 
-        /// <summary>若存在正式前驱，确认终局只写入失败生命、承诺节点与允许的药水删除。</summary>
+        /// <summary>按正式前驱或同一 durable intent 封闭确认唯一合法终局后继。</summary>
         private bool TryValidateTerminalSuccessor(
             RunSaveDocument terminal,
             out string detail)
         {
             detail = string.Empty;
             if (!_fileSystem.FileExists(_saveFilePath))
-                return true;
+            {
+                if (_fileSystem.FileExists(_terminalIntentFilePath) &&
+                    TryReadTerminalCheckpoint(
+                        _terminalIntentFilePath,
+                        "terminal intent",
+                        out RunSaveDocument existingIntent,
+                        out _) &&
+                    DocumentsEqual(existingIntent, terminal))
+                {
+                    return true;
+                }
+
+                detail = "A new terminal checkpoint requires its validated live predecessor.";
+                return false;
+            }
 
             RunSaveDocumentReadResult liveRead = RunSaveDocumentCodec.Read(
                 _fileSystem.ReadAllText(_saveFilePath));
@@ -805,28 +902,166 @@ namespace TinySpire.Infrastructure.Persistence
             return false;
         }
 
-        /// <summary>严格判断 MapReady 前驱到 Terminal(Defeat) 只允许本战生命与药水消费事实变化。</summary>
+        /// <summary>按 outcome 分类只接受 MapReady/BossGate 的封闭胜败或主动放弃后继。</summary>
         private static bool IsTerminalSuccessor(
             RunSaveDocument live,
             RunSaveDocument terminal)
         {
-            return live != null &&
-                   terminal != null &&
-                   live.ProgressPhase == RunSaveProgressPhase.MapReady &&
-                   terminal.ProgressPhase == RunSaveProgressPhase.Terminal &&
-                   terminal.TerminalReason == RunSaveTerminalReason.Defeat &&
+            if (live == null ||
+                terminal == null ||
+                terminal.ProgressPhase != RunSaveProgressPhase.Terminal ||
+                !terminal.OutcomeKind.HasValue ||
+                live.CommittedNodeId != null ||
+                live.PendingCardReward != null ||
+                terminal.PendingCardReward != null ||
+                live.LegacyDeckTemplateId != terminal.LegacyDeckTemplateId ||
+                !live.PathNodeIds.SequenceEqual(terminal.PathNodeIds) ||
+                !RunCardsEqual(live.RunCards, terminal.RunCards))
+            {
+                return false;
+            }
+
+            switch (terminal.OutcomeKind.Value)
+            {
+                case RunSaveOutcomeKind.Victory:
+                    return IsBossBattleTerminalSuccessor(
+                        live,
+                        terminal,
+                        requireZeroHealth: false);
+                case RunSaveOutcomeKind.Defeat:
+                    return live.ProgressPhase == RunSaveProgressPhase.MapReady
+                        ? IsOrdinaryBattleDefeatSuccessor(live, terminal)
+                        : IsBossBattleTerminalSuccessor(
+                            live,
+                            terminal,
+                            requireZeroHealth: true);
+                case RunSaveOutcomeKind.Abandoned:
+                    return IsAbandonedTerminalSuccessor(live, terminal);
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>只允许 MapReady 战斗检查点到零生命 Defeat，并仅开放稳定药水删除。</summary>
+        private static bool IsOrdinaryBattleDefeatSuccessor(
+            RunSaveDocument live,
+            RunSaveDocument terminal)
+        {
+            return live.ProgressPhase == RunSaveProgressPhase.MapReady &&
                    terminal.CurrentHealth == 0 &&
+                   terminal.CommittedNodeId != null &&
+                   HasDirectOrdinaryBattleCommittedNode(live, terminal) &&
                    HasSameStableRunIdentity(
                        live,
                        terminal,
-                       HoldingsTransitionMode.BattlePotionRemoval) &&
-                   live.PathNodeIds.SequenceEqual(terminal.PathNodeIds) &&
-                   live.CommittedNodeId == null &&
-                   terminal.CommittedNodeId != null &&
-                   live.PendingCardReward == null &&
-                   terminal.PendingCardReward == null &&
-                   live.LegacyDeckTemplateId == terminal.LegacyDeckTemplateId &&
-                   RunCardsEqual(live.RunCards, terminal.RunCards);
+                       HoldingsTransitionMode.BattlePotionRemoval);
+        }
+
+        /// <summary>从 live 配方重建并验证完整路径，只接受当前节点普通直达的 Combat 或 Elite 承诺节点。</summary>
+        private static bool HasDirectOrdinaryBattleCommittedNode(
+            RunSaveDocument live,
+            RunSaveDocument successor)
+        {
+            if (live == null ||
+                successor == null ||
+                string.IsNullOrWhiteSpace(successor.CommittedNodeId))
+            {
+                return false;
+            }
+
+            try
+            {
+                ActMapProfile profile = TinySpireActMapProfiles.GetById(live.MapProfileId);
+                if (profile == null || profile.GeneratorVersion != live.MapGeneratorVersion)
+                    return false;
+
+                MapDefinition map = ActMapGenerator.Generate(profile, live.MapSeed);
+                if (!string.Equals(map.Fingerprint, live.MapFingerprint, StringComparison.Ordinal))
+                    return false;
+
+                MapNodeId startNodeId = map.Nodes.Single(node => node.Kind == MapNodeKind.Start).Id;
+                if (live.PathNodeIds.Count == 0 ||
+                    new MapNodeId(live.PathNodeIds[0]) != startNodeId)
+                {
+                    return false;
+                }
+
+                MapNodeId currentNodeId = startNodeId;
+                for (int index = 1; index < live.PathNodeIds.Count; index++)
+                {
+                    var nextNodeId = new MapNodeId(live.PathNodeIds[index]);
+                    if (!MapReachability.GetSelectableNodeIds(
+                            map,
+                            currentNodeId,
+                            MapTraversalMode.Ordinary)
+                        .Contains(nextNodeId))
+                    {
+                        return false;
+                    }
+
+                    currentNodeId = nextNodeId;
+                }
+
+                var committedNodeId = new MapNodeId(successor.CommittedNodeId);
+                MapNode committedNode = map.GetNode(committedNodeId);
+                if (committedNode.Kind != MapNodeKind.Combat &&
+                    committedNode.Kind != MapNodeKind.Elite)
+                {
+                    return false;
+                }
+
+                return MapReachability.GetSelectableNodeIds(
+                        map,
+                        currentNodeId,
+                        MapTraversalMode.Ordinary)
+                    .Contains(committedNodeId);
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
+            catch (KeyNotFoundException)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>只允许 BossGate 战斗产生胜或败，且 committed node 必须就是已在路径末尾的 Boss。</summary>
+        private static bool IsBossBattleTerminalSuccessor(
+            RunSaveDocument live,
+            RunSaveDocument terminal,
+            bool requireZeroHealth)
+        {
+            if (live.ProgressPhase != RunSaveProgressPhase.BossGateReached ||
+                live.PathNodeIds.Count == 0 ||
+                terminal.CommittedNodeId != live.PathNodeIds[live.PathNodeIds.Count - 1] ||
+                (requireZeroHealth ? terminal.CurrentHealth != 0 : terminal.CurrentHealth <= 0))
+            {
+                return false;
+            }
+
+            return HasSameStableRunIdentity(
+                live,
+                terminal,
+                HoldingsTransitionMode.BattlePotionRemoval);
+        }
+
+        /// <summary>只允许稳定 RunEntry 阶段保留生命、路径、牌组与持有物后产生 Abandoned。</summary>
+        private static bool IsAbandonedTerminalSuccessor(
+            RunSaveDocument live,
+            RunSaveDocument terminal)
+        {
+            bool stableRunEntry = live.ProgressPhase == RunSaveProgressPhase.MapReady ||
+                                  live.ProgressPhase == RunSaveProgressPhase.BossGateReached;
+            return stableRunEntry &&
+                   terminal.CurrentHealth == live.CurrentHealth &&
+                   terminal.CurrentHealth > 0 &&
+                   terminal.CommittedNodeId == null &&
+                   HasSameStableRunIdentity(live, terminal);
         }
 
         /// <summary>严格判断目标是否为源 Pending 的一次选择或跳过结算后继。</summary>
@@ -1136,7 +1371,7 @@ namespace TinySpire.Infrastructure.Persistence
                    left.PathNodeIds.SequenceEqual(right.PathNodeIds) &&
                    left.ProgressPhase == right.ProgressPhase &&
                    left.CommittedNodeId == right.CommittedNodeId &&
-                   left.TerminalReason == right.TerminalReason &&
+                   left.OutcomeKind == right.OutcomeKind &&
                    PendingCardRewardsEqual(left.PendingCardReward, right.PendingCardReward) &&
                    PendingNodeVisitsEqual(left.PendingNodeVisit, right.PendingNodeVisit);
         }

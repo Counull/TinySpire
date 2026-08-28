@@ -7,6 +7,13 @@ using TinySpire.Core;
 
 namespace TinySpire.Battle
 {
+    /// <summary>Boss 在单场 Battle 内唯一可观察的阶段事实。</summary>
+    public enum BattleBossPhase
+    {
+        PhaseOne = 1,
+        PhaseTwo = 2,
+    }
+
     /// <summary>下一意图不存在合法候选时使用的稳定、首次写入前故障类型。</summary>
     internal sealed class BattleNoLegalNextIntentException : InvalidOperationException
     {
@@ -152,20 +159,35 @@ namespace TinySpire.Battle
         /// <summary>敌人运行时标识到当前行为模板标识的只读映射。</summary>
         public IReadOnlyDictionary<CombatantId, int> BehaviorIdsByEnemy { get; }
 
-        /// <summary>复制完整映射并冻结，防止已发布意图被后续修改。</summary>
-        internal EnemyIntentLayoutData(IEnumerable<KeyValuePair<CombatantId, int>> behaviorIdsByEnemy)
+        /// <summary>Boss 敌人运行时标识到当前战斗阶段的只读映射；普通遭遇为空。</summary>
+        public IReadOnlyDictionary<CombatantId, BattleBossPhase> BossPhasesByEnemy { get; }
+
+        /// <summary>复制完整意图与 Boss 阶段映射并冻结，防止已发布事实被后续修改。</summary>
+        internal EnemyIntentLayoutData(
+            IEnumerable<KeyValuePair<CombatantId, int>> behaviorIdsByEnemy,
+            IEnumerable<KeyValuePair<CombatantId, BattleBossPhase>> bossPhasesByEnemy = null)
         {
             if (behaviorIdsByEnemy == null)
                 throw new ArgumentNullException(nameof(behaviorIdsByEnemy));
 
             BehaviorIdsByEnemy = new ReadOnlyDictionary<CombatantId, int>(
                 new Dictionary<CombatantId, int>(behaviorIdsByEnemy));
+            BossPhasesByEnemy = new ReadOnlyDictionary<CombatantId, BattleBossPhase>(
+                bossPhasesByEnemy == null
+                    ? new Dictionary<CombatantId, BattleBossPhase>()
+                    : new Dictionary<CombatantId, BattleBossPhase>(bossPhasesByEnemy));
         }
 
         /// <summary>读取指定敌人的当前行为模板标识。</summary>
         public bool TryGetBehaviorId(CombatantId enemyId, out int behaviorId)
         {
             return BehaviorIdsByEnemy.TryGetValue(enemyId, out behaviorId);
+        }
+
+        /// <summary>读取指定敌人是否为 Boss，以及其当前 Battle 阶段。</summary>
+        public bool TryGetBossPhase(CombatantId enemyId, out BattleBossPhase phase)
+        {
+            return BossPhasesByEnemy.TryGetValue(enemyId, out phase);
         }
     }
 
@@ -260,6 +282,8 @@ namespace TinySpire.Battle
         private readonly GameRandom _random;
         private readonly Dictionary<CombatantId, EnemyBehaviorHistory> _historyByEnemy;
         private readonly ReactiveProperty<EnemyIntentLayoutData> _layout;
+        private readonly CombatantId? _bossEnemyId;
+        private readonly int _phaseTwoBehaviorGroupId;
 
         /// <summary>全部敌人当前意图的完整只读响应式快照。</summary>
         public ReadOnlyReactiveProperty<EnemyIntentLayoutData> Layout { get; }
@@ -274,7 +298,8 @@ namespace TinySpire.Battle
             BattleCombatantsData combatants,
             IReadOnlyList<CombatantId> enemyCombatantIdsInEncounterOrder,
             Tables tables,
-            uint battleSeed)
+            uint battleSeed,
+            int phaseTwoBehaviorGroupId = 0)
         {
             _combatants = combatants ?? throw new ArgumentNullException(nameof(combatants));
             _tables = tables ?? throw new ArgumentNullException(nameof(tables));
@@ -282,12 +307,24 @@ namespace TinySpire.Battle
                 throw new ArgumentNullException(nameof(enemyCombatantIdsInEncounterOrder));
             if (battleSeed == 0)
                 throw new ArgumentOutOfRangeException(nameof(battleSeed));
+            if (phaseTwoBehaviorGroupId < 0)
+                throw new ArgumentOutOfRangeException(nameof(phaseTwoBehaviorGroupId));
+            if (phaseTwoBehaviorGroupId > 0 && enemyCombatantIdsInEncounterOrder.Count != 1)
+            {
+                throw new InvalidOperationException(
+                    "A phase-two behavior group requires exactly one enemy in the encounter.");
+            }
 
             _random = new GameRandom(DeriveRandomSeed(battleSeed));
             _historyByEnemy = new Dictionary<CombatantId, EnemyBehaviorHistory>(
                 enemyCombatantIdsInEncounterOrder.Count);
+            _phaseTwoBehaviorGroupId = phaseTwoBehaviorGroupId;
+            _bossEnemyId = phaseTwoBehaviorGroupId > 0
+                ? enemyCombatantIdsInEncounterOrder[0]
+                : null;
             var initialBehaviorIds = new Dictionary<CombatantId, int>(
                 enemyCombatantIdsInEncounterOrder.Count);
+            var initialBossPhases = new Dictionary<CombatantId, BattleBossPhase>();
 
             foreach (CombatantId enemyId in enemyCombatantIdsInEncounterOrder)
             {
@@ -300,8 +337,14 @@ namespace TinySpire.Battle
                 _historyByEnemy.Add(enemyId, history);
             }
 
+            if (_bossEnemyId.HasValue)
+            {
+                ValidateBehaviorGroup(_phaseTwoBehaviorGroupId);
+                initialBossPhases.Add(_bossEnemyId.Value, BattleBossPhase.PhaseOne);
+            }
+
             _layout = new ReactiveProperty<EnemyIntentLayoutData>(
-                new EnemyIntentLayoutData(initialBehaviorIds));
+                new EnemyIntentLayoutData(initialBehaviorIds, initialBossPhases));
             Layout = _layout.ToReadOnlyReactiveProperty();
         }
 
@@ -389,8 +432,27 @@ namespace TinySpire.Battle
 
             try
             {
+                int nextBehaviorGroupId = enemy.BehaviorGroupId;
+                var nextBossPhases = new Dictionary<CombatantId, BattleBossPhase>(
+                    snapshot.Layout.BossPhasesByEnemy);
+                if (_bossEnemyId.HasValue && _bossEnemyId.Value == snapshot.EnemyId)
+                {
+                    if (!snapshot.Layout.TryGetBossPhase(snapshot.EnemyId, out BattleBossPhase currentPhase))
+                    {
+                        return FailedCompletion(
+                            BattleCommandQueueFaultReason.PreparedInvariantViolation);
+                    }
+
+                    if (currentPhase == BattleBossPhase.PhaseOne)
+                        nextBossPhases[snapshot.EnemyId] = BattleBossPhase.PhaseTwo;
+                    else if (currentPhase != BattleBossPhase.PhaseTwo)
+                        return FailedCompletion(BattleCommandQueueFaultReason.PreparedInvariantViolation);
+
+                    nextBehaviorGroupId = _phaseTwoBehaviorGroupId;
+                }
+
                 int nextBehaviorId = SelectNextBehavior(
-                    enemy.BehaviorGroupId,
+                    nextBehaviorGroupId,
                     nextHistory,
                     preparedRandom);
                 var nextBehaviorIds = new Dictionary<CombatantId, int>(
@@ -417,7 +479,7 @@ namespace TinySpire.Battle
                         nextHistory,
                         nextBehaviorId,
                         preparedRandom.State,
-                        new EnemyIntentLayoutData(nextBehaviorIds),
+                        new EnemyIntentLayoutData(nextBehaviorIds, nextBossPhases),
                         settlement));
             }
             catch (BattleNoLegalNextIntentException)

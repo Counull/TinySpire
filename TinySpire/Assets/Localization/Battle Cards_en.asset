@@ -2702,7 +2702,7 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 6047014798913549
-    m_Localized: Node cleared; later content is not connected yet
+    m_Localized: Node resolved. Choose the next route.
     m_Metadata:
       m_Items: []
   - m_Id: 6047014798913550
@@ -2731,11 +2731,11 @@ MonoBehaviour:
     m_Metadata:
       m_Items: []
   - m_Id: 6156690051985410
-    m_Localized: The current save will be deleted before starting a new Run.
+    m_Localized: This Run will end as Abandoned and show its result.
     m_Metadata:
       m_Items: []
   - m_Id: 6156690051985411
-    m_Localized: Abandon Run
+    m_Localized: End Run
     m_Metadata:
       m_Items: []
   - m_Id: 6156690051985412
@@ -2915,6 +2915,46 @@ MonoBehaviour:
     m_Metadata:
       m_Items:
       - rid: 3318493899348770842
+  - m_Id: 10407441649528832
+    m_Localized: Iron Sentinel
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10407441720832000
+    m_Localized: Chrono Warden
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10407441720832001
+    m_Localized: Phase I
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10407441720832002
+    m_Localized: Phase II
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10407441720832003
+    m_Localized: Elite
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10407441720832004
+    m_Localized: Boss
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10407441720832005
+    m_Localized: Act Complete
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10407441720832006
+    m_Localized: Defeated by the Boss
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10407441720832007
+    m_Localized: Run Abandoned
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10407441720832008
+    m_Localized: Return to Main Menu
+    m_Metadata:
+      m_Items: []
   references:
     version: 2
     RefIds:

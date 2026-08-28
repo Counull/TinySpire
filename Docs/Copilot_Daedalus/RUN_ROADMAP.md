@@ -4,7 +4,7 @@ owner: Daedalus
 page_type: roadmap
 lifecycle: active
 created: 2026-08-14
-updated: 2026-08-27
+updated: 2026-08-28
 status_source: STATUS.md
 predecessor: ROADMAP.md
 note: 本文件承担 BattleScene 之后的 Run 阶段结果、候选切片、依赖与门禁；任何阶段或切片都不因出现在本文而获得实施授权。
@@ -61,10 +61,10 @@ Run MVP 的终点不是“把所有 STS 内容做完”，而是至少用一个�
 | G4 | `completed` | G4-A～D `verified` | 胜利后选择/跳过冻结奖励，Run 牌组变化真实进入下一战 | 奖励不重随机、不重复领取，逐卡实例与升级事实可保存 | G1 结果 bridge、G2 schema；节点绑定时依赖 G3 |
 | G5 | `completed` | G5-A～D `verified` | 获得并跨战使用至少一个遗物和一个药水 | 触发顺序稳定、消费 exactly-once、保存/重开语义明确 | G2 持久化、G4 奖励/实例 seam |
 | G6 | `completed` | G6-A～E `verified` | 商店、事件、休息点、宝箱各有一个可完成样本 | 候选冻结、结算原子、重进/读档不可重复获利 | G2 经济事实、G3 节点契约、所需 G4/G5 seam |
-| G7 | `not-started` | G7-A `candidate` | 从新 Run 贯通一个 Act、一个精英和一个 Boss，再进入 Run 终局 | 单 Act 全链可达且内容门禁拒绝坏引用，终局只结算一次 | G3 地图/Act 结构与 G4～G6 内容流程 |
+| G7 | `completed` | G7-A～E `verified` | 从新 Run 贯通一个 Act、一个精英和一个 Boss，再进入 Run 终局 | 单 Act 全链可达且内容门禁拒绝坏引用，终局只结算一次 | G3 地图/Act 结构与 G4～G6 内容流程 |
 | G8 | `not-started` | G8-A `candidate` | 设置、教程、可访问性、正式表现、统计和发布验证形成产品闭环 | 目标 Player build 完整 Run 通过，兼容/性能/输入/分辨率矩阵有证据 | G1～G7 的产品关键验收 |
 
-当前事实：G1～G6 已完成。G5/G6 已取得 `Sync and Build All`、完整 EditMode 1348/1348、最新 BuildLayout、Packed Play schema v5 mixed route 与 Console 0 的本轮证据，阶段为 `completed`、切片为 `verified`；先前 Unity license code 198 阻塞已经解除。G7 仍为 `not-started`，真实 Boss 战、Boss 阶段与最终 Run 结算未获得授权；联网和多人不属于当前 G1～G8 Run MVP。
+当前事实：G1～G7 已完成。G7 终审 RED 505/510 后已取得 Rider problems 0、定向 510/510、完整 EditMode 1410/1410、`Sync and Build All`、最新 BuildLayout 七个真实 bundle 目标，以及 Packed Play Victory/Abandoned/Defeat 三条 schema v6 终局产品链，阶段为 `completed`、G7-A～E 均为 `verified`。权威事实见 [G7 验收记录](06_testing/2026-08-28-g7-single-act-elite-boss-outcome.md)。G8 仍为 `not-started`，G8-A 只是 `candidate`，没有获得 Grill、计划或实施授权；联网和多人不属于当前 G1～G8 Run MVP。
 
 ## 4. 已完成基础 · G1～G3（按需历史）
 
@@ -142,6 +142,8 @@ G1～G3 的完整计划、RED→GREEN、BuildLayout 与 Packed Play 细节保留
 
 **明确不做：** 多 Act、Ascension、每日挑战、多个真实 Boss Encounter / 多 Boss 战内容、通用 Boss DSL、全量内容目录、联网排行榜和多人；G3 已冻结的多候选 Boss 身份与多个 Boss 终点不属于此排除项。
 
+**当前状态（2026-08-28）：** G7-A～E 已完成并 `verified`。生产 profile `tinyspire.act1.g7.v1` 已从普通战斗、四类非战斗节点、第二场普通战斗、Elite 贯通唯一真实 Boss，并以 schema v6 分别闭合 Victory、Defeat 与 Abandoned；完整 EditMode、BuildLayout、Packed Play 三分支与 Console 0 的权威证据见 [G7 验收记录](06_testing/2026-08-28-g7-single-act-elite-boss-outcome.md)。
+
 ## 9. G8 · 产品化与发布门禁
 
 **阶段结果：** 在不改变 Run/Battle 权威边界的前提下，把完整单 Act 竖切收口成可发布、可复验的产品基线。
@@ -173,6 +175,6 @@ G1～G3 的完整计划、RED→GREEN、BuildLayout 与 Packed Play 细节保留
 
 ## 11. 下一步
 
-G3「确定性尖塔式 Act 地图」、G4「战斗奖励、Run 牌组与卡牌实例」以及 G5/G6「持有物与非战斗节点」均已完成并 `verified`。G5/G6 的完整 EditMode、`Sync and Build All`、Local Addressables/BuildLayout、Packed Play mixed route 与 Console 0 证据见 [G5/G6 验收](06_testing/2026-08-27-g5-g6-run-holdings-noncombat-nodes.md)。
+G3「确定性尖塔式 Act 地图」、G4「战斗奖励、Run 牌组与卡牌实例」、G5/G6「持有物与非战斗节点」以及 G7「单 Act、精英、Boss 与 Run 终局」均已完成并 `verified`。G7 的完整 EditMode、`Sync and Build All`、BuildLayout、Packed Play 三种终局与 Console 0 证据见 [G7 验收](06_testing/2026-08-28-g7-single-act-elite-boss-outcome.md)。
 
-当前立即停在 G6，没有实施中的 Run 切片。G7 仍为 `not-started / candidate`；真实 Boss/Boss 阶段、RunOutcome、Platform Save Spike、平台 SDK、云存档与多槽均未获授权，任何新范围仍须重新经过窄计划、明确授权和独立验收。
+当前没有已授权的实施中切片。G8-A 仍只是 `candidate`；进入设置、教程、可访问性、正式表现、统计或发布验证前，必须重新执行局部 Grill、形成窄计划并取得当前用户明确授权。G7 完成和 Git 交付授权都不自动授权 G8、Platform Save Spike、平台 SDK、云存档或多槽。

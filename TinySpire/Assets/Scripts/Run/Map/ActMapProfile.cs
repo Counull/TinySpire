@@ -4,7 +4,7 @@ using System.Collections.ObjectModel;
 
 namespace TinySpire.Run.Map
 {
-    /// <summary>G6 profile v1 由生成器 v2 使用的固定单 Slot 可游玩层种类与内容身份。</summary>
+    /// <summary>生成器 v2 使用的固定单 Slot 可游玩层种类与内容身份。</summary>
     public sealed class ActMapPlayableLayer
     {
         /// <summary>该层唯一节点的明确玩法种类。</summary>
@@ -13,10 +13,11 @@ namespace TinySpire.Run.Map
         /// <summary>该层唯一节点冻结的正整数内容身份。</summary>
         public int ContentId { get; }
 
-        /// <summary>冻结一个 Combat 或明确非战斗节点层。</summary>
+        /// <summary>冻结一个普通战斗、精英战斗或明确非战斗节点层。</summary>
         public ActMapPlayableLayer(MapNodeKind kind, int contentId)
         {
             if (kind != MapNodeKind.Combat &&
+                kind != MapNodeKind.Elite &&
                 kind != MapNodeKind.Rest &&
                 kind != MapNodeKind.Chest &&
                 kind != MapNodeKind.Shop &&
@@ -49,10 +50,10 @@ namespace TinySpire.Run.Map
         /// <summary>普通战斗层从 Start 后开始的固定 Slot 数。</summary>
         public IReadOnlyList<int> NormalLayerSlotCounts => _normalLayerSlotCounts;
 
-        /// <summary>生成普通节点时允许冻结的遭遇身份。</summary>
+        /// <summary>生成普通或精英战斗节点时允许冻结的去重 Encounter 身份。</summary>
         public IReadOnlyList<int> EncounterIds => _encounterIds;
 
-        /// <summary>G6 profile v1 按路线顺序冻结的单 Slot 可游玩层；legacy G3 v1 为空。</summary>
+        /// <summary>生成器 v2 按路线顺序冻结的单 Slot 可游玩层；legacy G3 v1 为空。</summary>
         public IReadOnlyList<ActMapPlayableLayer> PlayableLayers => _playableLayers;
 
         /// <summary>当前 Act 允许按地图 seed 抽取候选的去重 Boss 池。</summary>
@@ -116,11 +117,12 @@ namespace TinySpire.Run.Map
                         "Playable layers cannot contain null entries.",
                         nameof(playableLayers));
                 frozenLayers[index] = layer;
-                if (layer.Kind == MapNodeKind.Combat && seenEncounterIds.Add(layer.ContentId))
+                if ((layer.Kind == MapNodeKind.Combat || layer.Kind == MapNodeKind.Elite) &&
+                    seenEncounterIds.Add(layer.ContentId))
                     encounterIds.Add(layer.ContentId);
             }
             if (encounterIds.Count == 0)
-                throw new ArgumentException("A mixed profile requires at least one Combat layer.", nameof(playableLayers));
+                throw new ArgumentException("A mixed profile requires at least one Combat or Elite layer.", nameof(playableLayers));
 
             ProfileId = profileId;
             GeneratorVersion = ActMapGenerator.NewRunG6Version;
@@ -194,11 +196,12 @@ namespace TinySpire.Run.Map
         }
     }
 
-    /// <summary>同时保留 G3 profile v1/生成器 v1 与 G6 profile v1/生成器 v2 的稳定目录。</summary>
+    /// <summary>同时保留 G3/G6/G7 profile 与其生成器版本的稳定目录。</summary>
     public static class TinySpireActMapProfiles
     {
         public const string LegacyG3V1ProfileId = "tinyspire.act1.g3.v1";
         public const string NewRunG6V1ProfileId = "tinyspire.act1.g6.v1";
+        public const string NewRunG7V1ProfileId = "tinyspire.act1.g7.v1";
 
         /// <summary>保留既有测试与旧调用方使用的 G3 profile 常量。</summary>
         public const string CurrentProfileId = LegacyG3V1ProfileId;
@@ -226,11 +229,30 @@ namespace TinySpire.Run.Map
             bossCandidateCount: 2,
             bossEndpointCount: 3);
 
+        private static readonly ActMapProfile NewRunG7Profile = new ActMapProfile(
+            NewRunG7V1ProfileId,
+            playableLayers: new[]
+            {
+                new ActMapPlayableLayer(MapNodeKind.Combat, 5001),
+                new ActMapPlayableLayer(MapNodeKind.Rest, 7101),
+                new ActMapPlayableLayer(MapNodeKind.Chest, 7201),
+                new ActMapPlayableLayer(MapNodeKind.Shop, 7301),
+                new ActMapPlayableLayer(MapNodeKind.Event, 7401),
+                new ActMapPlayableLayer(MapNodeKind.Combat, 5001),
+                new ActMapPlayableLayer(MapNodeKind.Elite, 5101),
+            },
+            enabledBossIds: new[] { 9001, 9002, 9003 },
+            bossCandidateCount: 2,
+            bossEndpointCount: 3);
+
         /// <summary>读取必须逐字节兼容恢复的 legacy G3 v1 profile。</summary>
         public static ActMapProfile LegacyG3V1 => LegacyProfile;
 
         /// <summary>读取生产新 Run 直接使用的 G6 profile v1 mixed 配方。</summary>
         public static ActMapProfile NewRunG6V1 => NewRunProfile;
+
+        /// <summary>读取包含一个精英节点与真实 Boss 内容映射的 G7 单 Act profile。</summary>
+        public static ActMapProfile NewRunG7V1 => NewRunG7Profile;
 
         /// <summary>保留既有 G3 测试调用方的兼容别名，不作为生产新 Run 选择器。</summary>
         public static ActMapProfile Current => LegacyProfile;
@@ -242,6 +264,8 @@ namespace TinySpire.Run.Map
                 return LegacyProfile;
             if (string.Equals(profileId, NewRunG6V1ProfileId, StringComparison.Ordinal))
                 return NewRunProfile;
+            if (string.Equals(profileId, NewRunG7V1ProfileId, StringComparison.Ordinal))
+                return NewRunG7Profile;
             return null;
         }
     }

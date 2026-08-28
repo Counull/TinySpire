@@ -33,6 +33,8 @@ public sealed class RunEntryLocalizationG1ATests
         "run.entry.hero.future_slot",
         "run.entry.map.title",
         "run.entry.map.battle_node",
+        "run.entry.map.elite_node",
+        "run.entry.map.boss_node",
         "run.entry.map.cleared",
         "run.entry.map.health",
         "run.entry.reward.title",
@@ -62,6 +64,10 @@ public sealed class RunEntryLocalizationG1ATests
         "run.entry.abandon.title",
         "run.entry.abandon.message",
         "run.entry.abandon.confirm",
+        "run.entry.outcome.victory",
+        "run.entry.outcome.boss_defeat",
+        "run.entry.outcome.abandoned",
+        "run.entry.outcome.return_to_menu",
         "run.entry.save.issue.title",
         "run.entry.save.issue.invalid_json",
         "run.entry.save.issue.invalid_document",
@@ -97,7 +103,9 @@ public sealed class RunEntryLocalizationG1ATests
         new object[] { "run.entry.hero.future_slot", "Future Team Slot", "未来队伍槽位", false },
         new object[] { "run.entry.map.title", "Act Map", "Act 地图", false },
         new object[] { "run.entry.map.battle_node", "Encounter", "遭遇", false },
-        new object[] { "run.entry.map.cleared", "Node cleared; later content is not connected yet", "节点已清除、后续内容未接入", false },
+        new object[] { "run.entry.map.elite_node", "Elite", "精英", false },
+        new object[] { "run.entry.map.boss_node", "Boss", "首领", false },
+        new object[] { "run.entry.map.cleared", "Node resolved. Choose the next route.", "节点已结算，请选择下一条路线。", false },
         new object[] { "run.entry.map.health", "HP {current}/{max}", "生命 {current}/{max}", true },
         new object[] { "run.entry.reward.title", "Card Reward", "卡牌奖励", false },
         new object[] { "run.entry.reward.skip", "Skip", "跳过", false },
@@ -124,8 +132,12 @@ public sealed class RunEntryLocalizationG1ATests
         new object[] { "run.entry.menu.continue", "Continue", "继续游戏", false },
         new object[] { "run.entry.common.cancel", "Cancel", "取消", false },
         new object[] { "run.entry.abandon.title", "Abandon current Run?", "放弃当前 Run？", false },
-        new object[] { "run.entry.abandon.message", "The current save will be deleted before starting a new Run.", "开始新 Run 前会删除当前存档。", false },
-        new object[] { "run.entry.abandon.confirm", "Abandon Run", "放弃 Run", false },
+        new object[] { "run.entry.abandon.message", "This Run will end as Abandoned and show its result.", "本局将以主动放弃结算并显示结果。", false },
+        new object[] { "run.entry.abandon.confirm", "End Run", "结束本局", false },
+        new object[] { "run.entry.outcome.victory", "Act Complete", "章节完成", false },
+        new object[] { "run.entry.outcome.boss_defeat", "Defeated by the Boss", "败于首领", false },
+        new object[] { "run.entry.outcome.abandoned", "Run Abandoned", "本局已放弃", false },
+        new object[] { "run.entry.outcome.return_to_menu", "Return to Main Menu", "返回主菜单", false },
         new object[] { "run.entry.save.issue.title", "Save Unavailable", "存档不可用", false },
         new object[] { "run.entry.save.issue.invalid_json", "The save file contains invalid JSON. Continue is unavailable.", "存档不是有效的 JSON，无法继续游戏。", false },
         new object[] { "run.entry.save.issue.invalid_document", "The save data is incomplete or invalid. Continue is unavailable.", "存档内容不完整或无效，无法继续游戏。", false },
@@ -146,7 +158,7 @@ public sealed class RunEntryLocalizationG1ATests
         new object[] { "battle.hero.test_warrior.name", "Warrior", "战士", false },
     };
 
-    /// <summary>构建门禁必须显式冻结入口运行时会读取的全部 60 个键。</summary>
+    /// <summary>G7 构建门禁必须显式冻结入口运行时会读取的全部 66 个键。</summary>
     [Test]
     public void LocalizationBuildGate_RequiresAllRuntimeRunEntryKeys()
     {
@@ -156,7 +168,7 @@ public sealed class RunEntryLocalizationG1ATests
 
         Assert.That(field, Is.Not.Null);
         var actual = (string[])field.GetValue(null);
-        Assert.That(actual, Has.Length.EqualTo(60));
+        Assert.That(actual, Has.Length.EqualTo(ExpectedRunEntryKeys.Length));
         Assert.That(actual, Is.EquivalentTo(ExpectedRunEntryKeys));
     }
 

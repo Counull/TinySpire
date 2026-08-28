@@ -64,7 +64,7 @@ public sealed class AtomicJsonRunSaveStoreTests
             RunSaveProgressPhase.RewardPending,
             currentHealth: 41);
 
-        RunSaveCommitResult commit = store.Commit(document);
+        RunSaveCommitResult commit = CommitRewardPendingFromStablePredecessor(store, document);
         RunSaveLoadResult load = store.Load();
 
         Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.Success));
@@ -75,6 +75,24 @@ public sealed class AtomicJsonRunSaveStoreTests
         Assert.That(load.Document.PendingCardReward.CandidateTemplateIds,
             Is.EqualTo(new[] { 3105, 3123, 3157 }));
         Assert.That(File.Exists(GetRewardIntentPath()), Is.True);
+    }
+
+    /// <summary>没有可验证 live MapReady 前驱时不得把任意 RewardPending 作为首个检查点写入单槽。</summary>
+    [Test]
+    public void Commit_RewardPendingWithoutLivePredecessor_ReturnsInvalidDocument()
+    {
+        var store = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument pending = CreateDocument(
+            "18181818-bbbb-cccc-dddd-282828282828",
+            RunSaveProgressPhase.RewardPending,
+            currentHealth: 41);
+
+        RunSaveCommitResult commit = store.Commit(pending);
+        RunSaveLoadResult load = store.Load();
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.InvalidDocument));
+        Assert.That(load.Status, Is.EqualTo(RunSaveLoadStatus.NotFound));
+        Assert.That(File.Exists(GetRewardIntentPath()), Is.False);
     }
 
     /// <summary>冻结奖励在通用临时档写入前失败时，冷启动仍必须从 durable intent 恢复同一候选。</summary>
@@ -118,17 +136,19 @@ public sealed class AtomicJsonRunSaveStoreTests
             RunSaveProgressPhase.MapReady,
             currentHealth: 80);
         Assert.That(initialStore.Commit(oldLive).Status, Is.EqualTo(RunSaveCommitStatus.Success));
-        RunSaveDocument pending = CreateDocumentWithHoldingsDrift(
-            CreateDocument(
-                oldLive.RunId,
-                RunSaveProgressPhase.RewardPending,
-                currentHealth: 43),
-            HoldingsDrift.Gold);
+        RunSaveDocument pending = CreateDocument(
+            oldLive.RunId,
+            RunSaveProgressPhase.RewardPending,
+            currentHealth: 43);
         var failingStore = new AtomicJsonRunSaveStore(
             _testDirectory,
             new TemporaryWriteFailingFileSystem(GetTemporaryPath()));
 
         RunSaveCommitResult commit = failingStore.Commit(pending);
+        RunSaveDocument driftedLive = CreateDocumentWithHoldingsDrift(
+            oldLive,
+            HoldingsDrift.Gold);
+        File.WriteAllText(GetLivePath(), RunSaveDocumentCodec.Serialize(driftedLive));
         RunSaveLoadResult coldLoad = new AtomicJsonRunSaveStore(_testDirectory).Load();
 
         Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.IoFailure));
@@ -238,7 +258,9 @@ public sealed class AtomicJsonRunSaveStoreTests
             "1a1a1a1a-aaaa-bbbb-cccc-2a2a2a2a2a2a",
             RunSaveProgressPhase.RewardPending,
             currentHealth: 39);
-        Assert.That(initialStore.Commit(pending).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(
+            CommitRewardPendingFromStablePredecessor(initialStore, pending).Status,
+            Is.EqualTo(RunSaveCommitStatus.Success));
         RunSaveDocument settled = CreateSettledRewardDocument(pending, selectedTemplateId: 3123);
         var failingStore = new AtomicJsonRunSaveStore(
             _testDirectory,
@@ -266,7 +288,9 @@ public sealed class AtomicJsonRunSaveStoreTests
             currentHealth: 41,
             attachedRelicTemplateId: 8001,
             attachedPotionTemplateId: 9001);
-        Assert.That(store.Commit(pending).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(
+            CommitRewardPendingFromStablePredecessor(store, pending).Status,
+            Is.EqualTo(RunSaveCommitStatus.Success));
         RunSaveDocument settled = CreateSettledRewardDocument(pending, selectedTemplateId: null);
 
         RunSaveCommitResult commit = store.Commit(settled);
@@ -302,7 +326,9 @@ public sealed class AtomicJsonRunSaveStoreTests
             currentHealth: 42,
             attachedRelicTemplateId: 8001,
             attachedPotionTemplateId: 9001);
-        Assert.That(store.Commit(pending).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(
+            CommitRewardPendingFromStablePredecessor(store, pending).Status,
+            Is.EqualTo(RunSaveCommitStatus.Success));
         RunSaveDocument drifted = CreateAttachedLootSettlementDrift(
             CreateSettledRewardDocument(pending, selectedTemplateId: null),
             drift);
@@ -328,7 +354,9 @@ public sealed class AtomicJsonRunSaveStoreTests
             currentHealth: 43,
             attachedRelicTemplateId: 8001,
             attachedPotionTemplateId: null);
-        Assert.That(store.Commit(pending).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(
+            CommitRewardPendingFromStablePredecessor(store, pending).Status,
+            Is.EqualTo(RunSaveCommitStatus.Success));
         RunSaveDocument settled = CreateSettledRewardDocument(pending, selectedTemplateId: null);
         JObject raw = JObject.Parse(RunSaveDocumentCodec.Serialize(settled));
         ((JArray)raw["potions"]).Add(new JObject
@@ -360,7 +388,9 @@ public sealed class AtomicJsonRunSaveStoreTests
             ["templateId"] = 5103,
         });
         RunSaveDocument pending = RequireParseableDocument(pendingRaw, "full potion pending");
-        Assert.That(store.Commit(pending).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(
+            CommitRewardPendingFromStablePredecessor(store, pending).Status,
+            Is.EqualTo(RunSaveCommitStatus.Success));
         RunSaveDocument missingTail = CreateRewardSettlementWithoutAttachedLoot(pending);
 
         RunSaveCommitResult commit = store.Commit(missingTail);
@@ -381,7 +411,9 @@ public sealed class AtomicJsonRunSaveStoreTests
             attachedPotionTemplateId: null)));
         pendingRaw["relics"][1]["instanceId"] = int.MaxValue;
         RunSaveDocument pending = RequireParseableDocument(pendingRaw, "overflow relic pending");
-        Assert.That(store.Commit(pending).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(
+            CommitRewardPendingFromStablePredecessor(store, pending).Status,
+            Is.EqualTo(RunSaveCommitStatus.Success));
         JObject targetRaw = JObject.Parse(RunSaveDocumentCodec.Serialize(
             CreateRewardSettlementWithoutAttachedLoot(pending)));
         ((JArray)targetRaw["relics"]).Add(new JObject
@@ -412,7 +444,9 @@ public sealed class AtomicJsonRunSaveStoreTests
             "1b1b1b1b-aaaa-bbbb-cccc-2b2b2b2b2b2b",
             RunSaveProgressPhase.RewardPending,
             currentHealth: 47);
-        Assert.That(store.Commit(pending).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(
+            CommitRewardPendingFromStablePredecessor(store, pending).Status,
+            Is.EqualTo(RunSaveCommitStatus.Success));
         RunSaveDocument driftedSettlement = CreateDocumentWithHoldingsDrift(
             CreateSettledRewardDocument(pending, selectedTemplateId: null),
             drift);
@@ -439,7 +473,9 @@ public sealed class AtomicJsonRunSaveStoreTests
             "1d1d1d1d-aaaa-bbbb-cccc-2d2d2d2d2d2d",
             RunSaveProgressPhase.RewardPending,
             currentHealth: 58);
-        Assert.That(store.Commit(pending).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(
+            CommitRewardPendingFromStablePredecessor(store, pending).Status,
+            Is.EqualTo(RunSaveCommitStatus.Success));
         RunSaveDocument settled = CreateSettledRewardDocument(pending, selectedTemplateId: null);
 
         RunSaveCommitResult commit = store.Commit(settled);
@@ -464,7 +500,9 @@ public sealed class AtomicJsonRunSaveStoreTests
             "1b1b1b1b-aaaa-bbbb-cccc-2b2b2b2b2b2b",
             RunSaveProgressPhase.RewardPending,
             currentHealth: 51);
-        Assert.That(initialStore.Commit(pending).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(
+            CommitRewardPendingFromStablePredecessor(initialStore, pending).Status,
+            Is.EqualTo(RunSaveCommitStatus.Success));
         RunSaveDocument settled = CreateSettledRewardDocument(pending, selectedTemplateId: 3105);
         var failingStore = new AtomicJsonRunSaveStore(
             _testDirectory,
@@ -492,7 +530,9 @@ public sealed class AtomicJsonRunSaveStoreTests
             "1b1b1b1b-bbbb-cccc-dddd-2b2b2b2b2b2b",
             RunSaveProgressPhase.RewardPending,
             currentHealth: 51);
-        Assert.That(initialStore.Commit(pending).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(
+            CommitRewardPendingFromStablePredecessor(initialStore, pending).Status,
+            Is.EqualTo(RunSaveCommitStatus.Success));
         RunSaveDocument settled = CreateSettledRewardDocument(pending, selectedTemplateId: 3105);
         var cleanupFailingStore = new AtomicJsonRunSaveStore(
             _testDirectory,
@@ -849,6 +889,169 @@ public sealed class AtomicJsonRunSaveStoreTests
         Assert.That(coldSuccessor.Document.Gold, Is.EqualTo(successor.Gold));
     }
 
+    /// <summary>BossGate 只允许同一路径末尾 Boss 产生 Victory 或 Defeat，且终局提交后不可继续。</summary>
+    [TestCase(RunSaveOutcomeKind.Victory, 37)]
+    [TestCase(RunSaveOutcomeKind.Defeat, 0)]
+    public void Commit_BossGateBattleOutcome_AcceptsClosedTerminalSuccessor(
+        RunSaveOutcomeKind outcomeKind,
+        int terminalHealth)
+    {
+        var store = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument gate = CreateBossGateDocument(
+            outcomeKind == RunSaveOutcomeKind.Victory
+                ? "10101010-aaaa-bbbb-cccc-101010101010"
+                : "20202020-aaaa-bbbb-cccc-202020202020",
+            currentHealth: 58);
+        Assert.That(store.Commit(gate).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument terminal = CreateTerminalOutcomeSuccessor(
+            gate,
+            outcomeKind,
+            terminalHealth);
+
+        RunSaveCommitResult commit = store.Commit(terminal);
+        RunSaveLoadResult load = store.Load();
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(load.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(load.Document.OutcomeKind, Is.EqualTo(outcomeKind));
+        Assert.That(load.Document.PathNodeIds, Is.EqualTo(gate.PathNodeIds));
+        Assert.That(load.Document.CommittedNodeId, Is.EqualTo(gate.PathNodeIds.Last()));
+    }
+
+    /// <summary>主动放弃只允许稳定 RunEntry 前驱且必须逐字段保留生命、路径、牌组与持有物。</summary>
+    [Test]
+    public void Commit_MapReadyAbandoned_AcceptsExactStableSuccessorOnly()
+    {
+        var store = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument live = CreateDocument(
+            "30303030-aaaa-bbbb-cccc-303030303030",
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 46);
+        Assert.That(store.Commit(live).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument abandoned = CreateTerminalOutcomeSuccessor(
+            live,
+            RunSaveOutcomeKind.Abandoned,
+            terminalHealth: live.CurrentHealth);
+
+        Assert.That(store.Commit(abandoned).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        Assert.That(store.Load().Document.OutcomeKind, Is.EqualTo(RunSaveOutcomeKind.Abandoned));
+    }
+
+    /// <summary>MapReady 不得伪造 Victory，BossGate 也不得用非路径末项充当终局 Battle 节点。</summary>
+    [Test]
+    public void Commit_ForgedOutcomePredecessorOrBossNode_ReturnsInvalidDocument()
+    {
+        var mapReadyStore = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument mapReady = CreateDocument(
+            "40404040-aaaa-bbbb-cccc-404040404040",
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 55);
+        Assert.That(mapReadyStore.Commit(mapReady).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument forgedVictory = CreateTerminalOutcomeSuccessor(
+            mapReady,
+            RunSaveOutcomeKind.Victory,
+            terminalHealth: 30);
+        Assert.That(
+            mapReadyStore.Commit(forgedVictory).Status,
+            Is.EqualTo(RunSaveCommitStatus.InvalidDocument));
+
+        mapReadyStore.Delete();
+        RunSaveDocument gate = CreateBossGateDocument(
+            "50505050-aaaa-bbbb-cccc-505050505050",
+            currentHealth: 55);
+        Assert.That(mapReadyStore.Commit(gate).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument validVictory = CreateTerminalOutcomeSuccessor(
+            gate,
+            RunSaveOutcomeKind.Victory,
+            terminalHealth: 30);
+        RunSaveDocument forgedBossNode = CopyCommittedNode(
+            validVictory,
+            committedNodeId: "layer-99-slot-0");
+
+        Assert.That(
+            mapReadyStore.Commit(forgedBossNode).Status,
+            Is.EqualTo(RunSaveCommitStatus.InvalidDocument));
+    }
+
+    /// <summary>普通战败只能绑定 live 当前节点的普通直达 Combat/Elite，间接战斗或 Boss 都不得覆盖正式档。</summary>
+    [TestCase("L02-S00")]
+    [TestCase("L03-S00")]
+    public void Commit_MapReadyDefeatWithForgedBattleNode_ReturnsInvalidDocument(
+        string committedNodeId)
+    {
+        var store = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument live = CreateDocument(
+            "51515151-aaaa-bbbb-cccc-515151515151",
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 55);
+        Assert.That(store.Commit(live).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument defeat = CreateTerminalOutcomeSuccessor(
+            live,
+            RunSaveOutcomeKind.Defeat,
+            terminalHealth: 0);
+        RunSaveDocument forged = CopyCommittedNode(defeat, committedNodeId);
+
+        RunSaveCommitResult commit = store.Commit(forged);
+        RunSaveLoadResult load = store.Load();
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.InvalidDocument));
+        Assert.That(load.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(load.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.MapReady));
+        Assert.That(load.Document.CurrentHealth, Is.EqualTo(live.CurrentHealth));
+    }
+
+    /// <summary>冻结普通奖励也只能绑定 live 当前节点的普通直达 Combat/Elite，不能伪造间接节点或 Boss。</summary>
+    [TestCase("L02-S00")]
+    [TestCase("L03-S00")]
+    public void Commit_MapReadyRewardWithForgedBattleNode_ReturnsInvalidDocument(
+        string committedNodeId)
+    {
+        var store = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument live = CreateDocument(
+            "52525252-aaaa-bbbb-cccc-525252525252",
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 55);
+        Assert.That(store.Commit(live).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument pending = CreateDocument(
+            live.RunId,
+            RunSaveProgressPhase.RewardPending,
+            currentHealth: 44);
+        RunSaveDocument forged = CopyCommittedNode(pending, committedNodeId);
+
+        RunSaveCommitResult commit = store.Commit(forged);
+        RunSaveLoadResult load = store.Load();
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.InvalidDocument));
+        Assert.That(load.Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(load.Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.MapReady));
+        Assert.That(load.Document.CurrentHealth, Is.EqualTo(live.CurrentHealth));
+    }
+
+    /// <summary>残留 reward intent 即使逐字段等于提交候选，也必须重新证明它是当前 live 的合法直达奖励后继。</summary>
+    [Test]
+    public void Commit_ForgedRewardMatchingResidualIntent_ReturnsInvalidDocument()
+    {
+        var store = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument live = CreateDocument(
+            "53535353-aaaa-bbbb-cccc-535353535353",
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 55);
+        Assert.That(store.Commit(live).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument pending = CreateDocument(
+            live.RunId,
+            RunSaveProgressPhase.RewardPending,
+            currentHealth: 44);
+        RunSaveDocument forged = CopyCommittedNode(pending, committedNodeId: "L02-S00");
+        File.WriteAllText(GetRewardIntentPath(), RunSaveDocumentCodec.Serialize(forged));
+
+        RunSaveCommitResult commit = store.Commit(forged);
+        RunSaveLoadResult load = store.Load();
+
+        Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.InvalidDocument));
+        Assert.That(load.Status, Is.EqualTo(RunSaveLoadStatus.InterruptedCommit));
+        Assert.That(File.ReadAllText(GetLivePath()), Is.EqualTo(RunSaveDocumentCodec.Serialize(live)));
+    }
+
     /// <summary>终局替换失败后冷启动必须恢复已校验临时终局，不能回退到旧可继续档。</summary>
     [Test]
     public void Commit_TerminalReplacementFails_ColdLoadReturnsTerminalTemporary()
@@ -1035,6 +1238,32 @@ public sealed class AtomicJsonRunSaveStoreTests
         Assert.That(load.HasPendingTemporaryFile, Is.True);
     }
 
+    /// <summary>结构合法但不是正式档封闭后继的终局意图也必须 fail-closed，不能伪造 Victory。</summary>
+    [Test]
+    public void Load_ForgedVictoryIntentWithMapReadyLive_ReturnsInterruptedCommit()
+    {
+        var store = new AtomicJsonRunSaveStore(_testDirectory);
+        RunSaveDocument live = CreateDocument(
+            "61616161-aaaa-bbbb-cccc-616161616161",
+            RunSaveProgressPhase.MapReady,
+            currentHealth: 64);
+        Assert.That(store.Commit(live).Status, Is.EqualTo(RunSaveCommitStatus.Success));
+        RunSaveDocument forgedVictory = CreateTerminalOutcomeSuccessor(
+            live,
+            RunSaveOutcomeKind.Victory,
+            terminalHealth: 32);
+        File.WriteAllText(
+            GetTerminalIntentPath(),
+            RunSaveDocumentCodec.Serialize(forgedVictory));
+
+        RunSaveLoadResult load = store.Load();
+
+        Assert.That(load.Status, Is.EqualTo(RunSaveLoadStatus.InterruptedCommit));
+        Assert.That(load.Document, Is.Null);
+        Assert.That(load.Detail, Does.Contain("legal terminal successor"));
+        Assert.That(File.Exists(GetLivePath()), Is.True);
+    }
+
     /// <summary>损坏的终局意图不能回退读取旧可继续正式档，必须 fail-closed 为中断提交。</summary>
     [Test]
     public void Load_CorruptTerminalIntentWithValidOldLive_ReturnsInterruptedCommit()
@@ -1213,18 +1442,26 @@ public sealed class AtomicJsonRunSaveStoreTests
     [Test]
     public void Commit_ParseablePendingRewardDrift_RejectsBeforeLivePublication()
     {
-        var store = new AtomicJsonRunSaveStore(
-            _testDirectory,
-            new DriftingPendingRewardWriteFileSystem(GetTemporaryPath()));
         RunSaveDocument document = CreateDocument(
             "29292929-aaaa-bbbb-cccc-393939393939",
             RunSaveProgressPhase.RewardPending,
             currentHealth: 52);
+        RunSaveDocument predecessor = CreateRewardPendingPredecessor(document);
+        var initialStore = new AtomicJsonRunSaveStore(_testDirectory);
+        Assert.That(
+            initialStore.Commit(predecessor).Status,
+            Is.EqualTo(RunSaveCommitStatus.Success));
+        var store = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new DriftingPendingRewardWriteFileSystem(GetTemporaryPath()));
 
         RunSaveCommitResult commit = store.Commit(document);
 
         Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.InvalidDocument));
-        Assert.That(File.Exists(GetLivePath()), Is.False);
+        Assert.That(File.Exists(GetLivePath()), Is.True);
+        Assert.That(
+            RunSaveDocumentCodec.Read(File.ReadAllText(GetLivePath())).Document.ProgressPhase,
+            Is.EqualTo(RunSaveProgressPhase.MapReady));
         Assert.That(File.Exists(GetTemporaryPath()), Is.True);
         Assert.That(
             RunSaveDocumentCodec.Read(File.ReadAllText(GetTemporaryPath())).Status,
@@ -1235,18 +1472,26 @@ public sealed class AtomicJsonRunSaveStoreTests
     [Test]
     public void Commit_ParseablePendingRewardAttachedLootDrift_RejectsBeforeLivePublication()
     {
-        var store = new AtomicJsonRunSaveStore(
-            _testDirectory,
-            new DriftingPendingRewardAttachedLootWriteFileSystem(GetTemporaryPath()));
         RunSaveDocument document = CreateDocument(
             "30303030-aaaa-bbbb-cccc-404040404040",
             RunSaveProgressPhase.RewardPending,
             currentHealth: 53);
+        RunSaveDocument predecessor = CreateRewardPendingPredecessor(document);
+        var initialStore = new AtomicJsonRunSaveStore(_testDirectory);
+        Assert.That(
+            initialStore.Commit(predecessor).Status,
+            Is.EqualTo(RunSaveCommitStatus.Success));
+        var store = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new DriftingPendingRewardAttachedLootWriteFileSystem(GetTemporaryPath()));
 
         RunSaveCommitResult commit = store.Commit(document);
 
         Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.InvalidDocument));
-        Assert.That(File.Exists(GetLivePath()), Is.False);
+        Assert.That(File.Exists(GetLivePath()), Is.True);
+        Assert.That(
+            RunSaveDocumentCodec.Read(File.ReadAllText(GetLivePath())).Document.ProgressPhase,
+            Is.EqualTo(RunSaveProgressPhase.MapReady));
         Assert.That(File.Exists(GetTemporaryPath()), Is.True);
         Assert.That(
             RunSaveDocumentCodec.Read(File.ReadAllText(GetTemporaryPath())).Status,
@@ -1257,18 +1502,26 @@ public sealed class AtomicJsonRunSaveStoreTests
     [Test]
     public void Commit_ParseablePendingRewardIntentDrift_RejectsBeforeTemporaryWrite()
     {
-        var store = new AtomicJsonRunSaveStore(
-            _testDirectory,
-            new DriftingPendingRewardWriteFileSystem(GetRewardIntentPath()));
         RunSaveDocument document = CreateDocument(
             "29292929-bbbb-cccc-dddd-393939393939",
             RunSaveProgressPhase.RewardPending,
             currentHealth: 52);
+        RunSaveDocument predecessor = CreateRewardPendingPredecessor(document);
+        var initialStore = new AtomicJsonRunSaveStore(_testDirectory);
+        Assert.That(
+            initialStore.Commit(predecessor).Status,
+            Is.EqualTo(RunSaveCommitStatus.Success));
+        var store = new AtomicJsonRunSaveStore(
+            _testDirectory,
+            new DriftingPendingRewardWriteFileSystem(GetRewardIntentPath()));
 
         RunSaveCommitResult commit = store.Commit(document);
 
         Assert.That(commit.Status, Is.EqualTo(RunSaveCommitStatus.InvalidDocument));
-        Assert.That(File.Exists(GetLivePath()), Is.False);
+        Assert.That(File.Exists(GetLivePath()), Is.True);
+        Assert.That(
+            RunSaveDocumentCodec.Read(File.ReadAllText(GetLivePath())).Document.ProgressPhase,
+            Is.EqualTo(RunSaveProgressPhase.MapReady));
         Assert.That(File.Exists(GetTemporaryPath()), Is.False);
         Assert.That(File.Exists(GetRewardIntentPath()), Is.True);
     }
@@ -1401,6 +1654,55 @@ public sealed class AtomicJsonRunSaveStoreTests
         Assert.That(File.ReadAllText(GetTemporaryPath()), Is.EqualTo("{"));
     }
 
+    /// <summary>先发布与 Pending 同身份的真实 MapReady 前驱，再提交奖励检查点供事务测试使用。</summary>
+    private static RunSaveCommitResult CommitRewardPendingFromStablePredecessor(
+        AtomicJsonRunSaveStore store,
+        RunSaveDocument pending)
+    {
+        if (store == null)
+            throw new ArgumentNullException(nameof(store));
+        if (pending == null || pending.ProgressPhase != RunSaveProgressPhase.RewardPending)
+            throw new ArgumentException("A RewardPending fixture is required.", nameof(pending));
+
+        RunSaveDocument predecessor = CreateRewardPendingPredecessor(pending);
+        RunSaveCommitResult predecessorCommit = store.Commit(predecessor);
+        Assert.That(
+            predecessorCommit.Status,
+            Is.EqualTo(RunSaveCommitStatus.Success),
+            predecessorCommit.Detail);
+        return store.Commit(pending);
+    }
+
+    /// <summary>从冻结奖励 fixture 还原同身份、同持有物且位于合法战斗前的稳定 MapReady 前驱。</summary>
+    private static RunSaveDocument CreateRewardPendingPredecessor(RunSaveDocument pending)
+    {
+        if (pending == null || pending.ProgressPhase != RunSaveProgressPhase.RewardPending)
+            throw new ArgumentException("A RewardPending fixture is required.", nameof(pending));
+
+        return new RunSaveDocument(
+            pending.SchemaVersion,
+            pending.RunId,
+            pending.HeroTemplateId,
+            pending.CurrentHealth,
+            pending.MaxHealth,
+            pending.RunCards,
+            pending.LegacyDeckTemplateId,
+            pending.RandomRootSeed,
+            pending.MapProfileId,
+            pending.MapGeneratorVersion,
+            pending.MapSeed,
+            pending.MapFingerprint,
+            pending.PathNodeIds,
+            RunSaveProgressPhase.MapReady,
+            committedNodeId: null,
+            outcomeKind: null,
+            pendingCardReward: null,
+            pending.Relics,
+            pending.Potions,
+            pending.Gold,
+            pendingNodeVisit: null);
+    }
+
     /// <summary>返回 Adapter 契约冻结的版本化正式文件路径。</summary>
     private string GetLivePath()
     {
@@ -1425,6 +1727,101 @@ public sealed class AtomicJsonRunSaveStoreTests
         return Path.Combine(_testDirectory, AtomicJsonRunSaveStore.RewardIntentFileName);
     }
 
+    /// <summary>建立 Boss 已恰好追加到路径末尾的稳定 BossGate 检查点。</summary>
+    private static RunSaveDocument CreateBossGateDocument(string runId, int currentHealth)
+    {
+        RunSaveDocument source = CreateDocument(
+            runId,
+            RunSaveProgressPhase.MapReady,
+            currentHealth);
+        return new RunSaveDocument(
+            source.SchemaVersion,
+            source.RunId,
+            source.HeroTemplateId,
+            source.CurrentHealth,
+            source.MaxHealth,
+            source.RunCards,
+            source.LegacyDeckTemplateId,
+            source.RandomRootSeed,
+            source.MapProfileId,
+            source.MapGeneratorVersion,
+            source.MapSeed,
+            source.MapFingerprint,
+            new[] { "start", "layer-8-slot-0" },
+            RunSaveProgressPhase.BossGateReached,
+            committedNodeId: null,
+            outcomeKind: null,
+            pendingCardReward: null,
+            source.Relics,
+            source.Potions,
+            source.Gold,
+            pendingNodeVisit: null);
+    }
+
+    /// <summary>从稳定前驱复制只允许 outcome、生命、承诺节点与战斗药水消费变化的终局候选。</summary>
+    private static RunSaveDocument CreateTerminalOutcomeSuccessor(
+        RunSaveDocument source,
+        RunSaveOutcomeKind outcomeKind,
+        int terminalHealth)
+    {
+        string committedNodeId = outcomeKind == RunSaveOutcomeKind.Abandoned
+            ? null
+            : source.ProgressPhase == RunSaveProgressPhase.BossGateReached
+                ? source.PathNodeIds[source.PathNodeIds.Count - 1]
+                : "L01-S00";
+        return new RunSaveDocument(
+            source.SchemaVersion,
+            source.RunId,
+            source.HeroTemplateId,
+            terminalHealth,
+            source.MaxHealth,
+            source.RunCards,
+            source.LegacyDeckTemplateId,
+            source.RandomRootSeed,
+            source.MapProfileId,
+            source.MapGeneratorVersion,
+            source.MapSeed,
+            source.MapFingerprint,
+            source.PathNodeIds,
+            RunSaveProgressPhase.Terminal,
+            committedNodeId,
+            outcomeKind,
+            pendingCardReward: null,
+            source.Relics,
+            source.Potions,
+            source.Gold,
+            pendingNodeVisit: null);
+    }
+
+    /// <summary>仅替换候选文档的 committed node，供奖励与终局来源闭合测试伪造节点身份。</summary>
+    private static RunSaveDocument CopyCommittedNode(
+        RunSaveDocument source,
+        string committedNodeId)
+    {
+        return new RunSaveDocument(
+            source.SchemaVersion,
+            source.RunId,
+            source.HeroTemplateId,
+            source.CurrentHealth,
+            source.MaxHealth,
+            source.RunCards,
+            source.LegacyDeckTemplateId,
+            source.RandomRootSeed,
+            source.MapProfileId,
+            source.MapGeneratorVersion,
+            source.MapSeed,
+            source.MapFingerprint,
+            source.PathNodeIds,
+            source.ProgressPhase,
+            committedNodeId,
+            source.OutcomeKind,
+            source.PendingCardReward,
+            source.Relics,
+            source.Potions,
+            source.Gold,
+            source.PendingNodeVisit);
+    }
+
     /// <summary>建立字段稳定且互不共享的测试存档文档。</summary>
     private static RunSaveDocument CreateDocument(
         string runId,
@@ -1433,9 +1830,20 @@ public sealed class AtomicJsonRunSaveStoreTests
         int? attachedRelicTemplateId = null,
         int? attachedPotionTemplateId = null)
     {
+        const uint mapSeed = 987654321u;
+        MapDefinition map = ActMapGenerator.Generate(
+            TinySpireActMapProfiles.LegacyG3V1,
+            mapSeed);
+        MapNodeId startNodeId = map.Nodes.Single(node => node.Kind == MapNodeKind.Start).Id;
+        string firstDirectNodeId = MapReachability.GetSelectableNodeIds(
+                map,
+                startNodeId,
+                MapTraversalMode.Ordinary)
+            .First()
+            .Value;
         bool isTerminal = progressPhase == RunSaveProgressPhase.Terminal;
         bool isRewardPending = progressPhase == RunSaveProgressPhase.RewardPending;
-        string committedNodeId = isTerminal || isRewardPending ? "layer-1-slot-0" : null;
+        string committedNodeId = isTerminal || isRewardPending ? firstDirectNodeId : null;
         RunSavePendingCardRewardDocument pendingCardReward = isRewardPending
             ? new RunSavePendingCardRewardDocument(
                 $"{Guid.ParseExact(runId, "D"):N}:1:{committedNodeId}",
@@ -1458,11 +1866,11 @@ public sealed class AtomicJsonRunSaveStoreTests
             },
             legacyDeckTemplateId: null,
             randomRootSeed: 123456789u,
-            mapProfileId: "tinyspire.act1.g3.v1",
-            mapGeneratorVersion: 1,
-            mapSeed: 987654321u,
-            mapFingerprint: new string('a', 64),
-            pathNodeIds: new[] { "start" },
+            mapProfileId: map.ProfileId,
+            mapGeneratorVersion: map.GeneratorVersion,
+            mapSeed,
+            mapFingerprint: map.Fingerprint,
+            pathNodeIds: new[] { startNodeId.Value },
             progressPhase,
             committedNodeId,
             terminalReason: isTerminal ? RunSaveTerminalReason.Defeat : (RunSaveTerminalReason?)null,
@@ -1937,7 +2345,16 @@ public sealed class AtomicJsonRunSaveStoreTests
         if (settled == null || settled.ProgressPhase != RunSaveProgressPhase.MapReady)
             throw new ArgumentException("A settled MapReady document is required.", nameof(settled));
 
-        const string committedNodeId = "layer-2-slot-0";
+        ActMapProfile profile = TinySpireActMapProfiles.GetById(settled.MapProfileId)
+            ?? throw new InvalidOperationException("The settled fixture profile is not registered.");
+        MapDefinition map = ActMapGenerator.Generate(profile, settled.MapSeed);
+        Assert.That(map.Fingerprint, Is.EqualTo(settled.MapFingerprint));
+        string committedNodeId = MapReachability.GetSelectableNodeIds(
+                map,
+                new MapNodeId(settled.PathNodeIds[settled.PathNodeIds.Count - 1]),
+                MapTraversalMode.Ordinary)
+            .First()
+            .Value;
         var pendingReward = new RunSavePendingCardRewardDocument(
             $"{Guid.ParseExact(settled.RunId, "D"):N}:2:{committedNodeId}",
             new[] { 3105, 3123, 3157 });

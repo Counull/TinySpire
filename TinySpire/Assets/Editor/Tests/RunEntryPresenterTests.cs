@@ -71,6 +71,52 @@ public sealed class RunEntryPresenterTests
         Assert.That(view.LastModel.Map.Fingerprint, Is.EqualTo(document.MapFingerprint));
     }
 
+    /// <summary>稳定地图页主动放弃先经过确认，再投影唯一 Abandoned 结果并保留终局档到玩家返回主菜单。</summary>
+    [Test]
+    public void ActiveMapRun_RequestAbandonProjectsTypedOutcomeResult()
+    {
+        using var store = new RunStateStore();
+        using var localeChanges = new Subject<Locale>();
+        var saves = new ScriptedRunSaveStore();
+        var flow = CreateFlow(
+            store,
+            new RecordingSceneFlow(),
+            randomRootSeed: 303u,
+            saves);
+        flow.CreateNewRun(heroTemplateId: 1001);
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            flow,
+            CreateTables,
+            Localize,
+            localeChanges);
+        presenter.Initialize();
+
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Map));
+        Assert.That(view.LastModel.CanAbandonActiveRun, Is.True);
+
+        view.Emit(new RunEntryAction(RunEntryActionKind.RequestAbandon));
+
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.AbandonConfirmation));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.MapReady));
+
+        view.Emit(new RunEntryAction(RunEntryActionKind.ConfirmAbandon));
+
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.Terminal));
+        Assert.That(store.Current.Outcome.Kind, Is.EqualTo(RunOutcomeKind.Abandoned));
+        Assert.That(saves.Load().Document.OutcomeKind, Is.EqualTo(RunSaveOutcomeKind.Abandoned));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Failure));
+        Assert.That(
+            view.LastModel.GetText(RunEntryTextSlot.FailureTitle),
+            Is.EqualTo("run.entry.outcome.abandoned"));
+        Assert.That(
+            view.LastModel.GetText(RunEntryTextSlot.LeaveRun),
+            Is.EqualTo("run.entry.outcome.return_to_menu"));
+        Assert.That(view.LastModel.ContinueEnabled, Is.False);
+    }
+
     /// <summary>新 Run 一次投影整张冻结图，并明牌位置、内容 ID、明确名称与可区分视觉锚点。</summary>
     [Test]
     public void CreateRun_ProjectsWholeFrozenMapWithStablePositionsNamesAndVisualAnchors()
@@ -98,6 +144,8 @@ public sealed class RunEntryPresenterTests
         RunMapNodeViewModel[] bosses = projectedMap.Nodes
             .Where(node => node.Kind == MapNodeKind.Boss)
             .ToArray();
+        RunMapNodeViewModel elite = projectedMap.Nodes
+            .Single(node => node.Kind == MapNodeKind.Elite);
         RunMapNodeViewModel[] nonCombat = projectedMap.Nodes
             .Where(node => node.Kind == MapNodeKind.Rest ||
                            node.Kind == MapNodeKind.Chest ||
@@ -106,7 +154,7 @@ public sealed class RunEntryPresenterTests
             .ToArray();
 
         Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Map));
-        Assert.That(frozenMap.ProfileId, Is.EqualTo(TinySpireActMapProfiles.NewRunG6V1ProfileId));
+        Assert.That(frozenMap.ProfileId, Is.EqualTo(TinySpireActMapProfiles.NewRunG7V1ProfileId));
         Assert.That(frozenMap.GeneratorVersion, Is.EqualTo(ActMapGenerator.NewRunG6Version));
         Assert.That(
             frozenMap.Nodes.OrderBy(node => node.Layer).ThenBy(node => node.Slot)
@@ -120,6 +168,7 @@ public sealed class RunEntryPresenterTests
                 MapNodeKind.Shop,
                 MapNodeKind.Event,
                 MapNodeKind.Combat,
+                MapNodeKind.Elite,
                 MapNodeKind.Boss,
                 MapNodeKind.Boss,
                 MapNodeKind.Boss,
@@ -133,6 +182,11 @@ public sealed class RunEntryPresenterTests
         Assert.That(
             combats.All(node => node.VisualAnchorKind == RunMapVisualAnchorKind.EncounterSlimeSilhouette),
             Is.True);
+        Assert.That(elite.ContentId, Is.EqualTo(5101));
+        Assert.That(elite.DisplayName, Is.EqualTo("ELITE GUARDIAN\nTest Sentry"));
+        Assert.That(
+            elite.VisualAnchorKind,
+            Is.EqualTo(RunMapVisualAnchorKind.EncounterSentrySilhouette));
         Assert.That(nonCombat.Select(node => node.DisplayName),
             Is.EqualTo(new[] { "REST", "CHEST", "SHOP", "EVENT" }));
         Assert.That(nonCombat.Select(node => node.VisualAnchorKind),
@@ -143,10 +197,10 @@ public sealed class RunEntryPresenterTests
                 RunMapVisualAnchorKind.ShopBag,
                 RunMapVisualAnchorKind.EventQuestionMark,
             }));
-        Assert.That(bosses.Length, Is.EqualTo(TinySpireActMapProfiles.NewRunG6V1.BossEndpointCount));
+        Assert.That(bosses.Length, Is.EqualTo(TinySpireActMapProfiles.NewRunG7V1.BossEndpointCount));
         Assert.That(
             bosses.Select(node => node.ContentId).Distinct().Count(),
-            Is.EqualTo(TinySpireActMapProfiles.NewRunG6V1.BossCandidateCount));
+            Is.EqualTo(TinySpireActMapProfiles.NewRunG7V1.BossCandidateCount));
         Assert.That(
             bosses.GroupBy(node => node.ContentId).Any(group => group.Count() > 1),
             Is.True);
@@ -157,7 +211,7 @@ public sealed class RunEntryPresenterTests
         }
         Assert.That(
             bosses.Select(node => node.VisualAnchorKind).Distinct().Count(),
-            Is.EqualTo(TinySpireActMapProfiles.NewRunG6V1.BossCandidateCount));
+            Is.EqualTo(TinySpireActMapProfiles.NewRunG7V1.BossCandidateCount));
 
         foreach (RunMapNodeViewModel node in projectedMap.Nodes)
         {
@@ -526,6 +580,40 @@ public sealed class RunEntryPresenterTests
             Is.EqualTo(RunMapNodePresentationState.BossGateReached));
         Assert.That(scenes.LoadedAddresses.Count, Is.EqualTo(sceneRequestCountBeforeBoss));
         Assert.That(saves.Load().Document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.BossGateReached));
+    }
+
+    /// <summary>G7 BossGateReached 的当前 Boss 节点可再次点击，并只启动清单登记的真实 Boss Battle。</summary>
+    [Test]
+    public async Task G7BossGate_CurrentBossActionStartsManifestBattle()
+    {
+        using var store = new RunStateStore();
+        using var localeChanges = new Subject<Locale>();
+        var scenes = new RecordingSceneFlow();
+        var saves = new ScriptedRunSaveStore();
+        RunState bossGate = CreateG7BossGateRun(store, randomRootSeed: 414u);
+        saves.Commit(RunSaveDocumentMapper.Create(bossGate));
+        var flow = CreateFlow(store, scenes, randomRootSeed: 414u, saves);
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            flow,
+            CreateTables,
+            Localize,
+            localeChanges);
+        presenter.Initialize();
+
+        RunMapNodeViewModel boss = view.LastModel.Map.Nodes.Single(node =>
+            node.State == RunMapNodePresentationState.BossGateReached);
+        view.Emit(new RunEntryAction(
+            RunEntryActionKind.EnterMapNode,
+            mapNodeId: new MapNodeId(boss.NodeId)));
+        await UniTask.Yield();
+
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.InBattle));
+        Assert.That(store.Current.ActiveBattle.NodeKind, Is.EqualTo(MapNodeKind.Boss));
+        Assert.That(store.Current.ActiveBattle.EncounterTemplateId, Is.EqualTo(5201));
+        Assert.That(scenes.LoadedAddresses, Is.EqualTo(new[] { RunSceneAddresses.Battle }));
     }
 
     /// <summary>普通战斗失败投影 Failure；玩家确认离开后才删除档与唯一终局 Run。</summary>
@@ -1609,10 +1697,13 @@ public sealed class RunEntryPresenterTests
                 "\"cost\":1,\"play_destination\":0,\"rule_kind\":1,\"rule_value\":9}]"),
             ["battle_tbenemy"] = JArray.Parse(
                 "[{\"id\":2001,\"name_i18n_key\":\"battle.enemy.test_slime.name\",\"max_health\":20,\"base_strength\":0,\"view_prefab_key\":\"pfb_char_enemy\",\"behavior_group_id\":6001}," +
-                "{\"id\":2101,\"name_i18n_key\":\"battle.enemy.test_sentry.name\",\"max_health\":30,\"base_strength\":0,\"view_prefab_key\":\"pfb_char_enemy\",\"behavior_group_id\":6101}]"),
+                "{\"id\":2101,\"name_i18n_key\":\"battle.enemy.test_sentry.name\",\"max_health\":45,\"base_strength\":0,\"view_prefab_key\":\"pfb_char_enemy\",\"behavior_group_id\":6101}," +
+                "{\"id\":2201,\"name_i18n_key\":\"battle.enemy.chrono_warden.name\",\"max_health\":60,\"base_strength\":0,\"view_prefab_key\":\"pfb_char_enemy\",\"behavior_group_id\":6201}]"),
             ["battle_tbencounter"] = JArray.Parse(
-                "[{\"id\":5001,\"enemy_template_ids\":[2001]}," +
-                "{\"id\":5002,\"enemy_template_ids\":[2101]}]"),
+                "[{\"id\":5001,\"enemy_template_ids\":[2001],\"phase_two_behavior_group_id\":0}," +
+                "{\"id\":5002,\"enemy_template_ids\":[2101],\"phase_two_behavior_group_id\":0}," +
+                "{\"id\":5101,\"enemy_template_ids\":[2101],\"phase_two_behavior_group_id\":0}," +
+                "{\"id\":5201,\"enemy_template_ids\":[2201],\"phase_two_behavior_group_id\":6202}]"),
             ["run_tbrelic"] = JArray.Parse(
                 "[{\"id\":8001,\"name_i18n_key\":\"run.relic.one.name\",\"description_i18n_key\":\"run.relic.one.description\",\"battle_start_strength\":1}," +
                 "{\"id\":8002,\"name_i18n_key\":\"run.relic.two.name\",\"description_i18n_key\":\"run.relic.two.description\",\"battle_start_strength\":3}]"),
@@ -1766,6 +1857,48 @@ public sealed class RunEntryPresenterTests
             randomRootSeed,
             map: map,
             holdings: holdings));
+    }
+
+    /// <summary>沿 G7 冻结普通边恢复一个已完成精英且刚抵达 Boss 的稳定门夹具。</summary>
+    private static RunState CreateG7BossGateRun(
+        RunStateStore store,
+        uint randomRootSeed)
+    {
+        MapDefinition map = ActMapGenerator.Generate(
+            TinySpireActMapProfiles.NewRunG7V1,
+            RunRandomDomains.DeriveMapSeed(randomRootSeed));
+        var path = new List<MapNodeId>
+        {
+            MapNodeId.FromPosition(layer: 0, slot: 0),
+        };
+        MapNodeId cursor = path[0];
+        for (int index = 0; index < map.Nodes.Count; index++)
+        {
+            MapNodeId next = MapReachability.GetSelectableNodeIds(
+                    map,
+                    cursor,
+                    MapTraversalMode.Ordinary)
+                .First();
+            path.Add(next);
+            cursor = next;
+            if (map.GetNode(next).Kind == MapNodeKind.Boss)
+                break;
+        }
+
+        Assert.That(map.GetNode(path[path.Count - 1]).Kind, Is.EqualTo(MapNodeKind.Boss));
+        return store.RestoreRun(new RunRestoreOptions(
+            new RunId(Guid.Parse("24682468-1357-2468-1357-246813572468")),
+            heroTemplateId: 1001,
+            currentHealth: 53,
+            maxHealth: 80,
+            runDeck: RunDeck.CreateInitial(new[] { 3002, 3003 }),
+            randomRootSeed,
+            map,
+            path,
+            RunProgressPhase.BossGateReached,
+            committedNodeId: null,
+            outcomeKind: null,
+            holdings: RunHoldings.Empty(initialGold: 100)));
     }
 
     /// <summary>建立只含 Start 与一个直接可达非战斗节点的最小 Presenter 测试地图。</summary>

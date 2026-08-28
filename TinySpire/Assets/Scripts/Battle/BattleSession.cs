@@ -405,7 +405,8 @@ namespace TinySpire.Battle
                     combatants,
                     enemyCombatantIdsInEncounterOrder,
                     tables,
-                    options.RandomSeed);
+                    options.RandomSeed,
+                    encounter.PhaseTwoBehaviorGroupId ?? 0);
                 if (hero.RuntimeProfile == cfg.battle.HeroRuntimeProfile.MachineGunner)
                 {
                     machineGunnerRuntime = new MachineGunnerBattleRuntime(

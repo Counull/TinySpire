@@ -96,6 +96,71 @@ public sealed class ActMapGeneratorTests
         Assert.That(ActMapValidator.Validate(map, profile).IsValid, Is.True);
     }
 
+    /// <summary>G7 生产 Act 必须复用 v2 地图模型，并冻结普通、精英与真实 Boss 内容引用。</summary>
+    [Test]
+    public void Generate_NewRunG7V1_ProducesEliteRouteAndBossEncounterManifest()
+    {
+        ActContentManifest manifest = TinySpireActContentCatalog.NewRunG7V1;
+
+        Assert.That(manifest.Profile.ProfileId, Is.EqualTo("tinyspire.act1.g7.v1"));
+        Assert.That(manifest.Profile.GeneratorVersion, Is.EqualTo(ActMapGenerator.NewRunG6Version));
+        Assert.That(manifest.OrdinaryEncounterIds, Is.EqualTo(new[] { 5001 }));
+        Assert.That(manifest.EliteEncounterIds, Is.EqualTo(new[] { 5101 }));
+        Assert.That(
+            manifest.NonCombatContents.Select(content => (content.Kind, content.ContentId)),
+            Is.EqualTo(new[]
+            {
+                (MapNodeKind.Rest, 7101),
+                (MapNodeKind.Chest, 7201),
+                (MapNodeKind.Shop, 7301),
+                (MapNodeKind.Event, 7401),
+            }));
+        ActNonCombatContentReference chest = manifest.NonCombatContents
+            .Single(content => content.Kind == MapNodeKind.Chest);
+        ActNonCombatContentReference shop = manifest.NonCombatContents
+            .Single(content => content.Kind == MapNodeKind.Shop);
+        Assert.That(chest.PotionTemplateIds, Is.EqualTo(new[] { 9001 }));
+        Assert.That(shop.RelicTemplateIds, Is.EqualTo(new[] { 8001 }));
+        Assert.That(shop.PotionTemplateIds, Is.EqualTo(new[] { 9001 }));
+        Assert.That(shop.UsesHeroCardRewardPool, Is.True);
+        Assert.That(manifest.CompletionRule, Is.EqualTo(ActCompletionRule.BossVictory));
+        Assert.That(manifest.GetBossEncounterId(9001), Is.EqualTo(5201));
+        Assert.That(manifest.GetBossEncounterId(9002), Is.EqualTo(5201));
+        Assert.That(manifest.GetBossEncounterId(9003), Is.EqualTo(5201));
+        Assert.That(
+            TinySpireActContentCatalog.GetByProfileId(manifest.Profile.ProfileId),
+            Is.SameAs(manifest));
+
+        MapDefinition map = ActMapGenerator.Generate(manifest.Profile, mapSeed: 24680u);
+        MapNodeKind[] playableKinds = map.Nodes
+            .Where(node => node.Layer > 0 && node.Layer < manifest.Profile.BossLayer)
+            .OrderBy(node => node.Layer)
+            .Select(node => node.Kind)
+            .ToArray();
+
+        Assert.That(playableKinds, Is.EqualTo(new[]
+        {
+            MapNodeKind.Combat,
+            MapNodeKind.Rest,
+            MapNodeKind.Chest,
+            MapNodeKind.Shop,
+            MapNodeKind.Event,
+            MapNodeKind.Combat,
+            MapNodeKind.Elite,
+        }));
+        Assert.That(
+            map.Nodes.Single(node => node.Kind == MapNodeKind.Elite).ContentId,
+            Is.EqualTo(5101));
+        Assert.That(
+            map.Nodes
+                .Where(node => node.Kind == MapNodeKind.Boss)
+                .All(node => manifest.BossEncounterIds.ContainsKey(node.ContentId)),
+            Is.True);
+
+        MapValidationResult validation = ActMapValidator.Validate(map, manifest.Profile);
+        Assert.That(validation.IsValid, Is.True, validation.Errors.FirstOrDefault()?.Message);
+    }
+
     /// <summary>新增 Shop/Event 域不得改变既有 Map/Reward 派生结果且必须彼此隔离。</summary>
     [Test]
     public void RandomDomains_ShopAndEvent_AreStableAndIsolatedFromExistingDomains()

@@ -3,7 +3,7 @@ title: Daedalus · 代码决策记录
 page_type: decision
 lifecycle: active
 created: 2026-07-06
-updated: 2026-08-27
+updated: 2026-08-28
 status_source: STATUS.md
 ---
 
@@ -1360,3 +1360,17 @@ Run 规划采用递归切片门禁：每个可执行切片先处于 `needs-grill
 **地图与四个样本**：旧 G3 profile/generator v1 与 fingerprint 保持；新 mixed profile/generator v2 固定路线为 `Combat → Rest → Chest → Shop → Event → Combat → BossGate`，Boss 仍只是既有 gate。Shop/Event 使用独立随机域。Rest 冻结 `ceil(MaxHP×30%)` 治疗值和合法升级实例；Chest 冻结 Potion 9001 并提供 Claim/Skip；Shop 冻结 Relic 8001/75、Potion 9001/25 与 Hero 奖励池 Card/50，可多次购买后 Leave；Event A checked 增加 50 Gold，B 支付 25 Gold 并恢复最多 15 HP。所有 disabled 条件仍由 Store 终审，重复、过期、伪造输入和保存失败均零发布。
 
 **边界与状态**：本决定不引入事件 DSL、动态经济、出售/回购/刷新、第二节点状态机、真实 Boss、Boss 阶段、RunOutcome、G7、云/多槽或架构重构。G6-A～E 已实现；attached loot 恢复 P2 经 RED→GREEN 修复，独立复审未发现其他 P1/P2。最终完整 EditMode 1348/1348、BuildLayout、Packed Play mixed profile 实际路线与 Console 0 均通过，故 G6 为 `completed / verified`；先前许可证 code 198 仅保留为已解除的历史阻塞。完整事实见 `06_testing/2026-08-27-g5-g6-run-holdings-noncombat-nodes.md`。
+
+## CD-121：G7 以 ActContentManifest、Battle-owned 单次 Boss phase 与类型化 RunOutcome 闭合单 Act
+
+**问题**：G6 的 mixed map 只到不可进入的 `BossGateReached`，也没有 Elite、真实 Boss 或 Run 胜利；若为 G7 另造 Boss 地图、Boss Scene、结果 bridge 或 Outcome store，会把已验证的 MapDefinition、Battle setup/result 和 RunStateStore 拆成互相竞争的事实源。Boss 阶段若由 Flow、UI 或血量观察器临时推断，首个已明示行动、重试和 Scene 重建又会产生不一致；终局若继续只用历史 `TerminalReason.Defeat`，则无法无歧义表达胜利与主动放弃。
+
+**Act、内容与门禁选择**：保留 G3/G6 profile、generator 与 fingerprint，新增 `tinyspire.act1.g7.v1`，继续使用 mixed generator v2，冻结路线为 `Combat(5001) → Rest(7101) → Chest(7201) → Shop(7301) → Event(7401) → Combat(5001) → Elite(5101) → Boss(9001/9002/9003)`。窄 `ActContentManifest` 只聚合普通/Elite pool、Boss identity→Encounter resolver、`BossVictory` 完成规则与唯一 Relic 8001，不复制节点、边、路径或 Run 进度。Elite 使用 Encounter/Enemy/Group 5101/2101/6101；三个 Boss identity 都解析到唯一真实 Encounter/Enemy 5201/2201。`RunActContentBuildValidator` 沿同一清单聚合 Map、Node、Encounter、Enemy、Behavior、Reward、Event、Item 与 i18n 引用，拒绝空池、坏引用、不可达 Boss、非法单敌/阶段组、重复唯一奖励和缺失文本。
+
+**Boss phase 选择**：`battle.encounter` 的 nullable `int? phase_two_behavior_group_id` 只为单敌 Boss 声明可选二阶段；`null/0` 表示没有二阶段，Encounter 5201 的 Phase I/II 分别为 Behavior Group 6201/6202。Phase I 首个已明示敌人行动必须完整执行；其合法 prepared completion 在首次权威 commit 时恰好一次切到 Phase II，并同时冻结下一 Behavior、history 与 RNG。重复或 stale completion 零写入，后续不回切。阶段事实只由 `BattleEnemyIntentsData/BattleSession` 拥有，不写入 Run、save 或 UI，不引入血量/回合表达式、通用 Boss DSL、第二波或第二条 BattleResult 通道。
+
+**Outcome 与持久化选择**：`RunStateStore` 持有唯一不可变 `RunOutcome(Victory / Defeat / Abandoned)`；canonical save 提升到 schema v6，v5 `Terminal(Defeat)` 显式迁移为 Defeat outcome，其他稳定 v5 文档继续按原 profile 恢复。Boss 节点仍先追加路径并耐久形成 `BossGateReached`；Flow 先校验生产 Encounter 表，Store public 入口再独立要求 G7 profile 并按当前 Boss identity 从 manifest 解析 Encounter 5201，legacy/未知 profile 不能绕过 Flow 启动真实 Boss。Combat/Elite 胜利继续生成 G4 `RewardPending`；Boss 胜利直接形成 `Terminal(Victory)` 且不发普通卡牌奖励；任意真实战败形成 `Terminal(Defeat)`；稳定 RunEntry 主动放弃形成 `Terminal(Abandoned)`，不再直接删除活动档。三类后继都遵守 preview→durable save→publish 与 exact retry；Atomic 对 RewardPending 和 terminal 都从 live profile/version/seed 重建 recipe，核对 fingerprint 与完整路径，并只接受当前节点直达的 Combat/Elite committed node 或合法 BossGate/outcome 后继。terminal 冷启动不可 Continue，结果页确认后才清理并回主菜单；普通战斗失败仍没有同节点 retry。
+
+**Supersede 与保留边界**：本决定只 supersede CD-116/CD-120 中“Boss 仅为 gate、没有真实 Boss/Run 胜利”的当前限制，CD-119/CD-120 中“schema v5 是当前写入版本”的口径，以及 CD-116 以单一 TerminalReason 表达终局分类的现行部分。CD-112/113/116 的唯一 Store/Flow、Battle attempt、setup/result bridge、save-before-publish、recipe map/fingerprint 与普通失败无 retry，CD-117/118 的 RunDeck/奖励实例，CD-119 的 holdings 和 CD-120 的 NodeVisit 均继续有效。本决定不授权多 Act、Ascension、每日挑战、多个真实 Boss Encounter、通用 Boss DSL、G8、Scene/Prefab/asmdef/ProjectSettings/HybridCLR/DI 改造、云/多槽/战中存档、联网或多人。
+
+**实施状态与验收门**：G7-A～E 已完成并 `verified`。终审来源闭合 RED job `e81cc15a7483467291b7b9d72094fc1f` 为 505/510；保持生产门禁后的 G7 定向 GREEN `60ec69d046b5442cb593a8bef123c0f1` 为 510/510。最终 Rider build session `e750f929-d9bf-4cfd-bbf6-d715c237be51` 成功且 problems 0；完整 Unity EditMode job `9758c02e718540aa97e5e26f832794e3` 为 1410/1410。Luban、`Sync and Build All`、BuildLayout 七个真实 bundle 目标与 Packed Play Victory/Abandoned/Defeat 三条 UGUI 产品链均通过，所有产品分支 Console Error、InvalidKey 与 ConfigInitializationException 为 0。完整证据见 `06_testing/2026-08-28-g7-single-act-elite-boss-outcome.md`；G8 仍未授权。

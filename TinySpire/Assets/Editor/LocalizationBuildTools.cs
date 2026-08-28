@@ -52,7 +52,9 @@ public static class LocalizationBuildTools
     {
         "battle.card_pile.draw.name",
         "battle.card_pile.discard.name",
-        "battle.card_pile.exhaust.name"
+        "battle.card_pile.exhaust.name",
+        "battle.enemy.boss_phase.one",
+        "battle.enemy.boss_phase.two"
     };
 
     private static readonly string[] RequiredBattleFlowKeys =
@@ -82,6 +84,8 @@ public static class LocalizationBuildTools
         "run.entry.hero.future_slot",
         "run.entry.map.title",
         "run.entry.map.battle_node",
+        "run.entry.map.elite_node",
+        "run.entry.map.boss_node",
         "run.entry.map.cleared",
         "run.entry.map.health",
         "run.entry.reward.title",
@@ -111,6 +115,10 @@ public static class LocalizationBuildTools
         "run.entry.abandon.title",
         "run.entry.abandon.message",
         "run.entry.abandon.confirm",
+        "run.entry.outcome.victory",
+        "run.entry.outcome.boss_defeat",
+        "run.entry.outcome.abandoned",
+        "run.entry.outcome.return_to_menu",
         "run.entry.save.issue.title",
         "run.entry.save.issue.invalid_json",
         "run.entry.save.issue.invalid_document",

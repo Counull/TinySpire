@@ -1529,6 +1529,133 @@ public sealed class RunStateStoreTests
         Assert.Throws<InvalidOperationException>(() => store.BeginCommittedBattle());
     }
 
+    /// <summary>Boss 门签发真实战斗时复用已在路径中的 Boss，且分别冻结节点身份与解析后的遭遇。</summary>
+    [Test]
+    public void BeginBossBattle_FreezesResolvedEncounterWithoutAppendingBossTwice()
+    {
+        MapDefinition map = CreateSingleBossMap(bossIdentityId: 9001);
+        using var store = new RunStateStore();
+        RunState created = store.CreateNewRun(new RunCreationOptions(
+            new RunId(Guid.Parse("90909090-1111-2222-3333-444444444444")),
+            heroTemplateId: 1001,
+            initialHealth: 80,
+            maxHealth: 80,
+            runDeck: RunDeck.CreateInitial(new[] { 3002 }),
+            randomRootSeed: map.MapSeed,
+            map));
+        MapNodeId bossNodeId = GetFirstSelectable(created);
+        RunState gate = store.CommitNode(bossNodeId);
+
+        RunBattleInput input = store.BeginBossBattle();
+
+        Assert.That(gate.PathNodeIds, Is.EqualTo(new[]
+        {
+            MapNodeId.FromPosition(0, 0),
+            bossNodeId,
+        }));
+        Assert.That(store.Current.PathNodeIds, Is.EqualTo(gate.PathNodeIds));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.InBattle));
+        Assert.That(store.Current.CommittedNodeId, Is.EqualTo(bossNodeId));
+        Assert.That(input.NodeKind, Is.EqualTo(MapNodeKind.Boss));
+        Assert.That(input.MapNodeContentId, Is.EqualTo(9001));
+        Assert.That(input.EncounterTemplateId, Is.EqualTo(5201));
+        Assert.That(input.BattleId.NodeId, Is.EqualTo(bossNodeId));
+        Assert.That(input.BattleId.AttemptSequence, Is.EqualTo(1));
+        Assert.Throws<InvalidOperationException>(() => store.BeginBossBattle());
+    }
+
+    /// <summary>legacy 或未知 profile 即使位于 BossGate，也不能绕过 Flow 启动 G7 真实 Boss。</summary>
+    [TestCase(TinySpireActMapProfiles.LegacyG3V1ProfileId)]
+    [TestCase("tinyspire.test.unknown-boss.v1")]
+    public void BeginBossBattle_NonG7ProfileRejectsWithoutPublishing(string profileId)
+    {
+        MapDefinition map = CreateSingleBossMap(
+            bossIdentityId: 9001,
+            profileId: profileId);
+        using var store = new RunStateStore();
+        RunState created = store.CreateNewRun(new RunCreationOptions(
+            new RunId(Guid.Parse("90909090-aaaa-bbbb-cccc-555555555555")),
+            heroTemplateId: 1001,
+            initialHealth: 80,
+            maxHealth: 80,
+            runDeck: RunDeck.CreateInitial(new[] { 3002 }),
+            randomRootSeed: map.MapSeed,
+            map));
+        RunState gate = store.CommitNode(GetFirstSelectable(created));
+
+        Assert.Throws<InvalidOperationException>(() => store.BeginBossBattle());
+        Assert.That(store.Current, Is.SameAs(gate));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.BossGateReached));
+        Assert.That(store.Current.ActiveBattle, Is.Null);
+        Assert.That(store.Current.BattleAttemptSequence, Is.Zero);
+    }
+
+    /// <summary>Boss 胜利必须直接冻结唯一 Victory outcome，既不追加路径也不创建普通卡牌奖励。</summary>
+    [Test]
+    public void BossVictory_EntersTerminalVictoryWithoutOrdinaryReward()
+    {
+        MapDefinition map = CreateSingleBossMap(bossIdentityId: 9002);
+        using var store = new RunStateStore();
+        RunState created = store.CreateNewRun(new RunCreationOptions(
+            new RunId(Guid.Parse("91919191-1111-2222-3333-444444444444")),
+            heroTemplateId: 1001,
+            initialHealth: 80,
+            maxHealth: 80,
+            runDeck: RunDeck.CreateInitial(new[] { 3002 }),
+            randomRootSeed: map.MapSeed,
+            map));
+        MapNodeId bossNodeId = GetFirstSelectable(created);
+        store.CommitNode(bossNodeId);
+        RunBattleInput input = store.BeginBossBattle();
+        RunState inBattle = store.Current;
+
+        RunBattleResultSettlement preview = store.PreviewBattleResultSettlement(
+            input.BattleId,
+            BattleResultKind.Victory,
+            heroTemplateId: 1001,
+            settledHealth: 37,
+            maxHealth: 80,
+            Array.Empty<RunPotionInstanceId>());
+
+        Assert.That(store.Current, Is.SameAs(inBattle));
+        Assert.That(preview.Successor.ProgressPhase, Is.EqualTo(RunProgressPhase.Terminal));
+        Assert.That(preview.Successor.Outcome.Kind, Is.EqualTo(RunOutcomeKind.Victory));
+        Assert.That(preview.Successor.Outcome.BattleId, Is.EqualTo(input.BattleId));
+        Assert.That(preview.Successor.PendingCardReward, Is.Null);
+        Assert.That(preview.Successor.PathNodeIds, Is.EqualTo(inBattle.PathNodeIds));
+
+        RunState terminal = store.CommitBattleResultSettlement(preview);
+
+        Assert.That(terminal, Is.SameAs(preview.Successor));
+        Assert.Throws<InvalidOperationException>(() =>
+            store.CommitBattleResultSettlement(preview));
+    }
+
+    /// <summary>主动放弃先冻结 Abandoned 后继，只有显式提交才发布且重复提交保持零写入。</summary>
+    [Test]
+    public void AbandonStableRun_PreviewsThenCommitsTypedOutcomeExactlyOnce()
+    {
+        using var store = new RunStateStore();
+        RunState mapReady = store.CreateNewRun(CreateOptions(
+            "92929292-1111-2222-3333-444444444444",
+            mapSeed: 424243u));
+
+        RunAbandonmentSettlement preview = store.PreviewAbandonment();
+
+        Assert.That(store.Current, Is.SameAs(mapReady));
+        Assert.That(preview.Successor.ProgressPhase, Is.EqualTo(RunProgressPhase.Terminal));
+        Assert.That(preview.Successor.Outcome.Kind, Is.EqualTo(RunOutcomeKind.Abandoned));
+        Assert.That(preview.Successor.Outcome.BattleId, Is.Null);
+        Assert.That(preview.Successor.CurrentHealth, Is.EqualTo(mapReady.CurrentHealth));
+        Assert.That(preview.Successor.PathNodeIds, Is.EqualTo(mapReady.PathNodeIds));
+
+        RunState terminal = store.CommitAbandonment(preview);
+
+        Assert.That(terminal, Is.SameAs(preview.Successor));
+        Assert.Throws<InvalidOperationException>(() => store.CommitAbandonment(preview));
+        Assert.That(store.Current, Is.SameAs(terminal));
+    }
+
     /// <summary>本战 seed 派生在完整正整数 attempt 空间内不得复现旧压缩算法的碰撞。</summary>
     [Test]
     public void BattleSeedDerivation_PreviouslyCollidingAttempts_AreDifferent()
@@ -1614,6 +1741,28 @@ public sealed class RunStateStoreTests
             edges: new[]
             {
                 new MapEdge(startNodeId, destinationNodeId),
+            });
+    }
+
+    /// <summary>建立只含 Start 与一个已明牌 Boss 终点的最小 Store 测试地图。</summary>
+    private static MapDefinition CreateSingleBossMap(
+        int bossIdentityId,
+        string profileId = TinySpireActMapProfiles.NewRunG7V1ProfileId)
+    {
+        MapNodeId startNodeId = MapNodeId.FromPosition(layer: 0, slot: 0);
+        MapNodeId bossNodeId = MapNodeId.FromPosition(layer: 1, slot: 0);
+        return new MapDefinition(
+            profileId,
+            generatorVersion: ActMapGenerator.NewRunG6Version,
+            mapSeed: 42420002u,
+            nodes: new[]
+            {
+                new MapNode(startNodeId, layer: 0, slot: 0, MapNodeKind.Start, contentId: 0),
+                new MapNode(bossNodeId, layer: 1, slot: 0, MapNodeKind.Boss, bossIdentityId),
+            },
+            edges: new[]
+            {
+                new MapEdge(startNodeId, bossNodeId),
             });
     }
 

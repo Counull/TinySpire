@@ -47,6 +47,7 @@ namespace TinySpire.UI.Run
         EnterMapNode,
         LeaveTerminalRun,
         ContinueGame,
+        RequestAbandon,
         ConfirmAbandon,
         RetrySave,
         RequestExitAfterSaveFailure,
@@ -397,6 +398,7 @@ namespace TinySpire.UI.Run
                 case MapNodeKind.Start:
                     throw new InvalidOperationException("Start map identity must use content id 0.");
                 case MapNodeKind.Combat:
+                case MapNodeKind.Elite:
                     return ResolveEncounter(contentId);
                 case MapNodeKind.Rest:
                 case MapNodeKind.Chest:
@@ -469,7 +471,7 @@ namespace TinySpire.UI.Run
             return ResolveG3EncounterTestIdentity(encounterId, enemyId, mainEnemyName);
         }
 
-        /// <summary>解析当前 G3 profile 的 5001 与仅供目录判别测试的 5002，并把首敌身份绑定到稳定剪影。</summary>
+        /// <summary>解析普通与 G7 精英 Encounter，并把首敌身份绑定到稳定剪影。</summary>
         private static RunMapIdentityDescriptor ResolveG3EncounterTestIdentity(
             int encounterId,
             int mainEnemyId,
@@ -484,6 +486,10 @@ namespace TinySpire.UI.Run
                 case 5002 when mainEnemyId == 2101:
                     return new RunMapIdentityDescriptor(
                         $"SENTRY LINE\n{mainEnemyName}",
+                        RunMapVisualAnchorKind.EncounterSentrySilhouette);
+                case 5101 when mainEnemyId == 2101:
+                    return new RunMapIdentityDescriptor(
+                        $"ELITE GUARDIAN\n{mainEnemyName}",
                         RunMapVisualAnchorKind.EncounterSentrySilhouette);
                 default:
                     throw new InvalidOperationException(
@@ -600,6 +606,7 @@ namespace TinySpire.UI.Run
                     isValid = visualAnchorKind == RunMapVisualAnchorKind.StartFlag;
                     break;
                 case MapNodeKind.Combat:
+                case MapNodeKind.Elite:
                     isValid = visualAnchorKind == RunMapVisualAnchorKind.EncounterSlimeSilhouette ||
                               visualAnchorKind == RunMapVisualAnchorKind.EncounterSentrySilhouette;
                     break;
@@ -1296,6 +1303,9 @@ namespace TinySpire.UI.Run
         /// <summary>普通检查点提交失败时是否允许显式回退；Terminal 永远不允许回退。</summary>
         public bool CanRollbackFailedSave { get; }
 
+        /// <summary>当前稳定地图或 Boss 门是否允许请求主动放弃。</summary>
+        public bool CanAbandonActiveRun { get; }
+
         /// <summary>当前普通战斗奖励投影；仅奖励页非空。</summary>
         public RunCardRewardViewModel CardReward { get; }
 
@@ -1323,6 +1333,7 @@ namespace TinySpire.UI.Run
             RunMapViewModel map,
             bool continueEnabled = false,
             bool canRollbackFailedSave = false,
+            bool canAbandonActiveRun = false,
             RunCardRewardViewModel cardReward = null,
             RunHoldingsViewModel holdings = null,
             RunRestViewModel rest = null,
@@ -1339,6 +1350,7 @@ namespace TinySpire.UI.Run
             Map = map;
             ContinueEnabled = continueEnabled;
             CanRollbackFailedSave = canRollbackFailedSave;
+            CanAbandonActiveRun = canAbandonActiveRun;
             CardReward = cardReward;
             Holdings = holdings;
             Rest = rest;
@@ -1415,6 +1427,10 @@ namespace TinySpire.UI.Run
         private const string StrengthKeywordKey = "battle.keyword.strength.name";
         private const string VulnerableKeywordKey = "battle.keyword.vulnerable.name";
         private const string FailureTitleKey = "run.entry.failure.title";
+        private const string OutcomeVictoryKey = "run.entry.outcome.victory";
+        private const string OutcomeBossDefeatKey = "run.entry.outcome.boss_defeat";
+        private const string OutcomeAbandonedKey = "run.entry.outcome.abandoned";
+        private const string OutcomeReturnToMenuKey = "run.entry.outcome.return_to_menu";
         private const string CancelKey = "run.entry.common.cancel";
         private const string AbandonTitleKey = "run.entry.abandon.title";
         private const string AbandonMessageKey = "run.entry.abandon.message";
@@ -1601,10 +1617,18 @@ namespace TinySpire.UI.Run
                     break;
                 case RunEntryActionKind.ConfirmAbandon
                     when _localPage == RunEntryPage.AbandonConfirmation:
-                    RunSaveDeleteResult delete = _flow.AbandonSavedRun();
-                    _localPage = delete.Status == RunSaveDeleteStatus.Success
-                        ? RunEntryPage.HeroSelection
-                        : RunEntryPage.MainMenu;
+                    if (_flow.Persistence.CanContinue)
+                    {
+                        _flow.ContinueSavedRun();
+                        _flow.AbandonActiveRun();
+                    }
+                    else
+                    {
+                        RunSaveDeleteResult delete = _flow.AbandonSavedRun();
+                        _localPage = delete.Status == RunSaveDeleteStatus.Success
+                            ? RunEntryPage.HeroSelection
+                            : RunEntryPage.MainMenu;
+                    }
                     _selectedHeroTemplateId = null;
                     Render();
                     break;
@@ -1620,6 +1644,36 @@ namespace TinySpire.UI.Run
                 state.ProgressPhase == RunProgressPhase.MapReady)
             {
                 _flow.EnterMapNodeAsync(action.MapNodeId.Value).Forget();
+            }
+            else if (action.Kind == RunEntryActionKind.EnterMapNode &&
+                     action.MapNodeId == state.CurrentNodeId &&
+                     state.ProgressPhase == RunProgressPhase.BossGateReached)
+            {
+                _flow.BeginBossBattleAsync().Forget();
+            }
+            else if (action.Kind == RunEntryActionKind.RequestAbandon &&
+                     (state.ProgressPhase == RunProgressPhase.MapReady ||
+                      state.ProgressPhase == RunProgressPhase.BossGateReached) &&
+                     _flow.Persistence.Status != RunPersistenceStatus.CommitPending &&
+                     _flow.Persistence.Status != RunPersistenceStatus.CommitFailed)
+            {
+                _localPage = RunEntryPage.AbandonConfirmation;
+                Render();
+            }
+            else if (action.Kind == RunEntryActionKind.ConfirmAbandon &&
+                     _localPage == RunEntryPage.AbandonConfirmation &&
+                     (state.ProgressPhase == RunProgressPhase.MapReady ||
+                      state.ProgressPhase == RunProgressPhase.BossGateReached))
+            {
+                _flow.AbandonActiveRun();
+            }
+            else if (action.Kind == RunEntryActionKind.Back &&
+                     _localPage == RunEntryPage.AbandonConfirmation &&
+                     (state.ProgressPhase == RunProgressPhase.MapReady ||
+                      state.ProgressPhase == RunProgressPhase.BossGateReached))
+            {
+                _localPage = RunEntryPage.Map;
+                Render();
             }
             else if (action.Kind == RunEntryActionKind.LeaveTerminalRun &&
                      state.ProgressPhase == RunProgressPhase.Terminal)
@@ -1792,6 +1846,11 @@ namespace TinySpire.UI.Run
                                  _flow.Persistence.CanContinue,
                 canRollbackFailedSave: state != null &&
                                         _flow.CanRollbackFailedCheckpoint,
+                canAbandonActiveRun: state != null &&
+                                     (state.ProgressPhase == RunProgressPhase.MapReady ||
+                                      state.ProgressPhase == RunProgressPhase.BossGateReached) &&
+                                     _flow.Persistence.Status != RunPersistenceStatus.CommitPending &&
+                                     _flow.Persistence.Status != RunPersistenceStatus.CommitFailed,
                 cardReward: cardReward,
                 holdings: holdings,
                 rest: rest,
@@ -1879,6 +1938,13 @@ namespace TinySpire.UI.Run
                 return _localPage == RunEntryPage.RollbackConfirmation
                     ? RunEntryPage.RollbackConfirmation
                     : RunEntryPage.SaveFailure;
+            }
+
+            if (_localPage == RunEntryPage.AbandonConfirmation &&
+                (state.ProgressPhase == RunProgressPhase.MapReady ||
+                 state.ProgressPhase == RunProgressPhase.BossGateReached))
+            {
+                return RunEntryPage.AbandonConfirmation;
             }
 
             if (state.ProgressPhase == RunProgressPhase.Terminal)
@@ -2359,8 +2425,9 @@ namespace TinySpire.UI.Run
                 [RunEntryTextSlot.ChestTitle] = Localize(ChestTitleKey),
                 [RunEntryTextSlot.ShopTitle] = Localize(ShopTitleKey),
                 [RunEntryTextSlot.EventTitle] = Localize(EventTitleKey),
-                [RunEntryTextSlot.FailureTitle] = Localize(FailureTitleKey),
-                [RunEntryTextSlot.LeaveRun] = Localize(ExitKey),
+                [RunEntryTextSlot.FailureTitle] = Localize(ResolveOutcomeTitleKey(state)),
+                [RunEntryTextSlot.LeaveRun] = Localize(
+                    state?.Outcome == null ? ExitKey : OutcomeReturnToMenuKey),
                 [RunEntryTextSlot.Cancel] = Localize(CancelKey),
                 [RunEntryTextSlot.ConfirmationTitle] = Localize(
                     deletingUnusableSave ? DeleteTitleKey : AbandonTitleKey),
@@ -2379,6 +2446,28 @@ namespace TinySpire.UI.Run
                 [RunEntryTextSlot.RollbackMessage] = Localize(RollbackMessageKey),
                 [RunEntryTextSlot.RollbackConfirm] = Localize(RollbackConfirmKey),
             };
+        }
+
+        /// <summary>按唯一 RunOutcome 与战斗节点种类选择结果页标题，本轮只特别区分 Boss 失败。</summary>
+        private static string ResolveOutcomeTitleKey(RunState state)
+        {
+            if (state?.Outcome == null)
+                return FailureTitleKey;
+
+            switch (state.Outcome.Kind)
+            {
+                case RunOutcomeKind.Victory:
+                    return OutcomeVictoryKey;
+                case RunOutcomeKind.Abandoned:
+                    return OutcomeAbandonedKey;
+                case RunOutcomeKind.Defeat:
+                    bool isBossDefeat = state.CommittedNodeId.HasValue &&
+                                        state.MapDefinition.GetNode(
+                                            state.CommittedNodeId.Value).Kind == MapNodeKind.Boss;
+                    return isBossDefeat ? OutcomeBossDefeatKey : FailureTitleKey;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(state.Outcome.Kind));
+            }
         }
 
         /// <summary>把类型化存档故障转换为玩家可见的当前语言说明。</summary>

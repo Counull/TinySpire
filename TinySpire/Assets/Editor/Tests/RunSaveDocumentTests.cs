@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
+using TinySpire.Battle;
 using TinySpire.Run;
 using TinySpire.Run.Map;
 
@@ -142,7 +143,7 @@ public sealed class RunSaveDocumentTests
         }
     }
 
-    /// <summary>当前 v5 必须拒绝缺字段、错 payload、伪造身份与重复库存等 NodeVisit 形状。</summary>
+    /// <summary>当前 v6 必须拒绝缺字段、错 payload、伪造身份与重复库存等 NodeVisit 形状。</summary>
     [TestCase(NodeVisitShapeViolation.MissingTopLevelField)]
     [TestCase(NodeVisitShapeViolation.MissingNullablePayloadField)]
     [TestCase(NodeVisitShapeViolation.MismatchedKind)]
@@ -267,7 +268,7 @@ public sealed class RunSaveDocumentTests
             source.PathNodeIds,
             source.ProgressPhase,
             source.CommittedNodeId,
-            source.TerminalReason,
+            source.OutcomeKind,
             source.PendingCardReward,
             relics: new[]
             {
@@ -287,7 +288,9 @@ public sealed class RunSaveDocumentTests
         JObject raw = JObject.Parse(json);
 
         Assert.That(read.Status, Is.EqualTo(RunSaveDocumentReadStatus.Success));
-        Assert.That(raw.Value<int>("schemaVersion"), Is.EqualTo(5));
+        Assert.That(
+            raw.Value<int>("schemaVersion"),
+            Is.EqualTo(RunSaveDocument.CurrentSchemaVersion));
         Assert.That(
             read.Document.Relics.Select(relic => relic.InstanceId),
             Is.EqualTo(new[] { 1, 2 }));
@@ -547,7 +550,7 @@ public sealed class RunSaveDocumentTests
                 "pathNodeIds",
                 "progressPhase",
                 "committedNodeId",
-                "terminalReason",
+                "outcomeKind",
                 "pendingCardReward",
                 "pendingNodeVisit",
             }));
@@ -785,7 +788,7 @@ public sealed class RunSaveDocumentTests
         Assert.That(restored.BattleAttemptSequence, Is.EqualTo(2));
     }
 
-    /// <summary>普通战斗失败作为 Terminal(Defeat) 原子持久化，冷恢复仍停留失败终局且不能重试。</summary>
+    /// <summary>普通战斗失败作为 Defeat outcome 原子持久化，冷恢复仍停留失败终局且不能重试。</summary>
     [Test]
     public void TerminalDefeat_RoundTrip_RestoresFailedNodeAndTerminalReason()
     {
@@ -811,18 +814,85 @@ public sealed class RunSaveDocumentTests
         RunState restored = restoredStore.RestoreRun(restore.Options);
 
         Assert.That(document.ProgressPhase, Is.EqualTo(RunSaveProgressPhase.Terminal));
-        Assert.That(document.TerminalReason, Is.EqualTo(RunSaveTerminalReason.Defeat));
+        Assert.That(document.OutcomeKind, Is.EqualTo(RunSaveOutcomeKind.Defeat));
         Assert.That(document.CommittedNodeId, Is.EqualTo(failedNodeId.Value));
         Assert.That(read.Status, Is.EqualTo(RunSaveDocumentReadStatus.Success));
         Assert.That(restore.Status, Is.EqualTo(RunSaveRestoreStatus.Success));
         Assert.That(restored.ProgressPhase, Is.EqualTo(RunProgressPhase.Terminal));
-        Assert.That(restored.TerminalReason, Is.EqualTo(RunTerminalReason.Defeat));
+        Assert.That(restored.Outcome.Kind, Is.EqualTo(RunOutcomeKind.Defeat));
+        Assert.That(restored.Outcome.BattleId, Is.EqualTo(battle.BattleId));
         Assert.That(restored.CurrentHealth, Is.Zero);
         Assert.That(restored.CommittedNodeId, Is.EqualTo(failedNodeId));
         Assert.That(restored.PathNodeIds.Count, Is.EqualTo(1));
         Assert.That(restored.BattleAttemptSequence, Is.EqualTo(1));
         Assert.That(restored.ActiveBattle, Is.Null);
         Assert.Throws<InvalidOperationException>(() => restoredStore.BeginCommittedBattle());
+    }
+
+    /// <summary>Boss Victory 的节点身份与 outcome 必须跨 schema v6 冷恢复，且不生成普通奖励。</summary>
+    [Test]
+    public void BossVictory_RoundTrip_RestoresOutcomeWithoutAppendingPathOrReward()
+    {
+        using RunStateStore sourceStore = CreateG7BossGateStore(
+            "34343434-4545-5656-6767-787878787878",
+            mapSeed: 24682468u);
+        RunState gate = sourceStore.Current;
+        RunBattleInput bossBattle = sourceStore.BeginBossBattle();
+        RunBattleResultSettlement preview = sourceStore.PreviewBattleResultSettlement(
+            bossBattle.BattleId,
+            BattleResultKind.Victory,
+            heroTemplateId: 1001,
+            settledHealth: 29,
+            maxHealth: 80,
+            Array.Empty<RunPotionInstanceId>());
+        RunState victory = sourceStore.CommitBattleResultSettlement(preview);
+
+        RunSaveDocument document = RunSaveDocumentMapper.Create(victory);
+        RunSaveDocumentReadResult read = RunSaveDocumentCodec.Read(
+            RunSaveDocumentCodec.Serialize(document));
+        RunSaveRestoreResult restore = RunSaveDocumentMapper.CreateRestore(
+            read.Document,
+            new ExistingConfigurationCatalog(profile: TinySpireActMapProfiles.NewRunG7V1));
+        Assert.That(restore.Status, Is.EqualTo(RunSaveRestoreStatus.Success), restore.Detail);
+        using var restoredStore = new RunStateStore();
+        RunState restored = restoredStore.RestoreRun(restore.Options);
+
+        Assert.That(read.Status, Is.EqualTo(RunSaveDocumentReadStatus.Success));
+        Assert.That(document.OutcomeKind, Is.EqualTo(RunSaveOutcomeKind.Victory));
+        Assert.That(restored.Outcome.Kind, Is.EqualTo(RunOutcomeKind.Victory));
+        Assert.That(restored.Outcome.BattleId, Is.EqualTo(bossBattle.BattleId));
+        Assert.That(restored.PathNodeIds, Is.EqualTo(gate.PathNodeIds));
+        Assert.That(restored.CommittedNodeId, Is.EqualTo(gate.CurrentNodeId));
+        Assert.That(restored.PendingCardReward, Is.Null);
+        Assert.That(restored.BattleAttemptSequence, Is.EqualTo(gate.BattleAttemptSequence + 1));
+    }
+
+    /// <summary>主动放弃必须持久化为 Abandoned outcome，并保留当时生命与路径且没有 Battle 身份。</summary>
+    [Test]
+    public void Abandoned_RoundTrip_RestoresStableProgressWithoutBattleIdentity()
+    {
+        using RunStateStore sourceStore = CreateStore(
+            "35353535-4646-5757-6868-797979797979",
+            mapSeed: 35793579u);
+        RunAbandonmentSettlement preview = sourceStore.PreviewAbandonment();
+        RunState abandoned = sourceStore.CommitAbandonment(preview);
+
+        RunSaveDocument document = RunSaveDocumentMapper.Create(abandoned);
+        RunSaveDocumentReadResult read = RunSaveDocumentCodec.Read(
+            RunSaveDocumentCodec.Serialize(document));
+        RunSaveRestoreResult restore = RunSaveDocumentMapper.CreateRestore(
+            read.Document,
+            new ExistingConfigurationCatalog());
+        using var restoredStore = new RunStateStore();
+        RunState restored = restoredStore.RestoreRun(restore.Options);
+
+        Assert.That(document.OutcomeKind, Is.EqualTo(RunSaveOutcomeKind.Abandoned));
+        Assert.That(restored.Outcome.Kind, Is.EqualTo(RunOutcomeKind.Abandoned));
+        Assert.That(restored.Outcome.BattleId, Is.Null);
+        Assert.That(restored.CurrentHealth, Is.EqualTo(preview.Source.CurrentHealth));
+        Assert.That(restored.PathNodeIds, Is.EqualTo(preview.Source.PathNodeIds));
+        Assert.That(restored.CommittedNodeId, Is.Null);
+        Assert.That(restored.BattleAttemptSequence, Is.EqualTo(preview.Source.BattleAttemptSequence));
     }
 
     /// <summary>指纹漂移必须拒绝读档，禁止用当前生成结果静默替换原地图。</summary>
@@ -1262,6 +1332,38 @@ public sealed class RunSaveDocumentTests
         Assert.That(result.Detail, Is.Not.Empty);
     }
 
+    /// <summary>schema v5 的唯一 Terminal(Defeat) 必须显式迁移为 v6 Defeat outcome 并要求重写。</summary>
+    [Test]
+    public void Read_SchemaV5TerminalDefeat_MigratesToDefeatOutcome()
+    {
+        using RunStateStore store = CreateStore(
+            "45454545-5656-6767-7878-898989898989",
+            mapSeed: 45674567u);
+        MapNodeId failedNodeId = FirstSelectableNodeId(store.Current);
+        store.CommitNode(failedNodeId);
+        RunBattleInput battle = store.BeginCommittedBattle();
+        RunState defeated = store.RecordDefeat(
+            battle.BattleId,
+            heroTemplateId: 1001,
+            settledHealth: 0,
+            maxHealth: 80);
+        JObject raw = JObject.Parse(RunSaveDocumentCodec.Serialize(
+            RunSaveDocumentMapper.Create(defeated)));
+        raw["schemaVersion"] = 5;
+        raw.Remove("outcomeKind");
+        raw["terminalReason"] = nameof(RunSaveTerminalReason.Defeat);
+
+        RunSaveDocumentReadResult read = RunSaveDocumentCodec.Read(raw.ToString());
+
+        Assert.That(read.Status, Is.EqualTo(RunSaveDocumentReadStatus.Success));
+        Assert.That(read.Document.SchemaVersion, Is.EqualTo(6));
+        Assert.That(read.Document.OutcomeKind, Is.EqualTo(RunSaveOutcomeKind.Defeat));
+        Assert.That(read.Document.RequiresCanonicalRewrite, Is.True);
+        JObject canonical = JObject.Parse(RunSaveDocumentCodec.Serialize(read.Document));
+        Assert.That(canonical.Property("terminalReason"), Is.Null);
+        Assert.That(canonical.Value<string>("outcomeKind"), Is.EqualTo("Defeat"));
+    }
+
     /// <summary>schema v2 的初始牌组模板必须无歧义展开为当前有序实例牌组。</summary>
     [Test]
     public void Read_SchemaV2DeckTemplate_MigratesThroughLegacyFallbackAndRestoresOrderedInstances()
@@ -1270,6 +1372,7 @@ public sealed class RunSaveDocumentTests
             "12345678-aaaa-bbbb-cccc-123456789abc");
         JObject raw = JObject.Parse(RunSaveDocumentCodec.Serialize(current));
         raw["schemaVersion"] = 2;
+        DowngradeOutcomeFieldToLegacy(raw);
         raw.Remove("runCards");
         raw.Remove("pendingCardReward");
         raw.Remove("relics");
@@ -1324,6 +1427,7 @@ public sealed class RunSaveDocumentTests
             "13131313-aaaa-bbbb-cccc-131313131313");
         JObject raw = JObject.Parse(RunSaveDocumentCodec.Serialize(current));
         raw["schemaVersion"] = 2;
+        DowngradeOutcomeFieldToLegacy(raw);
         raw.Remove("pendingCardReward");
         raw.Remove("relics");
         raw.Remove("potions");
@@ -1351,6 +1455,7 @@ public sealed class RunSaveDocumentTests
             "23232323-aaaa-bbbb-cccc-232323232323");
         JObject raw = JObject.Parse(RunSaveDocumentCodec.Serialize(current));
         raw["schemaVersion"] = 3;
+        DowngradeOutcomeFieldToLegacy(raw);
         raw.Remove("pendingCardReward");
         raw.Remove("relics");
         raw.Remove("potions");
@@ -1376,6 +1481,7 @@ public sealed class RunSaveDocumentTests
             "24242424-aaaa-bbbb-cccc-242424242424");
         JObject raw = JObject.Parse(RunSaveDocumentCodec.Serialize(current));
         raw["schemaVersion"] = 3;
+        DowngradeOutcomeFieldToLegacy(raw);
         raw.Remove("relics");
         raw.Remove("potions");
         raw.Remove("gold");
@@ -1396,6 +1502,7 @@ public sealed class RunSaveDocumentTests
             "34343434-aaaa-bbbb-cccc-343434343434");
         JObject raw = JObject.Parse(RunSaveDocumentCodec.Serialize(current));
         raw["schemaVersion"] = 4;
+        DowngradeOutcomeFieldToLegacy(raw);
         raw.Remove("relics");
         raw.Remove("potions");
         raw.Remove("gold");
@@ -1404,7 +1511,7 @@ public sealed class RunSaveDocumentTests
         RunSaveDocumentReadResult read = RunSaveDocumentCodec.Read(raw.ToString());
 
         Assert.That(read.Status, Is.EqualTo(RunSaveDocumentReadStatus.Success));
-        Assert.That(read.Document.SchemaVersion, Is.EqualTo(5));
+        Assert.That(read.Document.SchemaVersion, Is.EqualTo(RunSaveDocument.CurrentSchemaVersion));
         Assert.That(read.Document.Relics, Is.Empty);
         Assert.That(read.Document.Potions, Is.Empty);
         Assert.That(read.Document.Gold, Is.EqualTo(100));
@@ -1433,6 +1540,7 @@ public sealed class RunSaveDocumentTests
         JObject raw = JObject.Parse(RunSaveDocumentCodec.Serialize(
             RunSaveDocumentMapper.Create(pending)));
         raw["schemaVersion"] = 4;
+        DowngradeOutcomeFieldToLegacy(raw);
         raw.Remove("relics");
         raw.Remove("potions");
         raw.Remove("gold");
@@ -1457,6 +1565,7 @@ public sealed class RunSaveDocumentTests
             "46464646-aaaa-bbbb-cccc-464646464646",
             attemptSequence: 2);
         raw["schemaVersion"] = 4;
+        DowngradeOutcomeFieldToLegacy(raw);
         raw.Remove("relics");
         raw.Remove("potions");
         raw.Remove("gold");
@@ -1479,6 +1588,7 @@ public sealed class RunSaveDocumentTests
             "47474747-aaaa-bbbb-cccc-474747474747",
             attemptSequence: 1);
         raw["schemaVersion"] = 4;
+        DowngradeOutcomeFieldToLegacy(raw);
         raw.Remove("relics");
         raw.Remove("potions");
         raw.Remove("gold");
@@ -1490,7 +1600,7 @@ public sealed class RunSaveDocumentTests
         Assert.That(read.Detail, Does.Contain("attachedLoot"));
     }
 
-    /// <summary>canonical v5 的 Pending 奖励必须携带字段齐全、值为 null 或正数的 attachedLoot。</summary>
+    /// <summary>canonical v6 的 Pending 奖励必须携带字段齐全、值为 null 或正数的 attachedLoot。</summary>
     [TestCase(AttachedLootShapeViolation.MissingObject)]
     [TestCase(AttachedLootShapeViolation.NullObject)]
     [TestCase(AttachedLootShapeViolation.MissingRelicField)]
@@ -1548,6 +1658,7 @@ public sealed class RunSaveDocumentTests
             "35353535-aaaa-bbbb-cccc-353535353535");
         JObject raw = JObject.Parse(RunSaveDocumentCodec.Serialize(current));
         raw["schemaVersion"] = 4;
+        DowngradeOutcomeFieldToLegacy(raw);
         raw.Remove("relics");
         raw.Remove("potions");
         raw.Remove("gold");
@@ -1565,7 +1676,7 @@ public sealed class RunSaveDocumentTests
         Assert.That(read.Detail, Does.Contain(newerField));
     }
 
-    /// <summary>当前 v5 必须严格拒绝缺字段、负 Gold、非法或重复实例与越界容量。</summary>
+    /// <summary>当前 v6 必须严格拒绝缺字段、负 Gold、非法或重复实例与越界容量。</summary>
     [TestCase(HoldingsShapeViolation.MissingRelics)]
     [TestCase(HoldingsShapeViolation.NullPotions)]
     [TestCase(HoldingsShapeViolation.NegativeGold)]
@@ -1836,6 +1947,16 @@ public sealed class RunSaveDocumentTests
         return store;
     }
 
+    /// <summary>把 canonical v6 空 outcome 字段改回 v2～v5 使用的 terminalReason 形状。</summary>
+    private static void DowngradeOutcomeFieldToLegacy(JObject raw)
+    {
+        if (raw == null)
+            throw new ArgumentNullException(nameof(raw));
+
+        raw.Remove("outcomeKind");
+        raw["terminalReason"] = JValue.CreateNull();
+    }
+
     /// <summary>创建一份当前 schema 的初始地图稳定文档。</summary>
     private static RunSaveDocument CreateInitialDocument(string runId)
     {
@@ -2058,6 +2179,40 @@ public sealed class RunSaveDocumentTests
         return store.CommitNode(bossNodeId);
     }
 
+    /// <summary>用真实 G7 recipe 沿普通直达边恢复到稳定 BossGate，供真实 Boss outcome 持久化测试使用。</summary>
+    private static RunStateStore CreateG7BossGateStore(string runId, uint mapSeed)
+    {
+        MapDefinition map = ActMapGenerator.Generate(TinySpireActMapProfiles.NewRunG7V1, mapSeed);
+        MapNodeId startNodeId = map.Nodes.Single(node => node.Kind == MapNodeKind.Start).Id;
+        var path = new List<MapNodeId> { startNodeId };
+        MapNodeId cursor = startNodeId;
+        while (map.GetNode(cursor).Kind != MapNodeKind.Boss)
+        {
+            cursor = MapReachability.GetSelectableNodeIds(
+                    map,
+                    cursor,
+                    MapTraversalMode.Ordinary)
+                .First();
+            path.Add(cursor);
+        }
+
+        var store = new RunStateStore();
+        store.RestoreRun(new RunRestoreOptions(
+            new RunId(Guid.ParseExact(runId, "D")),
+            heroTemplateId: 1001,
+            currentHealth: 80,
+            maxHealth: 80,
+            runDeck: RunDeck.CreateInitial(new[] { 3002, 3002, 3003 }),
+            randomRootSeed: 987654321u,
+            map,
+            path,
+            RunProgressPhase.BossGateReached,
+            committedNodeId: null,
+            outcomeKind: null,
+            holdings: RunHoldings.Empty(initialGold: 100)));
+        return store;
+    }
+
     /// <summary>按普通移动规则读取当前路径的首个可选节点。</summary>
     private static MapNodeId FirstSelectableNodeId(RunState state)
     {
@@ -2097,7 +2252,7 @@ public sealed class RunSaveDocumentTests
             pathNodeIds ?? source.PathNodeIds,
             source.ProgressPhase,
             source.CommittedNodeId,
-            source.TerminalReason,
+            source.OutcomeKind,
             pendingCardReward ?? source.PendingCardReward,
             relics ?? source.Relics,
             potions ?? source.Potions,
@@ -2212,7 +2367,7 @@ public sealed class RunSaveDocumentTests
             source.PathNodeIds,
             source.ProgressPhase,
             source.CommittedNodeId,
-            source.TerminalReason,
+            source.OutcomeKind,
             source.PendingCardReward,
             source.Relics,
             source.Potions,

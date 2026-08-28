@@ -4,6 +4,21 @@
     "enemy_template_ids": [
       2001,
       2002
-    ]
+    ],
+    "phase_two_behavior_group_id": 0
+  },
+  "5101": {
+    "id": 5101,
+    "enemy_template_ids": [
+      2101
+    ],
+    "phase_two_behavior_group_id": 0
+  },
+  "5201": {
+    "id": 5201,
+    "enemy_template_ids": [
+      2201
+    ],
+    "phase_two_behavior_group_id": 6202
   }
 }

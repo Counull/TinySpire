@@ -41,6 +41,9 @@ public static class TinySpireBuildTools
             EditorUtility.DisplayProgressBar("TinySpire Build", "Validating Hero card reward pools...", 0.59f);
             BattleHeroRewardPoolBuildValidator.ValidateCurrentProject();
 
+            EditorUtility.DisplayProgressBar("TinySpire Build", "Validating G7 Act content graph...", 0.595f);
+            RunActContentBuildValidator.ValidateCurrentProject();
+
             EditorUtility.DisplayProgressBar("TinySpire Build", "Importing and validating localization...", 0.6f);
             LocalizationBuildTools.ImportBattleCardTextFromExcel();
 

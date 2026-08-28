@@ -2347,6 +2347,46 @@ MonoBehaviour:
     m_Key: run.entry.event.paid_heal
     m_Metadata:
       m_Items: []
+  - m_Id: 10407441649528832
+    m_Key: battle.enemy.elite_guardian.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10407441720832000
+    m_Key: battle.enemy.chrono_warden.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10407441720832001
+    m_Key: battle.enemy.boss_phase.one
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10407441720832002
+    m_Key: battle.enemy.boss_phase.two
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10407441720832003
+    m_Key: run.entry.map.elite_node
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10407441720832004
+    m_Key: run.entry.map.boss_node
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10407441720832005
+    m_Key: run.entry.outcome.victory
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10407441720832006
+    m_Key: run.entry.outcome.boss_defeat
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10407441720832007
+    m_Key: run.entry.outcome.abandoned
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10407441720832008
+    m_Key: run.entry.outcome.return_to_menu
+    m_Metadata:
+      m_Items: []
   m_Metadata:
     m_Items: []
   m_KeyGenerator:

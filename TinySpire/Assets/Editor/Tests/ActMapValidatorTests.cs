@@ -259,6 +259,35 @@ public sealed class ActMapValidatorTests
         Assert.That(codes, Does.Contain(MapValidationErrorCode.ContentReferenceViolation));
     }
 
+    /// <summary>G7 精英节点必须同时从 Start 可达并可继续抵达真实 Boss 层。</summary>
+    [Test]
+    public void Validate_G7EliteWhenRouteBreaks_ReportsPlayableFailures()
+    {
+        ActMapProfile profile = TinySpireActMapProfiles.NewRunG7V1;
+        MapDefinition generated = ActMapGenerator.Generate(profile, mapSeed: 24680u);
+        MapNodeId eliteNodeId = MapNodeId.FromPosition(layer: 7, slot: 0);
+        var unreachable = new MapDefinition(
+            generated.ProfileId,
+            generated.GeneratorVersion,
+            generated.MapSeed,
+            generated.Nodes,
+            generated.Edges.Where(edge => edge.ToNodeId != eliteNodeId).ToArray());
+        var stranded = new MapDefinition(
+            generated.ProfileId,
+            generated.GeneratorVersion,
+            generated.MapSeed,
+            generated.Nodes,
+            generated.Edges.Where(edge => edge.FromNodeId != eliteNodeId).ToArray());
+
+        MapValidationResult unreachableResult = ActMapValidator.Validate(unreachable, profile);
+        MapValidationResult strandedResult = ActMapValidator.Validate(stranded, profile);
+
+        Assert.That(unreachableResult.Errors.Select(error => error.Code),
+            Does.Contain(MapValidationErrorCode.PlayableNodeUnreachableFromStart));
+        Assert.That(strandedResult.Errors.Select(error => error.Code),
+            Does.Contain(MapValidationErrorCode.PlayableNodeCannotReachBoss));
+    }
+
     /// <summary>创建覆盖两个普通层与重复 Boss 终点的固定校验 profile。</summary>
     private static ActMapProfile CreateProfile()
     {

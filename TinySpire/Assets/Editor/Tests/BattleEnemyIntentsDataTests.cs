@@ -10,6 +10,112 @@ using TinySpire.Battle;
 
 public sealed class BattleEnemyIntentsDataTests
 {
+    /// <summary>验证 Boss 首次行动完成的同一冻结计划只在提交时切换二阶段，后续意图始终留在二阶段。</summary>
+    [Test]
+    public void PreparedCompletion_PhaseOneBoss_SwitchesToPhaseTwoExactlyOnceOnCommit()
+    {
+        Tables tables = CreateTables(
+            new JArray(CreateEnemy(2001, 6001)),
+            new JArray(
+                CreateGroup(6001, 7001),
+                CreateGroup(6002, 7002)),
+            new JArray(
+                CreateBehavior(7001, weight: 1),
+                CreateBehavior(7002, weight: 1)));
+        var combatants = new BattleCombatantsData();
+        EnemyCombatantData enemy = combatants.AddEnemy(2001, maxHealth: 20, strength: 0);
+        var intents = new BattleEnemyIntentsData(
+            combatants,
+            new[] { enemy.Id },
+            tables,
+            battleSeed: 1234,
+            phaseTwoBehaviorGroupId: 6002);
+
+        try
+        {
+            EnemyIntentLayoutData phaseOneLayout = intents.Layout.CurrentValue;
+            uint phaseOneRandomState = intents.RandomState;
+            Assert.That(phaseOneLayout.TryGetBossPhase(enemy.Id, out BattleBossPhase phase), Is.True);
+            Assert.That(phase, Is.EqualTo(BattleBossPhase.PhaseOne));
+            Assert.That(GetCurrentBehaviorId(intents, enemy.Id), Is.EqualTo(7001));
+
+            BattleEnemyIntentCompletionPreparationResult firstPreparation =
+                intents.PrepareCompletion(enemy.Id, startingOrder: 3);
+
+            Assert.That(firstPreparation.Succeeded, Is.True);
+            Assert.That(intents.Layout.CurrentValue, Is.SameAs(phaseOneLayout));
+            Assert.That(intents.RandomState, Is.EqualTo(phaseOneRandomState));
+            Assert.That(
+                firstPreparation.Plan.NextLayout.TryGetBossPhase(enemy.Id, out BattleBossPhase preparedPhase),
+                Is.True);
+            Assert.That(preparedPhase, Is.EqualTo(BattleBossPhase.PhaseTwo));
+            Assert.That(firstPreparation.Plan.NextBehaviorId, Is.EqualTo(7002));
+
+            Assert.That(intents.ValidatePreparedCompletion(firstPreparation.Plan), Is.True);
+            intents.CommitPreparedCompletion(firstPreparation.Plan);
+
+            EnemyIntentLayoutData phaseTwoLayout = intents.Layout.CurrentValue;
+            Assert.That(phaseTwoLayout.TryGetBossPhase(enemy.Id, out BattleBossPhase committedPhase), Is.True);
+            Assert.That(committedPhase, Is.EqualTo(BattleBossPhase.PhaseTwo));
+            Assert.That(GetCurrentBehaviorId(intents, enemy.Id), Is.EqualTo(7002));
+
+            BattleEnemyIntentCompletionPreparationResult secondPreparation =
+                intents.PrepareCompletion(enemy.Id, startingOrder: 4);
+            Assert.That(secondPreparation.Succeeded, Is.True);
+            Assert.That(
+                secondPreparation.Plan.NextLayout.TryGetBossPhase(enemy.Id, out BattleBossPhase nextPhase),
+                Is.True);
+            Assert.That(nextPhase, Is.EqualTo(BattleBossPhase.PhaseTwo));
+            Assert.That(secondPreparation.Plan.NextBehaviorId, Is.EqualTo(7002));
+            Assert.That(intents.ValidatePreparedCompletion(secondPreparation.Plan), Is.True);
+            intents.CommitPreparedCompletion(secondPreparation.Plan);
+            Assert.That(
+                intents.Layout.CurrentValue.TryGetBossPhase(enemy.Id, out BattleBossPhase finalPhase),
+                Is.True);
+            Assert.That(finalPhase, Is.EqualTo(BattleBossPhase.PhaseTwo));
+        }
+        finally
+        {
+            intents.Dispose();
+            combatants.Dispose();
+        }
+    }
+
+    /// <summary>验证配置二阶段行为组的遭遇必须且只能实例化一名 Boss 敌人。</summary>
+    [Test]
+    public void Constructor_PhaseTwoBehaviorGroupWithMultipleEnemies_IsRejected()
+    {
+        Tables tables = CreateTables(
+            new JArray(
+                CreateEnemy(2001, 6001),
+                CreateEnemy(2002, 6001)),
+            new JArray(
+                CreateGroup(6001, 7001),
+                CreateGroup(6002, 7002)),
+            new JArray(
+                CreateBehavior(7001, weight: 1),
+                CreateBehavior(7002, weight: 1)));
+        var combatants = new BattleCombatantsData();
+        EnemyCombatantData first = combatants.AddEnemy(2001, maxHealth: 20, strength: 0);
+        EnemyCombatantData second = combatants.AddEnemy(2002, maxHealth: 20, strength: 0);
+
+        try
+        {
+            Assert.That(
+                () => new BattleEnemyIntentsData(
+                    combatants,
+                    new[] { first.Id, second.Id },
+                    tables,
+                    battleSeed: 1234,
+                    phaseTwoBehaviorGroupId: 6002),
+                Throws.InvalidOperationException.With.Message.Contains("exactly one enemy"));
+        }
+        finally
+        {
+            combatants.Dispose();
+        }
+    }
+
     /// <summary>验证意图完成先零写入 prepare，再只校验一次并只提交一次冻结结果。</summary>
     [Test]
     public void PreparedCompletion_IsZeroWriteUntilValidatedSingleCommit()

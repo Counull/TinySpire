@@ -31,6 +31,35 @@ namespace TinySpire.Run
         }
     }
 
+    /// <summary>一次已纯计算完成、等待存档成功后以来源引用 CAS 发布的主动放弃后继。</summary>
+    internal sealed class RunAbandonmentSettlement
+    {
+        /// <summary>预览时仍可由 RunEntry 主动放弃的精确稳定快照。</summary>
+        internal RunState Source { get; }
+
+        /// <summary>保留当前进度且只新增 Abandoned outcome 的唯一终局后继。</summary>
+        internal RunState Successor { get; }
+
+        /// <summary>冻结来源与唯一 Abandoned 后继，拒绝任何 Battle 或路径漂移。</summary>
+        internal RunAbandonmentSettlement(RunState source, RunState successor)
+        {
+            Source = source ?? throw new ArgumentNullException(nameof(source));
+            Successor = successor ?? throw new ArgumentNullException(nameof(successor));
+            if ((source.ProgressPhase != RunProgressPhase.MapReady &&
+                 source.ProgressPhase != RunProgressPhase.BossGateReached) ||
+                source.ActiveBattle != null ||
+                successor.ProgressPhase != RunProgressPhase.Terminal ||
+                successor.Outcome?.Kind != RunOutcomeKind.Abandoned ||
+                successor.Outcome.BattleId != null ||
+                successor.RunId != source.RunId ||
+                successor.CurrentHealth != source.CurrentHealth ||
+                !successor.PathNodeIds.SequenceEqual(source.PathNodeIds))
+            {
+                throw new ArgumentException("Run abandonment settlement snapshots are inconsistent.");
+            }
+        }
+    }
+
     /// <summary>一次已经权威冻结、等待存档成功后以来源引用 CAS 发布的非战斗进入后继。</summary>
     internal sealed class RunNodeVisitEntrySettlement
     {
@@ -272,6 +301,7 @@ namespace TinySpire.Run
             switch (node.Kind)
             {
                 case MapNodeKind.Combat:
+                case MapNodeKind.Elite:
                     Publish(new RunState(
                         state,
                         state.CurrentHealth,
@@ -280,7 +310,7 @@ namespace TinySpire.Run
                         node.Id,
                         state.BattleAttemptSequence,
                         activeBattle: null,
-                        terminalReason: null));
+                        outcome: null));
                     return Current;
                 case MapNodeKind.Boss:
                     var reachedPath = state.PathNodeIds.Concat(new[] { node.Id }).ToArray();
@@ -292,7 +322,7 @@ namespace TinySpire.Run
                         committedNodeId: null,
                         battleAttemptSequence: state.BattleAttemptSequence,
                         activeBattle: null,
-                        terminalReason: null));
+                        outcome: null));
                     return Current;
                 default:
                     throw new InvalidOperationException(
@@ -555,12 +585,23 @@ namespace TinySpire.Run
                 state.CommittedNodeId == null ||
                 state.ActiveBattle != null)
             {
-                throw new InvalidOperationException("The Run does not have a committed Combat node.");
+                throw new InvalidOperationException("The Run does not have a committed Combat or Elite node.");
             }
 
             int attemptSequence = checked(state.BattleAttemptSequence + 1);
             uint battleSeed = DeriveBattleSeed(state.RandomRootSeed, attemptSequence);
-            var input = new RunBattleInput(state, attemptSequence, battleSeed);
+            MapNode battleNode = state.MapDefinition.GetNode(state.CommittedNodeId.Value);
+            if (battleNode.Kind != MapNodeKind.Combat && battleNode.Kind != MapNodeKind.Elite)
+            {
+                throw new InvalidOperationException(
+                    "Only a committed Combat or Elite can use the ordinary battle entry.");
+            }
+            var input = new RunBattleInput(
+                state,
+                battleNode,
+                battleNode.ContentId,
+                attemptSequence,
+                battleSeed);
             Publish(new RunState(
                 state,
                 state.CurrentHealth,
@@ -569,7 +610,58 @@ namespace TinySpire.Run
                 state.CommittedNodeId,
                 attemptSequence,
                 input,
-                terminalReason: null));
+                outcome: null));
+            return input;
+        }
+
+        /// <summary>从 G7 Boss 门按当前 profile 与 Boss 身份独立解析并签发唯一真实 Battle。</summary>
+        public RunBattleInput BeginBossBattle()
+        {
+            RunState state = RequireCurrent();
+            if (state.ProgressPhase != RunProgressPhase.BossGateReached ||
+                state.ActiveBattle != null ||
+                state.CommittedNodeId != null)
+            {
+                throw new InvalidOperationException("The Run has not reached a stable Boss gate.");
+            }
+
+            MapNode bossNode = state.MapDefinition.GetNode(state.CurrentNodeId);
+            if (bossNode.Kind != MapNodeKind.Boss)
+                throw new InvalidOperationException("The current path tail is not a Boss node.");
+
+            ActContentManifest manifest = TinySpireActContentCatalog.GetByProfileId(
+                state.MapDefinition.ProfileId)
+                ?? throw new InvalidOperationException(
+                    $"Act profile '{state.MapDefinition.ProfileId}' has no real Boss manifest.");
+            int encounterTemplateId;
+            try
+            {
+                encounterTemplateId = manifest.GetBossEncounterId(bossNode.ContentId);
+            }
+            catch (KeyNotFoundException exception)
+            {
+                throw new InvalidOperationException(
+                    $"Boss identity {bossNode.ContentId} has no encounter in the active Act manifest.",
+                    exception);
+            }
+
+            int attemptSequence = checked(state.BattleAttemptSequence + 1);
+            uint battleSeed = DeriveBattleSeed(state.RandomRootSeed, attemptSequence);
+            var input = new RunBattleInput(
+                state,
+                bossNode,
+                encounterTemplateId,
+                attemptSequence,
+                battleSeed);
+            Publish(new RunState(
+                state,
+                state.CurrentHealth,
+                state.PathNodeIds,
+                RunProgressPhase.InBattle,
+                committedNodeId: bossNode.Id,
+                battleAttemptSequence: attemptSequence,
+                activeBattle: input,
+                outcome: null));
             return input;
         }
 
@@ -616,6 +708,37 @@ namespace TinySpire.Run
                 case BattleResultKind.Victory:
                     if (settledHealth <= 0)
                         throw new ArgumentOutOfRangeException(nameof(settledHealth));
+                    if (state.ActiveBattle.NodeKind == MapNodeKind.Boss)
+                    {
+                        if (rewardFactory != null)
+                        {
+                            throw new ArgumentException(
+                                "Boss victory cannot carry an ordinary reward factory.",
+                                nameof(rewardFactory));
+                        }
+
+                        successor = new RunState(
+                            state,
+                            settledHealth,
+                            state.PathNodeIds,
+                            RunProgressPhase.Terminal,
+                            committedNodeId: state.CommittedNodeId,
+                            battleAttemptSequence: state.BattleAttemptSequence,
+                            activeBattle: null,
+                            outcome: new RunOutcome(
+                                state.RunId,
+                                RunOutcomeKind.Victory,
+                                state.ActiveBattle.BattleId),
+                            holdings: settledHoldings);
+                        break;
+                    }
+
+                    if (state.ActiveBattle.NodeKind != MapNodeKind.Combat &&
+                        state.ActiveBattle.NodeKind != MapNodeKind.Elite)
+                    {
+                        throw new InvalidOperationException(
+                            "Only Combat or Elite victory can create a normal reward.");
+                    }
                     if (rewardFactory == null)
                         throw new ArgumentNullException(nameof(rewardFactory));
 
@@ -639,7 +762,7 @@ namespace TinySpire.Run
                         committedNodeId: state.CommittedNodeId,
                         battleAttemptSequence: state.BattleAttemptSequence,
                         activeBattle: null,
-                        terminalReason: null,
+                        outcome: null,
                         pendingCardReward: pendingCardReward,
                         holdings: settledHoldings);
                     break;
@@ -660,7 +783,10 @@ namespace TinySpire.Run
                         committedNodeId: state.CommittedNodeId,
                         battleAttemptSequence: state.BattleAttemptSequence,
                         activeBattle: null,
-                        terminalReason: RunTerminalReason.Defeat,
+                        outcome: new RunOutcome(
+                            state.RunId,
+                            RunOutcomeKind.Defeat,
+                            state.ActiveBattle.BattleId),
                         holdings: settledHoldings);
                     break;
                 default:
@@ -679,6 +805,50 @@ namespace TinySpire.Run
             {
                 throw new InvalidOperationException(
                     "The battle result settlement is stale or already committed.");
+            }
+
+            Publish(settlement.Successor);
+            return Current;
+        }
+
+        /// <summary>从 RunEntry 明确允许的稳定阶段纯计算 Abandoned 终局，不提前发布。</summary>
+        internal RunAbandonmentSettlement PreviewAbandonment()
+        {
+            RunState source = RequireCurrent();
+            if ((source.ProgressPhase != RunProgressPhase.MapReady &&
+                 source.ProgressPhase != RunProgressPhase.BossGateReached) ||
+                source.ActiveBattle != null ||
+                source.CommittedNodeId != null ||
+                source.Outcome != null)
+            {
+                throw new InvalidOperationException(
+                    "Only a stable MapReady or BossGateReached Run can be abandoned.");
+            }
+
+            var successor = new RunState(
+                source,
+                source.CurrentHealth,
+                source.PathNodeIds,
+                RunProgressPhase.Terminal,
+                committedNodeId: null,
+                battleAttemptSequence: source.BattleAttemptSequence,
+                activeBattle: null,
+                outcome: new RunOutcome(
+                    source.RunId,
+                    RunOutcomeKind.Abandoned,
+                    battleId: null));
+            return new RunAbandonmentSettlement(source, successor);
+        }
+
+        /// <summary>仅当 Store 仍是放弃预览来源时发布同一 Abandoned 后继。</summary>
+        internal RunState CommitAbandonment(RunAbandonmentSettlement settlement)
+        {
+            if (settlement == null)
+                throw new ArgumentNullException(nameof(settlement));
+            if (!ReferenceEquals(Current, settlement.Source))
+            {
+                throw new InvalidOperationException(
+                    "The Run abandonment settlement is stale or already committed.");
             }
 
             Publish(settlement.Successor);
@@ -721,7 +891,7 @@ namespace TinySpire.Run
             return Current;
         }
 
-        /// <summary>记录当前普通战斗失败并原子进入不可继续的 Terminal(Defeat)。</summary>
+        /// <summary>记录当前 Combat、Elite 或 Boss 失败并原子进入唯一 Defeat outcome。</summary>
         public RunState RecordDefeat(
             RunBattleId battleId,
             int heroTemplateId,
@@ -844,13 +1014,13 @@ namespace TinySpire.Run
                 committedNodeId: null,
                 battleAttemptSequence: state.BattleAttemptSequence,
                 activeBattle: null,
-                terminalReason: null,
+                outcome: null,
                 pendingCardReward: null,
                 runDeck: settledDeck,
                 holdings: settledHoldings);
         }
 
-        /// <summary>验证战斗次数与已完成普通战斗路径一致，并只在首战按结算后持有物冻结掉落。</summary>
+        /// <summary>验证战斗次数与已完成 Combat/Elite 路径一致，并只在首场奖励战冻结掉落。</summary>
         private static PendingCardReward FreezeAttachedLoot(
             RunState state,
             RunHoldings settledHoldings,
@@ -863,20 +1033,23 @@ namespace TinySpire.Run
                     "Victory reward factories cannot provide attached loot.");
             }
 
-            int completedOrdinaryCombatCount = state.PathNodeIds.Count(nodeId =>
-                state.MapDefinition.GetNode(nodeId).Kind == MapNodeKind.Combat);
-            int expectedAttemptSequence = checked(completedOrdinaryCombatCount + 1);
+            int completedRewardBattleCount = state.PathNodeIds.Count(nodeId =>
+            {
+                MapNodeKind kind = state.MapDefinition.GetNode(nodeId).Kind;
+                return kind == MapNodeKind.Combat || kind == MapNodeKind.Elite;
+            });
+            int expectedAttemptSequence = checked(completedRewardBattleCount + 1);
             if (state.ActiveBattle == null ||
                 state.BattleAttemptSequence != expectedAttemptSequence ||
                 state.ActiveBattle.BattleId.AttemptSequence != expectedAttemptSequence)
             {
                 throw new InvalidOperationException(
-                    "Battle attempt sequence does not match the completed ordinary Combat path.");
+                    "Battle attempt sequence does not match the completed Combat/Elite path.");
             }
 
             int? relicTemplateId = null;
             int? potionTemplateId = null;
-            if (completedOrdinaryCombatCount == 0)
+            if (completedRewardBattleCount == 0)
             {
                 if (!settledHoldings.Relics.Any(relic =>
                         relic.TemplateId == RunCardRewardAttachedLootTemplateIds.FirstOrdinaryBattleRelic))
@@ -948,7 +1121,7 @@ namespace TinySpire.Run
                 committedNodeId: null,
                 battleAttemptSequence: state.BattleAttemptSequence,
                 activeBattle: null,
-                terminalReason: null,
+                outcome: null,
                 pendingNodeVisit: pendingNodeVisit);
         }
 
@@ -1044,7 +1217,7 @@ namespace TinySpire.Run
                 committedNodeId: null,
                 battleAttemptSequence: source.BattleAttemptSequence,
                 activeBattle: null,
-                terminalReason: null,
+                outcome: null,
                 pendingCardReward: null,
                 runDeck: settledDeck,
                 holdings: settledHoldings,
@@ -1065,7 +1238,7 @@ namespace TinySpire.Run
                 committedNodeId: null,
                 battleAttemptSequence: source.BattleAttemptSequence,
                 activeBattle: null,
-                terminalReason: null,
+                outcome: null,
                 pendingCardReward: null,
                 runDeck: source.RunDeck,
                 holdings: source.Holdings,
@@ -1092,7 +1265,7 @@ namespace TinySpire.Run
                 committedNodeId: null,
                 battleAttemptSequence: source.BattleAttemptSequence,
                 activeBattle: null,
-                terminalReason: null,
+                outcome: null,
                 pendingCardReward: null,
                 runDeck: source.RunDeck,
                 holdings: settledHoldings,
@@ -1116,7 +1289,7 @@ namespace TinySpire.Run
                 committedNodeId: null,
                 battleAttemptSequence: source.BattleAttemptSequence,
                 activeBattle: null,
-                terminalReason: null,
+                outcome: null,
                 pendingCardReward: null,
                 runDeck: settledDeck,
                 pendingNodeVisit: null);
@@ -1141,7 +1314,7 @@ namespace TinySpire.Run
                 committedNodeId: null,
                 battleAttemptSequence: source.BattleAttemptSequence,
                 activeBattle: null,
-                terminalReason: null,
+                outcome: null,
                 pendingCardReward: null,
                 holdings: settledHoldings,
                 pendingNodeVisit: null);
@@ -1175,7 +1348,7 @@ namespace TinySpire.Run
                 committedNodeId: null,
                 battleAttemptSequence: state.BattleAttemptSequence,
                 activeBattle: null,
-                terminalReason: null,
+                outcome: null,
                 pendingCardReward: null,
                 runDeck: upgradedDeck);
         }

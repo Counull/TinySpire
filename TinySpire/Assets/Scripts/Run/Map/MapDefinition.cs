@@ -81,6 +81,7 @@ namespace TinySpire.Run.Map
         Chest,
         Shop,
         Event,
+        Elite,
     }
 
     /// <summary>冻结一个节点的位置、种类与开局明牌内容身份。</summary>

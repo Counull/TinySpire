@@ -106,6 +106,8 @@ namespace TinySpire.UI.Run
 
         private TMP_Text _mapTitle;
         private TMP_Text _mapHealth;
+        private TMP_Text _mapAbandonText;
+        private Button _mapAbandonButton;
         private RectTransform _mapGraphHost;
         private RectTransform _mapGraphRoot;
         private RunMapViewModel _renderedMap;
@@ -259,6 +261,8 @@ namespace TinySpire.UI.Run
 
             _mapTitle.text = model.GetText(RunEntryTextSlot.MapTitle);
             _mapHealth.text = model.GetText(RunEntryTextSlot.Health);
+            _mapAbandonText.text = model.GetText(RunEntryTextSlot.ConfirmationConfirm);
+            _mapAbandonButton.interactable = model.CanAbandonActiveRun;
             RenderMap(model.Map);
 
             _cardRewardTitle.text = model.GetText(RunEntryTextSlot.CardRewardTitle);
@@ -703,6 +707,12 @@ namespace TinySpire.UI.Run
                 stretch: false,
                 size: new Vector2(820f, 480f));
             SetCenteredRect(_mapGraphHost, new Vector2(0f, -75f), new Vector2(820f, 480f));
+            (_mapAbandonButton, _mapAbandonText) = CreateButton(
+                "MapAbandonRunButton",
+                page,
+                new RunEntryAction(RunEntryActionKind.RequestAbandon),
+                -380f,
+                width: 260f);
         }
 
         /// <summary>建立固定三候选与单一跳过按钮的普通战斗奖励页。</summary>
@@ -1169,7 +1179,8 @@ namespace TinySpire.UI.Run
                 identityId.text = node.ContentId > 0
                     ? $"#{node.ContentId}"
                     : node.NodeId;
-                button.interactable = node.State == RunMapNodePresentationState.Selectable;
+                button.interactable = node.State == RunMapNodePresentationState.Selectable ||
+                                      node.State == RunMapNodePresentationState.BossGateReached;
             }
 
             RestoreMapVisuals();

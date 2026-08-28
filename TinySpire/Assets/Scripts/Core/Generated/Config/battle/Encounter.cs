@@ -22,6 +22,7 @@ public sealed partial class Encounter : Luban.BeanBase
         JObject _obj = _buf as JObject;
         Id = (int)_obj.GetValue("id");
         { var __json0 = _obj.GetValue("enemy_template_ids"); int _n0 = (__json0 as JArray).Count; EnemyTemplateIds = new int[_n0]; int __index0=0; foreach(JToken __e0 in __json0) { int __v0;  __v0 = (int)__e0;  EnemyTemplateIds[__index0++] = __v0; }   }
+        {if (_obj.TryGetValue("phase_two_behavior_group_id", out var _j)) { PhaseTwoBehaviorGroupId = (int)_j; } else { PhaseTwoBehaviorGroupId = null; } }
     }
 
     public static Encounter DeserializeEncounter(JToken _buf)
@@ -37,6 +38,10 @@ public sealed partial class Encounter : Luban.BeanBase
     /// Enemy template ID list
     /// </summary>
     public readonly int[] EnemyTemplateIds;
+    /// <summary>
+    /// Phase two behavior group ID; 0 means none
+    /// </summary>
+    public readonly int? PhaseTwoBehaviorGroupId;
 
 
     public const int __ID__ = -2038323363;
@@ -51,6 +56,7 @@ public sealed partial class Encounter : Luban.BeanBase
         return "{ "
         + "id:" + Id + ","
         + "enemyTemplateIds:" + Luban.StringUtil.CollectionToString(EnemyTemplateIds) + ","
+        + "phaseTwoBehaviorGroupId:" + PhaseTwoBehaviorGroupId + ","
         + "}";
     }
 }

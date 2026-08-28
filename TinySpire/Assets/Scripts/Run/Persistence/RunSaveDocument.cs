@@ -8,7 +8,7 @@ using TinySpire.Run.Map;
 
 namespace TinySpire.Run
 {
-    /// <summary>schema v5 允许持久化的稳定 Run 进度阶段。</summary>
+    /// <summary>schema v6 允许持久化的稳定 Run 进度阶段。</summary>
     public enum RunSaveProgressPhase
     {
         MapReady,
@@ -18,10 +18,18 @@ namespace TinySpire.Run
         NodeVisitPending,
     }
 
-    /// <summary>schema v5 允许持久化的类型化 Run 终局原因。</summary>
+    /// <summary>schema v5 旧终局字段的兼容枚举，仅供显式迁移与旧构造入口使用。</summary>
     public enum RunSaveTerminalReason
     {
         Defeat,
+    }
+
+    /// <summary>schema v6 持久化的唯一 Run outcome 分类。</summary>
+    public enum RunSaveOutcomeKind
+    {
+        Victory,
+        Defeat,
+        Abandoned,
     }
 
     /// <summary>只保存一张 RunCard 的实例身份、模板与升级等级。</summary>
@@ -451,7 +459,7 @@ namespace TinySpire.Run
         private readonly ReadOnlyCollection<RunSaveRelicDocument> _relics;
         private readonly ReadOnlyCollection<RunSavePotionDocument> _potions;
 
-        public const int CurrentSchemaVersion = 5;
+        public const int CurrentSchemaVersion = 6;
 
         [JsonProperty("schemaVersion", Required = Required.Always)]
         public int SchemaVersion { get; }
@@ -515,9 +523,15 @@ namespace TinySpire.Run
         [JsonProperty("committedNodeId", Required = Required.AllowNull)]
         public string CommittedNodeId { get; }
 
-        [JsonProperty("terminalReason", Required = Required.AllowNull)]
+        [JsonProperty("outcomeKind", Required = Required.AllowNull)]
         [JsonConverter(typeof(StringEnumConverter))]
-        public RunSaveTerminalReason? TerminalReason { get; }
+        public RunSaveOutcomeKind? OutcomeKind { get; }
+
+        /// <summary>旧失败终局读取口径的派生兼容投影，不进入 canonical JSON。</summary>
+        [JsonIgnore]
+        public RunSaveTerminalReason? TerminalReason => OutcomeKind == RunSaveOutcomeKind.Defeat
+            ? RunSaveTerminalReason.Defeat
+            : (RunSaveTerminalReason?)null;
 
         [JsonProperty("pendingCardReward", Required = Required.AllowNull)]
         public RunSavePendingCardRewardDocument PendingCardReward { get; }
@@ -525,11 +539,11 @@ namespace TinySpire.Run
         [JsonProperty("pendingNodeVisit", Required = Required.AllowNull)]
         public RunSavePendingNodeVisitDocument PendingNodeVisit { get; }
 
-        /// <summary>指示本对象是否由旧 schema 迁移而来，Continue 应先重写 canonical v5。</summary>
+        /// <summary>指示本对象是否由旧 schema 迁移而来，Continue 应先重写 canonical v6。</summary>
         [JsonIgnore]
         public bool RequiresCanonicalRewrite { get; private set; }
 
-        /// <summary>建立并验证一份包含完整持有物的 canonical v5 文档。</summary>
+        /// <summary>建立并验证一份包含完整持有物与唯一 outcome 的 canonical v6 文档。</summary>
         [JsonConstructor]
         public RunSaveDocument(
             int schemaVersion,
@@ -547,7 +561,7 @@ namespace TinySpire.Run
             IReadOnlyList<string> pathNodeIds,
             RunSaveProgressPhase progressPhase,
             string committedNodeId,
-            RunSaveTerminalReason? terminalReason,
+            RunSaveOutcomeKind? outcomeKind,
             RunSavePendingCardRewardDocument pendingCardReward,
             IReadOnlyList<RunSaveRelicDocument> relics,
             IReadOnlyList<RunSavePotionDocument> potions,
@@ -603,7 +617,7 @@ namespace TinySpire.Run
                 currentHealth,
                 progressPhase,
                 committedNodeId,
-                terminalReason,
+                outcomeKind,
                 pendingCardReward,
                 pendingNodeVisit);
 
@@ -645,7 +659,7 @@ namespace TinySpire.Run
             _pathNodeIds = Array.AsReadOnly(pathNodeIds.ToArray());
             ProgressPhase = progressPhase;
             CommittedNodeId = committedNodeId;
-            TerminalReason = terminalReason;
+            OutcomeKind = outcomeKind;
             PendingCardReward = pendingCardReward;
             PendingNodeVisit = pendingNodeVisit;
             _relics = FreezeRelics(relics);
@@ -665,6 +679,56 @@ namespace TinySpire.Run
                         nameof(pendingNodeVisit));
                 }
             }
+        }
+
+        /// <summary>把旧测试与调用方的 Terminal(Defeat) 构造无损转发到 canonical outcome。</summary>
+        public RunSaveDocument(
+            int schemaVersion,
+            string runId,
+            int heroTemplateId,
+            int currentHealth,
+            int maxHealth,
+            IReadOnlyList<RunSaveCardDocument> runCards,
+            int? legacyDeckTemplateId,
+            uint randomRootSeed,
+            string mapProfileId,
+            int mapGeneratorVersion,
+            uint mapSeed,
+            string mapFingerprint,
+            IReadOnlyList<string> pathNodeIds,
+            RunSaveProgressPhase progressPhase,
+            string committedNodeId,
+            RunSaveTerminalReason? terminalReason,
+            RunSavePendingCardRewardDocument pendingCardReward,
+            IReadOnlyList<RunSaveRelicDocument> relics,
+            IReadOnlyList<RunSavePotionDocument> potions,
+            int gold,
+            RunSavePendingNodeVisitDocument pendingNodeVisit = null)
+            : this(
+                schemaVersion,
+                runId,
+                heroTemplateId,
+                currentHealth,
+                maxHealth,
+                runCards,
+                legacyDeckTemplateId,
+                randomRootSeed,
+                mapProfileId,
+                mapGeneratorVersion,
+                mapSeed,
+                mapFingerprint,
+                pathNodeIds,
+                progressPhase,
+                committedNodeId,
+                terminalReason.HasValue
+                    ? RunSaveOutcomeKind.Defeat
+                    : (RunSaveOutcomeKind?)null,
+                pendingCardReward,
+                relics,
+                potions,
+                gold,
+                pendingNodeVisit)
+        {
         }
 
         /// <summary>仅由 codec 在旧 schema 成功迁移后标记一次性 canonical 重写需求。</summary>
@@ -742,12 +806,12 @@ namespace TinySpire.Run
             return Array.AsReadOnly(frozen);
         }
 
-        /// <summary>验证存档阶段只表达可恢复地图页、Boss 门或失败终局。</summary>
+        /// <summary>验证存档阶段只表达可恢复稳定页或封闭的三类 outcome。</summary>
         private static void ValidateStablePhase(
             int currentHealth,
             RunSaveProgressPhase progressPhase,
             string committedNodeId,
-            RunSaveTerminalReason? terminalReason,
+            RunSaveOutcomeKind? outcomeKind,
             RunSavePendingCardRewardDocument pendingCardReward,
             RunSavePendingNodeVisitDocument pendingNodeVisit)
         {
@@ -757,7 +821,7 @@ namespace TinySpire.Run
                 case RunSaveProgressPhase.BossGateReached:
                     if (currentHealth <= 0 ||
                         committedNodeId != null ||
-                        terminalReason != null ||
+                        outcomeKind != null ||
                         pendingCardReward != null ||
                         pendingNodeVisit != null)
                         throw new ArgumentException("Non-terminal save progress contains terminal facts.");
@@ -765,7 +829,7 @@ namespace TinySpire.Run
                 case RunSaveProgressPhase.RewardPending:
                     if (currentHealth <= 0 ||
                         string.IsNullOrWhiteSpace(committedNodeId) ||
-                        terminalReason != null ||
+                        outcomeKind != null ||
                         pendingCardReward == null ||
                         pendingNodeVisit != null)
                     {
@@ -774,19 +838,26 @@ namespace TinySpire.Run
                     }
                     break;
                 case RunSaveProgressPhase.Terminal:
-                    if (currentHealth != 0 ||
-                        string.IsNullOrWhiteSpace(committedNodeId) ||
-                        terminalReason != RunSaveTerminalReason.Defeat ||
-                        pendingCardReward != null ||
-                        pendingNodeVisit != null)
+                    bool isVictory = outcomeKind == RunSaveOutcomeKind.Victory &&
+                                     currentHealth > 0 &&
+                                     !string.IsNullOrWhiteSpace(committedNodeId);
+                    bool isDefeat = outcomeKind == RunSaveOutcomeKind.Defeat &&
+                                    currentHealth == 0 &&
+                                    !string.IsNullOrWhiteSpace(committedNodeId);
+                    bool isAbandoned = outcomeKind == RunSaveOutcomeKind.Abandoned &&
+                                       currentHealth > 0 &&
+                                       committedNodeId == null;
+                    if ((!isVictory && !isDefeat && !isAbandoned) ||
+                        pendingCardReward != null || pendingNodeVisit != null)
                     {
-                        throw new ArgumentException("Terminal save must be Terminal(Defeat) with its failed node.");
+                        throw new ArgumentException(
+                            "Terminal save must carry one valid Victory, Defeat or Abandoned outcome shape.");
                     }
                     break;
                 case RunSaveProgressPhase.NodeVisitPending:
                     if (currentHealth <= 0 ||
                         committedNodeId != null ||
-                        terminalReason != null ||
+                        outcomeKind != null ||
                         pendingCardReward != null ||
                         pendingNodeVisit == null)
                     {
@@ -913,7 +984,7 @@ namespace TinySpire.Run
             return Create(new RunState(options));
         }
 
-        /// <summary>只把没有 Battle transient 的地图页、冻结奖励、Boss 门或失败终局转换为文档。</summary>
+        /// <summary>只把没有 Battle transient 的稳定页或唯一 outcome 转换为文档。</summary>
         public static RunSaveDocument Create(RunState state)
         {
             if (state == null)
@@ -929,9 +1000,9 @@ namespace TinySpire.Run
             }
 
             RunSaveProgressPhase progressPhase = ToSaveProgressPhase(state.ProgressPhase);
-            RunSaveTerminalReason? terminalReason = state.TerminalReason == null
+            RunSaveOutcomeKind? outcomeKind = state.Outcome == null
                 ? null
-                : RunSaveTerminalReason.Defeat;
+                : ToSaveOutcomeKind(state.Outcome.Kind);
             RunSavePendingCardRewardDocument pendingCardReward = state.PendingCardReward == null
                 ? null
                 : new RunSavePendingCardRewardDocument(
@@ -961,7 +1032,7 @@ namespace TinySpire.Run
                 state.PathNodeIds.Select(nodeId => nodeId.Value).ToArray(),
                 progressPhase,
                 state.CommittedNodeId?.Value,
-                terminalReason,
+                outcomeKind,
                 pendingCardReward,
                 state.Holdings.Relics.Select(relic => new RunSaveRelicDocument(
                     relic.InstanceId.Sequence,
@@ -1033,7 +1104,8 @@ namespace TinySpire.Run
                     "Rebuilt map fingerprint does not match the save document.");
             }
 
-            foreach (MapNode combat in map.Nodes.Where(node => node.Kind == MapNodeKind.Combat))
+            foreach (MapNode combat in map.Nodes.Where(node =>
+                         node.Kind == MapNodeKind.Combat || node.Kind == MapNodeKind.Elite))
             {
                 if (!catalog.EncounterExists(combat.ContentId))
                 {
@@ -1088,9 +1160,9 @@ namespace TinySpire.Run
                     pathNodeIds,
                     progressPhase,
                     committedNodeId,
-                    document.TerminalReason == null
-                        ? (RunTerminalReason?)null
-                        : RunTerminalReason.Defeat,
+                    document.OutcomeKind == null
+                        ? (RunOutcomeKind?)null
+                        : ToDomainOutcomeKind(document.OutcomeKind.Value),
                     holdings,
                     pendingCardReward,
                     pendingNodeVisit);
@@ -1111,17 +1183,20 @@ namespace TinySpire.Run
             }
         }
 
-        /// <summary>从已完成普通战斗路径与当前持有物重建附着掉落，拒绝冷档重复获利或删除应冻结事实。</summary>
+        /// <summary>从已完成 Combat/Elite 路径与当前持有物重建附着掉落，拒绝冷档重复获利。</summary>
         private static void ValidatePendingCardRewardAuthority(RunState restored)
         {
             if (restored.PendingCardReward == null)
                 return;
 
-            int completedOrdinaryCombatCount = restored.PathNodeIds.Count(nodeId =>
-                restored.MapDefinition.GetNode(nodeId).Kind == MapNodeKind.Combat);
+            int completedRewardBattleCount = restored.PathNodeIds.Count(nodeId =>
+            {
+                MapNodeKind kind = restored.MapDefinition.GetNode(nodeId).Kind;
+                return kind == MapNodeKind.Combat || kind == MapNodeKind.Elite;
+            });
             int? expectedRelicTemplateId = null;
             int? expectedPotionTemplateId = null;
-            if (completedOrdinaryCombatCount == 0)
+            if (completedRewardBattleCount == 0)
             {
                 if (!restored.Holdings.Relics.Any(relic =>
                         relic.TemplateId ==
@@ -1455,7 +1530,7 @@ namespace TinySpire.Run
             return RunDeck.CreateInitial(cardTemplateIds);
         }
 
-        /// <summary>把领域稳定阶段映射为 schema v5 字符串枚举。</summary>
+        /// <summary>把领域稳定阶段映射为 schema v6 字符串枚举。</summary>
         private static RunSaveProgressPhase ToSaveProgressPhase(RunProgressPhase progressPhase)
         {
             switch (progressPhase)
@@ -1475,7 +1550,7 @@ namespace TinySpire.Run
             }
         }
 
-        /// <summary>把 schema v5 稳定阶段映射为领域进度阶段。</summary>
+        /// <summary>把 schema v6 稳定阶段映射为领域进度阶段。</summary>
         private static RunProgressPhase ToDomainProgressPhase(RunSaveProgressPhase progressPhase)
         {
             switch (progressPhase)
@@ -1492,6 +1567,38 @@ namespace TinySpire.Run
                     return RunProgressPhase.NodeVisitPending;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(progressPhase));
+            }
+        }
+
+        /// <summary>把领域 outcome 分类映射为 canonical schema v6 枚举。</summary>
+        private static RunSaveOutcomeKind ToSaveOutcomeKind(RunOutcomeKind outcomeKind)
+        {
+            switch (outcomeKind)
+            {
+                case RunOutcomeKind.Victory:
+                    return RunSaveOutcomeKind.Victory;
+                case RunOutcomeKind.Defeat:
+                    return RunSaveOutcomeKind.Defeat;
+                case RunOutcomeKind.Abandoned:
+                    return RunSaveOutcomeKind.Abandoned;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(outcomeKind));
+            }
+        }
+
+        /// <summary>把 canonical schema v6 outcome 映射回领域封闭分类。</summary>
+        private static RunOutcomeKind ToDomainOutcomeKind(RunSaveOutcomeKind outcomeKind)
+        {
+            switch (outcomeKind)
+            {
+                case RunSaveOutcomeKind.Victory:
+                    return RunOutcomeKind.Victory;
+                case RunSaveOutcomeKind.Defeat:
+                    return RunOutcomeKind.Defeat;
+                case RunSaveOutcomeKind.Abandoned:
+                    return RunOutcomeKind.Abandoned;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(outcomeKind));
             }
         }
     }
