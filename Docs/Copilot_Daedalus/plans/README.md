@@ -2,7 +2,7 @@
 title: Daedalus · 实施计划索引
 page_type: index
 lifecycle: active
-updated: 2026-08-28
+updated: 2026-08-31
 status_source: ../STATUS.md
 ---
 
@@ -14,10 +14,9 @@ status_source: ../STATUS.md
 
 当前是否存在实施中的切片、已授权计划或下一候选，只查 [STATUS.md](../STATUS.md)。本索引不复制这些可变事实；由状态页给出精确计划路径后，再打开对应一页。
 
-当前没有已授权的实施中切片；G8-A 仍只是 `candidate`。任何后续工作都必须先由 [STATUS.md](../STATUS.md) 取得新的 Grill、计划与实施授权。
-
 ## 最近完成
 
+- [G8 产品化与发布门禁](2026-08-29-g8-productization-release-gates.md) — `archived / accepted-with-waiver`；A～E `verified`，G8-F 剩余人工 Player 字段与性能均由用户明确豁免为 `waived / not run`，精确证据边界见 [对应记录](../06_testing/2026-08-29-g8-productization-release-gates.md)。
 - [G7 单 Act、精英、Boss 与 Run 终局](2026-08-28-g7-single-act-elite-boss-outcome.md) — `archived / verified`；终审 RED 505/510、定向 GREEN 510/510 与完整 EditMode 1410/1410 的权威证据见 [对应记录](../06_testing/2026-08-28-g7-single-act-elite-boss-outcome.md)。
 - [G5/G6 Run 持有物与非战斗节点连续交付](2026-08-26-g5-g6-run-holdings-noncombat-nodes.md) — `archived / verified`；S0、G5-B～D 与 G6-A～E 的权威证据见 [对应记录](../06_testing/2026-08-27-g5-g6-run-holdings-noncombat-nodes.md)。
 - [G4 RunDeck、普通战斗奖励与多级升级](2026-08-25-g4-run-deck-rewards-upgrades.md) — `archived / verified`；A～D 的权威证据见 [对应记录](../06_testing/2026-08-25-g4-run-deck-rewards-upgrades.md)。

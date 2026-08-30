@@ -94,6 +94,7 @@ namespace TinySpire.UI.Run
         private bool _composed;
         private bool _hasResolvedEntrance;
         private bool _isEntrancePlaying;
+        private bool _reducedMotion;
         private int _playCount;
 
         internal Color MenuPrimaryTextColor => MenuPrimaryText;
@@ -158,9 +159,22 @@ namespace TinySpire.UI.Run
                 bottomSeparation: 2f);
         }
 
+        /// <summary>切换减少动态；启用时立即稳定到最终态且不改变任何菜单动作或交互。</summary>
+        internal void SetReducedMotion(bool reducedMotion)
+        {
+            _reducedMotion = reducedMotion;
+            if (_reducedMotion && _composed)
+                ResolveWithoutEntrance();
+        }
+
         /// <summary>首次主菜单展示时按 0/.12/.24 秒错拍播放一次入口，后续 Render 不重复创建 Tween。</summary>
         internal bool TryPlayEntrance()
         {
+            if (_reducedMotion)
+            {
+                ResolveWithoutEntrance();
+                return false;
+            }
             if (!_composed || _mainMenuCanvasGroup == null || _hasResolvedEntrance || !isActiveAndEnabled)
                 return false;
 

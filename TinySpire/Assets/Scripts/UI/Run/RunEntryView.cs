@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using TMPro;
 using TinySpire.Run;
+using TinySpire.Run.History.Presentation;
+using TinySpire.Settings;
+using TinySpire.Settings.Presentation;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
@@ -12,7 +15,7 @@ namespace TinySpire.UI.Run
 {
     /// <summary>以可替换几何控件渲染入口、明牌地图与冻结奖励，不持有任何 Run 业务事实。</summary>
     [DisallowMultipleComponent]
-    public sealed class RunEntryView : MonoBehaviour, IRunEntryView
+    public sealed class RunEntryView : MonoBehaviour, IRunEntryView, IAppSettingsView, IRunStatisticsView, ICancelHandler
     {
         private static readonly string[] CjkFontCandidates =
         {
@@ -42,6 +45,12 @@ namespace TinySpire.UI.Run
         private static readonly Color32 MapEdgeColor = new Color32(91, 105, 125, 210);
         private static readonly Color32 MapCompletedEdgeColor = new Color32(75, 145, 205, 255);
         private static readonly Color32 MapDimmedColor = new Color32(39, 45, 56, 120);
+        private static readonly Color32 SettingsHighContrastBackdropColor =
+            new Color32(4, 6, 10, 248);
+        private static readonly Color32 SettingsHighContrastButtonColor =
+            new Color32(12, 16, 22, 255);
+        private static readonly Color32 SettingsHighContrastTextColor =
+            new Color32(255, 246, 140, 255);
 
         [Header("Run Entry Visuals")]
         [SerializeField]
@@ -69,6 +78,8 @@ namespace TinySpire.UI.Run
         private TMP_FontAsset _fontAsset;
         private bool _ownsFontAsset;
         private bool _built;
+        private EventSystem _eventSystem;
+        private RunEntryPage? _renderedPage;
         private EntryPaperStackView _entryPaperStack;
         private GameObject _secondarySurface;
 
@@ -92,16 +103,43 @@ namespace TinySpire.UI.Run
         private Button _machineGunnerButton;
         private Button _confirmHeroButton;
 
-        private TMP_Text _settingsTitle;
-        private TMP_Text _settingsPlaceholder;
+        private readonly Dictionary<AppSettingsTextSlot, TMP_Text> _appSettingsTexts =
+            new Dictionary<AppSettingsTextSlot, TMP_Text>();
+        private readonly List<TMP_Text> _appSettingsStyledTexts = new List<TMP_Text>();
+        private readonly List<Button> _appSettingsButtons = new List<Button>();
+        private readonly Dictionary<TMP_Text, float> _appSettingsBaseFontSizes =
+            new Dictionary<TMP_Text, float>();
+        private readonly Dictionary<TMP_Text, float> _appSettingsBaseFontSizeMins =
+            new Dictionary<TMP_Text, float>();
+        private readonly Dictionary<TMP_Text, float> _appSettingsBaseFontSizeMaxes =
+            new Dictionary<TMP_Text, float>();
+        private readonly Dictionary<TMP_Text, Color> _appSettingsBaseTextColors =
+            new Dictionary<TMP_Text, Color>();
+        private readonly Dictionary<Button, Color> _appSettingsBaseButtonColors =
+            new Dictionary<Button, Color>();
+        private readonly Dictionary<Button, Selectable.Transition> _appSettingsBaseTransitions =
+            new Dictionary<Button, Selectable.Transition>();
+        private RectTransform _settingsPage;
+        private Image _settingsAccessibilityBackdrop;
+        private TMP_Text _settingsFailureText;
         private TMP_Text _settingsBackText;
+        private Action<AppSettingsAction> _appSettingsActionRequested;
+        private AppSettingsSnapshot _lastAppSettings;
 
         private TMP_Text _compendiumTitle;
         private TMP_Text _compendiumPlaceholder;
         private TMP_Text _compendiumBackText;
 
         private TMP_Text _statisticsTitle;
-        private TMP_Text _statisticsPlaceholder;
+        private TMP_Text _statisticsTotalRuns;
+        private TMP_Text _statisticsVictory;
+        private TMP_Text _statisticsDefeat;
+        private TMP_Text _statisticsAbandoned;
+        private TMP_Text _statisticsVictoryRate;
+        private TMP_Text _statisticsState;
+        private RectTransform _statisticsHeroRowsRoot;
+        private readonly Dictionary<int, TMP_Text> _statisticsHeroRows =
+            new Dictionary<int, TMP_Text>();
         private TMP_Text _statisticsBackText;
 
         private TMP_Text _mapTitle;
@@ -185,6 +223,35 @@ namespace TinySpire.UI.Run
         /// <summary>所有按钮被归一化后发布的唯一 UI 动作流。</summary>
         public event Action<RunEntryAction> ActionRequested;
 
+        /// <summary>把标准 Cancel/Escape 归一化为既有 Back 意图，页面门禁继续由 Presenter 决定。</summary>
+        public void OnCancel(BaseEventData eventData)
+        {
+            if (!isActiveAndEnabled)
+                return;
+
+            ActionRequested?.Invoke(new RunEntryAction(RunEntryActionKind.Back));
+            eventData?.Use();
+        }
+
+        /// <summary>显式公开独立设置动作流，避免与 RunEntry 动作使用同名 public event。</summary>
+        event Action<AppSettingsAction> IAppSettingsView.ActionRequested
+        {
+            add => _appSettingsActionRequested += value;
+            remove => _appSettingsActionRequested -= value;
+        }
+
+        /// <summary>由独立设置 Presenter 渲染设置页，不参与 RunEntry 页面状态投影。</summary>
+        void IAppSettingsView.Render(AppSettingsViewModel model)
+        {
+            RenderAppSettings(model);
+        }
+
+        /// <summary>由只读历史 Presenter 渲染 Statistics 页面，不改变 RunEntry 当前页面。</summary>
+        void IRunStatisticsView.Render(StatisticsViewModel model)
+        {
+            RenderStatistics(model);
+        }
+
         /// <summary>场景对象唤醒时建立一次功能性几何 UI。</summary>
         private void Awake()
         {
@@ -211,6 +278,7 @@ namespace TinySpire.UI.Run
                 throw new ArgumentNullException(nameof(model));
 
             EnsureBuilt();
+            bool pageChanged = !_renderedPage.HasValue || _renderedPage.Value != model.Page;
             foreach (KeyValuePair<RunEntryPage, GameObject> page in _pages)
                 page.Value.SetActive(page.Key == model.Page);
             if (_secondarySurface != null)
@@ -247,16 +315,12 @@ namespace TinySpire.UI.Run
                 _machineGunnerButton,
                 model.SelectedHeroTemplateId == 1002 ? SelectedButtonColor : ButtonColor);
 
-            _settingsTitle.text = model.GetText(RunEntryTextSlot.SettingsTitle);
-            _settingsPlaceholder.text = model.GetText(RunEntryTextSlot.SettingsPlaceholder);
             _settingsBackText.text = model.GetText(RunEntryTextSlot.Back);
 
             _compendiumTitle.text = model.GetText(RunEntryTextSlot.Compendium);
             _compendiumPlaceholder.text = model.GetText(RunEntryTextSlot.ComingSoon);
             _compendiumBackText.text = model.GetText(RunEntryTextSlot.Back);
 
-            _statisticsTitle.text = model.GetText(RunEntryTextSlot.Statistics);
-            _statisticsPlaceholder.text = model.GetText(RunEntryTextSlot.ComingSoon);
             _statisticsBackText.text = model.GetText(RunEntryTextSlot.Back);
 
             _mapTitle.text = model.GetText(RunEntryTextSlot.MapTitle);
@@ -301,6 +365,149 @@ namespace TinySpire.UI.Run
             _rollbackMessage.text = model.GetText(RunEntryTextSlot.RollbackMessage);
             _rollbackConfirmText.text = model.GetText(RunEntryTextSlot.RollbackConfirm);
             _rollbackCancelText.text = model.GetText(RunEntryTextSlot.Cancel);
+            RefreshAccessibilityTargets();
+
+            _renderedPage = model.Page;
+            EnsurePageFocus(model.Page, pageChanged);
+        }
+
+        /// <summary>页面切换时设置首焦点；同页只在当前焦点失效或离开该页时修复，不抢玩家选择。</summary>
+        private void EnsurePageFocus(RunEntryPage page, bool pageChanged)
+        {
+            GameObject selected = _eventSystem.currentSelectedGameObject;
+            bool validSelection = selected != null &&
+                                  selected.activeInHierarchy &&
+                                  selected.transform.IsChildOf(_pages[page].transform);
+            if (pageChanged || !validSelection)
+                FocusFirstButton(page);
+        }
+
+        /// <summary>页面切换完成后选择层级中第一个可见可交互按钮。</summary>
+        private void FocusFirstButton(RunEntryPage page)
+        {
+            Button first = _pages[page]
+                .GetComponentsInChildren<Button>(includeInactive: false)
+                .FirstOrDefault(button => button.IsActive() && button.IsInteractable());
+            _eventSystem.SetSelectedGameObject(first != null ? first.gameObject : null);
+        }
+
+        /// <summary>只更新设置 Presenter 所有的文本与可访问性表现，不改变 RunEntry 当前页面。</summary>
+        private void RenderAppSettings(AppSettingsViewModel model)
+        {
+            if (model == null)
+                throw new ArgumentNullException(nameof(model));
+
+            EnsureBuilt();
+            foreach (KeyValuePair<AppSettingsTextSlot, TMP_Text> item in _appSettingsTexts)
+                item.Value.text = model.GetText(item.Key);
+            _settingsFailureText.text = model.FailureText;
+            _lastAppSettings = model.Settings;
+            _entryPaperStack?.SetReducedMotion(model.Settings.ReducedMotion);
+            RefreshAccessibilityTargets();
+        }
+
+        /// <summary>完整替换 Statistics 文案、全局数值、状态和稳定 Hero 行。</summary>
+        private void RenderStatistics(StatisticsViewModel model)
+        {
+            if (model == null)
+                throw new ArgumentNullException(nameof(model));
+
+            EnsureBuilt();
+            _statisticsTitle.text = model.GetText(RunStatisticsTextSlot.Title);
+            HideStatisticsHeroRows();
+            if (model.Status == RunStatisticsViewStatus.Unavailable)
+            {
+                ClearStatisticsTotals();
+                _statisticsState.text = model.FailureText;
+                RefreshAccessibilityTargets();
+                return;
+            }
+
+            _statisticsTotalRuns.text = FormatStatistic(
+                model.GetText(RunStatisticsTextSlot.TotalRunsLabel),
+                model.TotalRuns.Value);
+            _statisticsVictory.text = FormatStatistic(
+                model.GetText(RunStatisticsTextSlot.VictoryLabel),
+                model.VictoryCount.Value);
+            _statisticsDefeat.text = FormatStatistic(
+                model.GetText(RunStatisticsTextSlot.DefeatLabel),
+                model.DefeatCount.Value);
+            _statisticsAbandoned.text = FormatStatistic(
+                model.GetText(RunStatisticsTextSlot.AbandonedLabel),
+                model.AbandonedCount.Value);
+            _statisticsVictoryRate.text =
+                $"{model.GetText(RunStatisticsTextSlot.VictoryRateLabel)}: {model.VictoryRateText}";
+            _statisticsState.text = model.IsEmpty
+                ? model.GetText(RunStatisticsTextSlot.EmptyHistory)
+                : string.Empty;
+            RenderStatisticsHeroRows(model);
+            RefreshAccessibilityTargets();
+        }
+
+        /// <summary>把一项统计标签与整数值组合成稳定可读文本。</summary>
+        private static string FormatStatistic(string label, int value)
+        {
+            return $"{label}: {value}";
+        }
+
+        /// <summary>不可用状态清空全部数值，避免把加载失败伪装成零历史。</summary>
+        private void ClearStatisticsTotals()
+        {
+            _statisticsTotalRuns.text = string.Empty;
+            _statisticsVictory.text = string.Empty;
+            _statisticsDefeat.text = string.Empty;
+            _statisticsAbandoned.text = string.Empty;
+            _statisticsVictoryRate.text = string.Empty;
+        }
+
+        /// <summary>先隐藏已建立 Hero 行，后续模型只重新启用当前集合。</summary>
+        private void HideStatisticsHeroRows()
+        {
+            foreach (TMP_Text row in _statisticsHeroRows.Values)
+                row.gameObject.SetActive(false);
+        }
+
+        /// <summary>按 ViewModel 冻结顺序复用或建立 Hero 行并更新完整统计。</summary>
+        private void RenderStatisticsHeroRows(StatisticsViewModel model)
+        {
+            for (int index = 0; index < model.HeroRows.Count; index++)
+            {
+                StatisticsHeroRowViewModel row = model.HeroRows[index];
+                if (!_statisticsHeroRows.TryGetValue(row.HeroTemplateId, out TMP_Text text))
+                {
+                    text = CreateText(
+                        $"StatisticsHero_{row.HeroTemplateId}",
+                        _statisticsHeroRowsRoot,
+                        19f,
+                        FontStyles.Normal,
+                        PrimaryTextColor,
+                        0f,
+                        800f,
+                        46f);
+                    _statisticsHeroRows.Add(row.HeroTemplateId, text);
+                }
+
+                SetCenteredRect(
+                    text.rectTransform,
+                    new Vector2(0f, 70f - index * 52f),
+                    new Vector2(800f, 46f));
+                text.text = FormatStatisticsHeroRow(model, row);
+                text.gameObject.SetActive(true);
+            }
+        }
+
+        /// <summary>用全局同一组标签格式化一行 Hero V/D/A 与胜率。</summary>
+        private static string FormatStatisticsHeroRow(
+            StatisticsViewModel model,
+            StatisticsHeroRowViewModel row)
+        {
+            return
+                $"{row.HeroText}  " +
+                $"{model.GetText(RunStatisticsTextSlot.TotalRunsLabel)}: {row.TotalRuns}  " +
+                $"{model.GetText(RunStatisticsTextSlot.VictoryLabel)}: {row.VictoryCount}  " +
+                $"{model.GetText(RunStatisticsTextSlot.DefeatLabel)}: {row.DefeatCount}  " +
+                $"{model.GetText(RunStatisticsTextSlot.AbandonedLabel)}: {row.AbandonedCount}  " +
+                $"{model.GetText(RunStatisticsTextSlot.VictoryRateLabel)}: {row.VictoryRateText}";
         }
 
         /// <summary>仅供 EditMode 测试显式建立与 Awake 相同的 UI。</summary>
@@ -385,7 +592,7 @@ namespace TinySpire.UI.Run
             BuildHeroSelectionPage(surface);
             BuildSettingsPage(surface);
             BuildComingSoonPage(surface, RunEntryPage.Compendium);
-            BuildComingSoonPage(surface, RunEntryPage.Statistics);
+            BuildStatisticsPage(surface);
             BuildMapPage(surface);
             BuildCardRewardPage(surface);
             BuildRestPage(surface);
@@ -406,6 +613,7 @@ namespace TinySpire.UI.Run
                 _secondarySurface = surface.gameObject;
                 _secondarySurface.SetActive(false);
             }
+            CaptureAccessibilityBaselines();
         }
 
         /// <summary>资产成对存在时在动态 Canvas 上建立纯视觉纸叠；测试缺省仍保留功能性旧背景。</summary>
@@ -433,6 +641,7 @@ namespace TinySpire.UI.Run
                 typeof(EventSystem),
                 typeof(InputSystemUIInputModule));
             eventObject.transform.SetParent(transform, worldPositionStays: false);
+            _eventSystem = eventObject.GetComponent<EventSystem>();
             // InputSystemUIInputModule.OnEnable 会自动分配默认 UI Actions；重复分配会破坏跨 Play/Test 复用的包级静态状态。
         }
 
@@ -625,31 +834,397 @@ namespace TinySpire.UI.Run
                 width: 260f).label;
         }
 
-        /// <summary>建立只展示布局占位并可返回的设置页。</summary>
+        /// <summary>建立七组实际设置控件，并保留由 RunEntry seam 所有的返回按钮。</summary>
         private void BuildSettingsPage(RectTransform parent)
         {
-            RectTransform page = CreatePage(RunEntryPage.Settings, parent);
-            _settingsTitle = CreateText("SettingsTitle", page, 42f, FontStyles.Bold, PrimaryTextColor, 245f, 700f, 64f);
-            _settingsPlaceholder = CreateText(
-                "SettingsPlaceholder",
-                page,
-                28f,
-                FontStyles.Normal,
-                SecondaryTextColor,
-                45f,
-                720f,
-                180f);
-            _settingsBackText = CreateButton(
+            _settingsPage = CreatePage(RunEntryPage.Settings, parent);
+            _settingsAccessibilityBackdrop = CreatePanel(
+                "SettingsAccessibilityBackdrop",
+                _settingsPage,
+                Color.clear,
+                Vector2.zero,
+                new Vector2(880f, 690f),
+                stretch: false).GetComponent<Image>();
+            _settingsAccessibilityBackdrop.raycastTarget = false;
+
+            RegisterAppSettingsText(
+                AppSettingsTextSlot.Title,
+                CreateSettingsText(
+                    "SettingsTitle",
+                    42f,
+                    FontStyles.Bold,
+                    PrimaryTextColor,
+                    300f,
+                    760f,
+                    58f,
+                    0f));
+            BuildSettingsSingleButtonRow(
+                "Language",
+                AppSettingsTextSlot.LanguageLabel,
+                AppSettingsTextSlot.LanguageValue,
+                "LanguageButton",
+                AppSettingsActionKind.CycleLocale,
+                200f);
+            BuildSettingsVolumeRow(142f);
+            BuildSettingsSingleButtonRow(
+                "DisplayMode",
+                AppSettingsTextSlot.DisplayModeLabel,
+                AppSettingsTextSlot.DisplayModeValue,
+                "DisplayModeButton",
+                AppSettingsActionKind.ToggleDisplayMode,
+                84f);
+            BuildSettingsResolutionRow(26f);
+            BuildSettingsSingleButtonRow(
+                "TextScale",
+                AppSettingsTextSlot.TextScaleLabel,
+                AppSettingsTextSlot.TextScaleValue,
+                "TextScaleButton",
+                AppSettingsActionKind.CycleTextScale,
+                -32f);
+            BuildSettingsSingleButtonRow(
+                "HighContrast",
+                AppSettingsTextSlot.HighContrastLabel,
+                AppSettingsTextSlot.HighContrastValue,
+                "HighContrastButton",
+                AppSettingsActionKind.ToggleHighContrast,
+                -90f);
+            BuildSettingsSingleButtonRow(
+                "ReducedMotion",
+                AppSettingsTextSlot.ReducedMotionLabel,
+                AppSettingsTextSlot.ReducedMotionValue,
+                "ReducedMotionButton",
+                AppSettingsActionKind.ToggleReducedMotion,
+                -148f);
+
+            _settingsFailureText = CreateSettingsText(
+                "SettingsFailureText",
+                20f,
+                FontStyles.Bold,
+                MapBossColor,
+                -207f,
+                760f,
+                38f,
+                0f);
+            (Button settingsBackButton, TMP_Text settingsBackText) = CreateButton(
                 "SettingsBackButton",
-                page,
+                _settingsPage,
                 new RunEntryAction(RunEntryActionKind.Back),
-                -235f,
-                width: 260f).label;
+                -292f,
+                width: 260f,
+                height: 54f);
+            _settingsBackText = settingsBackText;
+            TrackAppSettingsText(_settingsBackText);
+            TrackAppSettingsButton(settingsBackButton);
         }
 
-        /// <summary>建立图鉴或统计的开发中占位页，并保存各自文本引用。</summary>
+        /// <summary>建立标签与单一循环按钮组成的一行设置。</summary>
+        private void BuildSettingsSingleButtonRow(
+            string prefix,
+            AppSettingsTextSlot labelSlot,
+            AppSettingsTextSlot valueSlot,
+            string buttonName,
+            AppSettingsActionKind actionKind,
+            float y)
+        {
+            RegisterAppSettingsText(
+                labelSlot,
+                CreateSettingsText(
+                    $"{prefix}Label",
+                    22f,
+                    FontStyles.Normal,
+                    SecondaryTextColor,
+                    y,
+                    270f,
+                    42f,
+                    -245f));
+            (Button _, TMP_Text label) = CreateAppSettingsButton(
+                buttonName,
+                actionKind,
+                y,
+                330f,
+                46f,
+                180f);
+            RegisterAppSettingsText(valueSlot, label);
+        }
+
+        /// <summary>建立减号、当前值与加号组成的主音量设置行。</summary>
+        private void BuildSettingsVolumeRow(float y)
+        {
+            RegisterAppSettingsText(
+                AppSettingsTextSlot.MasterVolumeLabel,
+                CreateSettingsText(
+                    "MasterVolumeLabel",
+                    22f,
+                    FontStyles.Normal,
+                    SecondaryTextColor,
+                    y,
+                    270f,
+                    42f,
+                    -245f));
+            (Button _, TMP_Text decreaseLabel) = CreateAppSettingsButton(
+                "MasterVolumeDecreaseButton",
+                AppSettingsActionKind.DecreaseMasterVolume,
+                y,
+                140f,
+                46f,
+                45f);
+            RegisterAppSettingsText(AppSettingsTextSlot.DecreaseAction, decreaseLabel);
+            RegisterAppSettingsText(
+                AppSettingsTextSlot.MasterVolumeValue,
+                CreateSettingsText(
+                    "MasterVolumeValue",
+                    23f,
+                    FontStyles.Bold,
+                    PrimaryTextColor,
+                    y,
+                    150f,
+                    42f,
+                    180f));
+            (Button _, TMP_Text increaseLabel) = CreateAppSettingsButton(
+                "MasterVolumeIncreaseButton",
+                AppSettingsActionKind.IncreaseMasterVolume,
+                y,
+                140f,
+                46f,
+                345f);
+            RegisterAppSettingsText(AppSettingsTextSlot.IncreaseAction, increaseLabel);
+        }
+
+        /// <summary>建立前一项、当前值与后一项组成的分辨率设置行。</summary>
+        private void BuildSettingsResolutionRow(float y)
+        {
+            RegisterAppSettingsText(
+                AppSettingsTextSlot.ResolutionLabel,
+                CreateSettingsText(
+                    "ResolutionLabel",
+                    22f,
+                    FontStyles.Normal,
+                    SecondaryTextColor,
+                    y,
+                    270f,
+                    42f,
+                    -245f));
+            (Button _, TMP_Text previousLabel) = CreateAppSettingsButton(
+                "ResolutionPreviousButton",
+                AppSettingsActionKind.PreviousResolution,
+                y,
+                140f,
+                46f,
+                25f);
+            RegisterAppSettingsText(AppSettingsTextSlot.PreviousAction, previousLabel);
+            RegisterAppSettingsText(
+                AppSettingsTextSlot.ResolutionValue,
+                CreateSettingsText(
+                    "ResolutionValue",
+                    21f,
+                    FontStyles.Bold,
+                    PrimaryTextColor,
+                    y,
+                    180f,
+                    42f,
+                    190f));
+            (Button _, TMP_Text nextLabel) = CreateAppSettingsButton(
+                "ResolutionNextButton",
+                AppSettingsActionKind.NextResolution,
+                y,
+                140f,
+                46f,
+                355f);
+            RegisterAppSettingsText(AppSettingsTextSlot.NextAction, nextLabel);
+        }
+
+        /// <summary>创建设置页专用定位文本并纳入可访问性样式恢复集合。</summary>
+        private TMP_Text CreateSettingsText(
+            string objectName,
+            float fontSize,
+            FontStyles fontStyle,
+            Color color,
+            float y,
+            float width,
+            float height,
+            float x)
+        {
+            TMP_Text text = CreateText(
+                objectName,
+                _settingsPage,
+                fontSize,
+                fontStyle,
+                color,
+                y,
+                width,
+                height);
+            SetCenteredRect(
+                text.rectTransform,
+                new Vector2(x, y),
+                new Vector2(width, height));
+            TrackAppSettingsText(text);
+            return text;
+        }
+
+        /// <summary>创建尚未接入 RunEntry 动作流的设置页专用按钮。</summary>
+        private (Button button, TMP_Text label) CreateAppSettingsButton(
+            string objectName,
+            AppSettingsActionKind actionKind,
+            float y,
+            float width,
+            float height,
+            float x)
+        {
+            var buttonObject = new GameObject(
+                objectName,
+                typeof(RectTransform),
+                typeof(CanvasRenderer),
+                typeof(Image),
+                typeof(Button));
+            buttonObject.transform.SetParent(_settingsPage, worldPositionStays: false);
+            RectTransform rect = buttonObject.GetComponent<RectTransform>();
+            SetCenteredRect(rect, new Vector2(x, y), new Vector2(width, height));
+            Image image = buttonObject.GetComponent<Image>();
+            image.color = ButtonColor;
+            Button button = buttonObject.GetComponent<Button>();
+            button.targetGraphic = image;
+
+            TMP_Text label = CreateText(
+                $"{objectName}Label",
+                rect,
+                22f,
+                FontStyles.Bold,
+                PrimaryTextColor,
+                0f,
+                width - 16f,
+                height - 8f);
+            label.enableAutoSizing = true;
+            label.fontSizeMin = 16f;
+            label.fontSizeMax = 22f;
+            label.textWrappingMode = TextWrappingModes.NoWrap;
+            TrackAppSettingsText(label);
+            BindAppSettingsButton(button, new AppSettingsAction(actionKind));
+            TrackAppSettingsButton(button);
+            _buttons.Add(objectName, button);
+            return (button, label);
+        }
+
+        /// <summary>登记 ViewModel 文本槽位并拒绝重复所有权。</summary>
+        private void RegisterAppSettingsText(AppSettingsTextSlot slot, TMP_Text text)
+        {
+            if (!_appSettingsTexts.TryAdd(slot, text))
+                throw new InvalidOperationException($"App settings text slot '{slot}' is already registered.");
+        }
+
+        /// <summary>把设置页文字加入去重后的可访问性样式集合。</summary>
+        private void TrackAppSettingsText(TMP_Text text)
+        {
+            if (text == null || _appSettingsStyledTexts.Contains(text))
+                return;
+
+            _appSettingsStyledTexts.Add(text);
+            _appSettingsBaseFontSizes.Add(text, text.fontSize);
+            _appSettingsBaseFontSizeMins.Add(text, text.fontSizeMin);
+            _appSettingsBaseFontSizeMaxes.Add(text, text.fontSizeMax);
+            _appSettingsBaseTextColors.Add(text, text.color);
+        }
+
+        /// <summary>把设置按钮加入去重后的颜色与过渡恢复集合。</summary>
+        private void TrackAppSettingsButton(Button button)
+        {
+            if (button == null || button.targetGraphic == null || _appSettingsButtons.Contains(button))
+                return;
+
+            _appSettingsButtons.Add(button);
+            _appSettingsBaseButtonColors.Add(button, button.targetGraphic.color);
+            _appSettingsBaseTransitions.Add(button, button.transition);
+        }
+
+        /// <summary>从可访问性基线中移除即将销毁的动态子树控件。</summary>
+        private void UntrackAccessibilityTargets(Transform root)
+        {
+            if (root == null)
+                return;
+
+            foreach (TMP_Text text in root.GetComponentsInChildren<TMP_Text>(includeInactive: true))
+            {
+                _appSettingsStyledTexts.Remove(text);
+                _appSettingsBaseFontSizes.Remove(text);
+                _appSettingsBaseFontSizeMins.Remove(text);
+                _appSettingsBaseFontSizeMaxes.Remove(text);
+                _appSettingsBaseTextColors.Remove(text);
+            }
+
+            foreach (Button button in root.GetComponentsInChildren<Button>(includeInactive: true))
+            {
+                _appSettingsButtons.Remove(button);
+                _appSettingsBaseButtonColors.Remove(button);
+                _appSettingsBaseTransitions.Remove(button);
+            }
+        }
+
+        /// <summary>扫描整个 RunEntry 子树，只为首次出现的动态文字和按钮冻结未缩放基线。</summary>
+        private void CaptureAccessibilityBaselines()
+        {
+            foreach (TMP_Text text in GetComponentsInChildren<TMP_Text>(includeInactive: true))
+                TrackAppSettingsText(text);
+            foreach (Button button in GetComponentsInChildren<Button>(includeInactive: true))
+                TrackAppSettingsButton(button);
+        }
+
+        /// <summary>发现后续 Render 新建控件，并把最近设置幂等应用到完整 RunEntry 子树。</summary>
+        private void RefreshAccessibilityTargets()
+        {
+            CaptureAccessibilityBaselines();
+            if (_lastAppSettings != null)
+                ApplyAppSettingsAccessibility(_lastAppSettings);
+        }
+
+        /// <summary>从冻结基线应用文字缩放、高对比和减少动态，重复渲染不会累积。</summary>
+        private void ApplyAppSettingsAccessibility(AppSettingsSnapshot settings)
+        {
+            float textScale = (int)settings.TextScale / 100f;
+            foreach (TMP_Text text in _appSettingsStyledTexts)
+            {
+                text.fontSize = _appSettingsBaseFontSizes[text] * textScale;
+                if (text.enableAutoSizing)
+                {
+                    text.fontSizeMin = _appSettingsBaseFontSizeMins[text] * textScale;
+                    text.fontSizeMax = _appSettingsBaseFontSizeMaxes[text] * textScale;
+                }
+                text.color = settings.HighContrast
+                    ? SettingsHighContrastTextColor
+                    : _appSettingsBaseTextColors[text];
+            }
+
+            _settingsAccessibilityBackdrop.color = settings.HighContrast
+                ? SettingsHighContrastBackdropColor
+                : Color.clear;
+            foreach (Button button in _appSettingsButtons)
+            {
+                button.targetGraphic.color = settings.HighContrast
+                    ? SettingsHighContrastButtonColor
+                    : _appSettingsBaseButtonColors[button];
+                button.transition = settings.ReducedMotion
+                    ? Selectable.Transition.None
+                    : _appSettingsBaseTransitions[button];
+            }
+        }
+
+        /// <summary>只在设置按钮可交互且可见时发布独立 AppSettings 动作。</summary>
+        private void BindAppSettingsButton(Button button, AppSettingsAction action)
+        {
+            button.onClick.AddListener(() =>
+            {
+                if (button == null || !button.IsActive() || !button.IsInteractable())
+                    return;
+
+                _appSettingsActionRequested?.Invoke(action);
+            });
+            _boundButtons.Add(button);
+        }
+
+        /// <summary>建立图鉴开发中占位页，并保存文本引用。</summary>
         private void BuildComingSoonPage(RectTransform parent, RunEntryPage pageKind)
         {
+            if (pageKind != RunEntryPage.Compendium)
+                throw new ArgumentOutOfRangeException(nameof(pageKind));
+
             RectTransform page = CreatePage(pageKind, parent);
             string prefix = pageKind.ToString();
             TMP_Text title = CreateText(
@@ -677,22 +1252,129 @@ namespace TinySpire.UI.Run
                 -235f,
                 width: 260f).label;
 
-            if (pageKind == RunEntryPage.Compendium)
-            {
-                _compendiumTitle = title;
-                _compendiumPlaceholder = placeholder;
-                _compendiumBackText = back;
-            }
-            else if (pageKind == RunEntryPage.Statistics)
-            {
-                _statisticsTitle = title;
-                _statisticsPlaceholder = placeholder;
-                _statisticsBackText = back;
-            }
-            else
-            {
-                throw new ArgumentOutOfRangeException(nameof(pageKind));
-            }
+            _compendiumTitle = title;
+            _compendiumPlaceholder = placeholder;
+            _compendiumBackText = back;
+        }
+
+        /// <summary>建立全局统计、稳定 Hero 行、状态文案与返回按钮组成的真实 Statistics 页面。</summary>
+        private void BuildStatisticsPage(RectTransform parent)
+        {
+            RectTransform page = CreatePage(RunEntryPage.Statistics, parent);
+            _statisticsTitle = CreateStatisticsText(
+                "StatisticsTitle",
+                page,
+                42f,
+                FontStyles.Bold,
+                PrimaryTextColor,
+                292f,
+                760f,
+                58f,
+                0f);
+            _statisticsTotalRuns = CreateStatisticsText(
+                "StatisticsTotalRuns",
+                page,
+                27f,
+                FontStyles.Bold,
+                PrimaryTextColor,
+                205f,
+                350f,
+                46f,
+                0f);
+            _statisticsVictory = CreateStatisticsText(
+                "StatisticsVictory",
+                page,
+                23f,
+                FontStyles.Normal,
+                SecondaryTextColor,
+                150f,
+                240f,
+                42f,
+                -250f);
+            _statisticsDefeat = CreateStatisticsText(
+                "StatisticsDefeat",
+                page,
+                23f,
+                FontStyles.Normal,
+                SecondaryTextColor,
+                150f,
+                240f,
+                42f,
+                0f);
+            _statisticsAbandoned = CreateStatisticsText(
+                "StatisticsAbandoned",
+                page,
+                23f,
+                FontStyles.Normal,
+                SecondaryTextColor,
+                150f,
+                240f,
+                42f,
+                250f);
+            _statisticsVictoryRate = CreateStatisticsText(
+                "StatisticsVictoryRate",
+                page,
+                25f,
+                FontStyles.Bold,
+                PrimaryTextColor,
+                95f,
+                360f,
+                42f,
+                0f);
+            _statisticsHeroRowsRoot = CreateContainer(
+                "StatisticsHeroRows",
+                page,
+                stretch: false,
+                size: new Vector2(820f, 210f));
+            SetCenteredRect(
+                _statisticsHeroRowsRoot,
+                new Vector2(0f, -38f),
+                new Vector2(820f, 210f));
+            _statisticsState = CreateStatisticsText(
+                "StatisticsState",
+                page,
+                24f,
+                FontStyles.Normal,
+                SecondaryTextColor,
+                -55f,
+                760f,
+                100f,
+                0f);
+            _statisticsBackText = CreateButton(
+                "StatisticsBackButton",
+                page,
+                new RunEntryAction(RunEntryActionKind.Back),
+                -292f,
+                width: 260f,
+                height: 54f).label;
+        }
+
+        /// <summary>创建 Statistics 页面专用定位文本。</summary>
+        private TMP_Text CreateStatisticsText(
+            string objectName,
+            RectTransform parent,
+            float fontSize,
+            FontStyles fontStyle,
+            Color color,
+            float y,
+            float width,
+            float height,
+            float x)
+        {
+            TMP_Text text = CreateText(
+                objectName,
+                parent,
+                fontSize,
+                fontStyle,
+                color,
+                y,
+                width,
+                height);
+            SetCenteredRect(
+                text.rectTransform,
+                new Vector2(x, y),
+                new Vector2(width, height));
+            return text;
         }
 
         /// <summary>建立地图标题、生命和供整张冻结 DAG 使用的绘制区域。</summary>
@@ -1254,10 +1936,13 @@ namespace TinySpire.UI.Run
                 (RectTransform)label.transform,
                 compact ? new Vector2(18f, 7f) : new Vector2(20f, 12f),
                 compact ? new Vector2(width - 58f, 22f) : new Vector2(width - 68f, 42f));
-            label.fontSize = compact
+            float labelFontSize = compact
                 ? 14f
                 : node.Kind == TinySpire.Run.Map.MapNodeKind.Boss ? 18f : 20f;
-            label.textWrappingMode = TextWrappingModes.Normal;
+            ConfigureMapNodeText(
+                label,
+                compact ? 9f : 13f,
+                labelFontSize);
 
             TMP_Text identityId = CreateText(
                 $"MapNode_{node.NodeId}_IdentityId",
@@ -1272,6 +1957,10 @@ namespace TinySpire.UI.Run
                 (RectTransform)identityId.transform,
                 compact ? new Vector2(18f, -13f) : new Vector2(20f, -23f),
                 compact ? new Vector2(width - 58f, 14f) : new Vector2(width - 68f, 20f));
+            ConfigureMapNodeText(
+                identityId,
+                compact ? 7.5f : 10f,
+                compact ? 10f : 14f);
             IReadOnlyList<Image> anchorImages = CreateMapVisualAnchor(
                 node,
                 (RectTransform)button.transform,
@@ -1290,6 +1979,19 @@ namespace TinySpire.UI.Run
             var exit = new EventTrigger.Entry { eventID = EventTriggerType.PointerExit };
             exit.callback.AddListener(_ => RestoreMapVisuals());
             trigger.triggers.Add(exit);
+        }
+
+        /// <summary>让地图节点文字在固定语义分区内单行自适应，并保留全局文字缩放可扩大的字号区间。</summary>
+        private static void ConfigureMapNodeText(
+            TMP_Text text,
+            float minimumFontSize,
+            float preferredFontSize)
+        {
+            text.fontSize = preferredFontSize;
+            text.enableAutoSizing = true;
+            text.fontSizeMin = minimumFontSize;
+            text.fontSizeMax = preferredFontSize;
+            text.textWrappingMode = TextWrappingModes.NoWrap;
         }
 
         /// <summary>按 ViewModel 指定种类建立轻量程序化徽记，不读取或猜测业务内容 ID。</summary>
@@ -1449,8 +2151,8 @@ namespace TinySpire.UI.Run
                 Color textColor = emphasized
                     ? PrimaryTextColor
                     : new Color32(115, 124, 139, 150);
-                _mapNodeLabels[node.NodeId].color = textColor;
-                _mapNodeIdentityIds[node.NodeId].color = textColor;
+                SetTextColor(_mapNodeLabels[node.NodeId], textColor);
+                SetTextColor(_mapNodeIdentityIds[node.NodeId], textColor);
                 SetMapAnchorColor(
                     node.NodeId,
                     emphasized
@@ -1487,8 +2189,8 @@ namespace TinySpire.UI.Run
                 Color textColor = node.State == RunMapNodePresentationState.Locked
                     ? SecondaryTextColor
                     : PrimaryTextColor;
-                label.color = textColor;
-                identityId.color = textColor;
+                SetTextColor(label, textColor);
+                SetTextColor(identityId, textColor);
                 SetMapAnchorColor(
                     node.NodeId,
                     ResolveMapVisualAnchorColor(node.VisualAnchorKind));
@@ -1542,7 +2244,7 @@ namespace TinySpire.UI.Run
             }
         }
 
-        /// <summary>清理旧地图几何与测试按钮索引，不影响其他入口页面。</summary>
+        /// <summary>清理旧地图几何、可访问性基线与测试按钮索引，不影响其他入口页面。</summary>
         private void ClearMapGraph()
         {
             foreach (KeyValuePair<string, Button> entry in _mapNodeButtons)
@@ -1561,6 +2263,8 @@ namespace TinySpire.UI.Run
             if (_mapGraphRoot == null)
                 return;
 
+            UntrackAccessibilityTargets(_mapGraphRoot);
+            _mapGraphRoot.SetParent(null, worldPositionStays: false);
             _mapGraphRoot.gameObject.SetActive(false);
             DestroyOwnedObject(_mapGraphRoot.gameObject);
             _mapGraphRoot = null;
@@ -1937,11 +2641,30 @@ namespace TinySpire.UI.Run
             _boundButtons.Add(button);
         }
 
-        /// <summary>设置按钮底图颜色，保持选择与完成状态为纯表现事实。</summary>
-        private static void SetButtonColor(Button button, Color color)
+        /// <summary>写入按钮最新语义底色，高对比启用时仅以可逆显示色覆盖。</summary>
+        private void SetButtonColor(Button button, Color color)
         {
-            if (button?.targetGraphic != null)
-                button.targetGraphic.color = color;
+            if (button?.targetGraphic == null)
+                return;
+
+            TrackAppSettingsButton(button);
+            _appSettingsBaseButtonColors[button] = color;
+            button.targetGraphic.color = _lastAppSettings?.HighContrast == true
+                ? SettingsHighContrastButtonColor
+                : color;
+        }
+
+        /// <summary>写入文字最新语义底色，高对比启用时保留底色并显示统一强调色。</summary>
+        private void SetTextColor(TMP_Text text, Color color)
+        {
+            if (text == null)
+                return;
+
+            TrackAppSettingsText(text);
+            _appSettingsBaseTextColors[text] = color;
+            text.color = _lastAppSettings?.HighContrast == true
+                ? SettingsHighContrastTextColor
+                : color;
         }
 
         /// <summary>将 RectTransform 设为父级全拉伸。</summary>

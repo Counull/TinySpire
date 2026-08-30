@@ -3,9 +3,9 @@ title: TinySpire · 当前执行状态
 project: TinySpire
 page_type: status
 lifecycle: active
-updated: 2026-08-28
+updated: 2026-08-31
 scope: 当前 Run 切片与执行门禁
-source: 用户 2026-08-28 G7 实现、Unity 控制及完成后 commit/push 授权；G7 验收记录；CD-121；RUN_ROADMAP.md
+source: 用户 2026-08-29 G8 实现、优先参考杀戮尖塔2及完成后 commit/push 授权；用户 2026-08-31 明确豁免需要人工操作的验证并要求 commit/push；G8 实施计划；RUN_ROADMAP.md
 ---
 
 # TinySpire · 当前执行状态
@@ -16,13 +16,13 @@ source: 用户 2026-08-28 G7 实现、Unity 控制及完成后 commit/push 授�
 
 | 维度 | 当前结论 |
 |---|---|
-| Phase | **G7 · completed**；G7-A～E 均为 `verified`。G8 为 `not-started`。 |
-| Active slice | 无实施中切片；G8-A 仍只是 `candidate`，未获 Grill、计划或实施授权。 |
-| 已有证据 | Rider build `e750f929-d9bf-4cfd-bbf6-d715c237be51` success/problems 0；终审 RED 505/510 后，G7 定向 `60ec69d046b5442cb593a8bef123c0f1` **510/510**；完整 Unity EditMode `9758c02e718540aa97e5e26f832794e3` **1410/1410**；Sync/BuildLayout 七个真实 bundle 目标与 Packed Play Victory/Abandoned/Defeat 三链通过，产品 Console Error/InvalidKey/配置失败均为 0。完整事实见 [G7 验收记录](06_testing/2026-08-28-g7-single-act-elite-boss-outcome.md)。 |
-| 当前写入授权 | G7 实现与验证已结束；用户已授权对审计后的 G7 精确路径 commit 与 push，该 Git 交付尚未执行且必须分别报告。本授权不延伸到 G8。 |
-| 未授权 | G8，以及多 Act、Ascension、每日挑战、多个真实 Boss Encounter/多 Boss 战内容、通用 Boss DSL、全量内容目录、云/多槽/战中存档、多人、联网排行榜和 Scene/Prefab/asmdef/ProjectSettings/HybridCLR/DI 架构修改。 |
-| 当前阻塞 | 无。Unity MCP 与 Rider MCP 均已连通；用户原存档、Addressables builder 与 BootstrapScene dirty 状态已恢复。 |
-| 下一步 | 只做 G7 精确范围审计、暂存、commit 与 push，分别报告本地 commit 和远端结果；之后等待新的 Goal，不进入 G8。 |
+| Phase | **G8 · completed**；G8-A～E `verified`，G8-F `accepted-with-waiver`。人工 Player 字段没有被伪写为通过。 |
+| Active slice | 无。G8 实施计划已归档；后续新能力仍需从 [RUN_ROADMAP.md](RUN_ROADMAP.md) 重新提名与授权。 |
+| 已有证据 | final-review 后 Rider build problems 0；History/Statistics/UI Audio 定向 **38/38**、fresh full EditMode **1611/1611**。`Sync and Build All` 成功；fresh BuildLayout SHA-256 `838FA2FD...E9DF8AB1EB` 证明四个 address-only UI Audio 均由 `AssetBundleProvider` 打包。当前源码 Release Player `build-38ba3bf544` 为 `StandaloneWindows64 / Release / succeeded`、errors 0；中间日志 SHA-256 `FB5A27D...F6F9236` 且目标错误扫描 0。真实鼠标出牌到 `Completed #12 · PlayCard` 并推进至首战 Round 4，证明产品输入可达权威 Submit seam。测试 Player 已结束；persistent baseline 四个哈希、History count=2、`run-save.json` 不存在，以及四个构建噪声路径 clean 均已复核。详见 [G8 验收记录](06_testing/2026-08-29-g8-productization-release-gates.md)。 |
+| 当前写入授权 | 用户已明确要求精确 commit 并 push `main → origin/main`；`DEPENDENCIES.md` 与 8 个 Luban EOL-only 文件继续排除，禁止使用 `git add .`。 |
+| 未授权 | 多 Act、Ascension、每日挑战、多个真实 Boss Encounter/多 Boss 战内容、通用 Boss DSL、全量内容目录、云/多槽/战中存档、成就/遥测/商业化、多人/联网、多平台同时首发、完整手柄 Battle 语法，以及 Scene/Prefab/asmdef/ProjectSettings/HybridCLR settings 或 DI 架构修改。已完成的 `v8.14.1` package pin 是本轮最小兼容修复，不扩张这些边界。 |
+| 验证豁免 | 用户于 2026-08-31 明确要求跳过需要人工操作的验证；因此当前源码完整 Victory → 结果 → 主菜单、Victory history exactly-once、Continue disabled 与最终退出日志均为 `waived / not run`，性能同为 `waived / not run`。这些字段没有取得证据，`accepted-with-waiver` 不等于 `verified`。 |
+| 下一步 | 完成 132 路径候选的精确差异、`.meta`、LFS、排除项与 staged 审计，创建本地提交；push 前展示 commit payload、`main` 与 `origin/main`。 |
 
 ## 路由表
 
@@ -30,6 +30,7 @@ source: 用户 2026-08-28 G7 实现、Unity 控制及完成后 commit/push 授�
 |---|---|---|
 | 追溯 G3 实现/验证 | [G3 验收](06_testing/2026-08-24-g3-deterministic-act-map.md) | [G3 计划](plans/2026-08-24-g3-deterministic-act-map.md)、CD-116、历史日志 |
 | Run 阶段与下一候选切片 | [RUN_ROADMAP.md](RUN_ROADMAP.md) | 对应计划与验收；路线图不构成授权 |
+| 追溯 G8 实施/验收 | [G8 验收](06_testing/2026-08-29-g8-productization-release-gates.md) | [G8 归档计划](plans/2026-08-29-g8-productization-release-gates.md)、CD-122；人工字段的 waiver 不得改写成通过 |
 | 追溯 G7 实现/验证 | [G7 验收](06_testing/2026-08-28-g7-single-act-elite-boss-outcome.md) | [G7 计划](plans/2026-08-28-g7-single-act-elite-boss-outcome.md)、CD-121；不得扩到 G8 |
 | 追溯 G5/G6 实现/验证 | [G5/G6 验收](06_testing/2026-08-27-g5-g6-run-holdings-noncombat-nodes.md) | [G5/G6 计划](plans/2026-08-26-g5-g6-run-holdings-noncombat-nodes.md)、CD-119、CD-120 |
 | 已锁定实现口径或冲突裁决 | [CODE_DECISIONS.md](CODE_DECISIONS.md) | 精确 CD、相关代码和测试 |

@@ -3,7 +3,7 @@ title: Daedalus · 代码决策记录
 page_type: decision
 lifecycle: active
 created: 2026-07-06
-updated: 2026-08-28
+updated: 2026-08-29
 status_source: STATUS.md
 ---
 
@@ -1374,3 +1374,29 @@ Run 规划采用递归切片门禁：每个可执行切片先处于 `needs-grill
 **Supersede 与保留边界**：本决定只 supersede CD-116/CD-120 中“Boss 仅为 gate、没有真实 Boss/Run 胜利”的当前限制，CD-119/CD-120 中“schema v5 是当前写入版本”的口径，以及 CD-116 以单一 TerminalReason 表达终局分类的现行部分。CD-112/113/116 的唯一 Store/Flow、Battle attempt、setup/result bridge、save-before-publish、recipe map/fingerprint 与普通失败无 retry，CD-117/118 的 RunDeck/奖励实例，CD-119 的 holdings 和 CD-120 的 NodeVisit 均继续有效。本决定不授权多 Act、Ascension、每日挑战、多个真实 Boss Encounter、通用 Boss DSL、G8、Scene/Prefab/asmdef/ProjectSettings/HybridCLR/DI 改造、云/多槽/战中存档、联网或多人。
 
 **实施状态与验收门**：G7-A～E 已完成并 `verified`。终审来源闭合 RED job `e81cc15a7483467291b7b9d72094fc1f` 为 505/510；保持生产门禁后的 G7 定向 GREEN `60ec69d046b5442cb593a8bef123c0f1` 为 510/510。最终 Rider build session `e750f929-d9bf-4cfd-bbf6-d715c237be51` 成功且 problems 0；完整 Unity EditMode job `9758c02e718540aa97e5e26f832794e3` 为 1410/1410。Luban、`Sync and Build All`、BuildLayout 七个真实 bundle 目标与 Packed Play Victory/Abandoned/Defeat 三条 UGUI 产品链均通过，所有产品分支 Console Error、InvalidKey 与 ConfigInitializationException 为 0。完整证据见 `06_testing/2026-08-28-g7-single-act-elite-boss-outcome.md`；G8 仍未授权。
+
+## CD-122：G8 以独立 Settings/Profile/History owner、终局历史屏障与 UI Audio 资源域收口产品化
+
+**问题**：G7 已有唯一 RunStateStore、Battle setup/result bridge 与类型化 RunOutcome，但语言/显示/可访问性、教程进度、逐局历史、统计和 UI Audio 尚无彼此隔离的产品 owner。若把这些事实塞进 Run save、由 View 自行累计、让教程直接推进 Run/Battle，或在清理 terminal save 后才尝试补写历史，坏设置/坏教程/历史提交失败就会污染已验证的 Run 生命周期并丢失终局。五种分辨率、125% 文字与紧凑地图节点还需要一条明确的 overflow policy，不能靠缩小支持矩阵或手工视觉判断掩盖越界。
+
+**Settings、Profile 与 History 所有权选择**：`AppSettingsService` 是 versioned `app-settings.json` 的唯一公开 owner，保存 locale、master volume、display mode、resolution、text scale、high contrast 与 reduced motion；物理 adapter 只负责把已提交快照应用到 Localization、AudioListener 与 Screen。`PlayerProfileStateStore` 独立拥有 versioned `player-profile.json`，只保存教程进度。`RunHistoryService` 独立拥有 `run-history/{RunId}.json` 的不可变 `RunSummary`；同 RunId 同内容返回 AlreadyRecorded，不同内容返回 Conflict 并拒绝覆盖。三者只可复用 internal 原子文件 helper，不共享公开 codec、失败状态或第二份 Run/Outcome owner；Statistics 只从历史派生总局数、Victory/Defeat/Abandoned 与 Hero 分组。
+
+**统计快照事件选择**：`RunHistoryService.StatisticsChanged` 只在首次新增耐久历史后发布完整 `RunHistoryStatisticsLoadResult`，不得发布无载荷 invalidation 再迫使观察方重读全历史。`RunStatisticsPresenter` 初始化时显式读取一次并缓存完整结果；后续历史事件直接替换该快照，locale 变化只用缓存事实重建本地化 ViewModel，不重新遍历 repository。该事件契约服从 AC-P001，并不保存第二份统计计数。
+
+**设置应用事务与 fail-closed 选择**：设置候选先原子提交，再交给平台 adapter 应用；平台 Apply 抛错时，服务必须独立尝试把磁盘与平台都补偿回上一快照。两项均恢复才返回 typed `ApplyFailed`，保持 `Current` 为旧值且不发布 `Changed`；任一补偿失败则返回 `RecoveryFailed` 并设置 sticky `RequiresRecovery`。进入该状态后，后续 `TryChange` 必须在任何 repository/platform 副作用前返回 `RecoveryRequired`，Presenter 当前实例和重建实例都把它投影为明确失败，不把磁盘、内存与平台分裂伪装成可继续修改。
+
+**终局历史屏障选择**：RunOutcome 继续只由 RunStateStore 与既有 Battle result/Run flow 产生。结果页离开前必须先让 RunHistoryService 原子提交冻结 summary，或确认该 summary 已以相同内容存在；只有此后才允许删除 terminal `run-save.json` 与 journal。History commit failure、Conflict 或未确认状态均保持同一 summary 可重试并阻止清理，不由按钮点击或 Statistics 临时拼装替代。该屏障已用真实 Defeat/Abandoned 文件证明清理后的历史仍存在，但没有改变 G7 的 RunOutcome 分类或 BattleResult bridge。
+
+**教程、设置与只读可访问性选择**：TutorialGuidePresenter/Overlay 只读取当前 RunEntry/Battle 上下文，并只向 Profile 提交确认、skip、reset；不写 Run、Battle、Settings 或 History。全局 overlay 初始化时消费 AppSettings `Current`，随后只读订阅 `Changed`，即时投影 100/125% 字号、高对比和 reduced motion，并在 Dispose 时解除订阅。Reduced motion 只把表现 transition 降为 None/恢复既有 transition，不跳过领域命令、结算、History barrier 或场景清理。
+
+**支持矩阵与地图 overflow policy**：首发矩阵冻结为 Windows 10/11 Standalone x64、`zh-CN/en`、鼠标 Battle + 键盘菜单、1280×720 / 1920×1080 / 2560×1440 / 1920×1200 / 2560×1080、窗口/无边框，以及 100/125% 文字、高对比、减少动态效果。完整手柄 Battle、按键重映射和其他平台不在当前承诺。RunEntry 使用 safe viewport 与 1920×1080 reference policy；层数达到紧凑形状的地图节点把名称与身份文本放进互不覆盖的独立矩形区域，并在各自冻结的最小/最大字号内 autosize。125%+高对比只能在各自区域内缩放，不允许 glyph 越界，也不得通过删除身份、截断必需事实或缩小支持矩阵来过测。
+
+**动态地图可访问性缓存生命周期选择**：重建地图时，旧动态子树必须先从文字/按钮可访问性基线中移除，并在仍激活时脱离 RunEntry 层级，再停用和调用可能延迟到帧末的 `Destroy`。这样同次 Render 的 `GetComponentsInChildren(includeInactive: true)` 不会重新发现并缓存退休控件，下一帧设置重绘也不会访问已销毁 Unity 对象；此规则只约束 View 动态对象生命周期，不改变 MapDefinition 或 Run 状态所有权。
+
+**UI Audio 与表现资源选择**：UI Audio 使用原创短键、`ui-audio/{key}` 逻辑地址、专用 Addressables Group、构建期精确同步与运行时 Addressables loader；四个当前逻辑地址必须与专用组精确一致并由 `AssetBundleProvider` 打入物理 bundle。运行时不得使用 `Resources.Load`、`AssetDatabase`、文件系统路径或配置中的 `Assets/...` 业务素材路径旁路。Settings、Tutorial、Statistics、Outcome 复用现有自有纸张/UI 表现，不复制杀戮尖塔2的素材、文本、音频或实现；参考只用于信息层级、故障隔离和交互原则。
+
+**HybridCLR package 兼容选择**：Unity 6000.5 的默认 IL2CPP 路径使用 HybridCLR 官方 `v8.14.1`，该版本包含上游 commit `a93ca3dc27a2cbb7756b32c187534c18bfbbaf06` 对 6000.5 错选 6000.3 installer 分支的修复。仓库只在 `Packages/manifest.json` 与 `Packages/packages-lock.json` 固定 tag 和 lock hash `a0e0b502c6c1b9ce2d0983181f4555e6149ae249`；`HybridCLRSettings.useGlobalIl2cpp` 保持 0，ProjectSettings、程序集、AOT/热更新边界均不改变。回滚单位也是这两个 package 文件，但回滚会重新打开 Unity 6000.5 ABI/build 阻塞，因此不能把 stock global IL2CPP 当等价替代。
+
+**保留边界**：本决定不 supersede CD-112～121 的唯一 RunStateStore/RunFlow、attempt、Map recipe、Battle setup/result、RunDeck、holdings、NodeVisit、Boss phase 或 RunOutcome 所有权；Scene、Prefab、asmdef、ProjectSettings、HybridCLR settings、DI 架构与 BattleCommandQueue 提交/排队所有权均未修改。唯一 package-level 例外是上述官方 `v8.14.1` 兼容 pin。
+
+**验收来源与状态路由**：本决定只冻结 G8 的 owner、事务、事件与资源边界，不承载持续变化的 Phase/Slice 状态。当前唯一状态源是 `STATUS.md`；完整 RED→GREEN、构建、Player、Profiler、矩阵缺口与恢复证据统一记录在 `06_testing/2026-08-29-g8-productization-release-gates.md`，执行顺序和完成门见对应 G8 plan。不得从本决策页推断 G8 已完成。

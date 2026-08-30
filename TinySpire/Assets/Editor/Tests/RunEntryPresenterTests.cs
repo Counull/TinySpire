@@ -8,7 +8,9 @@ using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using R3;
 using TinySpire.Battle;
+using TinySpire.Profile;
 using TinySpire.Run;
+using TinySpire.Run.History;
 using TinySpire.Run.Map;
 using TinySpire.UI.Run;
 using UnityEngine.Localization;
@@ -36,6 +38,34 @@ public sealed class RunEntryPresenterTests
         Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.MainMenu));
         Assert.That(view.LastModel.ContinueEnabled, Is.False);
         Assert.That(view.LastModel.Map, Is.Null);
+    }
+
+    /// <summary>真实预 Run 页面每次成功呈现后必须依次观察主菜单与英雄选择教程上下文。</summary>
+    [Test]
+    public void TutorialContext_RenderedPreRunPagesObserveMainMenuThenHeroSelection()
+    {
+        using var store = new RunStateStore();
+        using var localeChanges = new Subject<Locale>();
+        var view = new RecordingRunEntryView();
+        var observedContexts = new List<TutorialContext>();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            CreateFlow(store, new RecordingSceneFlow(), randomRootSeed: 13u),
+            CreateTables,
+            Localize,
+            localeChanges,
+            observedContexts.Add);
+
+        presenter.Initialize();
+        view.Emit(new RunEntryAction(RunEntryActionKind.StartGame));
+
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.HeroSelection));
+        Assert.That(observedContexts.Distinct(), Is.EqualTo(new[]
+        {
+            TutorialContext.MainMenu,
+            TutorialContext.HeroSelection,
+        }));
     }
 
     /// <summary>有效当前 schema 地图档只启用 Continue，玩家确认后才重建同一冻结地图。</summary>
@@ -625,11 +655,13 @@ public sealed class RunEntryPresenterTests
         var saves = new ScriptedRunSaveStore();
         var flow = CreateFlow(store, new RecordingSceneFlow(), randomRootSeed: 505u, saves);
         flow.CreateNewRun(heroTemplateId: 1001);
+        using var history = new RunHistoryService(new InMemoryRunHistoryRepository());
         var view = new RecordingRunEntryView();
         using var presenter = new RunEntryPresenter(
             view,
             store,
             flow,
+            history,
             CreateTables,
             Localize,
             localeChanges);
@@ -657,6 +689,84 @@ public sealed class RunEntryPresenterTests
         Assert.That(store.Current, Is.Null);
         Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.MainMenu));
         Assert.That(view.LastModel.ContinueEnabled, Is.False);
+    }
+
+    /// <summary>终局历史首次记录或同内容已存在时，离开动作才删除终局存档并返回主菜单。</summary>
+    [TestCase(RunHistoryRecordStatus.Recorded)]
+    [TestCase(RunHistoryRecordStatus.AlreadyRecorded)]
+    public void LeaveTerminalRun_HistoryRecordedOrAlreadyRecorded_DeletesTerminalSave(
+        RunHistoryRecordStatus recordStatus)
+    {
+        using var store = new RunStateStore();
+        using var localeChanges = new Subject<Locale>();
+        var saves = new ScriptedRunSaveStore(CreateTerminalDocument());
+        var histories = new ScriptedRunHistoryRepository(recordStatus);
+        using var history = new RunHistoryService(histories);
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            CreateFlow(store, new RecordingSceneFlow(), randomRootSeed: 515u, saves),
+            history,
+            CreateTables,
+            Localize,
+            localeChanges);
+        presenter.Initialize();
+
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.Terminal));
+        Assert.That(histories.RecordCount, Is.Zero);
+        Assert.That(saves.DeleteCount, Is.Zero);
+
+        view.Emit(new RunEntryAction(RunEntryActionKind.LeaveTerminalRun));
+
+        Assert.That(histories.RecordCount, Is.EqualTo(1));
+        Assert.That(history.LastRecordResult.Status, Is.EqualTo(
+            recordStatus == RunHistoryRecordStatus.Recorded
+                ? RunHistoryServiceRecordStatus.Recorded
+                : RunHistoryServiceRecordStatus.AlreadyRecorded));
+        Assert.That(saves.DeleteCount, Is.EqualTo(1));
+        Assert.That(saves.Load().Status, Is.EqualTo(RunSaveLoadStatus.NotFound));
+        Assert.That(store.Current, Is.Null);
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.MainMenu));
+    }
+
+    /// <summary>历史冲突或不可用时，离开动作保留唯一终局与存档，并投影稳定本地化故障键。</summary>
+    [TestCase(RunHistoryRecordStatus.Conflict, RunHistoryServiceRecordStatus.Conflict)]
+    [TestCase(RunHistoryRecordStatus.IoFailure, RunHistoryServiceRecordStatus.Unavailable)]
+    public void LeaveTerminalRun_HistoryConflictOrUnavailable_PreservesTerminalSaveAndProjectsFailure(
+        RunHistoryRecordStatus recordStatus,
+        RunHistoryServiceRecordStatus expectedStatus)
+    {
+        using var store = new RunStateStore();
+        using var localeChanges = new Subject<Locale>();
+        var saves = new ScriptedRunSaveStore(CreateTerminalDocument());
+        var histories = new ScriptedRunHistoryRepository(recordStatus);
+        using var history = new RunHistoryService(histories);
+        var view = new RecordingRunEntryView();
+        using var presenter = new RunEntryPresenter(
+            view,
+            store,
+            CreateFlow(store, new RecordingSceneFlow(), randomRootSeed: 525u, saves),
+            history,
+            CreateTables,
+            Localize,
+            localeChanges);
+        presenter.Initialize();
+
+        view.Emit(new RunEntryAction(RunEntryActionKind.LeaveTerminalRun));
+
+        Assert.That(histories.RecordCount, Is.EqualTo(1));
+        Assert.That(history.LastRecordResult.Status, Is.EqualTo(expectedStatus));
+        Assert.That(saves.DeleteCount, Is.Zero);
+        Assert.That(saves.Load().Status, Is.EqualTo(RunSaveLoadStatus.Success));
+        Assert.That(store.Current.ProgressPhase, Is.EqualTo(RunProgressPhase.Terminal));
+        Assert.That(view.LastModel.Page, Is.EqualTo(RunEntryPage.Failure));
+        Assert.That(
+            view.LastModel.GetText(RunEntryTextSlot.SaveIssueTitle),
+            Is.EqualTo("run.entry.save.issue.title"));
+        Assert.That(
+            view.LastModel.GetText(RunEntryTextSlot.SaveIssue),
+            Is.EqualTo("run.history.failure.record"));
     }
 
     /// <summary>冷启动读到 Terminal(Defeat) 必须直接恢复失败页，永不暴露 Continue。</summary>
@@ -2183,6 +2293,61 @@ public sealed class RunEntryPresenterTests
             DeleteCount++;
             _document = null;
             return RunSaveDeleteResult.Succeeded();
+        }
+    }
+
+    /// <summary>让历史记录边界返回指定类型化结果，并记录写入尝试次数。</summary>
+    private sealed class ScriptedRunHistoryRepository : IRunHistoryRepository
+    {
+        private readonly RunHistoryRecordStatus _recordStatus;
+
+        /// <summary>累计逐 RunId 历史写入尝试次数。</summary>
+        public int RecordCount { get; private set; }
+
+        /// <summary>冻结本测试期历史写入应返回的类型化状态。</summary>
+        public ScriptedRunHistoryRepository(RunHistoryRecordStatus recordStatus)
+        {
+            _recordStatus = recordStatus;
+        }
+
+        /// <summary>模拟离开动作前尚无该 RunId 历史，使服务进入首次记录路径。</summary>
+        public RunHistoryLoadResult Load(RunId runId)
+        {
+            return RunHistoryLoadResult.NotFound();
+        }
+
+        /// <summary>记录写入尝试，并按脚本返回成功、幂等、冲突或不可用结果。</summary>
+        public RunHistoryRecordResult Record(RunSummary summary)
+        {
+            if (summary == null)
+                throw new ArgumentNullException(nameof(summary));
+
+            RecordCount++;
+            switch (_recordStatus)
+            {
+                case RunHistoryRecordStatus.Recorded:
+                    return RunHistoryRecordResult.Recorded(summary.RunId);
+                case RunHistoryRecordStatus.AlreadyRecorded:
+                    return RunHistoryRecordResult.AlreadyRecorded(summary.RunId);
+                case RunHistoryRecordStatus.Conflict:
+                    return RunHistoryRecordResult.Conflict(
+                        summary.RunId,
+                        "Injected history conflict.");
+                case RunHistoryRecordStatus.InvalidData:
+                case RunHistoryRecordStatus.IoFailure:
+                    return RunHistoryRecordResult.Failed(
+                        _recordStatus,
+                        summary.RunId,
+                        "Injected history failure.");
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
+
+        /// <summary>返回空统计输入；终局写入屏障测试不从旁路读取历史。</summary>
+        public RunHistoryReadAllResult ReadAll()
+        {
+            return RunHistoryReadAllResult.Succeeded(Array.Empty<RunSummary>());
         }
     }
 }

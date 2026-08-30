@@ -2,7 +2,7 @@
 title: Daedalus · 测试与验收索引
 page_type: index
 lifecycle: active
-updated: 2026-08-28
+updated: 2026-08-31
 status_source: ../STATUS.md
 ---
 
@@ -12,6 +12,7 @@ status_source: ../STATUS.md
 
 ## 最近记录
 
+- [G8 产品化与发布门禁](2026-08-29-g8-productization-release-gates.md) — G8-A～E `verified`，G8-F `accepted-with-waiver`，G8 Phase `completed`。final-review 后 History/Statistics/UI Audio 38/38、fresh full EditMode 1611/1611、`Sync and Build All`、BuildLayout/BuildReport 与四地址 `AssetBundleProvider` bundle 均通过；fresh 当前源码 Release Player build 成功、errors 0，真实鼠标出牌推进到首战 Round 4且中间目标错误扫描 0。完整 Victory、history exactly-once、Continue disabled、最终退出日志与性能均由用户明确豁免，记录为 `waived / not run` 而非通过；persistent baseline 与四个构建自动噪声文件已恢复。
 - [G7 单 Act、精英、Boss 与 Run 终局](2026-08-28-g7-single-act-elite-boss-outcome.md) — `completed / verified`；终审 RED 505/510、G7 定向 510/510、完整 EditMode 1410/1410、Rider problems 0、Sync/BuildLayout 真实 bundle，以及 Packed Play Victory/Abandoned/Defeat 三条终局产品链与 Console Error/InvalidKey/配置失败 0。
 - [G5/G6 Run 持有物与非战斗节点](2026-08-27-g5-g6-run-holdings-noncombat-nodes.md) — `completed / verified`；完整 EditMode 1348/1348、Rider problems 0、Sync/BuildLayout 真实 bundle、Packed Play schema v5 mixed route 与 Console Error/InvalidKey/配置失败 0。
 - [G4 RunDeck、普通战斗奖励与多级升级](2026-08-25-g4-run-deck-rewards-upgrades.md) — G4-A～D 权威验收：完整 EditMode 1093/1093、生产双 Hero 自动化、Sync/BuildLayout、Packed Play 双 Hero 选择/跳过与冷启动链、Console Error 0。

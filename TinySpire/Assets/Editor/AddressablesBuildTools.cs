@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using Newtonsoft.Json.Linq;
 using TinySpire.Battle;
+using TinySpire.Presentation.Audio;
 using TinySpire.Run;
 using UnityEditor;
 using UnityEditor.AddressableAssets;
@@ -11,12 +12,46 @@ using UnityEditor.AddressableAssets.Settings;
 using UnityEditor.AddressableAssets.Settings.GroupSchemas;
 using UnityEngine;
 
+/// <summary>纯构建 helper 使用的一项 UI 音频资源导入描述。</summary>
+internal sealed class UiAudioAssetDescriptor
+{
+    /// <summary>Unity 工程内的稳定 Assets 路径。</summary>
+    public string AssetPath { get; }
+
+    /// <summary>AssetDatabase 声明的主资源类型。</summary>
+    public Type MainAssetType { get; }
+
+    /// <summary>该路径是否能以 AudioClip 泛型加载。</summary>
+    public bool LoadsAsAudioClip { get; }
+
+    /// <summary>AudioImporter 是否保证资源加载时同步预载音频数据。</summary>
+    public bool PreloadAudioData { get; }
+
+    /// <summary>冻结一项供纯解析与生产扫描共用的导入事实。</summary>
+    public UiAudioAssetDescriptor(
+        string assetPath,
+        Type mainAssetType,
+        bool loadsAsAudioClip,
+        bool preloadAudioData)
+    {
+        if (string.IsNullOrWhiteSpace(assetPath))
+            throw new ArgumentException("UI audio asset path is required.", nameof(assetPath));
+
+        AssetPath = assetPath;
+        MainAssetType = mainAssetType;
+        LoadsAsAudioClip = loadsAsAudioClip;
+        PreloadAudioData = preloadAudioData;
+    }
+}
+
 public static class AddressablesBuildTools
 {
     private const string ScenesGroupName = "TinySpire Scenes";
     private const string GameDataGroupName = "TinySpire GameData";
     private const string CharactersGroupName = "TinySpire Characters";
     private const string CardArtGroupName = "TinySpire Card Art";
+    internal const string UiAudioGroupName = "TinySpire UI Audio";
+    internal const string UiAudioAssetRoot = "Assets/Arts/Runtime/Audio/UI";
     private const string GameDataLabel = "GameData";
     private const string HeroTableJsonPath = "Assets/GameData/battle_tbhero.json";
     private const string EnemyTableJsonPath = "Assets/GameData/battle_tbenemy.json";
@@ -26,6 +61,10 @@ public static class AddressablesBuildTools
     private const string CatalogPlaceholderIllustrationPath =
         "Assets/Arts/Runtime/Card/Texture/art_placeholder.png";
 
+    /// <summary>UI 音频专用 group 的冻结打包模式。</summary>
+    internal static BundledAssetGroupSchema.BundlePackingMode UiAudioBundleMode =>
+        BundledAssetGroupSchema.BundlePackingMode.PackTogether;
+
     private static readonly string[] ScenePaths =
     {
         "Assets/Scenes/LoadingScene.unity",
@@ -33,10 +72,11 @@ public static class AddressablesBuildTools
         RunSceneAddresses.Battle
     };
 
-    /// <summary>按项目稳定地址配置场景、配置、角色与牌面本地资源组。</summary>
+    /// <summary>按项目稳定地址配置场景、配置、角色、牌面与 UI 音频本地资源组。</summary>
     [MenuItem("TinySpire/Addressables/Configure Local Content")]
     public static void ConfigureLocalContent()
     {
+        IReadOnlyDictionary<string, string> uiAudioEntries = ReadUiAudioEntries();
         AddressableAssetSettings settings = AddressableAssetSettingsDefaultObject.GetSettings(create: true);
         settings.BuildAddressablesWithPlayerBuild = AddressableAssetSettings.PlayerBuildOption.DoNotBuildWithPlayer;
         settings.BuildRemoteCatalog = false;
@@ -73,6 +113,13 @@ public static class AddressablesBuildTools
             CardArtGroupName,
             BundledAssetGroupSchema.BundlePackingMode.PackTogether);
         SyncEntries(settings, cardArt, ReadCardIllustrationEntries(), label: null);
+
+        AddressableAssetGroup uiAudio = EnsureLocalGroup(
+            settings,
+            UiAudioGroupName,
+            UiAudioBundleMode);
+        ConfigureUiAudioCatalogKeys(uiAudio.GetSchema<BundledAssetGroupSchema>());
+        SyncEntries(settings, uiAudio, uiAudioEntries, label: null);
 
         EditorUtility.SetDirty(settings);
         AssetDatabase.SaveAssets();
@@ -117,6 +164,18 @@ public static class AddressablesBuildTools
         schema.IncludeInBuild = true;
         EditorUtility.SetDirty(schema);
         return group;
+    }
+
+    /// <summary>冻结 UI 音频 catalog 只暴露逻辑地址，拒绝 GUID 与 Label 形成第二组公钥。</summary>
+    internal static void ConfigureUiAudioCatalogKeys(BundledAssetGroupSchema schema)
+    {
+        if (schema == null)
+            throw new ArgumentNullException(nameof(schema));
+
+        schema.IncludeAddressInCatalog = true;
+        schema.IncludeGUIDInCatalog = false;
+        schema.IncludeLabelsInCatalog = false;
+        EditorUtility.SetDirty(schema);
     }
 
     /// <summary>从英雄与敌人生成表收集角色短键，并解析为资源路径与逻辑地址。</summary>
@@ -356,6 +415,137 @@ public static class AddressablesBuildTools
             throw new InvalidOperationException(
                 $"Card illustration key '{key}' must use Sprite/Single with mipmaps disabled: {assetPath}");
         }
+    }
+
+    /// <summary>扫描 UI 音频专用根并收集主类型与 AudioClip 泛型加载事实。</summary>
+    private static IReadOnlyDictionary<string, string> ReadUiAudioEntries()
+    {
+        if (!AssetDatabase.IsValidFolder(UiAudioAssetRoot))
+            throw new InvalidOperationException($"UI audio asset root does not exist: {UiAudioAssetRoot}");
+
+        var descriptors = new List<UiAudioAssetDescriptor>();
+        foreach (string guid in AssetDatabase.FindAssets(string.Empty, new[] { UiAudioAssetRoot }))
+        {
+            string assetPath = AssetDatabase.GUIDToAssetPath(guid);
+            if (AssetDatabase.IsValidFolder(assetPath))
+                continue;
+
+            var importer = AssetImporter.GetAtPath(assetPath) as AudioImporter;
+
+            descriptors.Add(new UiAudioAssetDescriptor(
+                assetPath,
+                AssetDatabase.GetMainAssetTypeAtPath(assetPath),
+                AssetDatabase.LoadAssetAtPath<AudioClip>(assetPath) != null,
+                UsesPreloadedAudioData(importer)));
+        }
+
+        return ResolveUiAudioEntries(descriptors);
+    }
+
+    /// <summary>按 Standalone override 或默认采样设置判断音频数据是否随资源完整预载。</summary>
+    private static bool UsesPreloadedAudioData(AudioImporter importer)
+    {
+        if (importer == null)
+            return false;
+
+        AudioImporterSampleSettings settings =
+            importer.ContainsSampleSettingsOverride(BuildTargetGroup.Standalone)
+                ? importer.GetOverrideSampleSettings(BuildTargetGroup.Standalone)
+                : importer.defaultSampleSettings;
+        return settings.preloadAudioData;
+    }
+
+    /// <summary>把专用根导入事实解析为目录四项精确清单，并拒绝全部资源契约漂移。</summary>
+    internal static IReadOnlyDictionary<string, string> ResolveUiAudioEntries(
+        IEnumerable<UiAudioAssetDescriptor> descriptors)
+    {
+        if (descriptors == null)
+            throw new ArgumentNullException(nameof(descriptors));
+
+        var assetsByKey = new Dictionary<string, UiAudioAssetDescriptor>(
+            StringComparer.OrdinalIgnoreCase);
+        foreach (UiAudioAssetDescriptor descriptor in descriptors)
+        {
+            if (descriptor == null)
+                throw new InvalidOperationException("UI audio asset descriptor cannot be null.");
+
+            string normalizedPath = descriptor.AssetPath.Replace('\\', '/');
+            if (!string.Equals(normalizedPath, descriptor.AssetPath, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"UI audio asset path must use Unity separators: {descriptor.AssetPath}");
+            }
+
+            string directory = Path.GetDirectoryName(normalizedPath)?.Replace('\\', '/');
+            if (!string.Equals(directory, UiAudioAssetRoot, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"UI audio assets must be direct children of {UiAudioAssetRoot}: {descriptor.AssetPath}");
+            }
+            if (!string.Equals(Path.GetExtension(normalizedPath), ".wav", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"UI audio asset must use the exact lowercase .wav extension: {descriptor.AssetPath}");
+            }
+
+            string key = Path.GetFileNameWithoutExtension(normalizedPath);
+            if (assetsByKey.TryGetValue(key, out UiAudioAssetDescriptor duplicate))
+            {
+                throw new InvalidOperationException(
+                    $"Duplicate UI audio key '{key}': {duplicate.AssetPath}, {descriptor.AssetPath}");
+            }
+
+            try
+            {
+                UiAudioAddress.FromKey(key);
+            }
+            catch (ArgumentException exception)
+            {
+                throw new InvalidOperationException(
+                    $"UI audio asset filename is not a canonical short key: {descriptor.AssetPath}",
+                    exception);
+            }
+
+            if (descriptor.MainAssetType != typeof(AudioClip))
+            {
+                throw new InvalidOperationException(
+                    $"UI audio asset must import with AudioClip as its main type: {descriptor.AssetPath}");
+            }
+            if (!descriptor.LoadsAsAudioClip)
+            {
+                throw new InvalidOperationException(
+                    $"UI audio asset cannot be loaded as AudioClip: {descriptor.AssetPath}");
+            }
+            if (!descriptor.PreloadAudioData)
+            {
+                throw new InvalidOperationException(
+                    $"UI audio asset must preload audio data: {descriptor.AssetPath}");
+            }
+
+            assetsByKey.Add(key, descriptor);
+        }
+
+        var entries = new Dictionary<string, string>(StringComparer.Ordinal);
+        for (int index = 0; index < UiAudioCatalog.Ordered.Count; index++)
+        {
+            UiAudioCueDefinition definition = UiAudioCatalog.Ordered[index];
+            if (!assetsByKey.TryGetValue(definition.Key, out UiAudioAssetDescriptor descriptor))
+            {
+                throw new InvalidOperationException(
+                    $"Declared UI audio cue is missing from the dedicated root: {definition.Key}");
+            }
+
+            string assetKey = Path.GetFileNameWithoutExtension(descriptor.AssetPath);
+            if (!string.Equals(assetKey, definition.Key, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"UI audio key casing must match the catalog: {assetKey} != {definition.Key}");
+            }
+
+            entries.Add(descriptor.AssetPath, definition.Address);
+        }
+
+        return entries;
     }
 
     /// <summary>让专用资源组与当前配置地址集合完全一致，并移除已经失效的旧条目。</summary>

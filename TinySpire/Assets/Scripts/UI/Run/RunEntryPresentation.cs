@@ -6,7 +6,10 @@ using System.Linq;
 using cfg;
 using Cysharp.Threading.Tasks;
 using R3;
+using TinySpire.Profile;
+using TinySpire.Profile.Presentation;
 using TinySpire.Run;
+using TinySpire.Run.History;
 using TinySpire.Run.Map;
 using UnityEngine.Localization;
 using VContainer;
@@ -1446,6 +1449,7 @@ namespace TinySpire.UI.Run
         private const string IoFailureKey = "run.entry.save.issue.io_failure";
         private const string MissingConfigurationKey =
             "run.entry.save.issue.missing_configuration";
+        private const string HistoryRecordFailureKey = "run.history.failure.record";
         private const string DeleteFailedKey = "run.entry.save.delete.failed";
         private const string CommitFailedKey = "run.entry.save.commit_failed";
         private const string RetrySaveKey = "run.entry.save.retry";
@@ -1457,6 +1461,9 @@ namespace TinySpire.UI.Run
         private readonly IRunEntryView _view;
         private readonly RunStateStore _store;
         private readonly RunFlowService _flow;
+        private readonly RunHistoryService _runHistory;
+        private readonly Action<TutorialContext> _observeTutorialContext;
+        private readonly Action _clearTutorialContext;
         private readonly Func<Tables> _tablesProvider;
         private readonly IRunMapIdentityCatalog _mapIdentities;
         private readonly Func<string, IReadOnlyDictionary<string, object>, string> _localize;
@@ -1466,11 +1473,57 @@ namespace TinySpire.UI.Run
         private IDisposable _localeSubscription;
         private RunEntryPage _localPage = RunEntryPage.MainMenu;
         private int? _selectedHeroTemplateId;
+        private RunId? _historyRecordFailureRunId;
         private bool _initialized;
         private bool _disposed;
 
         /// <summary>以生产配置、本地化服务和跨场景 Run 服务创建入口 Presenter。</summary>
         [Inject]
+        public RunEntryPresenter(
+            IRunEntryView view,
+            RunStateStore store,
+            RunFlowService flow,
+            RunHistoryService runHistory,
+            ConfigService configs,
+            LocalizationService localization,
+            IRunMapIdentityCatalog mapIdentities,
+            TutorialGuidePresenter tutorialGuide)
+            : this(
+                view,
+                store,
+                flow,
+                runHistory,
+                CreateTablesProvider(configs),
+                mapIdentities,
+                CreateLocalizer(localization),
+                RequireLocaleChanges(localization),
+                CreateTutorialObserver(tutorialGuide),
+                CreateTutorialClearer(tutorialGuide))
+        {
+        }
+
+        /// <summary>保留含历史服务的旧生产构造形状；未注入教程时维持原页面行为。</summary>
+        public RunEntryPresenter(
+            IRunEntryView view,
+            RunStateStore store,
+            RunFlowService flow,
+            RunHistoryService runHistory,
+            ConfigService configs,
+            LocalizationService localization,
+            IRunMapIdentityCatalog mapIdentities)
+            : this(
+                view,
+                store,
+                flow,
+                runHistory,
+                CreateTablesProvider(configs),
+                mapIdentities,
+                CreateLocalizer(localization),
+                RequireLocaleChanges(localization))
+        {
+        }
+
+        /// <summary>保留旧调用形状；未注入历史服务时终局离开会安全失败并保留存档。</summary>
         public RunEntryPresenter(
             IRunEntryView view,
             RunStateStore store,
@@ -1482,6 +1535,7 @@ namespace TinySpire.UI.Run
                 view,
                 store,
                 flow,
+                null,
                 CreateTablesProvider(configs),
                 mapIdentities,
                 CreateLocalizer(localization),
@@ -1501,6 +1555,50 @@ namespace TinySpire.UI.Run
                 view,
                 store,
                 flow,
+                null,
+                tablesProvider,
+                new RunMapIdentityCatalog(tablesProvider, localize),
+                localize,
+                localeChanges)
+        {
+        }
+
+        /// <summary>以可替换教程观察动作创建预 Run 页面接线测试 Presenter。</summary>
+        internal RunEntryPresenter(
+            IRunEntryView view,
+            RunStateStore store,
+            RunFlowService flow,
+            Func<Tables> tablesProvider,
+            Func<string, IReadOnlyDictionary<string, object>, string> localize,
+            Observable<Locale> localeChanges,
+            Action<TutorialContext> observeTutorialContext)
+            : this(
+                view,
+                store,
+                flow,
+                null,
+                tablesProvider,
+                new RunMapIdentityCatalog(tablesProvider, localize),
+                localize,
+                localeChanges,
+                observeTutorialContext)
+        {
+        }
+
+        /// <summary>以显式历史服务、可替换配置与本地化 seam 创建终局写入屏障测试 Presenter。</summary>
+        internal RunEntryPresenter(
+            IRunEntryView view,
+            RunStateStore store,
+            RunFlowService flow,
+            RunHistoryService runHistory,
+            Func<Tables> tablesProvider,
+            Func<string, IReadOnlyDictionary<string, object>, string> localize,
+            Observable<Locale> localeChanges)
+            : this(
+                view,
+                store,
+                flow,
+                runHistory,
                 tablesProvider,
                 new RunMapIdentityCatalog(tablesProvider, localize),
                 localize,
@@ -1517,10 +1615,85 @@ namespace TinySpire.UI.Run
             IRunMapIdentityCatalog mapIdentities,
             Func<string, IReadOnlyDictionary<string, object>, string> localize,
             Observable<Locale> localeChanges)
+            : this(
+                view,
+                store,
+                flow,
+                null,
+                tablesProvider,
+                mapIdentities,
+                localize,
+                localeChanges)
+        {
+        }
+
+        /// <summary>以显式历史服务与地图身份目录创建完整可替换的 Presenter。</summary>
+        internal RunEntryPresenter(
+            IRunEntryView view,
+            RunStateStore store,
+            RunFlowService flow,
+            RunHistoryService runHistory,
+            Func<Tables> tablesProvider,
+            IRunMapIdentityCatalog mapIdentities,
+            Func<string, IReadOnlyDictionary<string, object>, string> localize,
+            Observable<Locale> localeChanges)
+            : this(
+                view,
+                store,
+                flow,
+                runHistory,
+                tablesProvider,
+                mapIdentities,
+                localize,
+                localeChanges,
+                null)
+        {
+        }
+
+        /// <summary>以历史、地图与教程观察 seam 创建完整可替换的 Presenter。</summary>
+        internal RunEntryPresenter(
+            IRunEntryView view,
+            RunStateStore store,
+            RunFlowService flow,
+            RunHistoryService runHistory,
+            Func<Tables> tablesProvider,
+            IRunMapIdentityCatalog mapIdentities,
+            Func<string, IReadOnlyDictionary<string, object>, string> localize,
+            Observable<Locale> localeChanges,
+            Action<TutorialContext> observeTutorialContext)
+            : this(
+                view,
+                store,
+                flow,
+                runHistory,
+                tablesProvider,
+                mapIdentities,
+                localize,
+                localeChanges,
+                observeTutorialContext,
+                null)
+        {
+        }
+
+        /// <summary>以历史、地图及教程观察/清除 seam 创建生产与接线测试共用 Presenter。</summary>
+        internal RunEntryPresenter(
+            IRunEntryView view,
+            RunStateStore store,
+            RunFlowService flow,
+            RunHistoryService runHistory,
+            Func<Tables> tablesProvider,
+            IRunMapIdentityCatalog mapIdentities,
+            Func<string, IReadOnlyDictionary<string, object>, string> localize,
+            Observable<Locale> localeChanges,
+            Action<TutorialContext> observeTutorialContext,
+            Action clearTutorialContext)
         {
             _view = view ?? throw new ArgumentNullException(nameof(view));
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _flow = flow ?? throw new ArgumentNullException(nameof(flow));
+            _runHistory = runHistory;
+            _observeTutorialContext = observeTutorialContext ?? IgnoreTutorialContext;
+            _clearTutorialContext = clearTutorialContext ?? IgnoreTutorialContextClear;
             _tablesProvider = tablesProvider ?? throw new ArgumentNullException(nameof(tablesProvider));
             _mapIdentities = mapIdentities ?? throw new ArgumentNullException(nameof(mapIdentities));
             _localize = localize ?? throw new ArgumentNullException(nameof(localize));
@@ -1678,6 +1851,12 @@ namespace TinySpire.UI.Run
             else if (action.Kind == RunEntryActionKind.LeaveTerminalRun &&
                      state.ProgressPhase == RunProgressPhase.Terminal)
             {
+                if (!EnsureTerminalHistoryRecorded(state))
+                {
+                    Render();
+                    return;
+                }
+
                 RunSaveDeleteResult delete = _flow.AbandonSavedRun();
                 if (delete.Status == RunSaveDeleteStatus.Success)
                 {
@@ -1805,6 +1984,32 @@ namespace TinySpire.UI.Run
             }
         }
 
+        /// <summary>在删除终局存档前确保历史已首次记录或同内容幂等存在，其他结果全部保留终局。</summary>
+        private bool EnsureTerminalHistoryRecorded(RunState state)
+        {
+            if (_runHistory == null)
+            {
+                _historyRecordFailureRunId = state.RunId;
+                return false;
+            }
+
+            RunHistoryServiceRecordResult result = _runHistory.EnsureRecorded(state);
+            switch (result.Status)
+            {
+                case RunHistoryServiceRecordStatus.Recorded:
+                case RunHistoryServiceRecordStatus.AlreadyRecorded:
+                    _historyRecordFailureRunId = null;
+                    return true;
+                case RunHistoryServiceRecordStatus.Conflict:
+                case RunHistoryServiceRecordStatus.Unavailable:
+                    _historyRecordFailureRunId = state.RunId;
+                    return false;
+                default:
+                    _historyRecordFailureRunId = state.RunId;
+                    return false;
+            }
+        }
+
         /// <summary>验证冻结候选并更新创建 Run 前唯一允许的临时选择。</summary>
         private void SelectHero(int heroTemplateId)
         {
@@ -1857,6 +2062,60 @@ namespace TinySpire.UI.Run
                 chest: chest,
                 shop: shop,
                 eventNode: eventNode));
+            ObserveTutorialContextForPage(
+                page,
+                _observeTutorialContext,
+                _clearTutorialContext);
+        }
+
+        /// <summary>把玩法页映射为教程上下文，并在非玩法页显式清除上一真实上下文。</summary>
+        internal static void ObserveTutorialContextForPage(
+            RunEntryPage page,
+            Action<TutorialContext> observeTutorialContext,
+            Action clearTutorialContext = null)
+        {
+            if (observeTutorialContext == null)
+                throw new ArgumentNullException(nameof(observeTutorialContext));
+            if (clearTutorialContext == null)
+                clearTutorialContext = IgnoreTutorialContextClear;
+
+            TutorialContext context;
+            switch (page)
+            {
+                case RunEntryPage.MainMenu:
+                    context = TutorialContext.MainMenu;
+                    break;
+                case RunEntryPage.HeroSelection:
+                    context = TutorialContext.HeroSelection;
+                    break;
+                case RunEntryPage.Map:
+                    context = TutorialContext.ActMap;
+                    break;
+                case RunEntryPage.CardReward:
+                    context = TutorialContext.CardReward;
+                    break;
+                case RunEntryPage.Rest:
+                case RunEntryPage.Chest:
+                case RunEntryPage.Shop:
+                case RunEntryPage.Event:
+                    context = TutorialContext.NonCombatNode;
+                    break;
+                case RunEntryPage.Failure:
+                    context = TutorialContext.RunOutcome;
+                    break;
+                case RunEntryPage.Settings:
+                case RunEntryPage.Compendium:
+                case RunEntryPage.Statistics:
+                case RunEntryPage.AbandonConfirmation:
+                case RunEntryPage.SaveFailure:
+                case RunEntryPage.RollbackConfirmation:
+                    clearTutorialContext();
+                    return;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(page), page, null);
+            }
+
+            observeTutorialContext(context);
         }
 
         /// <summary>按 Run 持有物领域顺序从 cfg.run 构建当前语言的金币、遗物与药水投影。</summary>
@@ -2473,6 +2732,15 @@ namespace TinySpire.UI.Run
         /// <summary>把类型化存档故障转换为玩家可见的当前语言说明。</summary>
         private string BuildSaveIssueText()
         {
+            RunState state = _store.Current;
+            if (_historyRecordFailureRunId.HasValue &&
+                state != null &&
+                state.ProgressPhase == RunProgressPhase.Terminal &&
+                _historyRecordFailureRunId.Value.Equals(state.RunId))
+            {
+                return Localize(HistoryRecordFailureKey);
+            }
+
             switch (_flow.Persistence.Status)
             {
                 case RunPersistenceStatus.InvalidJson:
@@ -2543,6 +2811,35 @@ namespace TinySpire.UI.Run
                 throw new ArgumentNullException(nameof(localization));
 
             return localization.LocaleChanged;
+        }
+
+        /// <summary>把生产全局 TutorialGuidePresenter 收窄为上下文观察动作。</summary>
+        private static Action<TutorialContext> CreateTutorialObserver(
+            TutorialGuidePresenter tutorialGuide)
+        {
+            if (tutorialGuide == null)
+                throw new ArgumentNullException(nameof(tutorialGuide));
+
+            return tutorialGuide.ObserveContext;
+        }
+
+        /// <summary>把生产全局 TutorialGuidePresenter 收窄为离开玩法页时的清除动作。</summary>
+        private static Action CreateTutorialClearer(TutorialGuidePresenter tutorialGuide)
+        {
+            if (tutorialGuide == null)
+                throw new ArgumentNullException(nameof(tutorialGuide));
+
+            return tutorialGuide.ClearContext;
+        }
+
+        /// <summary>旧构造器没有教程依赖时保留页面行为且不发布伪上下文。</summary>
+        private static void IgnoreTutorialContext(TutorialContext context)
+        {
+        }
+
+        /// <summary>旧构造器没有教程依赖时忽略非玩法页的上下文清除请求。</summary>
+        private static void IgnoreTutorialContextClear()
+        {
         }
 
         /// <summary>拒绝在场景级 Presenter 已释放后重新初始化。</summary>

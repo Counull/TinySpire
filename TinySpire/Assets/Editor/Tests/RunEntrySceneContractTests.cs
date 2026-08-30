@@ -2,7 +2,9 @@ using System;
 using System.Linq;
 using System.Reflection;
 using NUnit.Framework;
+using TinySpire.Profile.Presentation;
 using TinySpire.Run;
+using TinySpire.Run.History;
 using TinySpire.UI.Run;
 using UnityEditor;
 using UnityEditor.AddressableAssets;
@@ -165,9 +167,11 @@ public sealed class RunEntrySceneContractTests
             typeof(IRunEntryView),
             typeof(RunStateStore),
             typeof(RunFlowService),
+            typeof(RunHistoryService),
             typeof(ConfigService),
             typeof(LocalizationService),
             typeof(IRunMapIdentityCatalog),
+            typeof(TutorialGuidePresenter),
         });
 
         Assert.That(constructor, Is.Not.Null);

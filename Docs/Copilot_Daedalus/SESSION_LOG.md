@@ -3,11 +3,91 @@ title: Daedalus · 会话变更日志
 page_type: changelog
 lifecycle: active
 created: 2026-07-06
-updated: 2026-08-28
+updated: 2026-08-31
 status_source: STATUS.md
 ---
 
 > 当前可变状态只查 [STATUS.md](STATUS.md)。本页保留按日期排列的审计与恢复线索；其中旧状态快照不构成当前事实。
+
+## 2026-08-31 G8 人工验证豁免、环境恢复与交付收口
+
+- 用户明确要求跳过需要人工操作的验证，并再次明确要求完成后 commit、push。G8-A～E 保持 `verified`；G8-F 从 `validation-blocked` 改为 `accepted-with-waiver`，G8 Phase 收口为 `completed`。该验收决定只移除当前交付 blocker，不把缺失证据改写成通过。
+- 当前源码 Release Player `build-38ba3bf544` 的有效证据截至首战 Round 4：真实鼠标已提交到 `Completed #12 · PlayCard`，中间 Player.log 3150 bytes、SHA-256 `FB5A27D1D4350887A8C04EDCB9DD7A1B6F9BEA7EF4D244120DCDCA5CFD6F9236`，目标错误扫描 0。完整 Victory → 结果 → 主菜单、Victory history exactly-once、Continue disabled 与最终退出日志均没有执行，统一记录为 `waived / not run`；性能同为 `waived / not run`。
+- 仓库只读复核确认没有合法的 Release full-Act runtime driver；Windows Computer Use 的官方单次 drag 也不能表达 Battle 所需的跨帧按下/移动/松开。本轮没有新增 click-click、autoplay、直接命令或伪造终局档，没有改变 Battle input/command owner。
+- 本任务启动且路径精确核对的 Release Player PID 14816 已结束。未完成 `run-save.json` 的同哈希副本保存在外部临时证据目录；persistent data 中该文件已移除。最终 baseline 复核为：settings `D64C6A0CB47D6F8E01C30860507A295C2A52CC8280A088DE22A4ED5B6A2AA30B`、profile `3649ED21C5AB97277B5A1C4BEE9B6A7DB1743655252CB03118B2206C72B42B7B`、Defeat `B03825476D73E9E7A7204F109AB13FFA3773589434ABB7DB975860EC22DAEAD8`、Abandoned `AB30288F1C776468B12B0AEE7D6D397CCD41EB24133634DBDB50A9BCD2B9B2BB`，History count=2、`run-save.json` 不存在。
+- fresh Release build 自动改写的 `DefaultVolumeProfile.asset`、`UniversalRenderPipelineGlobalSettings.asset`、`ProjectSettings.asset` 与 `UnityConnectSettings.asset` 已逐项恢复到 HEAD，四路径 status clean。`DEPENDENCIES.md` 与 8 个 Luban EOL-only generated 文件继续作为保护路径排除；进入精确 132 路径候选审计、commit 与 push。
+
+## 2026-08-31 G8 当前源码 Release Player 中间验收（较早 checkpoint；已由上方 waiver 收口取代）
+
+- fresh UnityMCP Release job `build-38ba3bf544` 为 `StandaloneWindows64 / Release / succeeded`、errors 0、warnings 489、350.8749483s、1888.26 MB，输出 `TinySpire/Temp/G8ReleasePlayerFinal3/TinySpire.exe`。EXE/GameAssembly/boot.config SHA-256 分别为 `74155F5299D9F6173E902E08D9CACD511A2AF7217A69B230F68769137E1DB0A3`、`9FCB1BBF91D2E9C818FA1CF8D1583183DAC334B174AA10685B9BD465F7BE9419`、`E69AC58A65DED81DEA2677F7D5DDACAEE72054AF24725C221CC5CC4F89707124`。
+- Release 内容中的 catalog.bin、catalog hash 文件、settings.json 与 UI Audio bundle SHA-256 分别为 `B872BFFD6D9B97D809F15C5D76B25D675C69BD414B95DB339AE0650C06832F8F`、`1EF1EC51F6E095234FC5A0C43F1B07E5723658AE66731A0D945F70589B790FCD`、`63EE54D0556991F46C9C6A182D37C295D23DACB695ECFFA65A8D30E88ABCE32E`、`2F92390B7DAA5786EC1C162179C5C3AE0BA8B4CC806DCCCE055046EC05B34D77`。
+- Player 以 `en / Windowed / 1920×1080 / 125% / high contrast / reduced motion` 启动，进入 Run `5a117682-2bf2-4187-9032-1890524a7e49` 首战第 2 回合。中间 Player.log 为 3150 bytes、SHA-256 `FB5A27D1D4350887A8C04EDCB9DD7A1B6F9BEA7EF4D244120DCDCA5CFD6F9236`，已到 `game-config.json 已加载。`，目标错误扫描 0；同一时点 run-save SHA-256 `37CD06C14F84595BAC76D33B9F7BDB2D1000A9418891084D5B468A4669F7299B`。Player 与 Run 仍在运行，中间快照不冒充 Victory 或最终日志。
+- 用户已允许鼠标。Windows Computer Use 的官方 drag 仅支持一次性 from/to，没有 duration/path/down/up；实测攻击牌与自目标牌均未触发 Unity UGUI 跨帧出牌链。这是自动化输入限制，不是产品失败；未增加 click-click、autoplay、直接命令或伪造终局档。继续需要用户手动拖牌，或另行授权产品输入 seam 变更。
+- 用户随后在同一 Release Player 手动完成真实拖拽出牌；画面显示 `Completed #10 · PlayCard` 并推进到首战 Round 3。观察时 Warrior 17/30 HP、2 energy，两只 Warden 分别为 17/20 与 14/20，证明产品鼠标拖拽可达权威 PlayCard Submit；仍不能代替完整 Act Victory。
+- 用户继续手动提交到 `Completed #12 · PlayCard`，随后明确之后不再交互。代理完成 End Action 并进入 Round 4：Warrior 11/30 HP、3 energy，两只 Warden 为 11/20 与 8/20，双方本回合均 Attack 6，手牌为 2 Strike + 3 Defend。官方单次 drag 再试中间 Defend 后能量/手牌/命令序号均未变化，因此停在安全的回合开始，没有结束会导致 Defeat 的回合。
+- Round 4 中间点 Player.log 仍为 3150 bytes、SHA-256 `FB5A27D1D4350887A8C04EDCB9DD7A1B6F9BEA7EF4D244120DCDCA5CFD6F9236`，目标错误扫描 0；稳定地图检查点 run-save 仍为 1537 bytes、SHA-256 `37CD06C14F84595BAC76D33B9F7BDB2D1000A9418891084D5B468A4669F7299B`。Player 与当前战斗继续运行，不冒充最终日志或 Victory。
+- G8-A～E 保持 `verified`；G8-F / G8 Phase 继续 `blocked / validation-blocked` / `active`。尚缺完整 Victory → 结果 → 主菜单、history exactly-once、Continue disabled、最终目标错误 0、persistent baseline 与四个构建噪声文件恢复。性能为 `waived / not run`；没有暂存、commit 或 push。
+
+## 2026-08-29 G8-D/E final-review 后 fresh 验证闭合（G8-A～E verified）
+
+- 唯一已连接 Unity 6000.5.5f1 Editor 完成 final-review 后回归：History/Statistics/UI Audio job `4610ad8d0a274969a311acd6d251d56d` 为 **38/38 passed**；fresh full EditMode `fe2d343ea283455b99a89a1b658bf8f7` 为 **1611/1611 passed**。Rider build `6c5046e2-6cce-49cb-b888-c3f73697e378` 继续为 success/problems 0；双轴 Standards/Spec 复审均 no findings。
+- `TinySpire/Build/Sync and Build All` fresh 成功；BuildLayout/归档 BuildReport SHA-256 均为 `838FA2FD924E855ABC49EB944317812635AFE8275CAD7DF55508A2E9DF8AB1EB`，四个 address-only UI Audio 精确进入 `AssetBundleProvider` bundle，物理 bundle SHA-256 `2F92390B7DAA5786EC1C162179C5C3AE0BA8B4CC806DCCCE055046EC05B34D77`。
+- 当前源码 Development Player job `build-a17ae188b3` success/errors 0；EXE/GameAssembly/boot.config SHA-256 分别为 `51ACC9182CC45B00A3838E7C633D056330C0B7DD4F396502EA75E111367C5F3D`、`3E369CD53EEB89B87118BCF7CAE602F3F7A95FB02C6C20714E3C16442327E0D3`、`6E8CD5EC25235A6AF99EC679C92315908FAC7E72018417F4EEC678474067E5A8`。
+- Player 以隐藏 `-batchmode -nographics` 启动，未注入鼠标或键盘；生产链越过四 cue Addressables 初始化后到达 `game-config.json 已加载。`。日志 SHA-256 `11ED4986CDAE8C2AF2E76379BEF21BA10DEDD1CE41AFA62B50295C25BBF5770B`，InvalidKey、配置初始化、UI Audio load、Unhandled/NullReference/Exception/Error 扫描 0。只结束了路径核对无误的本轮 PID 8936。
+- 启动前后 settings/profile/Defeat history/Abandoned history hash 和 history count 均未改变，run-save 继续不存在。资源/Player build 自动写入的四个高影响设置文件已精确恢复，8 个 Luban EOL-only 文件继续保持用户原 CRLF 且 normalized diff clean。
+- 交付预审得到 132 个精确 G8 候选路径（24 tracked 实质 diff + 108 untracked）；106 个新增 Assets 路径双向 `.meta` 配对 0 缺失/孤儿，staged=0。`DEPENDENCIES.md` 与 8 个 Luban generated EOL-only 文件均 normalized diff clean 并继续排除；4 个构建自动噪声文件 clean。排除这 9 项后的 scoped `git diff --check` 与 LLM knowledge workflow 均通过。
+- 续查 Windows `computer-use` 能力后确认其 UI 输入层使用 `SendInput`；真实 Battle drag 会接管系统指针，且技能安全规则禁止以自制 PowerShell UI Automation 旁路替代。按用户“不影响鼠标”的当前边界，没有初始化目标窗口、激活 Player、发送按键/点击/拖拽或运行任何 Windows UI 自动化。
+- 因此 G8-D/E 恢复 `verified`，G8-A～E 均已闭合。G8-F 仍 `blocked / validation-blocked`，唯一 blocker 是当前源码完整单 Act Victory → 结果 → 主菜单；仓库没有合法无鼠标 full-Act driver，正式 Battle 仍需跨帧鼠标拖拽。按用户当前边界不注入输入、不改产品 seam；性能验证继续豁免，commit/push 完成条件尚未满足。
+
+## 2026-08-29 G8 final Standards review 修复与验证回退（较早 checkpoint；已由上方闭合）
+
+- 最终 Standards review 的 4 个 P2 已在工作树完成最小修复并补回归测试：History 首次 Load 失败立即冻结；pending 重试以冻结完成时间重建并逐字段比较完整摘要，覆盖终局事实漂移和同事实/不同完成时间的 durable 冲突；`StatisticsChanged` 逐观察者隔离，已耐久 Record 不被异常遮蔽且保留单异常/聚合诊断；UI Audio 强制 importer `preloadAudioData=true`，专用 catalog 仅暴露 address，关闭 GUID/labels。
+- Rider build session `6c5046e2-6cce-49cb-b888-c3f73697e378` 为 Completed/success/problems=[]，四个关键文件 Rider errors 0；`git diff --check` 通过。此前 `b8efa7e5fc84495b8189a011db0d8d39` 的 1605/1605、BuildLayout 和 Player 均早于这些最终修复，不能冒充当前源码 G8-D/E 证据。
+- 修复后双轴只读复审已收口：Standards 对原 4 个 P2 逐项确认关闭且无剩余 P0～P3；独立 Spec 对 G8-A～F 当前 tracked/untracked 实现确认无规格偏离、漏 AC、越界或 Run/Battle owner 破坏。两次复审均未运行 Unity/GUI，也未修改文件。
+- 尝试以 batchmode 运行新增测试时，Unity 在进入测试与加载用例前被 headless licensing 阻断；没有测试开始执行，因此既不是红灯/失败，也不能记作通过。G8-E 回到 `validating`，需 fresh History/Statistics 定向与 full EditMode。
+- UI Audio importer 与 catalog schema 已改变旧资源构建输入，G8-D 回到 `validating`；需 fresh `Sync and Build All`、BuildLayout，并由 Packed/Player 证明 address-only catalog 下四个 cue 仍经 `AssetBundleProvider` real load。
+- G8-A/B/C 保持 `verified`。G8-F 继续 `blocked / validation-blocked`，唯一 blocker 仍是当前源码完整单 Act Victory；D/E 的验证缺口不改写成 G8-F 输入或性能失败。用户明确豁免的性能验证不重开，persistent baseline 仍已恢复；自动化键盘/跨帧 drag 未证明不是产品失败。
+- 因此 G8 Phase 保持 `active`，尚不满足完成后 commit/push 条件。下一串行停止点是：G8-E fresh Unity → G8-D fresh 资源构建/real load → G8-F 完整 Victory。
+
+## 2026-08-29 G8 当前源码产品链与 10 行矩阵（较早 checkpoint；已由上方记录收紧）
+
+- G8-C 的产品证据已闭合并从 `validating` 提升为 `verified`。当前源码 Player `build-a607c859f5` 以 fresh Profile 实际覆盖 Welcome、skip、正常关闭/重启、reset、Hero、Map 与 Battle；Map/Battle 教程确认前后 Run save 的 SHA-256、长度与最后写入时间均不变，Profile 只记录教程步骤。Tutorial 自动化仍为 46/46。
+- 同一当前源码 Player 已覆盖启动、设置、Hero、Map、Battle、Defeat、Statistics 与返回主菜单。三次 End Action 后形成 Defeat，结果页返回主菜单后 Run save 清除；新历史 `7cd34451-b1e1-4954-819c-6bc3f351bfe1.json` SHA-256 `8461F44B86ED7F053945DD95A3278149A1E345CAB6FC143B28CFE0988AAF1CC3`，Statistics 实见 Total 3 / Victory 0 / Defeat 2 / Abandoned 1。产品链 Player.log SHA-256 `8232CFF1532ABAEAE37D2A79F3EB559D01281AA5BF1F360EB41BF93E69FE97AE`，目标错误扫描为 0；退出阶段 2 条 `JobTempAlloc` 继续归入既有引擎/包基线。
+- M1～M10 已全部完成设置写入、正常关闭、重启恢复与 UI 可达性检查，覆盖 Windowed/Borderless、1280×720 / 1920×1080 / 2560×1440 / 1920×1200 / 2560×1080、`zh-CN/en`、100/125% 文字、高对比与 reduced motion 的冻结组合；每行 settings hash、关闭日志 hash 与配置见 `06_testing/2026-08-29-g8-productization-release-gates.md`。M3 额外覆盖 125% Hero/Map，节点无重叠且 End Run 可达。
+- Borderless 行已证明请求设置、持久化、重启恢复与 UI 可达；自动化环境未取得内部 `Screen.width/height/fullScreenMode` 精确值。Computer Use 的键盘注入没有触发菜单，Sky 原子 drag 也不能表达 Unity 所需的跨帧 Battle 拖拽；这些只记为 `automation-environment unproven`，不是产品失败，也不授权新增 click-click/keyboard-only Battle 或修改既有输入 seam。
+- 最终 Rider build `977de2d6-10d1-4e29-af34-137a28d21044` success/problems 0；fresh full EditMode `b8efa7e5fc84495b8189a011db0d8d39` 为 **1605/1605 passed、0 failed、0 skipped，201.1325655s**。
+- 用户于 2026-08-29 明确豁免本轮性能验证。当前源码 raw、FPS、刷新率、内存与 GC 已从本轮剩余门禁和待办删除；被取消并删除的采样不进入验收证据。
+- persistent baseline 已恢复并核验：settings SHA-256 `D64C6A0CB47D6F8E01C30860507A295C2A52CC8280A088DE22A4ED5B6A2AA30B`、profile `3649ED21C5AB97277B5A1C4BEE9B6A7DB1743655252CB03118B2206C72B42B7B`、Defeat history `B03825476D73E9E7A7204F109AB13FFA3773589434ABB7DB975860EC22DAEAD8`、Abandoned history `AB30288F1C776468B12B0AEE7D6D397CCD41EB24133634DBDB50A9BCD2B9B2BB`；history JSON count=2，`run-save.json`、验证新增 history 与验证 profile sibling 均不存在。
+- 因此 G8-A～E 均为 `verified`；G8-F 与 G8 Phase 继续为 `blocked / validation-blocked`、`active`。唯一剩余 blocker 是当前源码 Player 的完整单 Act Victory → 结果 → 主菜单证据；Defeat、旧 Player、G7 Packed Play 或自动化测试均不能代替。完成后 commit/push 条件仍未满足。
+
+## 2026-08-29 G8 产品化与发布门禁（较早 validation checkpoint；已由上方记录取代）
+
+- G8 当前 Phase 为 `active`，不是 `completed`。G8-A/B/D/E 已完成并 `verified`，G8-C 保持 `validating`：应用设置以独立 `AppSettingsService` / versioned `app-settings.json` 持有语言、音量、窗口、分辨率与可访问性；教程以独立 `PlayerProfileStateStore` / `player-profile.json` 只保存教程进度；Run 历史以 `run-history/{RunId}.json` 保存逐局不可变 `RunSummary`，Statistics 只从历史派生，不建立第二份计数或 Run/Outcome store。
+- G8-C 的全局 TutorialGuideOverlay 只读消费 AppSettings 的初始化 `Current` 与后续 `Changed`，即时应用 100/125% 文字、高对比和 reduced-motion；Presenter/overlay 解除时取消订阅。教程上下文只读取当前 RunEntry/Battle 页面事实，确认、skip、reset 只写 Profile，不直接写 Run、Battle 或 History。
+- Run 终局采用 history-before-delete barrier：只有不可变 summary 已提交或确认 AlreadyRecorded 后，结果页才允许清理 Run save/journal；Conflict 或 commit failure 保持可重试且不删除活动证据。真实 Defeat 与 Abandoned 历史文件 SHA-256 分别为 `B03825476D73E9E7A7204F109AB13FFA3773589434ABB7DB975860EC22DAEAD8`、`AB30288F1C776468B12B0AEE7D6D397CCD41EB24133634DBDB50A9BCD2B9B2BB`，统计继续从同一历史 projection 派生。
+- G8-B 冻结 Windows x64、`zh-CN/en`、鼠标 Battle + 键盘菜单、五种声明分辨率、100/125% 文字、高对比与减少动态效果。地图紧凑节点在 125%+高对比下通过“名称/身份独立区域 + autosizing”保持 glyph 不越界；补强保留 RED `07c04ffd1ade4a07906b998bae6baa10` / `826054fc60d6439198d27862308768d5`、GREEN `975c55298ced499dae34cb5cfc289ed2`，focused job `42fac711e7c845d5a71bfda1a9c5b702` 为 **25/25**。未把菜单手柄探针写成完整手柄 Run 支持。
+- 设置事务终审补强先以 RED `e45b9d8771b3455aa1c839b8aaa42071` 暴露平台 Apply 异常逃逸，再以 RED `25af4049b5c9467e89f834f8179068df` 暴露两个补偿/fail-closed 缺口；GREEN job `1c73b018cf734349a4a81b3cf89d1a9a` 为 **18/18**。候选已提交但平台应用失败时，服务独立补偿磁盘与平台；两项均恢复才返回 typed `ApplyFailed`，任一补偿失败则返回 `RecoveryFailed` 并进入 sticky `RecoveryRequired`，后续变更在触碰磁盘或平台前 fail-closed。Presenter 将 Apply/Recovery 状态投影为类型化失败，重建后仍保留 RecoveryRequired；Presenter + RunEntry targeted job `a0deeefbb0e24e3cae612069466ba264` 为 **33/33**，其后最终源码由完整 1604/1604 覆盖。
+- 地图动态可访问性缓存先以 RED `cc45c8ce55aa43f7a385c1785ac81caf` 复现已销毁控件的 `MissingReferenceException`，GREEN `f3deb959e3eb4aa6a4989e93eb00b5d4` 关闭首个缺口；终审继续以有效 RED `b415c203b7e74b64b5475e98b84e313b`（1/1 failed）证明延迟 Destroy 前旧地图仍会留在 RunEntry 层级。最终 GREEN `f4fd43d62e9341269c69650927736d3c` 为 1/1，邻接回归 `4624253e080e4748b25259fbe6d9dcb8` 为 **22/22**：旧地图先从可访问性基线移除并在仍激活时脱离 RunEntry 层级，再停用/销毁，避免同帧 `includeInactive=true` 重扫重新缓存退休控件。用户取消导致的 orphaned Play job 不计入证据。
+- 设置补强后的 Rider build session `3d52faea-edbc-4763-afd1-31cf57627b9f` 为 success/problems 0；最终地图 patch 后的 fresh Unity EditMode job `5ac459cd8d5447718e62d40087290746` 为 **1604/1604 passed、0 failed、0 skipped，35.9688173s**，并由下述 post-detach Player build 再次完成当前源码编译。
+- `TinySpire/Build/Sync and Build All` 成功，最终 Console Error 0。2026-08-29 04:24:55 的最终 BuildLayout SHA-256 为 `C53DEAB42C7D0583E4BB9FF6F82D4F33A08DD351796F0D8E1D181C7105985133`、BuildError 为空；四个 `ui-audio/*` 逻辑地址均由 `AssetBundleProvider` 进入专用物理 bundle，bundle SHA-256 为 `9A2441C5C87227BB8DF40F631972B8395327DEBBC15C78CCDE0E9792C9615865`。UI Audio 继续使用短键、专用组与 Addressables loader，没有 `Resources.Load`、运行时 `AssetDatabase` 或业务素材路径旁路。
+- HybridCLR 已按官方 Unity 6000.5 兼容修复把 package 固定为 `v8.14.1`，lock hash 为 `a0e0b502c6c1b9ce2d0983181f4555e6149ae249`；上游修复 commit 为 `a93ca3dc27a2cbb7756b32c187534c18bfbbaf06`。Installer 与 `HybridCLR/Generate/All` 成功，且未修改 `HybridCLRSettings`、ProjectSettings 或 AOT/热更新架构；先前 `build-0eaf79b22f` stock IL2CPP 只保留为历史诊断。
+- History 统计快照修复后的当前 clean Development Player job `build-a607c859f5` 为 success、errors 0、warnings 489、439.5431838s、2058.75 MB，输出 `TinySpire/Temp/G8DevelopmentPlayerCurrent/TinySpire.exe`。EXE SHA-256 `51ACC9182CC45B00A3838E7C633D056330C0B7DD4F396502EA75E111367C5F3D`，GameAssembly `591BACDA85E3C1D5613729A6417647C1CA887933DEEE1FC162DE1C89C6A33030`，`boot.config` `1AB6F153B2CD6BD7267C1CBA577F8CC1DDE5F2262BDE2D0A521C7F805C98AF25`，profiler connection 为 `Listen`。前一版 Player 日志已冻结为 `9A1DB362FE8719E42073D801D18B9CDE42CADE2903F15C6ABD3257C12826EFA8` 且目标错误 0；本段当时仍计划重验，后续已由上方当前源码证据与性能豁免取代。
+- 在该较早 checkpoint，当前源码 Player `build-a607c859f5` 尚未启动；主菜单、设置、统计、选英雄、地图、首战与目标日志错误为 0 的观察来自前一版 `build-77f17d0b8f`。这一状态已由上方当前源码产品链取代。
+- 前一版 Profiler raw 为 `TinySpire/Temp/G8DevelopmentPlayerCurrent/G8StableFinal.raw`（Temp 证据，不提交），SHA-256 `87350EDFEE9B49B3AB5B52488D1CCDCEBC73D65845F8446AC36B7A7F7E977811`；CPU+Memory 1200/1200 帧、20.216s。平均帧时间 16.846760864 ms = **59.358 FPS**，p95 17.318455 ms、p99 20.695103 ms；working set 370.6–370.7 MiB、private memory 974 MiB，GC Alloc 平均 453.25 B/frame、最大 609 B（frame 925）。这些只保留为较早诊断；后续用户已明确豁免本轮性能验证，不再要求当前源码重采。
+- Unity Editor 当时只读枚举当前显示模式为 `2560×1440 @ 59951/1000 = 59.951 Hz`，且 1920×1080 也只有同一模式；该记录只解释较早诊断。后续用户已明确选择本轮不做性能测试，刷新率与 FPS 不再是当前 blocker。
+- Standards 终审发现 History 无载荷 invalidation event 违反 AC-P001；TDD RED `bb175319dbab4a30bc93aa531ae29857` 为 0/1，GREEN `b6daef6df30e46898e0de5e7e414be77` 为 1/1。`RunHistoryService` 现在发布完整 `RunHistoryStatisticsLoadResult`，Statistics Presenter 缓存该快照，locale 变化只重建本地化模型；相邻 History 15/15、Presenter 8/8 与 Rider build `977de2d6-10d1-4e29-af34-137a28d21044` success/problems 0。
+- 该终审修复后的 fresh full EditMode job `b8efa7e5fc84495b8189a011db0d8d39` 为 **1605/1605 passed、0 failed、0 skipped，201.1325655s**，覆盖当前源码。
+- Spec 终审在该 checkpoint 确认冻结发布矩阵和 G8-C 产品证据尚未闭合，因此当时把 G8-C 降为 `validating` 并扩回完整矩阵；这些缺口已由上方当前源码教程与 M1～M10 证据闭合。
+- 既有 stock Player 产品链覆盖启动/config、地图 125%+高对比、Battle、Abandoned 与历史，目标日志错误为 0；Battle 60 次 working-set 平均 566.799 MiB、峰值 569.949 MiB。它们只作为早期产品/内存诊断，不替代最终当前源码二进制的完整 Act 或性能证据。
+- 该 checkpoint 的状态是 G8-C `validating`、G8-F `blocked / validation-blocked`；上方记录已把 G8-C 推进为 `verified`，并以用户明确豁免取代性能 blocker。Scene、Prefab、asmdef、ProjectSettings、HybridCLR settings、DI 架构与 BattleCommandQueue 所有权均未因 G8 改动；完成后 commit/push 条件仍未满足。
+
+## 2026-08-29 G8 产品化与发布门禁（implementing checkpoint；已由上方结果记录取代）
+
+- 用户明确授权实现 `RUN_ROADMAP.md` G8、优先参考杀戮尖塔2的产品设计，并允许完成后 commit/push。本轮冻结为 Windows Standalone x64、`zh-CN/en`、键鼠完整 Run、五种分辨率/宽高比、100/125% 文字缩放、高对比和减少动态效果；手柄 Battle 输入语法、多平台、云同步、成就/遥测/商业化继续排除。
+- 开始基线为 `main`/`origin/main` HEAD `5c415b03b00d74d32e634f26b0d8d15a7fd3b2d2`，G7 已由 `80c6376` 交付。唯一既有改动是用户 `Docs/Copilot_Daedalus/DEPENDENCIES.md` 的换行差异，本轮明确保护并排除。
+- UnityMCP 只有一个 `TinySpire@8edf130c865b3957`，用户结束 Play Mode 后确认 BootstrapScene、Edit Mode、idle、无编译/刷新、`ready_for_tools=true`；RiderMCP 以项目相对根 `TinySpire/` 连通，初始 Error problems=0。
+- 只读 seam audit 确认当前只有 `LocalizationService` 具备应用设置能力；Settings 与 Statistics 仍是占位，没有 App/Profile store、教程、RunSummary/history 或音频资源。RunEntry 已有唯一 Action→Presenter→View seam 与 Input System UI map；Battle 完整操作仍依赖鼠标拖拽，因此本轮不把菜单手柄导航冒充为手柄完整 Run。
+- 已建立 [G8 窄计划](plans/2026-08-29-g8-productization-release-gates.md)，按 G8-A settings → G8-B 输入/分辨率/可访问性 → G8-C 教程 → G8-D 表现/音频 → G8-E history/统计 → G8-F Player 矩阵串行 RED→GREEN。当前尚未产生代码、Unity 测试、生成、BuildLayout、Player、commit 或 push 完成证据。
 
 ## 2026-08-28 G7 单 Act、精英、Boss 与 Run 终局（completed / verified）
 

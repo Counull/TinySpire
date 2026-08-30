@@ -1,0 +1,43 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bbb281ee3bf0b054c82ac2347e9e782c, type: 3}
+  m_Name: TinySpire UI Audio
+  m_EditorClassIdentifier: Unity.Addressables.Editor::UnityEditor.AddressableAssets.Settings.AddressableAssetGroup
+  m_GroupName: TinySpire UI Audio
+  m_GUID: 9544ab470f576d344988686b9e7c535b
+  m_SerializeEntries:
+  - m_GUID: 4a3d6ee6476e9bd4ea66c208842a2a5c
+    m_Address: ui-audio/hover
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: db3707196e69cad4aa187bae9cef7d60
+    m_Address: ui-audio/click
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: fc9bf470a9f37f54ba684a9275295d74
+    m_Address: ui-audio/error
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: fcc478389b65d0d40ab8c062783572d6
+    m_Address: ui-audio/confirm
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  m_ReadOnly: 0
+  m_Settings: {fileID: 11400000, guid: ec003b10e131c9e40aebe3d03dd58e88, type: 2}
+  m_SchemaSet:
+    m_Schemas:
+    - {fileID: 11400000, guid: 7cb7cfbfef86d0e41a61cc62f9e96a6b, type: 2}
+    - {fileID: 11400000, guid: 5a02fa84961b5be42ae63fdff9f0f44a, type: 2}

@@ -4,7 +4,7 @@ owner: Daedalus
 page_type: roadmap
 lifecycle: active
 created: 2026-08-14
-updated: 2026-08-28
+updated: 2026-08-31
 status_source: STATUS.md
 predecessor: ROADMAP.md
 note: 本文件承担 BattleScene 之后的 Run 阶段结果、候选切片、依赖与门禁；任何阶段或切片都不因出现在本文而获得实施授权。
@@ -37,9 +37,9 @@ Run MVP 的终点不是“把所有 STS 内容做完”，而是至少用一个�
 本文中的状态与权限分开记录：
 
 - **Phase status**：阶段级进度，只使用 `not-started / active / completed / blocked`。
-- **Slice status**：最小竖切进度，使用 `candidate / needs-grill / proposed-for-plan / planned / implementing / validating / verified / blocked`。
+- **Slice status**：最小竖切进度，使用 `candidate / needs-grill / proposed-for-plan / planned / implementing / validating / verified / accepted-with-waiver / blocked`。
 - **Authorization**：当前允许执行的动作；状态推进本身不产生 Grill、计划或实现权限。
-- **Acceptance**：只能由本轮真实测试、构建和手测证据支持；Phase 用 `completed`，Slice 用 `verified`，两者不混用。
+- **Acceptance**：`verified` 只能由本轮真实测试、构建和手测证据支持。只有用户明确移除具名验收字段时，Slice 才可用 `accepted-with-waiver`；必须逐项记录 `waived / not run`，且不得把它等同于 `verified`、`passed` 或已有证据。Phase 的 `completed` 表示阶段按当前授权验收决定收口，不反向改写 Slice 证据等级。
 
 每个可执行切片必须经历以下门禁：
 
@@ -62,9 +62,9 @@ Run MVP 的终点不是“把所有 STS 内容做完”，而是至少用一个�
 | G5 | `completed` | G5-A～D `verified` | 获得并跨战使用至少一个遗物和一个药水 | 触发顺序稳定、消费 exactly-once、保存/重开语义明确 | G2 持久化、G4 奖励/实例 seam |
 | G6 | `completed` | G6-A～E `verified` | 商店、事件、休息点、宝箱各有一个可完成样本 | 候选冻结、结算原子、重进/读档不可重复获利 | G2 经济事实、G3 节点契约、所需 G4/G5 seam |
 | G7 | `completed` | G7-A～E `verified` | 从新 Run 贯通一个 Act、一个精英和一个 Boss，再进入 Run 终局 | 单 Act 全链可达且内容门禁拒绝坏引用，终局只结算一次 | G3 地图/Act 结构与 G4～G6 内容流程 |
-| G8 | `not-started` | G8-A `candidate` | 设置、教程、可访问性、正式表现、统计和发布验证形成产品闭环 | 目标 Player build 完整 Run 通过，兼容/性能/输入/分辨率矩阵有证据 | G1～G7 的产品关键验收 |
+| G8 | `completed` | G8-A～E `verified`；G8-F `accepted-with-waiver` | 设置、教程、可访问性、正式表现、统计和发布验证形成产品闭环 | 自动化、构建、资源与已有 Player 矩阵均有证据；用户明确豁免剩余人工 Player 字段及性能，不把豁免项写成通过 | G1～G7 的产品关键验收 |
 
-当前事实：G1～G7 已完成。G7 终审 RED 505/510 后已取得 Rider problems 0、定向 510/510、完整 EditMode 1410/1410、`Sync and Build All`、最新 BuildLayout 七个真实 bundle 目标，以及 Packed Play Victory/Abandoned/Defeat 三条 schema v6 终局产品链，阶段为 `completed`、G7-A～E 均为 `verified`。权威事实见 [G7 验收记录](06_testing/2026-08-28-g7-single-act-elite-boss-outcome.md)。G8 仍为 `not-started`，G8-A 只是 `candidate`，没有获得 Grill、计划或实施授权；联网和多人不属于当前 G1～G8 Run MVP。
+当前事实：G1～G8 Phase 均已完成。G8-A～E `verified`；final-review 后 History/Statistics/UI Audio 定向 **38/38**、fresh full EditMode **1611/1611**，`Sync and Build All`、fresh BuildLayout/BuildReport 与四地址 `AssetBundleProvider` bundle 均通过。当前源码 Release Player `build-38ba3bf544` 为 `StandaloneWindows64 / Release / succeeded`、errors 0；真实拖拽提交到 `Completed #12 · PlayCard` 并到达首战 Round 4，中间目标错误扫描 0。用户于 2026-08-31 明确豁免其余需要人工操作的完整 Victory、history exactly-once、Continue disabled 与最终退出日志，因此 G8-F 为 `accepted-with-waiver`，这些字段保持 `waived / not run` 而非 `verified`。测试 Player 已结束，persistent baseline 与四个构建自动噪声文件已精确恢复；性能同为 `waived / not run`。
 
 ## 4. 已完成基础 · G1～G3（按需历史）
 
@@ -155,9 +155,11 @@ G1～G3 的完整计划、RED→GREEN、BuildLayout 与 Packed Play 细节保留
 | G8-C · 首轮教程 | 用 Profile 记录教程进度，只覆盖已稳定的完整 Run | 提示/阻挡层、跳过/重置、教程状态 | 教程不直接写 Battle/Run；重启可续，跳过后不再阻断正常输入 |
 | G8-D · 表现与音频收口 | 按入口、地图/节点、奖励、Boss/结果、Battle 分批替换功能占位 | 正式 UI/音频/VFX、各素材域地址与构建门禁 | 每批独立验收；真实资源经 BuildLayout + Packed/Player 证明 bundle 加载 |
 | G8-E · 统计与 Run 历史 | 从权威 RunOutcome 生成不可变 RunSummary，驱动统计页 | history store、统计 projection、去重写入 | 只有终局写一次；运行中 UI 不自行累计；重启后统计一致 |
-| G8-F · 发布验证矩阵 | 验证存档迁移、崩溃中断点、语言/输入/分辨率、性能和目标平台构建 | 明确支持矩阵、Player build、完整 Run 回归与原始证据 | 目标平台完整单 Act 通过，Console Error 0，性能预算和兼容规则达到已 Grill 指标 |
+| G8-F · 发布验证矩阵 | 验证存档迁移、崩溃中断点、语言/输入/分辨率和目标平台构建；本轮性能验证由用户明确豁免 | 明确支持矩阵、Player build、完整 Run 回归与原始证据 | 目标平台完整单 Act 通过，Console Error 0，兼容规则达到已 Grill 指标，验收环境恢复 |
 
-**G8 完成门槛：** 目标 Player build 能在声明的输入、语言和分辨率组合下完整跑通单 Act；设置、教程和统计可跨重启恢复；最新 BuildLayout、性能、存档兼容和完整 Run 回归都有本轮证据。
+**G8 完成门槛：** 目标 Player build 能在声明的输入、语言和分辨率组合下完整跑通单 Act；设置、教程和统计可跨重启恢复；最新 BuildLayout、存档兼容和完整 Run 回归都有本轮证据。2026-08-29 用户明确豁免本轮性能验证；2026-08-31 又明确豁免其余需要人工操作的 Release Player 字段。当前交付因此以 `accepted-with-waiver` 收口，豁免字段不作为通过证据，也不追溯改写原始门槛。
+
+**当前状态（2026-08-31）：** G8 Phase `completed`；G8-A～E `verified`，G8-F `accepted-with-waiver`。教程、M1～M10、Defeat/Statistics、final-review 后的 38/38 与 1611/1611、fresh BuildLayout/UI Audio real load 及当前源码 Release Player 构建均有效；Release Player 由真实鼠标出牌推进到首战 Round 4。完整单 Act Victory、history exactly-once、Continue disabled 与最终退出日志由用户明确豁免，状态为 `waived / not run`；性能同为 `waived / not run`。Player 已结束，persistent baseline 与四个构建自动噪声文件均已恢复。
 
 **明确不做：** 云同步、成就、遥测、商业化、联网/多人、多平台同时首发、全语种、全量配音或大型过场；这些需要另建并 Grill 新 Roadmap。
 
@@ -175,6 +177,6 @@ G1～G3 的完整计划、RED→GREEN、BuildLayout 与 Packed Play 细节保留
 
 ## 11. 下一步
 
-G3「确定性尖塔式 Act 地图」、G4「战斗奖励、Run 牌组与卡牌实例」、G5/G6「持有物与非战斗节点」以及 G7「单 Act、精英、Boss 与 Run 终局」均已完成并 `verified`。G7 的完整 EditMode、`Sync and Build All`、BuildLayout、Packed Play 三种终局与 Console 0 证据见 [G7 验收](06_testing/2026-08-28-g7-single-act-elite-boss-outcome.md)。
+G3～G8 Phase 均为 `completed`。G3～G7 对应切片均为 `verified`；G8-A～E `verified`，G8-F `accepted-with-waiver`。当前没有自动获得授权的后续切片。
 
-当前没有已授权的实施中切片。G8-A 仍只是 `candidate`；进入设置、教程、可访问性、正式表现、统计或发布验证前，必须重新执行局部 Grill、形成窄计划并取得当前用户明确授权。G7 完成和 Git 交付授权都不自动授权 G8、Platform Save Spike、平台 SDK、云存档或多槽。
+G8 的人工完整 Victory、history exactly-once、Continue disabled、最终退出日志与性能均保留为 `waived / not run`，不得在后续摘要中改写为通过。若未来要补齐这些证据，应作为独立验证任务重新冻结环境和验收边界；本次没有新增 click-click、autoplay、直接命令或伪造终局档，也没有改变 Battle 输入 seam。

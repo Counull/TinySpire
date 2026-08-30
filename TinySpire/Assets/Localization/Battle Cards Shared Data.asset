@@ -2387,6 +2387,166 @@ MonoBehaviour:
     m_Key: run.entry.outcome.return_to_menu
     m_Metadata:
       m_Items: []
+  - m_Id: 10748379559260160
+    m_Key: app.settings.title
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757632
+    m_Key: app.settings.language
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757633
+    m_Key: app.settings.language.en
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757634
+    m_Key: app.settings.language.zh_cn
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757635
+    m_Key: app.settings.master_volume
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757636
+    m_Key: app.settings.display_mode
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757637
+    m_Key: app.settings.display_mode.windowed
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757638
+    m_Key: app.settings.display_mode.borderless
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757639
+    m_Key: app.settings.resolution
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757640
+    m_Key: app.settings.text_scale
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757641
+    m_Key: app.settings.high_contrast
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757642
+    m_Key: app.settings.reduced_motion
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757643
+    m_Key: app.settings.state.enabled
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757644
+    m_Key: app.settings.state.disabled
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757645
+    m_Key: app.settings.action.decrease
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757646
+    m_Key: app.settings.action.increase
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757647
+    m_Key: app.settings.action.previous
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757648
+    m_Key: app.settings.action.next
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757649
+    m_Key: app.settings.failure.save
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757650
+    m_Key: app.settings.failure.unsupported_resolution
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757651
+    m_Key: tutorial.guide.main_menu_welcome
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757652
+    m_Key: tutorial.guide.hero_selection
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757653
+    m_Key: tutorial.guide.map_route
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757654
+    m_Key: tutorial.guide.battle_basics
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757655
+    m_Key: tutorial.guide.card_reward
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757656
+    m_Key: tutorial.guide.non_combat_node
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757657
+    m_Key: tutorial.guide.run_outcome
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757658
+    m_Key: tutorial.guide.confirm
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757659
+    m_Key: tutorial.guide.skip
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757660
+    m_Key: tutorial.guide.reset
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757661
+    m_Key: app.statistics.title
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757662
+    m_Key: app.statistics.total_runs
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757663
+    m_Key: app.statistics.victory
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757664
+    m_Key: app.statistics.defeat
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757665
+    m_Key: app.statistics.abandoned
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757666
+    m_Key: app.statistics.victory_rate
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757667
+    m_Key: app.statistics.hero
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757668
+    m_Key: app.statistics.empty
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757669
+    m_Key: app.statistics.failure.load
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379638951936
+    m_Key: run.history.failure.record
+    m_Metadata:
+      m_Items: []
   m_Metadata:
     m_Items: []
   m_KeyGenerator:

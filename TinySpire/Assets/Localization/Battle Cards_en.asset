@@ -2955,6 +2955,175 @@ MonoBehaviour:
     m_Localized: Return to Main Menu
     m_Metadata:
       m_Items: []
+  - m_Id: 10748379559260160
+    m_Localized: Settings
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757632
+    m_Localized: Language
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757633
+    m_Localized: English
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757634
+    m_Localized: Simplified Chinese
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757635
+    m_Localized: Master Volume
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757636
+    m_Localized: Display Mode
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757637
+    m_Localized: Windowed
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757638
+    m_Localized: Borderless Fullscreen
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757639
+    m_Localized: Resolution
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757640
+    m_Localized: Text Scale
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757641
+    m_Localized: High Contrast
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757642
+    m_Localized: Reduced Motion
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757643
+    m_Localized: Enabled
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757644
+    m_Localized: Disabled
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757645
+    m_Localized: Decrease
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757646
+    m_Localized: Increase
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757647
+    m_Localized: Previous
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757648
+    m_Localized: Next
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757649
+    m_Localized: Settings could not be saved. The previous values are still active.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757650
+    m_Localized: This resolution is not in the supported release matrix.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757651
+    m_Localized: Welcome. Start a Run, choose a hero, then climb one connected route
+      through the Act.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757652
+    m_Localized: Choose a hero to lock the starting deck and Run identity.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757653
+    m_Localized: Choose any reachable node. Cleared nodes stay cleared, and only
+      connected routes unlock.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757654
+    m_Localized: Drag a card onto a valid target, watch energy and intent, then end
+      the turn when ready.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757655
+    m_Localized: After battle, take one reward card or skip it. Your choice is saved
+      immediately.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757656
+    m_Localized: Rest, chest, shop, and event nodes resolve once. Review the choice
+      before confirming.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757657
+    m_Localized: The Run is over. Review the result, then return to the menu; the
+      summary remains in Statistics.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757658
+    m_Localized: Got it
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757659
+    m_Localized: Skip tutorial
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757660
+    m_Localized: Reset tutorial
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757661
+    m_Localized: Run Statistics
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757662
+    m_Localized: Total Runs
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757663
+    m_Localized: Victories
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757664
+    m_Localized: Defeats
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757665
+    m_Localized: Abandoned
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757666
+    m_Localized: Victory Rate
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757667
+    m_Localized: Hero {hero_template_id}
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 10748379634757668
+    m_Localized: No completed Runs yet.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 10748379634757669
+    m_Localized: 'Run history is unavailable: {detail}'
+    m_Metadata:
+      m_Items:
+      - rid: 3318493899348770842
+  - m_Id: 10748379638951936
+    m_Localized: The Run summary could not be recorded. The terminal save was kept;
+      try again before leaving.
+    m_Metadata:
+      m_Items: []
   references:
     version: 2
     RefIds:
@@ -3310,3 +3479,5 @@ MonoBehaviour:
         - id: 10327795650162704
         - id: 10327795650162707
         - id: 10327795650162708
+        - id: 10748379634757667
+        - id: 10748379634757669

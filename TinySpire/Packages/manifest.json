@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "com.code-philosophy.hybridclr": "https://github.com/focus-creative-games/hybridclr_unity.git",
+    "com.code-philosophy.hybridclr": "https://github.com/focus-creative-games/hybridclr_unity.git#v8.14.1",
     "com.code-philosophy.luban": "https://github.com/focus-creative-games/luban_unity.git",
     "com.coplaydev.unity-mcp": "https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#main",
     "com.cysharp.r3": "https://github.com/Cysharp/R3.git?path=src/R3.Unity/Assets/R3.Unity",

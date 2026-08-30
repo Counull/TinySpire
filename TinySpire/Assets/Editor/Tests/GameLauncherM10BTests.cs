@@ -27,8 +27,14 @@ public sealed class GameLauncherM10BTests
 
         GameLauncher.RunStartupAsync(
                 () => RecordAsync(steps, "assets"),
+                () => RecordAsync(steps, "audio"),
                 () => UniTask.FromException(expectedFailure),
                 () => RecordAsync(steps, "localization"),
+                () => steps.Add("settings"),
+                () => steps.Add("profile"),
+                () => steps.Add("tutorial-view"),
+                () => steps.Add("tutorial-presenter"),
+                () => steps.Add("history"),
                 () => RecordAsync(steps, "scene"),
                 failure =>
                 {
@@ -38,7 +44,7 @@ public sealed class GameLauncherM10BTests
             .GetAwaiter()
             .GetResult();
 
-        CollectionAssert.AreEqual(new[] { "assets", "failure" }, steps);
+        CollectionAssert.AreEqual(new[] { "assets", "audio", "failure" }, steps);
         Assert.That(observedFailure, Is.SameAs(expectedFailure));
     }
 
@@ -52,15 +58,21 @@ public sealed class GameLauncherM10BTests
         InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(() =>
             GameLauncher.RunStartupAsync(
                     () => RecordAsync(steps, "assets"),
+                    () => RecordAsync(steps, "audio"),
                     () => UniTask.FromException(new InvalidOperationException("unexpected")),
                     () => RecordAsync(steps, "localization"),
+                    () => steps.Add("settings"),
+                    () => steps.Add("profile"),
+                    () => steps.Add("tutorial-view"),
+                    () => steps.Add("tutorial-presenter"),
+                    () => steps.Add("history"),
                     () => RecordAsync(steps, "scene"),
                     _ => presentedFailure = true)
                 .GetAwaiter()
                 .GetResult());
 
         Assert.That(thrown.Message, Is.EqualTo("unexpected"));
-        CollectionAssert.AreEqual(new[] { "assets" }, steps);
+        CollectionAssert.AreEqual(new[] { "assets", "audio" }, steps);
         Assert.That(presentedFailure, Is.False);
     }
 
@@ -72,15 +84,145 @@ public sealed class GameLauncherM10BTests
 
         GameLauncher.RunStartupAsync(
                 () => RecordAsync(steps, "assets"),
+                () => RecordAsync(steps, "audio"),
                 () => RecordAsync(steps, "configuration"),
                 () => RecordAsync(steps, "localization"),
+                () => steps.Add("settings"),
+                () => steps.Add("profile"),
+                () => steps.Add("tutorial-view"),
+                () => steps.Add("tutorial-presenter"),
+                () => steps.Add("history"),
                 () => RecordAsync(steps, "scene"),
                 _ => steps.Add("failure"))
             .GetAwaiter()
             .GetResult();
 
         CollectionAssert.AreEqual(
-            new[] { "assets", "configuration", "localization", "scene" },
+            new[]
+            {
+                "assets", "audio", "configuration", "localization", "settings", "profile",
+                "tutorial-view", "tutorial-presenter", "history", "scene",
+            },
+            steps);
+    }
+
+    /// <summary>确认应用设置在本地化就绪后、首场景加载前同步应用。</summary>
+    [Test]
+    public void SuccessfulStartup_AppliesSettingsBeforeInitialScene()
+    {
+        var steps = new List<string>();
+
+        GameLauncher.RunStartupAsync(
+                () => RecordAsync(steps, "assets"),
+                () => RecordAsync(steps, "audio"),
+                () => RecordAsync(steps, "configuration"),
+                () => RecordAsync(steps, "localization"),
+                () => steps.Add("settings"),
+                () => steps.Add("profile"),
+                () => steps.Add("tutorial-view"),
+                () => steps.Add("tutorial-presenter"),
+                () => steps.Add("history"),
+                () => RecordAsync(steps, "scene"),
+                _ => steps.Add("failure"))
+            .GetAwaiter()
+            .GetResult();
+
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                "assets", "audio", "configuration", "localization", "settings", "profile",
+                "tutorial-view", "tutorial-presenter", "history", "scene",
+            },
+            steps);
+    }
+
+    /// <summary>确认独立 Player Profile 在设置应用后、首场景加载前同步恢复。</summary>
+    [Test]
+    public void SuccessfulStartup_InitializesPlayerProfileBeforeInitialScene()
+    {
+        var steps = new List<string>();
+
+        GameLauncher.RunStartupAsync(
+                () => RecordAsync(steps, "assets"),
+                () => RecordAsync(steps, "audio"),
+                () => RecordAsync(steps, "configuration"),
+                () => RecordAsync(steps, "localization"),
+                () => steps.Add("settings"),
+                () => steps.Add("profile"),
+                () => steps.Add("tutorial-view"),
+                () => steps.Add("tutorial-presenter"),
+                () => steps.Add("history"),
+                () => RecordAsync(steps, "scene"),
+                _ => steps.Add("failure"))
+            .GetAwaiter()
+            .GetResult();
+
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                "assets", "audio", "configuration", "localization", "settings", "profile",
+                "tutorial-view", "tutorial-presenter", "history", "scene",
+            },
+            steps);
+    }
+
+    /// <summary>确认全局教程 View 与 Presenter 在 Profile 就绪后、历史和场景之前依次初始化。</summary>
+    [Test]
+    public void SuccessfulStartup_InitializesTutorialOverlayAfterProfileBeforeHistoryAndScene()
+    {
+        var steps = new List<string>();
+
+        GameLauncher.RunStartupAsync(
+                () => RecordAsync(steps, "assets"),
+                () => RecordAsync(steps, "audio"),
+                () => RecordAsync(steps, "configuration"),
+                () => RecordAsync(steps, "localization"),
+                () => steps.Add("settings"),
+                () => steps.Add("profile"),
+                () => steps.Add("tutorial-view"),
+                () => steps.Add("tutorial-presenter"),
+                () => steps.Add("history"),
+                () => RecordAsync(steps, "scene"),
+                _ => steps.Add("failure"))
+            .GetAwaiter()
+            .GetResult();
+
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                "assets", "audio", "configuration", "localization", "settings", "profile",
+                "tutorial-view", "tutorial-presenter", "history", "scene",
+            },
+            steps);
+    }
+
+    /// <summary>确认 Run 历史观察者在首场景可能恢复终局前完成订阅。</summary>
+    [Test]
+    public void SuccessfulStartup_InitializesRunHistoryBeforeInitialScene()
+    {
+        var steps = new List<string>();
+
+        GameLauncher.RunStartupAsync(
+                () => RecordAsync(steps, "assets"),
+                () => RecordAsync(steps, "audio"),
+                () => RecordAsync(steps, "configuration"),
+                () => RecordAsync(steps, "localization"),
+                () => steps.Add("settings"),
+                () => steps.Add("profile"),
+                () => steps.Add("tutorial-view"),
+                () => steps.Add("tutorial-presenter"),
+                () => steps.Add("history"),
+                () => RecordAsync(steps, "scene"),
+                _ => steps.Add("failure"))
+            .GetAwaiter()
+            .GetResult();
+
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                "assets", "audio", "configuration", "localization", "settings", "profile",
+                "tutorial-view", "tutorial-presenter", "history", "scene",
+            },
             steps);
     }
 

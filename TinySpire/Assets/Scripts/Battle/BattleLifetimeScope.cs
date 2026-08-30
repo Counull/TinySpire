@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using TinySpire.Battle;
+using TinySpire.Profile;
+using TinySpire.Profile.Presentation;
 using TinySpire.Run;
 using TinySpire.UI.Battle;
 using UnityEngine;
@@ -13,6 +15,16 @@ public sealed class BattleLifetimeScope : LifetimeScope
     [SerializeField] private int encounterTemplateId = 5001;
     // 保留 Inspector 值作为没有 active Run 时的 legacy/debug Battle fallback。
     [SerializeField, Min(1)] private int battleSeed = 1;
+
+    private BattleAccessibilitySceneView _accessibilityView;
+
+    /// <summary>在容器构建前动态挂载场景级可访问性 View，不修改 Battle Scene 或 Prefab。</summary>
+    protected override void Awake()
+    {
+        _accessibilityView = GetComponent<BattleAccessibilitySceneView>()
+            ?? gameObject.AddComponent<BattleAccessibilitySceneView>();
+        base.Awake();
+    }
 
     /// <summary>注册本场战斗的运行时事实、权威命令队列、逐帧入口与现有只读视图。</summary>
     protected override void Configure(IContainerBuilder builder)
@@ -28,7 +40,12 @@ public sealed class BattleLifetimeScope : LifetimeScope
         builder.RegisterComponentInHierarchy<BattleParticipantPresenter>();
         builder.RegisterComponentInHierarchy<BattleCardPileHudView>();
         builder.RegisterComponentInHierarchy<BattleTurnHudView>();
+        builder.RegisterComponent(_accessibilityView)
+            .As<IBattleAccessibilityView>();
+        builder.RegisterEntryPoint<BattleTutorialContextDriver>();
         builder.RegisterEntryPoint<BattleCommandPresentationAdapter>()
+            .AsSelf();
+        builder.RegisterEntryPoint<BattleAccessibilityPresenter>()
             .AsSelf();
         builder.Register<BattleCommandSubmissionCoordinator>(Lifetime.Singleton);
         builder.Register(
@@ -144,6 +161,42 @@ public sealed class BattleLifetimeScope : LifetimeScope
 
 namespace TinySpire.Battle
 {
+    /// <summary>Battle 场景级最小教程入口，只向全局 Presenter 发布当前上下文。</summary>
+    public sealed class BattleTutorialContextDriver : IStartable
+    {
+        private readonly Action<TutorialContext> _observeTutorialContext;
+
+        /// <summary>把全局 TutorialGuidePresenter 收窄为场景启动观察动作。</summary>
+        [Inject]
+        public BattleTutorialContextDriver(TutorialGuidePresenter tutorialGuide)
+            : this(CreateObserver(tutorialGuide))
+        {
+        }
+
+        /// <summary>以可替换观察动作创建 EditMode 可验证的最小 Battle 入口。</summary>
+        internal BattleTutorialContextDriver(Action<TutorialContext> observeTutorialContext)
+        {
+            _observeTutorialContext = observeTutorialContext ??
+                                      throw new ArgumentNullException(nameof(observeTutorialContext));
+        }
+
+        /// <summary>BattleLifetimeScope 启动时精确观察一次 Battle 上下文。</summary>
+        public void Start()
+        {
+            _observeTutorialContext(TutorialContext.Battle);
+        }
+
+        /// <summary>验证全局 Presenter 并返回其唯一上下文观察入口。</summary>
+        private static Action<TutorialContext> CreateObserver(
+            TutorialGuidePresenter tutorialGuide)
+        {
+            if (tutorialGuide == null)
+                throw new ArgumentNullException(nameof(tutorialGuide));
+
+            return tutorialGuide.ObserveContext;
+        }
+    }
+
     /// <summary>生产生命周期入口：只提交启动命令，敌人推进完全由 Queue continuation 驱动。</summary>
     public sealed class BattleCommandRuntimeDriver : IStartable
     {
